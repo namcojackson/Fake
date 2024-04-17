@@ -1,0 +1,122 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<sqlMap namespace="NMAL6880Query">
+    <typeAlias alias="NMAL6880CMsg" type="business.blap.NMAL6880.NMAL6880CMsg" />
+    
+    <statement id="findVendorShipToXref" parameterClass="Map" resultClass="Map">
+        SELECT
+            MAIN.VND_SHIP_TO_CUST_CD
+            ,MAIN.RTL_WH_CD
+            ,MAIN.RTL_WH_NM
+            ,MAIN.XX_ALL_LINE_ADDR
+            ,MAIN.RTL_SWH_CD
+            ,MAIN.EFF_FROM_DT
+            ,MAIN.EFF_THRU_DT
+            ,MAIN.VND_SHIP_TO_XREF_PK
+            ,MAIN.EZUPTIME
+            ,MAIN.EZUPTIMEZONE
+        FROM (
+            SELECT
+                VSTX.VND_SHIP_TO_CUST_CD
+                ,VSTX.RTL_WH_CD
+                ,RW.RTL_WH_NM
+                ,STC.FIRST_LINE_ADDR || ' ' || STC.SCD_LINE_ADDR || ' ' || STC.THIRD_LINE_ADDR || ' ' || STC.FRTH_LINE_ADDR || ' ' || STC.CTY_ADDR || ' ' || STC.ST_CD || ' ' || STC.CTRY_CD || ' ' || STC.POST_CD AS XX_ALL_LINE_ADDR
+                ,VSTX.RTL_SWH_CD
+                ,VSTX.EFF_FROM_DT
+                ,VSTX.EFF_THRU_DT
+                ,VSTX.VND_SHIP_TO_XREF_PK
+                ,VSTX.EZUPTIME
+                ,VSTX.EZUPTIMEZONE
+            FROM
+                VND_SHIP_TO_XREF VSTX
+                , RTL_WH RW
+                , SHIP_TO_CUST STC
+            WHERE 
+                1 = 1
+            -- JOIN TO VND_SHIP_TO_XREF
+            AND VSTX.GLBL_CMPY_CD        = #glblCmpyCd#
+            AND VSTX.VND_XREF_TP_CD      = #vndXrefTpCd#
+            <isNotNull property="cMsg.vndShipToCustCd">
+            AND VSTX.VND_SHIP_TO_CUST_CD LIKE #cMsg.vndShipToCustCd#
+            </isNotNull>
+            <isNotNull property="cMsg.rtlWhCd">
+            AND VSTX.RTL_WH_CD           LIKE #cMsg.rtlWhCd#
+            </isNotNull>
+            -- JOIN TO RTL_WH
+            AND VSTX.GLBL_CMPY_CD        = RW.GLBL_CMPY_CD
+            AND VSTX.RTL_WH_CD           = RW.RTL_WH_CD
+            <isNotNull property="cMsg.rtlWhNm">
+            AND RW.RTL_WH_NM             LIKE #cMsg.rtlWhNm#
+            </isNotNull>
+            -- JOIN TO SHIP_TO_CUST
+            AND RW.GLBL_CMPY_CD           = STC.GLBL_CMPY_CD
+            AND RW.SHIP_TO_CUST_CD        = STC.SHIP_TO_CUST_CD
+            -- EZCANCELFLAG
+            AND VSTX.EZCANCELFLAG         = '0'
+            AND RW.EZCANCELFLAG           = '0'
+            AND STC.EZCANCELFLAG          = '0'
+            ORDER BY
+                VND_SHIP_TO_CUST_CD ASC
+            ) MAIN
+        WHERE ROWNUM &lt;= #rowNum#
+    </statement>
+
+    <statement id="countVendorShipToXref" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            COUNT(*)
+        FROM
+            VND_SHIP_TO_XREF VSTX
+        WHERE 
+            1 = 1
+        AND VSTX.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND VSTX.VND_XREF_TP_CD      = #vndXrefTpCd#
+        <iterate property="vndShipToXrefPkList" var="vndShipToXrefPk[]" open="AND VSTX.VND_SHIP_TO_XREF_PK NOT IN (" conjunction= ", " close=")">
+            #vndShipToXrefPk[]#
+        </iterate>
+        AND VSTX.VND_SHIP_TO_CUST_CD = #vndShipToCustCd#
+        AND (
+                #effFromDt# BETWEEN VSTX.EFF_FROM_DT AND NVL(VSTX.EFF_THRU_DT, '99991231') 
+                OR
+                #effThruDt# BETWEEN VSTX.EFF_FROM_DT AND NVL(VSTX.EFF_THRU_DT, '99991231')
+            )
+        AND VSTX.EZCANCELFLAG         = '0'
+    </statement>
+
+    <statement id="findRtlWh" parameterClass="Map" resultClass="Map">
+        SELECT
+            RS.RTL_WH_NM
+           ,STC.FIRST_LINE_ADDR || ' ' || STC.SCD_LINE_ADDR || ' ' || STC.THIRD_LINE_ADDR || ' ' || STC.FRTH_LINE_ADDR || ' ' || STC.CTY_ADDR || ' ' || STC.ST_CD || ' ' || STC.CTRY_CD || ' ' || STC.POST_CD AS XX_ALL_LINE_ADDR
+        FROM
+            RTL_WH RS
+          , SHIP_TO_CUST STC
+        WHERE 
+            1 = 1
+        AND RS.GLBL_CMPY_CD                     = #glblCmpyCd#
+        AND RS.RTL_WH_CD                        = #rtlWhCd#
+        AND RS.EFF_FROM_DT                  &lt;= #salesDate#
+        AND NVL(RS.EFF_THRU_DT, '99991231') &gt;= #salesDate#
+        AND RS.GLBL_CMPY_CD                     = STC.GLBL_CMPY_CD
+        AND RS.SHIP_TO_CUST_CD                  = STC.SHIP_TO_CUST_CD
+        AND RS.EZCANCELFLAG                     = '0'
+        AND STC.EZCANCELFLAG                    = '0'
+    </statement>
+    
+    <statement id="findRtlSwh" parameterClass="Map" resultClass="String">
+        SELECT
+            RS.INVTY_LOC_CD
+        FROM
+            RTL_SWH RS
+        WHERE 
+            1 = 1
+        AND RS.GLBL_CMPY_CD                     = #glblCmpyCd#
+        AND RS.RTL_WH_CD                        = #rtlWhCd#
+        <isNotNull property="rtlSwhCd">
+        AND RS.RTL_SWH_CD                       = #rtlSwhCd#
+        </isNotNull>
+        AND RS.EFF_FROM_DT                  &lt;= #salesDate#
+        AND NVL(RS.EFF_THRU_DT, '99991231') &gt;= #salesDate#
+        AND RS.EZCANCELFLAG                     = '0'
+        AND ROWNUM                              = #rowNum#
+    </statement>
+
+</sqlMap>

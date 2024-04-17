@@ -1,0 +1,165 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NFCB306001">
+
+    <statement id="getArRfRqstInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+               ARR.GLBL_CMPY_CD
+              ,ARR.AR_RF_RQST_PK
+              ,ARR.AR_RF_TP_CD
+              ,ARR.BILL_TO_CUST_ACCT_CD
+              ,ARR.AR_RF_CHK_CMNT_TXT
+              ,ARR.VND_CD
+              ,ARR.AR_RF_APVL_USR_ID
+              ,ARR.AR_RF_APVL_USR_NM
+              ,ARR.AR_RCPT_RF_RSN_CD
+
+        FROM
+               AR_RF_RQST        ARR
+
+        WHERE
+             ARR.GLBL_CMPY_CD                      = #glblCmpyCd#
+             AND ARR.AR_DS_WF_STS_CD               = #arDsWfStsCd#
+             AND ARR.AR_RF_STS_CD                  IS NULL
+             AND ARR.EZCANCELFLAG                  = '0'
+        ORDER BY
+             ARR.AR_RF_RQST_PK ASC
+
+    </statement>
+
+    <statement id="getArRfRqstDtlInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+               ARRD.GLBL_CMPY_CD
+              ,ARRD.AR_RF_RQST_DTL_PK
+              ,ARRD.AR_TRX_BAL_PK
+              ,ARRD.AR_RF_RQST_PK
+              ,ARRD.BILL_TO_CUST_CD
+              ,ARRD.AR_TRX_TP_CD
+              ,ARRD.DEAL_ORIG_GRS_AMT
+              ,ARRD.DEAL_RMNG_BAL_GRS_AMT
+              ,ARRD.DEAL_RF_AMT
+              ,ARRD.DEAL_CCY_CD
+              ,ARRD.RF_EXCH_RATE
+              ,ARRD.FUNC_ORIG_GRS_AMT
+              ,ARRD.FUNC_RMNG_BAL_GRS_AMT
+              ,ARRD.FUNC_RF_AMT
+              ,ARRD.AR_TRX_BAL_LAST_UPD_TS     AS EZUPTIME_ARRD
+              ,ATB.AR_TRX_NUM
+              ,ATB.EZUPTIME                    AS ATB_EZUPTIME
+              ,ATB.EZUPTIMEZONE                AS ATB_EZUPTIMEZONE
+              ,AR.EZUPTIME                     AS AR_EZUPTIME
+              ,AR.EZUPTIMEZONE                 AS AR_EZUPTIMEZONE
+              <!-- START 2017/12/15 MOD QC#23041 -->
+              ,ARRD.DEAL_RMNG_BAL_GRS_AMT      AS RF_AMT
+              ,ATB.ATT_ADJ_NUM
+              ,ORG_ATB.AR_TRX_NUM              AS ORIG_AR_TRX_NUM
+              <!-- add start 2022/07/25 QC#57417 -->
+              ,ARRD.AR_RCPT_RF_RSN_CD
+              <!-- add end 2022/07/25 QC#57417 -->
+              <!-- ,(
+                   SELECT
+                       SUM(RAMT.DEAL_RMNG_BAL_GRS_AMT)
+                   FROM
+                       AR_RF_RQST_DTL    RAMT
+                   WHERE
+                       RAMT.GLBL_CMPY_CD    = ARRD.GLBL_CMPY_CD
+                   AND RAMT.AR_RF_RQST_PK   = ARRD.AR_RF_RQST_PK
+                   AND (
+                           RAMT.BILL_TO_CUST_CD = ARRD.BILL_TO_CUST_CD
+                        OR RAMT.BILL_TO_CUST_CD IS NULL
+                        )
+                   AND RAMT.AR_TRX_TP_CD    = ARRD.AR_TRX_TP_CD
+                   AND RAMT.EZCANCELFLAG    = '0'
+                )                              AS RF_AMT -->
+              <!-- END 2017/12/15 MOD QC#23041 -->
+
+        FROM
+               AR_RF_RQST_DTL    ARRD
+              ,AR_TRX_BAL        ATB
+              ,AR_RCPT           AR
+              ,AR_ADJ            AD
+              ,AR_TRX_BAL        ORG_ATB
+        WHERE
+
+             ARRD.GLBL_CMPY_CD                      = #glblCmpyCd#
+             AND ARRD.AR_RF_RQST_PK                 = #arRfRqstPk#
+             AND ARRD.EZCANCELFLAG                  = '0'
+             AND ARRD.GLBL_CMPY_CD                  = ATB.GLBL_CMPY_CD
+             AND ARRD.AR_TRX_BAL_PK                 = ATB.AR_TRX_BAL_PK
+             AND ATB.EZCANCELFLAG                   = '0'
+             AND ATB.GLBL_CMPY_CD                   = AR.GLBL_CMPY_CD (+)
+             AND ATB.AR_TRX_NUM                     = AR.RCPT_NUM (+)
+             AND ATB.EZCANCELFLAG(+)                = '0'
+             AND ATB.ATT_ADJ_NUM                    = AD.AR_ADJ_NUM (+)
+             AND ATB.GLBL_CMPY_CD                   = AD.GLBL_CMPY_CD (+)
+             AND AD.EZCANCELFLAG (+)                = '0'
+             AND AD.ORIG_AR_TRX_BAL_PK              = ORG_ATB.AR_TRX_BAL_PK (+)
+             AND AD.GLBL_CMPY_CD                    = ORG_ATB.GLBL_CMPY_CD (+)
+             AND ORG_ATB.EZCANCELFLAG (+)           = '0'
+        ORDER BY
+              ARRD.AR_RF_RQST_DTL_PK ASC
+             ,ARRD.AR_TRX_TP_CD ASC
+             ,ARRD.BILL_TO_CUST_CD ASC
+    </statement>
+
+    <statement id="getExchRate" parameterClass="Map" resultClass="BigDecimal">
+        WITH AER AS (
+            SELECT
+                EX.ACTL_EXCH_RATE
+            FROM
+                ACCT_DLY_ACTL_EXCH_RATES EX
+            WHERE
+                EX.GLBL_CMPY_CD              = #glblCmpyCd#
+            AND EX.CCY_CD                    = #ccyCd#
+            AND EX.ACTL_EXCH_RATE_ENT_DT &lt;= #slsDt#
+            AND EX.ACTL_EXCH_RATE            IS NOT NULL
+            AND EX.EZCANCELFLAG              = '0'
+            ORDER BY
+                EX.ACTL_EXCH_RATE_ENT_DT DESC
+        )
+        SELECT
+            AER.ACTL_EXCH_RATE
+        FROM
+            AER
+        WHERE
+            ROWNUM &lt;= 1
+    </statement>
+
+	<!-- START 2022/03/04 D.Mamaril [QC#5933,ADD] -->
+    <statement id="findOnAccArCashAppInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+              ACA.AR_CASH_APP_PK
+            , ACA.AR_CASH_APP_SQ_NUM
+        FROM
+              AR_CASH_APP ACA
+            , AR_TRX_BAL  ATB
+        WHERE
+                ATB.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND ATB.EZCANCELFLAG    = '0'
+            AND ATB.AR_TRX_BAL_PK   = #arTrxBalPk#
+            AND ACA.GLBL_CMPY_CD    = ATB.GLBL_CMPY_CD
+            AND ACA.EZCANCELFLAG    = '0'
+            AND ACA.AR_SCR_CANC_FLG = #flgN#
+            AND ACA.AR_APPLY_TP_CD  = #arApplyTpCdAdj#
+            AND ATB.ATT_ADJ_NUM     = #attAdjNum#
+            AND ACA.AR_ADJ_NUM      = ATB.ATT_ADJ_NUM
+            AND ROWNUM         &lt; = #rowNum#
+    </statement>
+
+	<statement id="findCancelArApplyIntfcWrkInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+               AAIW.APPLY_GRP_KEY
+             , AAIW.APPLY_GRP_SUB_PK
+        FROM
+            AR_APPLY_INTFC_WRK AAIW
+        WHERE
+               AAIW.GLBL_CMPY_CD     = #glblCmpyCd#
+           AND AAIW.EZCANCELFLAG     = '0'
+           AND AAIW.RCPT_NUM         = #rcptNum#
+           AND AAIW.INV_NUM          = #invNum#
+           AND AAIW.AR_ADJ_NUM       = #arAdjNum#
+           AND AAIW.AR_ADJ_TRX_TP_CD = #arAdjTrxTpCdAcc#
+           AND ROWNUM           &lt; = #rowNum#
+    </statement>
+	<!-- END 2022/03/04 D.Mamaril [QC#5933,ADD] -->
+
+</sqlMap>

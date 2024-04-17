@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NSAB052001">
+
+    <!-- START 2017/08/15 M.Naito [QC#8661, MOD] -->
+    <statement id="getRenewalEscalationLetterList" parameterClass="Map" resultClass="Map">
+        <!-- mod start 2020/03/17 QC#56228 -->
+        <!-- SELECT DISTINCT
+             DCPCR.DS_CONTR_PK         AS DS_CONTR_PK
+            ,SPRLW.DS_CONTR_NUM        AS DS_CONTR_NUM -->
+        SELECT
+             DCPCR.DS_CONTR_PK             AS DS_CONTR_PK
+            ,SPRLW.DS_CONTR_NUM            AS DS_CONTR_NUM
+            ,MAX(DCPCR.RNW_EFF_FROM_DT)    AS RNW_EFF_FROM_DT
+            ,MAX(DCPCR.UPLFT_EFF_FROM_DT)  AS UPLFT_EFF_FROM_DT
+        <!-- mod end 2020/03/17 QC#56228 -->
+        FROM
+             DS_CONTR_PRC_CHNG_REC     DCPCR
+            ,SVC_PRC_RNW_LTR_WRK       SPRLW
+        WHERE
+                DCPCR.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND DCPCR.EIP_RPT_RQST_DT  IS NULL
+            AND DCPCR.EZCANCELFLAG     = '0'
+            AND SPRLW.GLBL_CMPY_CD     = DCPCR.GLBL_CMPY_CD
+            AND SPRLW.DS_CONTR_PK      = DCPCR.DS_CONTR_PK
+            AND SPRLW.EZCANCELFLAG     = '0'
+            <!-- START 2019/05/07 K.Kitachi [QC#31341, ADD] -->
+            AND EXISTS (
+                SELECT
+                    1
+                FROM
+                     DS_CONTR       DC
+                    ,SVC_RG_BR_RELN SRBR
+                WHERE
+                        DCPCR.GLBL_CMPY_CD = DC.GLBL_CMPY_CD
+                    AND DCPCR.DS_CONTR_PK  = DC.DS_CONTR_PK
+                    AND DC.SVC_LINE_BIZ_CD = #svcLineBizCd#
+                    AND DC.EZCANCELFLAG    = '0'
+                    AND DC.GLBL_CMPY_CD    = SRBR.GLBL_CMPY_CD
+                    AND DC.SVC_CONTR_BR_CD = SRBR.SVC_CONTR_BR_CD
+                    AND SRBR.SVC_RG_PK     = #svcRgPk#
+                    AND SRBR.EZCANCELFLAG  = '0'
+            )
+            <!-- END 2019/05/07 K.Kitachi [QC#31341, ADD] -->
+        <!-- add start 2020/03/17 QC#56228 -->
+    <!-- START 2024/03/19 T.Nagae [QC#63552, MOD] -->
+       <!-- AND SPRLW.RPT_ID           &lt;&gt; #prtId# -->
+            AND SPRLW.RPT_ID               = #prtId#
+    <!-- END   2024/03/19 T.Nagae [QC#63552, MOD] -->
+        GROUP BY
+             DCPCR.DS_CONTR_PK
+            ,SPRLW.DS_CONTR_NUM
+        <!-- add end 2020/03/17 QC#56228 -->
+    </statement>
+    <!-- END 2017/08/15 M.Naito [QC#8661, MOD] -->
+
+    <!-- START 2017/08/15 M.Naito [QC#8661, ADD] -->
+    <statement id="getLetterInfoForEIP" parameterClass="Map" resultClass="Map">
+        SELECT DISTINCT
+    <!-- START 2019/03/07 K.Fujimoto [QC#30663, MOD] -->
+             SPRLW.BIZ_APP_ID         AS BIZ_APP_ID
+            ,SPRLW.RPT_ID             AS RPT_ID
+            ,LPC.RPT_BR_NUM           AS RPT_BR_NUM
+            ,DC.DS_CONTR_NUM          AS DS_CONTR_NUM
+            ,DC.DS_ACCT_NUM           AS DS_ACCT_NUM
+    <!-- START 2024/03/19 T.Nagae [QC#63552, ADD] -->
+            ,DC.SVC_LINE_BIZ_CD       AS SVC_LINE_BIZ_CD
+    <!-- END 2024/03/19 T.Nagae [QC#63552, ADD] -->
+            ,LBT.LINE_BIZ_TP_DESC_TXT AS LINE_BIZ_TP_DESC_TXT
+            ,DC.SVC_CONTR_BR_CD       AS SVC_CONTR_BR_CD
+    <!-- END 2019/03/07 K.Fujimoto [QC#30663, MOD] -->
+        FROM
+             DS_CONTR            DC
+            ,SVC_PRC_RNW_LTR_WRK SPRLW
+            ,SVC_RG_BR_RELN      SRBR
+            ,LTR_RPT_CTRL        LPC
+    <!-- START 2019/03/07 K.Fujimoto [QC#30663, ADD] -->
+            ,LINE_BIZ_TP         LBT
+    <!-- END 2019/03/07 K.Fujimoto [QC#30663, ADD] -->
+        WHERE
+                DC.GLBL_CMPY_CD           = #glblCmpyCd#
+            AND DC.DS_CONTR_PK            = #dsContrPk#
+            AND DC.GLBL_CMPY_CD           = SPRLW.GLBL_CMPY_CD
+            AND DC.DS_CONTR_PK            = SPRLW.DS_CONTR_PK
+            AND DC.GLBL_CMPY_CD           = SRBR.GLBL_CMPY_CD
+            AND DC.SVC_CONTR_BR_CD        = SRBR.SVC_CONTR_BR_CD
+            AND DC.GLBL_CMPY_CD           = LPC.GLBL_CMPY_CD
+            AND DC.SVC_LINE_BIZ_CD        = LPC.SVC_LINE_BIZ_CD
+            AND SRBR.SVC_RG_PK            = LPC.SVC_RG_PK
+    <!-- START 2024/03/19 T.Nagae [QC#63552, MOD] -->
+       <!-- AND SPRLW.RPT_ID              &lt;&gt; #prtId# -->
+            AND SPRLW.RPT_ID              = #prtId#
+    <!-- END   2024/03/19 T.Nagae [QC#63552, MOD] -->
+            <!-- add start 2020/03/17 QC#56228 -->
+            <iterate property="bizAppIdList" var="bizAppId[]" open="AND SPRLW.BIZ_APP_ID IN (" close=")" conjunction=",">
+                #bizAppId[]#
+            </iterate>
+            <!-- add end 2020/03/17 QC#56228 -->
+    <!-- START 2019/03/07 K.Fujimoto [QC#30663, ADD] -->
+            AND DC.GLBL_CMPY_CD           = LBT.GLBL_CMPY_CD
+            AND DC.SVC_LINE_BIZ_CD        = LBT.LINE_BIZ_TP_CD
+    <!-- END 2019/03/07 K.Fujimoto [QC#30663, ADD] -->
+            AND DC.EZCANCELFLAG           = '0'
+            AND SPRLW.EZCANCELFLAG        = '0'
+            AND SRBR.EZCANCELFLAG         = '0'
+            AND LPC.EZCANCELFLAG          = '0'
+    <!-- START 2019/03/07 K.Fujimoto [QC#30663, ADD] -->
+            AND LBT.EZCANCELFLAG          = '0'
+    <!-- END 2019/03/07 K.Fujimoto [QC#30663, ADD] -->
+    </statement>
+
+    <statement id="getPriceEffectivityRecord" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+             DCPF.DS_CONTR_PRC_EFF_PK
+        FROM
+             DS_CONTR_DTL     DCD
+            ,DS_CONTR_PRC_EFF DCPF
+        WHERE
+                DCD.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND DCD.DS_CONTR_PK      = #dsContrPk#
+            AND DCPF.GLBL_CMPY_CD    = DCD.GLBL_CMPY_CD
+            AND DCPF.DS_CONTR_DTL_PK = DCD.DS_CONTR_DTL_PK
+            AND DCPF.RNW_ADV_NTC_DT  IS NULL
+            AND DCD.EZCANCELFLAG     = '0'
+            AND DCPF.EZCANCELFLAG    = '0'
+    </statement>
+
+    <statement id="getPriceChangeRecord" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+             DCPCR.DS_CONTR_PRC_CHNG_REC_PK
+        FROM
+             DS_CONTR_PRC_CHNG_REC  DCPCR
+        WHERE
+                DCPCR.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND DCPCR.DS_CONTR_PK     = #dsContrPk#
+            AND DCPCR.EIP_RPT_RQST_DT IS NULL
+            AND DCPCR.EZCANCELFLAG    = '0'
+    </statement>
+    <!-- END 2017/08/15 M.Naito [QC#8661, ADD] -->
+
+    <!-- START 2019/05/07 K.Kitachi [QC#31341, ADD] -->
+    <statement id="getLtrRptCtrl" parameterClass="Map" resultClass="Map">
+        SELECT
+             A.SVC_LINE_BIZ_CD
+            ,A.SVC_RG_PK
+            ,A.RPT_BR_NUM
+        FROM
+            LTR_RPT_CTRL A
+        WHERE
+                A.GLBL_CMPY_CD = #glblCmpyCd#
+            AND A.EZCANCELFLAG = '0'
+        ORDER BY
+             A.SVC_LINE_BIZ_CD
+            ,A.SVC_RG_PK
+    </statement>
+    <!-- END 2019/05/07 K.Kitachi [QC#31341, ADD] -->
+
+    <!-- START 2024/03/19 T.Nagae [QC#63552, ADD] -->
+    <statement id="getCustBllgVcleCd" parameterClass="Map" resultClass="String">
+        SELECT
+            DCIR.CUST_BLLG_VCLE_CD
+        FROM
+            DS_CUST_INV_RULE DCIR
+        WHERE
+                DCIR.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND DCIR.EZCANCELFLAG    = '0'
+            AND DCIR.DS_ACCT_NUM     = #dsAcctNum#
+            AND DCIR.CUST_INV_SRC_CD = #custInvSrcCd#
+    </statement>
+    <statement id="getDsAcctNm" parameterClass="Map" resultClass="String">
+        SELECT 
+            STC.DS_ACCT_NM
+        FROM 
+            DS_CONTR      DCR
+            ,SELL_TO_CUST STC
+        WHERE
+                DCR.GLBL_CMPY_CD = #glblCmpyCd#
+            AND DCR.GLBL_CMPY_CD = STC.GLBL_CMPY_CD
+            AND DCR.EZCANCELFLAG = '0'
+            AND STC.EZCANCELFLAG = '0'
+            AND DCR.DS_ACCT_NUM  = STC.SELL_TO_CUST_CD
+            AND DCR.DS_CONTR_PK  = #dsContrPk#
+    </statement>
+    <statement id="getAcctEmlAddr" parameterClass="Map" resultClass="String">
+        SELECT
+            DCP.DS_CTAC_PNT_VAL_TXT
+        FROM
+            DS_CUST_INV_RULE DCIR
+            ,DS_CUST_INV_RULE_RCPNT DCIRR
+            ,DS_CTAC_PNT DCP
+        WHERE
+                DCIR.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND DCIR.GLBL_CMPY_CD          = DCIRR.GLBL_CMPY_CD
+            AND DCIRR.GLBL_CMPY_CD         = DCP.GLBL_CMPY_CD
+            AND DCIR.EZCANCELFLAG          = '0'
+            AND DCIRR.EZCANCELFLAG         = '0'
+            AND DCP.EZCANCELFLAG           = '0'
+            AND DCIR.DS_ACCT_NUM           = #dsAcctNum#
+            AND DCIR.CUST_INV_SRC_CD       = #custInvSrcCd#
+            AND DCIR.DS_CUST_INV_RULE_PK   = DCIRR.DS_CUST_INV_RULE_PK
+            AND DCIRR.INV_RULE_RCPNT_TP_CD = #invRuleRcpntTpCd#
+            AND DCIRR.CTAC_PSN_PK          = DCP.CTAC_PSN_PK
+            AND DCP.DS_CTAC_PNT_TP_CD      = #dsCtacPntTpCd#
+    </statement>
+    <statement id="getSlsRepEmlAddr" parameterClass="Map" resultClass="String">
+        SELECT
+            PSN.EML_ADDR
+        FROM
+            DS_CONTR DCR
+            ,S21_PSN PSN
+        WHERE
+                DCR.GLBL_CMPY_CD       = #glblCmpyCd#
+            AND DCR.GLBL_CMPY_CD       = PSN.GLBL_CMPY_CD
+            AND DCR.EZCANCELFLAG       = '0'
+            AND PSN.EZCANCELFLAG       = '0'
+            AND DCR.DS_CONTR_PK        = #dsContrPk#
+            AND DCR.CONTR_ADMIN_PSN_CD = PSN.PSN_CD
+    </statement>
+    <!-- END 2024/03/19 T.Nagae [QC#63552, ADD] -->
+</sqlMap>

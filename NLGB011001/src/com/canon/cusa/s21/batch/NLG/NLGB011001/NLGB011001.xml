@@ -1,0 +1,790 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sqlMap namespace="NLGB011001">
+    <typeAlias alias="WMS_INBD_TRXTMsg"    type="business.db.WMS_INBD_TRXTMsg"/>
+    <typeAlias alias="WMS_INBD_SO_HDRTMsg" type="business.db.WMS_INBD_SO_HDRTMsg"/>
+    <typeAlias alias="WMS_INBD_PO_HDRTMsg" type="business.db.WMS_INBD_PO_HDRTMsg"/>
+
+    <statement id="getPoReceipt" parameterClass="Map" resultMap="result.getPoReceipt">
+        SELECT
+            TRX.GLBL_CMPY_CD
+           ,TRX.WMS_INBD_TRX_PK
+           ,TRX.INTFC_ID
+           ,TRX.WMS_REC_ID
+           ,TRX.WH_CD
+           ,TRX.WMS_MDSE_CD
+           ,TRX.WMS_STK_STS_CD
+           ,TRX.WMS_ORD_QTY
+           ,TRX.WMS_TRX_DT_TM_TS
+           ,TRX.INBD_ORD_NUM
+           ,TRX.INBD_ORD_TP_CD
+           ,TRX.INBD_ORD_LINE_NUM
+           ,TRX.SER_NUM
+        FROM
+            WMS_INBD_TRX TRX
+        WHERE
+            TRX.GLBL_CMPY_CD            = #glblCmpyCd#
+        AND TRX.WMS_TASK_CD             = #wmsTaskRcvd#       /* 'RCVD' */
+        AND TRX.INBD_ORD_NUM            IS NOT NULL
+        AND LENGTHB(TRX.WMS_STK_STS_CD) = #lgWmsStkStsCd#     /* 1 */
+<!-- START 2019/10/02 M.Naito [QC#53482,MOD] -->
+        <isNull property="noReceivingFlag">
+        AND TRX.WMS_ORD_QTY             &gt; #lowLimitOrdQty# /* 0 */
+        </isNull>
+        <isNotNull property="noReceivingFlag">
+        AND TRX.WMS_ORD_QTY             = #lowLimitOrdQty# /* 0 */
+        </isNotNull>
+<!-- END 2019/10/02 M.Naito [QC#53482,MOD] -->
+<!-- START 2019/11/12 M.Naito [QC#54375,MOD] -->
+        <isNull property="notProcFlag">
+            <iterate property="inbdOrdToCdList" var="inbdOrdToCdList[]" open="AND TRX.INBD_ORD_TP_CD NOT IN (" close=")" conjunction=",">
+              #inbdOrdToCdList[]#
+            </iterate>
+        </isNull>
+        <isNotNull property="notProcFlag">
+            <iterate property="notProcInbdOrdToCdList" var="notProcInbdOrdToCdList[]" open="AND TRX.INBD_ORD_TP_CD IN (" close=")" conjunction=",">
+              #notProcInbdOrdToCdList[]#
+            </iterate>
+        </isNotNull>
+<!-- END 2019/11/12 M.Naito [QC#54375,MOD] -->
+   <!-- AND TRX.INBD_ORD_TP_CD          NOT IN   (#ordTpCdStkStsChng#, #ordTpCdItemChngReman#)  /* ('S','X') */ 
+        AND TRX.INBD_ORD_TP_CD         != #ordTpCdStkStsChng#-->
+        AND TRX.PROC_STS_CD             = #procStsCd#         /* '0':IN_COMPLETED */
+        AND TRX.INTFC_PROC_STS_CD       = #intfcProcStsCd#    /* '1' */
+        AND TRX.EZCANCELFLAG            = '0'
+        <isNotNull property="wmsTrgtWhCd">
+            <iterate property="wmsTrgtWhCd" var="elem[]" open="AND TRX.WH_CD IN (" close=")" conjunction=",">
+                #elem[]#
+            </iterate>
+        </isNotNull>
+        <isNull property="wmsTrgtWhCd">
+        AND EXISTS(
+                   SELECT
+                       1
+                   FROM
+                       TPL_LOC  TL
+                      ,RTL_WH   RW
+                   WHERE
+                       TRX.GLBL_CMPY_CD = TL.GLBL_CMPY_CD
+                   AND TRX.WH_CD        = TL.TPL_LOC_CD
+                   AND TL.EZCANCELFLAG  = '0'
+                   AND TL.GLBL_CMPY_CD  = RW.GLBL_CMPY_CD
+                   AND TL.TPL_LOC_CD    = RW.RTL_WH_CD
+                   AND RW.EZCANCELFLAG  = '0'
+                   AND NOT EXISTS(
+                                  SELECT
+                                      1
+                                  FROM
+                                      WMS_WH WW
+                                  WHERE
+                                      RW.GLBL_CMPY_CD = WW.GLBL_CMPY_CD
+                                  AND RW.WMS_WH_CD    = WW.WH_CD
+                                  AND WW.EZCANCELFLAG = '0'
+                                 )
+                  )
+        </isNull>
+<!-- START 2023/8/31 K.Ikeda [QC#61763,MOD] -->
+       <isNull property="notProcFlag">
+       <isNull property="noReceivingFlag">
+          AND (EXISTS(
+                   SELECT
+                       1
+                   FROM
+                       WMS_INBD_TRX A
+                      ,SCE_ORD_TP SOT
+                   WHERE
+                       A.GLBL_CMPY_CD = TRX.GLBL_CMPY_CD
+                   AND A.WMS_TASK_CD  = #wmsTaskPcls#
+                   AND A.INBD_ORD_NUM = TRX.INBD_ORD_NUM
+                   AND A.INBD_ORD_TP_CD = SOT.S80_ORD_TP_CD
+                   <iterate property="putAwaySkipSceTpList" var="elem[]" open="AND SOT.SCE_ORD_TP_CD IN (" close=")" conjunction=",">
+                         #elem[]#
+                   </iterate>
+                   AND A.EZCANCELFLAG = '0'
+                   AND SOT.EZCANCELFLAG = '0'
+                   )
+                   OR NOT EXISTS(
+                   SELECT
+                       1
+                   FROM
+                       WMS_INBD_TRX A
+                      ,SCE_ORD_TP SOT
+                   WHERE
+                       A.GLBL_CMPY_CD = TRX.GLBL_CMPY_CD
+                   AND A.INBD_ORD_NUM = TRX.INBD_ORD_NUM
+                   AND A.INBD_ORD_TP_CD = SOT.S80_ORD_TP_CD
+                   <iterate property="putAwaySkipSceTpList" var="elem[]" open="AND SOT.SCE_ORD_TP_CD IN (" close=")" conjunction=",">
+                         #elem[]#
+                   </iterate>
+                   AND A.EZCANCELFLAG = '0'
+                   AND SOT.EZCANCELFLAG = '0'
+               )
+            )
+      </isNull>
+      </isNull> 
+<!-- END 2023/8/31 K.Ikeda [QC#61763,MOD] -->       
+        ORDER BY
+               TRX.WRK_TRX_ID
+              ,TRX.INBD_ORD_NUM
+              ,TRX.INBD_ORD_LINE_NUM
+    </statement>
+
+    <resultMap id="result.getPoReceipt" class="WMS_INBD_TRXTMsg">
+        <result property="glblCmpyCd"      column="GLBL_CMPY_CD"       javaType="EZDTStringItem"/>
+        <result property="wmsInbdTrxPk"    column="WMS_INBD_TRX_PK"    javaType="EZDTBigDecimalItem"/>
+        <result property="intfcId"         column="INTFC_ID"           javaType="EZDTStringItem"/>
+        <result property="wmsRecId"        column="WMS_REC_ID"         javaType="EZDTStringItem"/>
+        <result property="whCd"            column="WH_CD"              javaType="EZDTStringItem"/>
+        <result property="wmsMdseCd"       column="WMS_MDSE_CD"        javaType="EZDTStringItem"/>
+        <result property="wmsStkStsCd"     column="WMS_STK_STS_CD"     javaType="EZDTStringItem"/>
+        <result property="wmsOrdQty"       column="WMS_ORD_QTY"        javaType="EZDTBigDecimalItem"/>
+        <result property="wmsTrxDtTmTs"    column="WMS_TRX_DT_TM_TS"   javaType="EZDTStringItem"/>
+        <result property="inbdOrdNum"      column="INBD_ORD_NUM"       javaType="EZDTStringItem"/>
+        <result property="inbdOrdTpCd"     column="INBD_ORD_TP_CD"     javaType="EZDTStringItem"/>
+        <result property="inbdOrdLineNum"  column="INBD_ORD_LINE_NUM"  javaType="EZDTBigDecimalItem"/>
+        <result property="serNum"          column="SER_NUM"            javaType="EZDTStringItem"/>
+    </resultMap>
+
+    <statement id="getPoClose" parameterClass="Map" resultMap="result.getPoClose">
+    SELECT
+           TRX.GLBL_CMPY_CD
+          ,TRX.WMS_INBD_TRX_PK
+          ,TRX.INTFC_ID
+          ,TRX.WMS_REC_ID
+          ,TRX.WH_CD
+          ,TRX.WMS_MDSE_CD
+          ,TRX.WMS_STK_STS_CD
+          ,TRX.WMS_TRX_DT_TM_TS
+          ,TRX.EZINTIME
+          ,TRX.WMS_TASK_CD
+          ,TRX.INBD_ORD_NUM
+          ,TRX.INBD_ORD_TP_CD
+          ,TRX.WMS_ORD_STS_CD
+          ,SUM(TRX.WMS_OPEN_QTY)    WMS_ORG_QTY
+          ,SUM(TRX.SUM_WMS_ORD_QTY) WMS_ORD_QTY
+          ,TRX.ERR_MSG_CD
+      FROM (
+           SELECT
+                  CLO.GLBL_CMPY_CD
+                 ,CLO.WMS_INBD_TRX_PK
+                 ,CLO.INTFC_ID
+                 ,CLO.WMS_REC_ID
+                 ,CLO.WH_CD
+                 ,CLO.WMS_MDSE_CD
+                 ,CLO.WMS_STK_STS_CD
+                 ,CLO.WMS_TRX_DT_TM_TS
+                 ,CLO.EZINTIME
+                 ,CLO.WMS_TASK_CD
+                 ,CLO.INBD_ORD_NUM
+                 ,CLO.INBD_ORD_TP_CD
+                 ,CLO.WMS_ORD_STS_CD
+                 ,CLO.WMS_ORD_QTY
+                 ,DTL.WMS_LINE_NUM
+                 ,DTL.WMS_OPEN_QTY
+                 ,RCV.INBD_ORD_LINE_NUM
+                 ,SUM(RCV.WMS_ORD_QTY) SUM_WMS_ORD_QTY
+                 ,RCV.ERR_MSG_CD
+             FROM
+                  WMS_INBD_TRX    CLO
+                 ,WMS_INBD_PO_DTL DTL
+                 ,WMS_INBD_TRX    RCV
+            WHERE
+                  CLO.GLBL_CMPY_CD    = #glblCmpyCd#
+              AND CLO.WMS_TASK_CD     = #wmsTaskPcls#
+              <iterate property="inbdOrdTpCdNot" var="elem[]" open="AND CLO.INBD_ORD_TP_CD NOT IN (" close=")" conjunction=",">
+              #elem[]#
+              </iterate>
+              AND CLO.INBD_ORD_NUM    IS NOT NULL
+              AND CLO.PROC_STS_CD       = #procStsCdInComp#
+              AND CLO.INTFC_PROC_STS_CD = #intfcProcStsCd#
+              AND CLO.EZCANCELFLAG      = '0'
+              AND CLO.GLBL_CMPY_CD      = DTL.GLBL_CMPY_CD(+)
+              AND CLO.WH_CD             = DTL.WH_CD(+)
+              AND CLO.INBD_ORD_NUM      = DTL.WMS_PO_ID(+)
+              AND DTL.EZCANCELFLAG(+)   = '0'
+              AND DTL.GLBL_CMPY_CD      = RCV.GLBL_CMPY_CD(+)
+              AND DTL.WH_CD             = RCV.WH_CD(+)
+              AND DTL.WMS_PO_ID         = RCV.INBD_ORD_NUM(+)
+              AND DTL.WMS_LINE_NUM      = RCV.INBD_ORD_LINE_NUM(+)
+              AND DTL.WMS_MDSE_CD       = RCV.WMS_MDSE_CD(+)
+              AND RCV.WMS_TASK_CD(+)    = #wmsTaskRcvd#
+              AND RCV.PROC_STS_CD(+)    = #procStsCdComp#
+              AND RCV.EZCANCELFLAG(+)   = '0'
+              <isNotNull property="wmsTrgtWhCd">
+                  <iterate property="wmsTrgtWhCd" var="elem[]" open="AND CLO.WH_CD IN (" close=")" conjunction=",">
+                  #elem[]#
+                  </iterate>
+              </isNotNull>
+              <isNull property="wmsTrgtWhCd">
+              AND EXISTS(
+                      SELECT 1
+                      FROM
+                          TPL_LOC  TPL_LOC
+                         ,RTL_WH   RTL_WH
+                      WHERE
+                          CLO.GLBL_CMPY_CD     = TPL_LOC.GLBL_CMPY_CD
+                      AND CLO.WH_CD            = TPL_LOC.TPL_LOC_CD
+                      AND TPL_LOC.EZCANCELFLAG = '0'
+                      AND TPL_LOC.GLBL_CMPY_CD = RTL_WH.GLBL_CMPY_CD
+                      AND TPL_LOC.TPL_LOC_CD   = RTL_WH.RTL_WH_CD
+                      AND RTL_WH.EZCANCELFLAG  = '0'
+                      AND NOT EXISTS(
+                              SELECT 1
+                              FROM
+                                  WMS_WH       WMS_WH
+                              WHERE
+                                  RTL_WH.GLBL_CMPY_CD  = WMS_WH.GLBL_CMPY_CD
+                              AND RTL_WH.WMS_WH_CD     = WMS_WH.WH_CD
+                              AND WMS_WH.EZCANCELFLAG  = '0'
+                              )
+                      )
+              </isNull>
+            GROUP BY
+                  CLO.GLBL_CMPY_CD
+                 ,CLO.WMS_INBD_TRX_PK
+                 ,CLO.INTFC_ID
+                 ,CLO.WMS_REC_ID
+                 ,CLO.WH_CD
+                 ,CLO.WMS_MDSE_CD
+                 ,CLO.WMS_STK_STS_CD
+                 ,CLO.WMS_TRX_DT_TM_TS
+                 ,CLO.EZINTIME
+                 ,CLO.WMS_TASK_CD
+                 ,CLO.INBD_ORD_NUM
+                 ,CLO.INBD_ORD_TP_CD
+                 ,CLO.WMS_ORD_STS_CD
+                 ,CLO.WMS_ORD_QTY
+                 ,DTL.WMS_LINE_NUM
+                 ,DTL.WMS_OPEN_QTY
+                 ,RCV.INBD_ORD_LINE_NUM
+                 ,RCV.ERR_MSG_CD
+           ) TRX
+     GROUP BY
+           TRX.GLBL_CMPY_CD
+          ,TRX.WMS_INBD_TRX_PK
+          ,TRX.INTFC_ID
+          ,TRX.WMS_REC_ID
+          ,TRX.WH_CD
+          ,TRX.WMS_MDSE_CD
+          ,TRX.WMS_STK_STS_CD
+          ,TRX.WMS_TRX_DT_TM_TS
+          ,TRX.EZINTIME
+          ,TRX.WMS_TASK_CD
+          ,TRX.INBD_ORD_NUM
+          ,TRX.INBD_ORD_TP_CD
+          ,TRX.WMS_ORD_STS_CD
+          ,TRX.ERR_MSG_CD
+ UNION ALL
+    SELECT
+           TRX.GLBL_CMPY_CD
+          ,TRX.WMS_INBD_TRX_PK
+          ,TRX.INTFC_ID
+          ,TRX.WMS_REC_ID
+          ,TRX.WH_CD
+          ,TRX.WMS_MDSE_CD
+          ,TRX.WMS_STK_STS_CD
+          ,TRX.WMS_TRX_DT_TM_TS
+          ,TRX.EZINTIME
+          ,TRX.WMS_TASK_CD
+          ,TRX.INBD_ORD_NUM
+          ,TRX.INBD_ORD_TP_CD
+          ,TRX.WMS_ORD_STS_CD
+<!-- START 2021/02/02 [QC#58349,MOD] -->
+     <!-- ,SUM(TRX.WMS_ORG_QTY)     WMS_ORG_QTY-->
+          ,TRX.WMS_ORG_QTY          WMS_ORG_QTY
+          ,SUM(TRX.SUM_WMS_ORD_QTY) WMS_ORD_QTY
+          ,TRX.ERR_MSG_CD
+      FROM (
+           SELECT
+                  CLO.GLBL_CMPY_CD
+                 ,CLO.WMS_INBD_TRX_PK
+                 ,CLO.INTFC_ID
+                 ,CLO.WMS_REC_ID
+                 ,CLO.WH_CD
+                 ,CLO.WMS_MDSE_CD
+                 ,CLO.WMS_STK_STS_CD
+                 ,CLO.WMS_TRX_DT_TM_TS
+                 ,CLO.EZINTIME
+                 ,CLO.WMS_TASK_CD
+                 ,CLO.INBD_ORD_NUM
+                 ,CLO.INBD_ORD_TP_CD
+                 ,CLO.WMS_ORD_STS_CD
+                 ,CLO.WMS_ORD_QTY
+                 ,RCV.INBD_ORD_LINE_NUM
+            <!-- ,RCV.WMS_ORG_QTY-->
+                 ,(
+                  SELECT SUM(RD.RWS_QTY) 
+                    FROM RWS_HDR RH
+                        ,RWS_DTL RD
+                   WHERE RH.GLBL_CMPY_CD = #glblCmpyCd#
+                     AND RH.EZCANCELFLAG = '0'
+                     AND RH.GLBL_CMPY_CD = RD.GLBL_CMPY_CD
+                     AND RH.RWS_NUM      = RD.RWS_NUM
+                     AND RH.RWS_REF_NUM  = CLO.INBD_ORD_NUM
+                     AND RD.EZCANCELFLAG = '0'
+                  ) WMS_ORG_QTY
+<!-- END 2021/02/02 [QC#58349,MOD] -->
+                 ,SUM(RCV.WMS_ORD_QTY) SUM_WMS_ORD_QTY
+                 ,RCV.ERR_MSG_CD
+             FROM
+                  WMS_INBD_TRX CLO
+                 ,WMS_INBD_TRX RCV
+            WHERE
+                  CLO.GLBL_CMPY_CD    = #glblCmpyCd#
+              AND CLO.WMS_TASK_CD     = #wmsTaskPcls#
+              AND CLO.INBD_ORD_NUM    IS NOT NULL
+              <iterate property="inbdOrdTpCdArr" var="elem[]" open="AND CLO.INBD_ORD_TP_CD IN (" close=")" conjunction=",">
+              #elem[]#
+              </iterate>
+              AND CLO.PROC_STS_CD     = #procStsCdInComp#
+              AND CLO.INTFC_PROC_STS_CD = #intfcProcStsCd#
+              AND CLO.EZCANCELFLAG    = '0'
+
+              AND CLO.GLBL_CMPY_CD    = RCV.GLBL_CMPY_CD(+)
+              AND CLO.WH_CD           = RCV.WH_CD(+)
+              AND CLO.INBD_ORD_NUM    = RCV.INBD_ORD_NUM(+)
+              AND RCV.WMS_TASK_CD(+)  = #wmsTaskRcvd#
+              AND RCV.PROC_STS_CD(+)  = #procStsCdComp#
+              AND RCV.EZCANCELFLAG(+) = '0'
+              <isNotNull property="wmsTrgtWhCd">
+                  <iterate property="wmsTrgtWhCd" var="elem[]" open="AND CLO.WH_CD IN (" close=")" conjunction=",">
+                  #elem[]#
+                  </iterate>
+              </isNotNull>
+              <isNull property="wmsTrgtWhCd">
+              AND EXISTS(
+                      SELECT 1
+                      FROM
+                          TPL_LOC  TPL_LOC
+                         ,RTL_WH   RTL_WH
+                      WHERE
+                          CLO.GLBL_CMPY_CD     = TPL_LOC.GLBL_CMPY_CD
+                      AND CLO.WH_CD            = TPL_LOC.TPL_LOC_CD
+                      AND TPL_LOC.EZCANCELFLAG = '0'
+                      AND TPL_LOC.GLBL_CMPY_CD = RTL_WH.GLBL_CMPY_CD
+                      AND TPL_LOC.TPL_LOC_CD   = RTL_WH.RTL_WH_CD
+                      AND RTL_WH.EZCANCELFLAG  = '0'
+                      AND NOT EXISTS(
+                              SELECT 1
+                              FROM
+                                  WMS_WH       WMS_WH
+                              WHERE
+                                  RTL_WH.GLBL_CMPY_CD  = WMS_WH.GLBL_CMPY_CD
+                              AND RTL_WH.WMS_WH_CD     = WMS_WH.WH_CD
+                              AND WMS_WH.EZCANCELFLAG  = '0'
+                              )
+                      )
+              </isNull>
+            GROUP BY
+                  CLO.GLBL_CMPY_CD
+                 ,CLO.WMS_INBD_TRX_PK
+                 ,CLO.INTFC_ID
+                 ,CLO.WMS_REC_ID
+                 ,CLO.WH_CD
+                 ,CLO.WMS_MDSE_CD
+                 ,CLO.WMS_STK_STS_CD
+                 ,CLO.WMS_TRX_DT_TM_TS
+                 ,CLO.EZINTIME
+                 ,CLO.WMS_TASK_CD
+                 ,CLO.INBD_ORD_NUM
+                 ,CLO.INBD_ORD_TP_CD
+                 ,CLO.WMS_ORD_STS_CD
+                 ,CLO.WMS_ORD_QTY
+                 ,RCV.INBD_ORD_LINE_NUM
+                 ,RCV.WMS_ORG_QTY
+                 ,RCV.ERR_MSG_CD
+           ) TRX
+     GROUP BY
+           TRX.GLBL_CMPY_CD
+          ,TRX.WMS_INBD_TRX_PK
+          ,TRX.INTFC_ID
+          ,TRX.WMS_REC_ID
+          ,TRX.WH_CD
+          ,TRX.WMS_MDSE_CD
+          ,TRX.WMS_STK_STS_CD
+          ,TRX.WMS_TRX_DT_TM_TS
+          ,TRX.EZINTIME
+          ,TRX.WMS_TASK_CD
+          ,TRX.INBD_ORD_NUM
+          ,TRX.INBD_ORD_TP_CD
+          ,TRX.WMS_ORD_STS_CD
+          <!-- START 2022/06/28 F.Fadriquela [QC#60234,ADD] -->
+          ,TRX.WMS_ORG_QTY
+          <!-- END 2022/06/28 F.Fadriquela [QC#60234,ADD] -->
+          ,TRX.ERR_MSG_CD
+ UNION ALL
+           SELECT
+                  TRX.GLBL_CMPY_CD
+                 ,TRX.WMS_INBD_TRX_PK
+                 ,TRX.INTFC_ID
+                 ,TRX.WMS_REC_ID
+                 ,TRX.WH_CD
+                 ,TRX.WMS_MDSE_CD
+                 ,TRX.WMS_STK_STS_CD
+                 ,TRX.WMS_TRX_DT_TM_TS
+                 ,TRX.EZINTIME
+                 ,TRX.WMS_TASK_CD
+                 ,TRX.INBD_ORD_NUM
+                 ,TRX.INBD_ORD_TP_CD
+                 ,TRX.WMS_ORD_STS_CD
+                 ,TRX.WMS_ORG_QTY
+                 ,TRX.WMS_ORD_QTY
+                 ,TRX.ERR_MSG_CD
+             FROM
+                  WMS_INBD_TRX TRX
+            WHERE
+                  TRX.GLBL_CMPY_CD = #glblCmpyCd#
+              AND TRX.WMS_TASK_CD  = #wmsTaskPcfm#
+              AND TRX.INBD_ORD_NUM IS NOT NULL
+              AND TRX.PROC_STS_CD  = #procStsCdInComp#
+              AND TRX.INTFC_PROC_STS_CD = #intfcProcStsCd#
+              AND TRX.EZCANCELFLAG = '0'
+              <isNotNull property="wmsTrgtWhCd">
+                  <iterate property="wmsTrgtWhCd" var="elem[]" open="AND TRX.WH_CD IN (" close=")" conjunction=",">
+                  #elem[]#
+                  </iterate>
+              </isNotNull>
+              <isNull property="wmsTrgtWhCd">
+              AND EXISTS(
+                      SELECT 1
+                      FROM
+                          TPL_LOC  TPL_LOC
+                         ,RTL_WH   RTL_WH
+                      WHERE
+                          TRX.GLBL_CMPY_CD     = TPL_LOC.GLBL_CMPY_CD
+                      AND TRX.WH_CD            = TPL_LOC.TPL_LOC_CD
+                      AND TPL_LOC.EZCANCELFLAG = '0'
+                      AND TPL_LOC.GLBL_CMPY_CD = RTL_WH.GLBL_CMPY_CD
+                      AND TPL_LOC.TPL_LOC_CD   = RTL_WH.RTL_WH_CD
+                      AND RTL_WH.EZCANCELFLAG  = '0'
+                      AND NOT EXISTS(
+                              SELECT 1
+                              FROM
+                                  WMS_WH       WMS_WH
+                              WHERE
+                                  RTL_WH.GLBL_CMPY_CD  = WMS_WH.GLBL_CMPY_CD
+                              AND RTL_WH.WMS_WH_CD     = WMS_WH.WH_CD
+                              AND WMS_WH.EZCANCELFLAG  = '0'
+                              )
+                      )
+              </isNull>
+       ORDER BY
+             WMS_TASK_CD
+            ,WMS_INBD_TRX_PK
+            ,INBD_ORD_NUM
+    </statement>
+
+    <resultMap id="result.getPoClose" class="WMS_INBD_TRXTMsg">
+        <result property="glblCmpyCd"      column="GLBL_CMPY_CD"       javaType="EZDTStringItem"/>
+        <result property="wmsInbdTrxPk"    column="WMS_INBD_TRX_PK"    javaType="EZDTBigDecimalItem"/>
+        <result property="intfcId"         column="INTFC_ID"           javaType="EZDTStringItem"/>
+        <result property="wmsRecId"        column="WMS_REC_ID"         javaType="EZDTStringItem"/>
+        <result property="whCd"            column="WH_CD"              javaType="EZDTStringItem"/>
+        <result property="wmsMdseCd"       column="WMS_MDSE_CD"        javaType="EZDTStringItem"/>
+        <result property="wmsStkStsCd"     column="WMS_STK_STS_CD"     javaType="EZDTStringItem"/>
+        <result property="wmsTrxDtTmTs"    column="WMS_TRX_DT_TM_TS"   javaType="EZDTStringItem"/>
+        <result property="ezInTime"        column="EZINTIME"           javaType="EZDTStringItem"/>
+        <result property="wmsTaskCd"       column="WMS_TASK_CD"        javaType="EZDTStringItem"/>
+        <result property="inbdOrdNum"      column="INBD_ORD_NUM"       javaType="EZDTStringItem"/>
+        <result property="inbdOrdTpCd"     column="INBD_ORD_TP_CD"     javaType="EZDTStringItem"/>
+        <result property="wmsOrdStsCd"     column="WMS_ORD_STS_CD"     javaType="EZDTStringItem"/>
+        <result property="wmsOrgQty"       column="WMS_ORG_QTY"        javaType="EZDTBigDecimalItem"/>
+        <result property="wmsOrdQty"       column="WMS_ORD_QTY"        javaType="EZDTBigDecimalItem"/>
+        <result property="errMsgCd"        column="ERR_MSG_CD"         javaType="EZDTStringItem"/>
+    </resultMap>
+
+    <statement id="getPoCancel" parameterClass="Map" resultMap="result.getPoCancel">
+        SELECT
+            TRX.GLBL_CMPY_CD
+           ,TRX.WMS_INBD_TRX_PK
+           ,TRX.WMS_REC_ID
+           ,TRX.WH_CD
+           ,TRX.WMS_MDSE_CD
+           ,TRX.WMS_STK_STS_CD
+           ,TRX.WMS_TRX_DT_TM_TS
+           ,TRX.INBD_ORD_LINE_NUM
+           ,TRX.WMS_TASK_CD
+           ,TRX.INBD_ORD_NUM
+           ,TRX.INBD_ORD_TP_CD
+           ,TRX.WMS_ORD_STS_CD
+        FROM
+            WMS_INBD_TRX TRX
+        WHERE
+            TRX.GLBL_CMPY_CD = #glblCmpyCd#
+        AND TRX.WMS_TASK_CD  = #wmsTaskPdlt#
+        AND TRX.INBD_ORD_NUM IS NOT NULL
+        <iterate property="wmsTrgtWhCd" var="elem[]" open="AND TRX.WH_CD IN (" close=")" conjunction=",">
+            #elem[]#
+        </iterate>
+        AND TRX.PROC_STS_CD  = #procStsCd#
+        AND TRX.EZCANCELFLAG = '0'
+        ORDER BY
+            TRX.WRK_TRX_ID
+    </statement>
+
+    <resultMap id="result.getPoCancel" class="WMS_INBD_TRXTMsg">
+        <result property="glblCmpyCd"      column="GLBL_CMPY_CD"       javaType="EZDTStringItem"/>
+        <result property="wmsInbdTrxPk"    column="WMS_INBD_TRX_PK"    javaType="EZDTBigDecimalItem"/>
+        <result property="wmsRecId"        column="WMS_REC_ID"         javaType="EZDTStringItem"/>
+        <result property="whCd"            column="WH_CD"              javaType="EZDTStringItem"/>
+        <result property="wmsMdseCd"       column="WMS_MDSE_CD"        javaType="EZDTStringItem"/>
+        <result property="wmsStkStsCd"     column="WMS_STK_STS_CD"     javaType="EZDTStringItem"/>
+        <result property="wmsTrxDtTmTs"    column="WMS_TRX_DT_TM_TS"   javaType="EZDTStringItem"/>
+        <result property="inbdOrdLineNum"  column="INBD_ORD_LINE_NUM"  javaType="EZDTStringItem"/>
+        <result property="wmsTaskCd"       column="WMS_TASK_CD"        javaType="EZDTStringItem"/>
+        <result property="inbdOrdNum"      column="INBD_ORD_NUM"       javaType="EZDTStringItem"/>
+        <result property="inbdOrdTpCd"     column="INBD_ORD_TP_CD"     javaType="EZDTStringItem"/>
+        <result property="wmsOrdStsCd"     column="WMS_ORD_STS_CD"     javaType="EZDTStringItem"/>
+    </resultMap>
+
+    <statement id="getSceOrdTp" parameterClass="Map" resultClass="String">
+        SELECT
+            TP.SCE_ORD_TP_CD
+        FROM
+            SCE_ORD_TP  TP
+        WHERE
+            TP.GLBL_CMPY_CD  = #glblCmpyCd#
+        AND TP.S80_ORD_TP_CD = #s80OrdTpCd#
+        AND TP.INBD_OTBD_CD  = #inbdOtbdCd#
+        AND TP.EZCANCELFLAG  = '0'
+    </statement>
+
+    <statement id="getRwsHdrSts" parameterClass="Map" resultClass="String">
+        SELECT
+            RS.RWS_OPEN_FLG
+        FROM
+            RWS_HDR RH
+           ,RWS_STS RS
+        WHERE
+            RH.GLBL_CMPY_CD = #glblCmpyCd#
+        AND RH.RWS_NUM      = #rwsNum#
+        AND RH.EZCANCELFLAG = '0'
+        AND RH.GLBL_CMPY_CD = RS.GLBL_CMPY_CD
+        AND RH.RWS_STS_CD   = RS.RWS_STS_CD
+        AND RS.EZCANCELFLAG = '0'
+    </statement>
+
+    <statement id="getWmsInbdSoHdr" parameterClass="Map" resultMap="result.getWmsInbdSoHdr">
+        SELECT
+            SOH.GLBL_CMPY_CD
+           ,SOH.WH_CD
+           ,SOH.WMS_SQ_NUM
+           ,SOH.SHIP_DT_TM_TS
+           ,SOH.WMS_CANC_DT_TM_TS
+        FROM
+            WMS_INBD_SO_HDR SOH
+        WHERE
+            SOH.GLBL_CMPY_CD = #glblCmpyCd#
+        AND SOH.WH_CD        = #whCd#
+        AND SOH.WMS_SO_ID    = #wmsSoId#
+        AND SOH.EZCANCELFLAG = '0'
+        ORDER BY
+            SOH.WMS_SQ_NUM DESC
+        FOR UPDATE
+    </statement>
+
+    <resultMap id="result.getWmsInbdSoHdr" class="WMS_INBD_SO_HDRTMsg">
+        <result property="glblCmpyCd"      column="GLBL_CMPY_CD"       javaType="EZDTStringItem"/>
+        <result property="whCd"            column="WH_CD"              javaType="EZDTStringItem"/>
+        <result property="wmsSqNum"        column="WMS_SQ_NUM"         javaType="EZDTBigDecimalItem"/>
+        <result property="shipDtTmTs"      column="SHIP_DT_TM_TS"      javaType="EZDTStringItem"/>
+        <result property="wmsCancDtTmTs"   column="WMS_CANC_DT_TM_TS"  javaType="EZDTStringItem"/>
+    </resultMap>
+
+    <statement id="getWmsInbdPoHdr" parameterClass="Map" resultMap="result.getWmsInbdPoHdr">
+        SELECT
+            POH.GLBL_CMPY_CD
+           ,POH.WH_CD
+           ,POH.WMS_SQ_NUM
+           ,POH.WMS_CLO_DT_TM_TS
+        FROM
+            WMS_INBD_PO_HDR POH
+        WHERE
+            POH.GLBL_CMPY_CD = #glblCmpyCd#
+        AND POH.WH_CD        = #whCd#
+        AND POH.WMS_PO_ID    = #wmsPoId#
+        AND POH.EZCANCELFLAG = '0'
+        ORDER BY
+            POH.WMS_SQ_NUM DESC
+        FOR UPDATE
+    </statement>
+
+    <resultMap id="result.getWmsInbdPoHdr" class="WMS_INBD_PO_HDRTMsg">
+        <result property="glblCmpyCd"      column="GLBL_CMPY_CD"       javaType="EZDTStringItem"/>
+        <result property="whCd"            column="WH_CD"              javaType="EZDTStringItem"/>
+        <result property="wmsSqNum"        column="WMS_SQ_NUM"         javaType="EZDTBigDecimalItem"/>
+        <result property="wmsCloDtTmTs"    column="WMS_CLO_DT_TM_TS"   javaType="EZDTStringItem"/>
+    </resultMap>
+
+    <statement id="getWmsInbdPoHdrMaxSqNum" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            MAX(POH.WMS_SQ_NUM)
+        FROM
+            WMS_INBD_PO_HDR POH
+        WHERE
+            POH.GLBL_CMPY_CD = #glblCmpyCd#
+        AND POH.WH_CD        = #whCd#
+        AND POH.WMS_PO_ID    = #wmsPoId#
+        AND POH.EZCANCELFLAG = '0'
+    </statement>
+
+    <statement id="getWmsInbdSoHdrMaxSqNum" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            MAX(SOH.WMS_SQ_NUM)
+        FROM
+            WMS_INBD_SO_HDR SOH
+        WHERE
+            SOH.GLBL_CMPY_CD = #glblCmpyCd#
+        AND SOH.WH_CD        = #whCd#
+        AND SOH.WMS_SO_ID    = #wmsSoId#
+        AND SOH.EZCANCELFLAG = '0'
+    </statement>
+
+    <statement id="getRwsNumBySoNum" parameterClass="Map" resultClass="Map">
+        SELECT
+            RWS_NUM
+        FROM
+            RWS_HDR
+        WHERE
+            GLBL_CMPY_CD = #glblCmpyCd#
+        AND WH_CD        = #whCd#
+        AND RWS_REF_NUM  = #rwsRefNum#
+        AND EZCANCELFLAG = '0'
+        ORDER BY 
+            RWS_STS_CD ASC
+    </statement>
+
+    <statement id="getPutAwaySerCnt" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            COUNT(PSW.SER_NUM) AS SER_CNT
+        FROM
+            RWS_PUT_AWAY_WRK       PAW
+           ,RWS_PUT_AWAY_SER_WRK   PSW
+        WHERE
+            PAW.GLBL_CMPY_CD         = #glblCmpyCd#
+        AND PAW.MDSE_CD              = #mdseCd#
+        AND PAW.PROC_STS_CD          IN (#procStsInCompleted#, #procStsCompleated#)
+        AND PAW.SVC_MACH_PROC_STS_CD IN (#svcMachProcStsInCompleted#, #svcMachProcStsError#)
+        AND PAW.EZCANCELFLAG         = '0'
+        AND PAW.GLBL_CMPY_CD         = PSW.GLBL_CMPY_CD
+        AND PAW.WRK_TRX_ID           = PSW.WRK_TRX_ID
+        AND PAW.SQ_ID                = PSW.SQ_ID
+        AND PAW.MDSE_CD              = PSW.MDSE_CD
+        AND PSW.SER_NUM              = #serNum#
+        AND PSW.EZCANCELFLAG         = '0'
+    </statement>
+
+    <statement id="getRwsHdrLock" parameterClass="Map" resultClass="Map">
+        SELECT
+            HDR.GLBL_CMPY_CD
+        FROM
+            RWS_HDR  HDR
+           ,RWS_DTL  DTL
+        WHERE
+            HDR.GLBL_CMPY_CD = #glblCmpyCd#
+        AND HDR.RWS_NUM      = #rwsNum#
+        AND HDR.EZCANCELFLAG = '0'
+        AND HDR.GLBL_CMPY_CD = DTL.GLBL_CMPY_CD
+        AND HDR.RWS_NUM      = DTL.RWS_NUM
+        AND DTL.EZCANCELFLAG = '0'
+        FOR UPDATE
+    </statement>
+
+    <statement id="getNotProcRwsPutAwayWrkCnt" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            SUM(ERROR_CNT)
+        FROM (
+            SELECT
+                COUNT(*) ERROR_CNT
+            FROM
+                RWS_PUT_AWAY_WRK  WRK
+            WHERE
+                WRK.GLBL_CMPY_CD = #glblCmpyCd#
+            AND WRK.RWS_REF_NUM  = #inbdOrdNum#
+            AND WRK.PROC_STS_CD IN (#procStsCdInComp#, #procStsCdErr#)
+            AND WRK.EZCANCELFLAG = '0'
+            UNION ALL
+            SELECT
+                COUNT(*) ERROR_CNT
+            FROM
+                WMS_INBD_TRX TRX
+            WHERE
+                TRX.GLBL_CMPY_CD = #glblCmpyCd#
+            AND TRX.INBD_ORD_NUM = #inbdOrdNum#
+            AND TRX.PROC_STS_CD  = #procStsCdErr#
+            AND TRX.EZCANCELFLAG = '0'
+            )
+    </statement>
+
+    <statement id="getSkipPutAwayWrk" parameterClass="Map" resultClass="Map">
+        SELECT
+            WRK.GLBL_CMPY_CD
+           ,WRK.RWS_REF_NUM
+           ,WRK.RWS_NUM
+           ,WRK.RWS_DTL_LINE_NUM
+           ,WRK.INVTY_STK_STS_CD
+           ,WRK.MDSE_CD
+           ,WRK.WRK_TRX_ID
+           ,WRK.SQ_ID
+        FROM
+            RWS_PUT_AWAY_WRK  WRK
+        WHERE
+            WRK.GLBL_CMPY_CD         = #glblCmpyCd#
+        AND WRK.RWS_NUM              = #rwsNum#
+        AND WRK.PROC_STS_CD          = #procStsCd#
+        AND WRK.SVC_MACH_PROC_STS_CD = #svcMachProcStsCd#
+        AND WRK.EZCANCELFLAG         =  '0'
+    </statement>
+
+    <!-- START 2022/04/28 J.Evangelista [QC#58807,ADD] -->
+    <statement id="chkRtrnMachInRws" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+             RH.SVC_CONFIG_MSTR_PK
+        FROM
+             RWS_HDR          RH
+            ,RWS_SER          RS
+            ,SVC_MACH_MSTR    SMM
+            ,DS_CPO_RTRN_DTL  DCRD
+        WHERE
+            RH.GLBL_CMPY_CD           = #glblCmpyCd#
+        AND RH.RWS_NUM                = #rwsNum#
+        AND RS.GLBL_CMPY_CD           = RH.GLBL_CMPY_CD
+        AND RS.RWS_NUM                = RH.RWS_NUM
+        AND SMM.GLBL_CMPY_CD          = RS.GLBL_CMPY_CD
+        AND SMM.SVC_CONFIG_MSTR_PK    = RH.SVC_CONFIG_MSTR_PK
+        AND SMM.MDSE_CD               = RS.MDSE_CD
+        AND SMM.SER_NUM               = RS.SER_NUM
+        AND SMM.SVC_MACH_TP_CD        = #svcMachTpCd#
+        AND DCRD.GLBL_CMPY_CD         = RS.GLBL_CMPY_CD
+        AND DCRD.CPO_ORD_NUM          = RH.SRC_ORD_NUM
+        AND DCRD.MDSE_CD              = RS.MDSE_CD
+        AND DCRD.SER_NUM              = RS.SER_NUM
+        AND DCRD.RTRN_RSN_CD          NOT IN
+        <iterate property="rtrnRsnCd" var="rtrnRsnCd[]" open="(" conjunction= ", " close=")">
+            #rtrnRsnCd[]#
+        </iterate>
+        AND RH.EZCANCELFLAG           = '0'
+        AND RS.EZCANCELFLAG           = '0'
+        AND SMM.EZCANCELFLAG          = '0'
+        AND DCRD.EZCANCELFLAG         = '0'
+    </statement>
+
+    <statement id="getIntgItemForTrmn" parameterClass="Map" resultClass="Map">
+        SELECT
+             SMM.SVC_MACH_MSTR_PK
+            ,SMM.SVC_CONFIG_MSTR_PK
+        FROM
+             SVC_MACH_MSTR    SMM
+            ,MDSE             MDSE
+        WHERE
+            SMM.GLBL_CMPY_CD          = #glblCmpyCd#
+        AND SMM.SVC_CONFIG_MSTR_PK    = #svcConfigMstrPk#
+        AND MDSE.GLBL_CMPY_CD         = SMM.GLBL_CMPY_CD
+        AND MDSE.MDSE_CD              = SMM.MDSE_CD
+        AND MDSE.INVTY_CTRL_FLG       = #invtyCtrlFlg#
+        AND MDSE.INSTL_BASE_CTRL_FLG  = #instlBaseCtrlFlg#
+        AND SMM.EZCANCELFLAG          = '0'
+        AND MDSE.EZCANCELFLAG         = '0'
+    </statement>
+    <!-- END 2022/04/28 J.Evangelista [QC#58807,ADD] -->
+
+</sqlMap>

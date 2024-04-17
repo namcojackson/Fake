@@ -1,0 +1,1220 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<sqlMap namespace="NPAB165001">
+
+     <statement id="getTechnicianRequestList" parameterClass="Map" resultClass="Map"> 
+        WITH
+            IV_BEF AS(
+                    SELECT
+                        WK.TECH_TOC_CD
+                        ,WK.DEST_INVTY_LOC_CD
+                        ,WK.PRCH_REQ_NUM
+                        ,WK.PRCH_REQ_LINE_NUM
+                        ,WK.PRCH_REQ_LINE_SUB_NUM
+                        ,WK.SVC_TASK_NUM
+                        ,WK.SHIP_DT_TM_TS
+                        ,WK.DS_ACCT_NM
+                        ,WK.FIRST_LINE_ADDR
+                        ,WK.SCD_LINE_ADDR
+                        ,WK.THIRD_LINE_ADDR
+                        ,WK.FRTH_LINE_ADDR
+                        ,WK.PRCH_REQ_STS_DESC_TXT
+<!-- START 2017/11/13 M.Naito [QC#18572,ADD] -->
+                        ,WK.TECH_RQST_SO_NUM
+<!-- END 2017/11/13 M.Naito [QC#18572,ADD] -->
+                        ,WK.MDSE_CD
+                        ,WK.MDSE_DESC_SHORT_TXT
+                        ,WK.PRCH_REQ_LINE_STS_DESC_TXT
+                        ,WK.SRC_INVTY_LOC_CD
+                        ,WK.CARR_TP_NM
+                        ,WK.RQST_RCV_DT
+                        ,WK.RQST_RCV_TM
+                        ,WK.PRCH_REQ_QTY
+                        ,WK.SHIP_QTY
+                        ,WK.RWS_PUT_AWAY_QTY
+                        ,WK.BACK_TO_TECH_QTY
+                        ,WK.PRO_NUM
+                        ,WK.CARR_TRK_URL
+                        ,WK.LOC_NM
+                        ,WK.RTL_WH_NM
+                    FROM
+                        TECH_RQST_LIST_WRK WK
+                    WHERE
+                        WK.GLBL_CMPY_CD            = #glblCmpyCd#
+<!-- mod start 2017/01/13 CSA Defect#17032 -->
+<!-- mod start 2016/11/18 CSA Defect#15980 -->
+                        <iterate property="techProcStsCdList" var="techProcStsCd[]" open=" AND WK.TECH_PROC_STS_CD IN (" close=")" conjunction=",">
+                            #techProcStsCd[]#
+                        </iterate>
+<!-- mod end 2016/11/18 CSA Defect#15980 -->
+<!-- mod end 2017/01/13 CSA Defect#17032 -->
+                        AND WK.EZCANCELFLAG        = '0'
+                        AND (EXISTS(SELECT * 
+                                   FROM DS_COND_CONST COND
+                                   WHERE COND.GLBL_CMPY_CD = WK.GLBL_CMPY_CD
+                                           AND COND.EZCANCELFLAG             = '0'
+                                           AND COND.DS_COND_CONST_VAL_TXT_02 = WK.PRCH_REQ_STS_DESC_TXT
+                                           AND WK.PRCH_REQ_LINE_SUB_NUM      IS NOT NULL
+                                           AND COND.DS_COND_CONST_GRP_ID     = #NPAB1650_PrchHdr#
+                                           AND COND.DS_COND_CONST_CD         NOT IN 
+                                           <iterate property="prchReqStsList" var="prchReqStsList[]" open="(" close="))" conjunction=",">
+                                               #prchReqStsList[]#
+                                           </iterate>
+                            OR EXISTS(SELECT * 
+                                   FROM DS_COND_CONST COND
+                                   WHERE COND.GLBL_CMPY_CD = WK.GLBL_CMPY_CD
+                                           AND COND.EZCANCELFLAG             = '0'
+                                           AND COND.DS_COND_CONST_VAL_TXT_02 = WK.PRCH_REQ_STS_DESC_TXT
+                                           AND WK.PRCH_REQ_LINE_SUB_NUM      IS NULL
+                                           AND COND.DS_COND_CONST_GRP_ID     = #NPAB1650_PoHdr#
+                                           AND COND.DS_COND_CONST_CD         NOT IN 
+                                           <iterate property="poHdrStsList" var="poHdrStsList[]" open="(" close=")))" conjunction=",">
+                                               #poHdrStsList[]#
+                                           </iterate>
+            )
+            ,IV_PO_DTL AS(
+                    SELECT
+                        PO.GLBL_CMPY_CD
+                        ,PDTL.INVTY_LOC_CD
+                        ,PO.PO_APVL_STS_CD
+                        ,PDTL.VND_PO_ACK_STS_CD
+                        ,PDTL.PO_STS_CD
+                        ,PO.PO_HDR_STS_CD
+                        ,PDTL.SHIP_TO_CUST_CD
+                        ,PDTL.CARR_CD
+                        ,PDTL.MDSE_CD
+                        ,PDTL.MDSE_DESC_SHORT_TXT
+                        ,PO.PO_ORD_NUM
+                        ,PDTL.PRO_NUM
+                        ,PDTL.PO_ORD_DTL_LINE_NUM
+                        ,PDTL.PO_QTY
+                        <!-- START 2017/02/16 K.Kojima [QC#17111,ADD] -->
+                        ,PDTL.PO_BAL_QTY
+                        <!-- END 2017/02/16 K.Kojima [QC#17111,ADD] -->
+                        ,PDTL.ETA_DT
+                        <!-- START 2023/06/19 K.Chiba [QC#61262, ADD] -->
+                        ,PO.RQST_TECH_TOC_CD
+                        <!-- END 2023/06/19 K.Chiba [QC#61262, ADD] -->
+                    FROM 
+                         PO          PO
+                        ,PO_DTL      PDTL
+                    WHERE 
+                        PO.GLBL_CMPY_CD                     = #glblCmpyCd#
+                        AND (PO.PO_HDR_STS_CD               = #poHdrStsCd#
+                                OR (PO.PO_HDR_STS_CD        &lt;&gt; #poHdrStsCd#
+                                    AND EXISTS(SELECT * FROM IV_BEF
+                                                            WHERE IV_BEF.PRCH_REQ_NUM        = PO.PO_ORD_NUM
+                                                                AND IV_BEF.PRCH_REQ_LINE_NUM = PDTL.PO_ORD_DTL_LINE_NUM)))
+                        AND PO.EZCANCELFLAG                 = '0'
+                        AND PO.GLBL_CMPY_CD                 = PDTL.GLBL_CMPY_CD
+                        AND PO.PO_ORD_NUM                   = PDTL.PO_ORD_NUM
+                        AND PDTL.EZCANCELFLAG                = '0'
+                        AND PDTL.PRCH_REQ_NUM                IS NULL
+                        <!-- START 2017/02/16 K.Kojima [QC#17111,ADD] -->
+                        AND EXISTS(
+                            SELECT
+                                1
+                            FROM
+                                TECH_LOC TL
+                            WHERE
+                                    TL.GLBL_CMPY_CD = PDTL.GLBL_CMPY_CD
+                                AND TL.TECH_LOC_CD  = PDTL.INVTY_LOC_CD
+                                AND TL.EZCANCELFLAG = '0')
+                        <!-- END 2017/02/16 K.Kojima [QC#17111,ADD] -->
+                )
+            ,IV_RWS AS(
+                        SELECT
+                            RSH.PO_RCV_TRX_HDR_NUM
+                            ,RSD.PO_RCV_TRX_LINE_NUM
+                            ,RSH.TRX_ORD_NUM
+                            ,RSD.TRX_LINE_NUM
+                            ,RSD.RWS_QTY
+                            ,RSD.RWS_PUT_AWAY_QTY
+                            ,RSH.IMPT_INV_BOL_NUM
+                        FROM
+                            RWS_HDR             RSH
+                            ,RWS_DTL            RSD
+                        WHERE
+                            RSH.GLBL_CMPY_CD            = #glblCmpyCd#
+                            AND RSH.RWS_NUM             = RSD.RWS_NUM
+                            AND RSH.EZCANCELFLAG        = '0'
+                            AND RSD.EZCANCELFLAG        = '0'
+<!-- START 2017/11/13 M.Naito [QC#18572,ADD] -->
+                            AND RSH.RWS_STS_CD          != #rwsStsCanceled#
+<!-- END 2017/11/13 M.Naito [QC#18572,ADD] -->
+                            AND EXISTS(SELECT * FROM IV_PO_DTL DPO
+                                        WHERE DPO.PO_ORD_NUM           = RSH.PO_RCV_TRX_HDR_NUM
+                                          AND DPO.PO_ORD_DTL_LINE_NUM  = RSD.PO_RCV_TRX_LINE_NUM)
+                    )
+            ,IV_PO_RCV AS(
+                        SELECT
+                            POH.PO_RCV_TRX_HDR_NUM
+                            ,POH.RWS_REF_NUM
+                            ,POD.PO_RCV_TRX_LINE_NUM
+                            ,POH.PO_RCV_NUM
+                            ,POD.PO_RCV_LINE_NUM
+                            ,POD.ASN_SO_NUM
+                            ,POD.ASN_LINE_NUM
+                        FROM
+                             PO_RCV_HDR     POH
+                            ,PO_RCV_DTL     POD
+                        WHERE
+                            POH.GLBL_CMPY_CD            = #glblCmpyCd#
+                            AND POH.EZCANCELFLAG        = '0'
+                            AND POH.GLBL_CMPY_CD        = POD.GLBL_CMPY_CD
+                            AND POH.PO_RCV_NUM          = POD.PO_RCV_NUM
+                            AND POD.EZCANCELFLAG        = '0'
+                            AND EXISTS(SELECT * FROM IV_RWS RWS
+                                        WHERE RWS.TRX_ORD_NUM   = POH.PO_RCV_NUM
+                                          AND RWS.TRX_LINE_NUM  = POD.PO_RCV_LINE_NUM)
+                    )
+            ,IV_EDI_ASN AS(
+                        SELECT
+                            EAD.ASN_SO_NUM
+                            ,EAD.ASN_LINE_NUM
+                            ,EAH.ASN_SHIP_DT_TM_TS
+                            ,EAH.SHIP_FROM_SO_NUM
+                        FROM
+                            EDI_ASN_HDR_WRK     EAH
+                            ,EDI_ASN_DTL_WRK    EAD
+                        WHERE
+                            EAH.GLBL_CMPY_CD            = #glblCmpyCd#
+                            AND EAH.EZCANCELFLAG        = '0'
+                            AND EAH.GLBL_CMPY_CD        = EAD.GLBL_CMPY_CD
+                            AND EAH.ASN_SO_NUM          = EAD.ASN_SO_NUM
+                            AND EAD.EZCANCELFLAG        = '0'
+                            AND EXISTS(SELECT * FROM IV_PO_RCV RCV
+                                        WHERE RCV.ASN_SO_NUM    = EAD.ASN_SO_NUM
+                                          AND RCV.ASN_LINE_NUM  = EAD.ASN_LINE_NUM)
+                    )
+            ,IV_PO_ACK AS(
+                        SELECT
+                            PO_ORD_NUM
+                            ,PO_ORD_DTL_LINE_NUM
+                            ,ETA_DT
+                        FROM
+                        (
+                            SELECT
+                                PAH.PO_ORD_NUM
+                                ,PAD.PO_ORD_DTL_LINE_NUM
+                                ,PAD.ETA_DT
+                                ,ROW_NUMBER() OVER (PARTITION BY PAH.PO_ORD_NUM, PAD.PO_ORD_DTL_LINE_NUM ORDER BY PAH.PO_ACK_NUM DESC NULLS LAST) AS ROW_NUM
+                            FROM
+                                PO_ACK_HDR     PAH
+                                ,PO_ACK_DTL    PAD
+                            WHERE
+                                PAH.GLBL_CMPY_CD            = #glblCmpyCd#
+                                AND PAH.EZCANCELFLAG        = '0'
+                                AND PAH.GLBL_CMPY_CD        = PAD.GLBL_CMPY_CD
+                                AND PAH.PO_ACK_HDR_PK       = PAD.PO_ACK_HDR_PK
+                                AND PAD.EZCANCELFLAG        = '0'
+                                AND EXISTS(SELECT * FROM IV_PO_DTL DPO
+                                            WHERE DPO.PO_ORD_NUM           = PAD.PO_ORD_NUM
+                                              AND DPO.PO_ORD_DTL_LINE_NUM  = PAD.PO_ORD_DTL_LINE_NUM)
+                        )
+                        WHERE
+                            ROW_NUM = 1
+                    )
+            ,IV_PRCH AS(
+                SELECT
+                        GLBL_CMPY_CD
+                        ,DEST_INVTY_LOC_CD
+                        ,PRCH_REQ_NUM
+                        ,SVC_TASK_NUM
+                        ,NVL(SHIP_DT_TM_TS, (SELECT CASE WHEN LENGTH(EAHW.ASN_SHIP_DT_TM_TS) = 8 THEN EAHW.ASN_SHIP_DT_TM_TS || '000000' ELSE EAHW.ASN_SHIP_DT_TM_TS END AS SHIP_DT_TM_TS
+                                             FROM EDI_ASN_HDR_WRK EAHW, EDI_ASN_DTL_WRK EADW 
+                                             WHERE EAHW.GLBL_CMPY_CD = #glblCmpyCd# AND EAHW.GLBL_CMPY_CD = EADW.GLBL_CMPY_CD AND EAHW.ASN_SO_NUM = EADW.ASN_SO_NUM AND EADW.ASN_PRO_NUM = PR.PRO_NUM AND EAHW.EZCANCELFLAG = '0' AND EADW.EZCANCELFLAG = '0' AND ROWNUM = 1)) AS SHIP_DT_TM_TS
+<!-- START 2017/11/13 M.Naito [QC#18572,ADD] -->
+                        ,SO_NUM
+<!-- END 2017/11/13 M.Naito [QC#18572,ADD] -->
+                        ,MDSE_CD
+                        ,SRC_INVTY_LOC_CD
+                        ,RQST_RCV_DT
+                        ,RQST_RCV_TM
+                        ,PRCH_REQ_QTY
+                        ,SHIP_QTY
+                        ,RWS_PUT_AWAY_QTY
+                        ,BACK_TO_TECH_QTY
+                        ,PRO_NUM
+                        ,PRCH_REQ_LINE_NUM
+                        ,PRCH_REQ_LINE_SUB_NUM
+                        ,NVL(CARR_CD, (SELECT PD.CARR_CD FROM PO_DTL PD WHERE PD.GLBL_CMPY_CD = PR.GLBL_CMPY_CD AND PD.PRCH_REQ_NUM = PR.PRCH_REQ_NUM AND PD.PRCH_REQ_LINE_NUM = PR.PRCH_REQ_LINE_NUM AND PD.PRCH_REQ_LINE_SUB_NUM = PR.PRCH_REQ_LINE_SUB_NUM AND PD.EZCANCELFLAG = '0' AND ROWNUM = 1)) AS CARR_CD
+                        ,SHIP_TO_CUST_CD 
+                        ,PRCH_REQ_STS_CD
+                        ,PRCH_REQ_APVL_STS_CD
+                        ,CASE WHEN PRCH_REQ_LINE_STS_CD IN(#prchReqLineStsClosed#, #prchReqLineStsCancelled#) THEN PRCH_REQ_LINE_STS_CD
+                              WHEN PRCH_REQ_QTY = SHIP_QTY AND SHIP_QTY = RWS_PUT_AWAY_QTY AND SHIP_QTY > 0 AND RWS_PUT_AWAY_QTY > 0 THEN #prchReqLineStsReceived#
+                              WHEN PRCH_REQ_QTY = SHIP_QTY AND SHIP_QTY > 0 AND RWS_PUT_AWAY_QTY = 0 THEN #prchReqLineStsShipped#
+                              WHEN PRCH_REQ_QTY = SHIP_QTY AND SHIP_QTY > 0 AND RWS_PUT_AWAY_QTY > 0 THEN #prchReqLineStsPartiallyReceived#
+                              WHEN PRCH_REQ_QTY > SHIP_QTY AND SHIP_QTY > 0 THEN #prchReqLineStsPartiallyShipped#
+                              ELSE PRCH_REQ_LINE_STS_CD
+                         END AS PRCH_REQ_LINE_STS_CD
+                        ,OPEN_STS_FLG
+                        ,INVTY_ORD_NUM
+                        ,INVTY_ORD_LINE_NUM
+                        ,PO_RCV_TRX_HDR_NUM
+                        ,PO_RCV_TRX_LINE_NUM
+                        <!-- START 2023/06/19 K.Chiba [QC#61262, ADD] -->
+                        ,RQST_TECH_TOC_CD
+                        <!-- END 2023/06/19 K.Chiba [QC#61262, ADD] -->
+                        <!-- START 2023/10/26 T.Kuroda [QC#61494, ADD] -->
+                        ,PO_ORD_NUM
+                        ,PO_ORD_DTL_LINE_NUM
+                        ,VND_SO_NUM
+                        ,PAD_ETA_DT
+                        ,PRCH_REQ_TP_CD
+                        <!-- END 2023/10/26 T.Kuroda [QC#61494, ADD] -->
+                    FROM
+                        (
+                        SELECT
+                            REQ.GLBL_CMPY_CD
+                            ,DTL.DEST_INVTY_LOC_CD
+                            ,REQ.PRCH_REQ_NUM
+                            ,REQ.SVC_TASK_NUM
+                            ,DTL.SHIP_DT_TM_TS
+<!-- START 2017/12/21 M.Naito [QC#18572,MOD] -->
+                            ,NVL(DTL.SO_NUM, PRH.RWS_REF_NUM) AS SO_NUM
+                            ,DTL.MDSE_CD
+                            ,DTL.SRC_INVTY_LOC_CD
+                            <!-- START 2023/10/26 T.Kuroda [QC#61494, MOD] -->
+<!--                            ,NVL(PRH.PO_RCV_ETA_DT, DTL.RQST_RCV_DT) AS RQST_RCV_DT-->
+<!--                            ,CASE WHEN PRH.PO_RCV_ETA_DT IS NULL THEN DTL.RQST_RCV_TM END AS RQST_RCV_TM-->
+                            ,DTL.RQST_RCV_DT AS RQST_RCV_DT
+                            ,DTL.RQST_RCV_TM AS RQST_RCV_TM
+                            <!-- END 2023/10/26 T.Kuroda [QC#61494, MOD] -->
+                            ,CASE
+                                WHEN
+                                    DTL.PRCH_REQ_LINE_TP_CD = #prchReqLineTpInsPo#
+                                THEN
+                                    NVL(PRD.PO_RCV_QTY, DTL.PRCH_REQ_QTY)
+                                ELSE
+                                    DTL.PRCH_REQ_QTY
+                                END AS PRCH_REQ_QTY
+                            ,CASE
+                                WHEN
+                                    DTL.PRCH_REQ_LINE_TP_CD = #prchReqLineTpInsPo#
+                                THEN
+                                    NVL(PRD.PO_RCV_QTY, DTL.SHIP_QTY)
+                                ELSE
+                                    DTL.SHIP_QTY
+                                END AS SHIP_QTY
+                            ,CASE
+                                WHEN
+                                    DTL.PRCH_REQ_LINE_TP_CD = #prchReqLineTpInsPo#
+                                THEN
+                                    NVL(PRD.ACTL_RCV_QTY, DTL.RWS_PUT_AWAY_QTY)
+                                ELSE
+                                    DTL.RWS_PUT_AWAY_QTY
+                                END AS RWS_PUT_AWAY_QTY
+<!-- END 2017/12/21 M.Naito [QC#18572,MOD] -->
+                            <!-- START 2017/02/16 K.Kojima [QC#17111,MOD] -->
+                            <!-- ,DTL.BACK_TO_TECH_QTY -->
+                            ,CASE
+                                WHEN
+                                    DTL.PROCR_TP_CD = #procRTpSupplier# AND DTL.PRCH_REQ_LINE_SUB_NUM &lt;&gt; 0
+                                THEN
+                                    NVL(DTL.PRCH_REQ_QTY,0) - NVL(DTL.SHIP_QTY,0)
+                                ELSE
+                                    DTL.BACK_TO_TECH_QTY
+                                END AS BACK_TO_TECH_QTY
+                            <!-- END 2017/02/16 K.Kojima [QC#17111,MOD] -->
+<!-- START 2017/11/13 M.Naito [QC#18572,MOD] -->
+                            ,NVL(SOCD.PRO_NUM, PRD.PRO_NUM) AS PRO_NUM
+<!-- END 2017/11/13 M.Naito [QC#18572,MOD] -->
+                            ,DTL.PRCH_REQ_LINE_NUM
+                            ,DTL.PRCH_REQ_LINE_SUB_NUM
+<!-- START 2017/11/13 M.Naito [QC#18572,MOD] -->
+                            ,NVL(SOCD.VND_CD, NVL(PRD.CARR_CD, DTL.CARR_CD)) AS CARR_CD
+<!-- END 2017/11/13 M.Naito [QC#18572,MOD] -->
+                            ,REQ.SHIP_TO_CUST_CD 
+                            ,REQ.PRCH_REQ_STS_CD
+                            ,REQ.PRCH_REQ_APVL_STS_CD
+                            ,DTL.PRCH_REQ_LINE_STS_CD
+                            ,DTL.PRCH_REQ_BAL_QTY
+                            ,RSTS.OPEN_STS_FLG
+                            ,DTL.INVTY_ORD_NUM
+                            ,DTL.INVTY_ORD_LINE_NUM
+                            ,PRH.PO_RCV_TRX_HDR_NUM
+                            ,PRD.PO_RCV_TRX_LINE_NUM
+                            ,COUNT(*) OVER (PARTITION BY REQ.PRCH_REQ_NUM, DTL.PRCH_REQ_LINE_NUM) AS CNT
+<!-- START 2023/06/19 K.Chiba [QC#61262, ADD] -->
+                            ,REQ.RQST_TECH_TOC_CD
+<!-- END 2023/06/19 K.Chiba [QC#61262, ADD] -->
+<!-- START 2023/10/26 T.Kuroda [QC#61494, ADD] -->
+                            ,DTL2.PO_ORD_NUM
+                            ,DTL2.PO_ORD_DTL_LINE_NUM
+                            ,PAD2.VND_SO_NUM
+                            ,PAD2.ETA_DT AS PAD_ETA_DT
+                            ,REQ.PRCH_REQ_TP_CD
+<!-- END 2023/10/26 T.Kuroda [QC#61494, ADD] -->
+                        FROM
+                            PRCH_REQ        REQ
+                            ,PRCH_REQ_DTL   DTL
+                            ,PRCH_REQ_STS   RSTS
+<!-- START 2017/11/13 M.Naito [QC#18572,ADD] -->
+                            ,SHPG_ORD_DTL   SOD
+                            ,SHPG_ORD_CONF_DTL SOCD
+                            ,PO_RCV_DTL     PRD
+                            ,PO_RCV_HDR     PRH
+<!-- END 2017/11/13 M.Naito [QC#18572,ADD] -->
+<!-- START 2023/10/26 T.Kuroda [QC#61494, ADD] -->
+                            ,PRCH_REQ       REQ2
+                            ,PRCH_REQ_DTL   DTL2
+                            ,PO_ACK_DTL     PAD2
+<!-- END 2023/10/26 T.Kuroda [QC#61494, ADD] -->
+                        WHERE
+                            REQ.GLBL_CMPY_CD                    = #glblCmpyCd#
+                            AND REQ.PRCH_REQ_REC_TP_CD          = #prchReqRecTpCd#
+                            AND REQ.EZCANCELFLAG                = '0'
+                            AND REQ.GLBL_CMPY_CD                = DTL.GLBL_CMPY_CD
+                            AND REQ.PRCH_REQ_NUM                = DTL.PRCH_REQ_NUM
+<!-- START 2018/05/21 K.Kojima [QC#22220,ADD] -->
+                            AND (DTL.PRCH_REQ_LINE_STS_CD &lt;&gt; #prchReqLineStsCancelled#
+                                OR (DTL.PRCH_REQ_LINE_STS_CD = #prchReqLineStsCancelled# AND DTL.PRCH_REQ_CANC_QTY &gt; 0))
+<!-- END 2018/05/21 K.Kojima [QC#22220,ADD] -->
+                            AND DTL.EZCANCELFLAG                = '0'
+                            AND REQ.GLBL_CMPY_CD                = RSTS.GLBL_CMPY_CD
+                            AND REQ.PRCH_REQ_STS_CD             = RSTS.PRCH_REQ_STS_CD
+                            AND RSTS.EZCANCELFLAG               = '0'
+<!-- START 2017/11/13 M.Naito [QC#18572,ADD] -->
+                            AND DTL.GLBL_CMPY_CD                = SOD.GLBL_CMPY_CD(+)
+                            AND DTL.PRCH_REQ_NUM                = SOD.PRCH_REQ_NUM(+)
+                            AND DTL.PRCH_REQ_LINE_NUM           = SOD.PRCH_REQ_LINE_NUM(+)
+                            AND DTL.PRCH_REQ_LINE_SUB_NUM       = SOD.PRCH_REQ_LINE_SUB_NUM(+)
+                            AND SOD.EZCANCELFLAG(+)             = '0'
+                            AND SOD.GLBL_CMPY_CD                = SOCD.GLBL_CMPY_CD(+)
+                            AND SOD.SO_NUM                      = SOCD.SO_NUM(+)
+                            AND SOD.SO_SLP_NUM                  = SOCD.SO_SLP_NUM(+)
+                            AND SOCD.EZCANCELFLAG(+)            = '0'
+                            AND DTL.GLBL_CMPY_CD                = PRD.GLBL_CMPY_CD(+)
+                            AND DTL.PRCH_REQ_NUM                = PRD.PRCH_REQ_NUM(+)
+                            AND DTL.PRCH_REQ_LINE_NUM           = PRD.PRCH_REQ_LINE_NUM(+)
+                            AND DTL.PRCH_REQ_LINE_SUB_NUM       = PRD.PRCH_REQ_LINE_SUB_NUM(+)
+                            AND PRD.RWS_STS_CD(+)               != #rwsStsCanceled#
+                            AND PRD.EZCANCELFLAG(+)             = '0'
+                            AND PRD.GLBL_CMPY_CD                = PRH.GLBL_CMPY_CD(+)
+                            AND PRD.PO_RCV_NUM                  = PRH.PO_RCV_NUM(+)
+                            AND PRH.EZCANCELFLAG(+)             = '0'
+<!-- END 2017/11/13 M.Naito [QC#18572,ADD] -->
+<!-- START 2016/11/22 K.Kojima [QC#16033,ADD] -->
+                            AND (RSTS.PRCH_REQ_STS_CD    &lt;&gt; #prchReqStsClosed#
+                                    OR (RSTS.PRCH_REQ_STS_CD    = #prchReqStsClosed#
+                                         AND SUBSTR(NVL(REQ.PRCH_REQ_CLO_DT_TM_TS, #slsDt#), 1, 8) = #slsDt#))
+<!-- END 2016/11/22 K.Kojima [QC#16033,ADD] -->
+                            AND (RSTS.OPEN_STS_FLG              = 'Y'
+                                    OR (RSTS.OPEN_STS_FLG       = 'N'
+                                         AND EXISTS(SELECT * FROM IV_BEF
+                                                                WHERE IV_BEF.PRCH_REQ_NUM            = REQ.PRCH_REQ_NUM
+                                                                    AND IV_BEF.PRCH_REQ_LINE_NUM     = DTL.PRCH_REQ_LINE_NUM
+                                                                    AND IV_BEF.PRCH_REQ_LINE_SUB_NUM = DTL.PRCH_REQ_LINE_SUB_NUM)))
+<!-- START 2023/10/26 T.Kuroda [QC#61494, ADD] -->
+                            AND DTL2.TRX_REF_NUM(+)             = DTL.PRCH_REQ_NUM
+                            AND DTL2.TRX_REF_LINE_NUM(+)        = DTL.PRCH_REQ_LINE_NUM
+                            AND DTL2.TRX_REF_LINE_SUB_NUM(+)    = DTL.PRCH_REQ_LINE_SUB_NUM
+                            AND DTL2.GLBL_CMPY_CD(+)            = REQ.GLBL_CMPY_CD
+                            AND DTL2.EZCANCELFLAG(+)            = '0'
+                            AND REQ2.PRCH_REQ_NUM(+)            = DTL2.PRCH_REQ_NUM
+                            AND REQ2.GLBL_CMPY_CD(+)            = DTL2.GLBL_CMPY_CD
+                            AND REQ2.EZCANCELFLAG(+)            = '0'
+                            AND REQ2.PRCH_REQ_REC_TP_CD(+)      = #prchReqRecTpCdRequisition#
+                            AND DTL2.GLBL_CMPY_CD               = PAD2.GLBL_CMPY_CD(+)
+                            AND DTL2.PO_ORD_NUM                 = PAD2.PO_ORD_NUM(+)
+                            AND DTL2.PO_ORD_DTL_LINE_NUM        = PAD2.PO_ORD_DTL_LINE_NUM(+)
+                            AND PAD2.VND_SO_NUM(+)              IS NOT NULL
+                            AND PAD2.EZCANCELFLAG(+)            = '0'
+<!-- END 2023/10/26 T.Kuroda [QC#61494, ADD] -->
+                        ) PR
+                    WHERE
+                        CNT                 = 1
+                        OR (CNT &gt; 1 AND PRCH_REQ_LINE_SUB_NUM &lt;&gt; 0)
+            )
+            ,IV_MAIN AS(
+                    SELECT
+                        GLBL_CMPY_CD
+                        ,DEST_INVTY_LOC_CD
+                        ,PRCH_REQ_NUM
+                        ,PRCH_REQ_LINE_NUM
+                        ,PRCH_REQ_LINE_SUB_NUM
+                        ,SVC_TASK_NUM
+                        ,SHIP_DT_TM_TS
+                        ,PRCH_REQ_STS_DESC_TXT
+<!-- START 2017/11/13 M.Naito [QC#18572,ADD] -->
+                        ,TECH_RQST_SO_NUM
+<!-- END 2017/11/13 M.Naito [QC#18572,ADD] -->
+                        ,MDSE_CD
+                        ,MDSE_DESC_SHORT_TXT
+                        ,PRCH_REQ_LINE_STS_DESC_TXT
+                        ,SRC_INVTY_LOC_CD
+                        ,RQST_RCV_DT
+                        ,RQST_RCV_TM
+                        ,PRCH_REQ_QTY
+                        ,SHIP_QTY
+                        ,RWS_PUT_AWAY_QTY
+                        ,BACK_TO_TECH_QTY
+                        ,PRO_NUM
+                        ,CARR_CD
+                        ,SHIP_TO_CUST_CD
+                        ,ROW_NUM
+<!-- START 2023/06/19 K.Chiba [QC#61262, ADD] -->
+                        ,RQST_TECH_TOC_CD
+<!-- END 2023/06/19 K.Chiba [QC#61262, ADD] -->
+                    FROM
+                        (
+                        --OPEN PR
+                        SELECT
+                            PRCH.GLBL_CMPY_CD                         AS GLBL_CMPY_CD
+                            ,PRCH.DEST_INVTY_LOC_CD                   AS DEST_INVTY_LOC_CD
+                            ,PRCH.PRCH_REQ_NUM                        AS PRCH_REQ_NUM
+                            ,PRCH.PRCH_REQ_LINE_NUM                   AS PRCH_REQ_LINE_NUM
+                            ,PRCH.PRCH_REQ_LINE_SUB_NUM               AS PRCH_REQ_LINE_SUB_NUM
+                            ,PRCH.SVC_TASK_NUM                        AS SVC_TASK_NUM
+                            ,PRCH.SHIP_DT_TM_TS                       AS SHIP_DT_TM_TS
+                            ,CASE WHEN PRCH.OPEN_STS_FLG = 'Y'  THEN CN_OP.DS_COND_CONST_VAL_TXT_02
+                                  ELSE                               CN_CL.DS_COND_CONST_VAL_TXT_02 
+                             END  AS PRCH_REQ_STS_DESC_TXT
+<!-- START 2017/11/13 M.Naito [QC#18572,ADD] -->
+                            ,PRCH.SO_NUM                              AS TECH_RQST_SO_NUM
+<!-- END 2017/11/13 M.Naito [QC#18572,ADD] -->
+                            ,PRCH.MDSE_CD                             AS MDSE_CD
+                            ,DSMD.MDSE_DESC_SHORT_TXT                 AS MDSE_DESC_SHORT_TXT
+                            ,CN_LN.DS_COND_CONST_VAL_TXT_02           AS PRCH_REQ_LINE_STS_DESC_TXT
+                            ,PRCH.SRC_INVTY_LOC_CD                    AS SRC_INVTY_LOC_CD
+<!-- START 2023/10/26 T.Kuroda [QC#61494, MOD] -->
+<!--                             ,NVL(NVL( -->
+                            ,NVL(
+<!-- END 2023/10/26 T.Kuroda [QC#61494, MOD] -->
+                                  (SELECT
+                                        MAX(PSW.EDI_STS_DT)
+                                    FROM (
+                                        SELECT
+                                            PSW.EDI_STS_DT
+                                        FROM
+<!-- START 2023/10/26 T.Kuroda [QC#61494, MOD] -->
+<!--                                             POD_STS_WRK PSW-->
+<!--                                         WHERE -->
+<!--                                             PRCH.GLBL_CMPY_CD   = PSW.GLBL_CMPY_CD-->
+<!--                                         AND PRCH.PRO_NUM        = PSW.EDI_PRO_NUM-->
+<!--                                         <iterate property="podUpdStsList" var="podUpdStsList[]" open="AND PSW.EDI_STS_CD IN (" conjunction= ", " close=")">-->
+<!--                                             #podUpdStsList[]#-->
+<!--                                         </iterate>-->
+<!--                                         AND PSW.EZCANCELFLAG    = '0'-->
+                                            SHPG_PLN SP,
+                                            POD_STS_WRK PSW
+                                        WHERE 
+                                            SP.GLBL_CMPY_CD     = PRCH.GLBL_CMPY_CD
+                                        AND SP.SO_NUM           = PRCH.SO_NUM
+                                        AND SP.TRX_HDR_NUM      = PRCH.INVTY_ORD_NUM
+                                        AND SP.TRX_LINE_NUM     = PRCH.INVTY_ORD_LINE_NUM
+                                        AND SP.GLBL_CMPY_CD     = PSW.GLBL_CMPY_CD
+                                        AND SP.BOL_NUM          = PSW.EDI_PRO_NUM
+                                        <iterate property="ediStsCdList" var="ediStsCdList[]" open="AND PSW.EDI_STS_CD IN (" conjunction= ", " close=")">
+                                            #ediStsCdList[]#
+                                        </iterate>
+                                        AND SP.EZCANCELFLAG     = '0'
+<!-- END 2023/10/26 T.Kuroda [QC#61494, MOD] -->
+                                        AND PSW.EZCANCELFLAG    = '0'
+                                        ORDER BY
+                                            PSW.EZUPTIME DESC
+                                           ,PSW.EDI_STS_DT DESC
+                                           ,PSW.EDI_STS_TM DESC
+                                    ) PSW
+                                    WHERE ROWNUM = 1
+                                  )
+                                  ,
+<!-- START 2023/10/26 T.Kuroda [QC#61494, ADD] -->
+                                  NVL(
+                                  (
+                                    SELECT
+                                        MAX(TRX.WMS_SHIP_DT_TM_TS)
+                                    FROM
+                                        WMS_INBD_TRX TRX
+                                    WHERE
+                                        TRX.GLBL_CMPY_CD = PRCH.GLBL_CMPY_CD
+                                    AND TRX.PRO_NUM = PRCH.PRO_NUM
+                                    AND TRX.WMS_CARR_CD IN (
+                                            SELECT
+                                                A.TPL_CARR_SVC_LVL_CD
+                                            FROM
+                                                TPL_CARR_SVC_LVL A
+                                            WHERE
+                                                A.GLBL_CMPY_CD = TRX.GLBL_CMPY_CD
+                                            AND ((PRCH.PRCH_REQ_TP_CD = #prchReqTpCdPremiumRush# AND A.TPL_CARR_NM LIKE #premiumRushConditionTplCarrNm#)
+                                                OR
+                                                (PRCH.PRCH_REQ_TP_CD = #prchReqTpCdRush# AND 
+                                                <iterate property="rushConditionTplCarrNmList" var="rushConditionTplCarrNmList[]" open="A.TPL_CARR_NM IN (" conjunction= ", " close=")">
+                                                    #rushConditionTplCarrNmList[]#
+                                                </iterate>
+                                                ))
+                                            AND A.EZCANCELFLAG = '0'
+                                        )
+                                    AND TRX.EZCANCELFLAG = '0'
+                                  )
+                                  ,
+                                  NVL(
+<!-- END 2023/10/26 T.Kuroda [QC#61494, ADD] -->
+                                  (SELECT
+                                         MAX(SP.RDD_DT)
+                                    FROM
+                                        SHPG_PLN SP
+                                    WHERE 
+                                        SP.GLBL_CMPY_CD     = PRCH.GLBL_CMPY_CD
+                                    AND SP.SO_NUM           = PRCH.SO_NUM
+                                    AND SP.TRX_HDR_NUM      = PRCH.INVTY_ORD_NUM
+                                    AND SP.TRX_LINE_NUM     = PRCH.INVTY_ORD_LINE_NUM
+                                    AND SP.SHIP_PLN_CANC_FLG = 'N'
+                                    AND SP.EZCANCELFLAG     = '0'
+                                  )
+                                  ,
+<!-- START 2023/10/26 T.Kuroda [QC#61494, ADD] -->
+                                  NVL(
+                                  (
+                                    SELECT
+                                        MAX(PSW.EDI_STS_DT)
+                                    FROM (
+                                        SELECT
+                                            PSW.EDI_STS_DT
+                                        FROM
+                                            EDI_ASN_HDR_WRK EAHW
+                                           ,EDI_ASN_DTL_WRK EADW
+                                           ,POD_STS_WRK PSW
+                                        WHERE
+                                            EAHW.GLBL_CMPY_CD        = PRCH.GLBL_CMPY_CD
+                                        AND EAHW.ASN_SO_NUM          = PRCH.VND_SO_NUM
+                                        AND EAHW.GLBL_CMPY_CD        = EADW.GLBL_CMPY_CD
+                                        AND EAHW.ASN_SO_NUM          = EADW.ASN_SO_NUM
+                                        AND EADW.PO_ORD_NUM          = PRCH.PO_ORD_NUM
+                                        AND EADW.PO_ORD_DTL_LINE_NUM = PRCH.PO_ORD_DTL_LINE_NUM 
+                                        AND EADW.GLBL_CMPY_CD        = PSW.GLBL_CMPY_CD
+                                        AND EADW.ASN_BOL_NUM         = PSW.EDI_PRO_NUM
+                                        <iterate property="ediStsCdList" var="ediStsCdList[]" open="AND PSW.EDI_STS_CD IN (" conjunction= ", " close=")">
+                                            #ediStsCdList[]#
+                                        </iterate>
+                                        AND EAHW.EZCANCELFLAG        = '0'
+                                        AND EADW.EZCANCELFLAG        = '0'
+                                        AND PSW.EZCANCELFLAG         = '0'
+                                        ORDER BY
+                                            PSW.EZUPTIME DESC
+                                           ,PSW.EDI_STS_DT DESC
+                                           ,PSW.EDI_STS_TM DESC
+                                    ) PSW
+                                    WHERE ROWNUM = 1
+                                  )
+                                  ,
+<!-- END 2023/10/26 T.Kuroda [QC#61494, ADD] -->
+                                  NVL(
+                                  (
+                                    SELECT
+                                        MAX(EADW.ASN_PLN_DELY_DT)
+                                    FROM
+                                         EDI_ASN_HDR_WRK EAHW
+                                        ,EDI_ASN_DTL_WRK EADW
+                                    WHERE
+                                        EAHW.GLBL_CMPY_CD = PRCH.GLBL_CMPY_CD
+                                    AND EAHW.ASN_SO_NUM   = PRCH.SO_NUM
+                                    AND EAHW.GLBL_CMPY_CD = EADW.GLBL_CMPY_CD
+                                    AND EAHW.ASN_SO_NUM = EADW.ASN_SO_NUM
+                                    AND EADW.PO_ORD_NUM = PRCH.PO_RCV_TRX_HDR_NUM
+                                    AND EADW.PO_ORD_DTL_LINE_NUM = PRCH.PO_RCV_TRX_LINE_NUM 
+                                    AND EAHW.EZCANCELFLAG = '0'
+                                    AND EADW.EZCANCELFLAG = '0'
+                                  )
+                                  ,
+                                  NVL(
+                                  (
+<!-- START 2023/10/26 T.Kuroda [QC#61494, MOD] -->
+<!--                                    SELECT-->
+<!--                                        TO_CHAR(TO_DATE(MAX(PAD_IB.ETA_DT), 'YYYYMMDD') + #days#, 'YYYYMMDD') AS ETA_DT-->
+<!--                                    FROM-->
+<!--                                        PO_ACK_DTL         PAD_IB-->
+<!--                                       ,PO_DTL             PD-->
+<!--                                    WHERE-->
+<!--                                        PD.GLBL_CMPY_CD            = PRCH.GLBL_CMPY_CD-->
+<!--                                    AND PD.TRX_REF_NUM             = PRCH.PRCH_REQ_NUM-->
+<!--                                    AND PD.TRX_REF_LINE_NUM        = PRCH.PRCH_REQ_LINE_NUM-->
+<!--                                    AND PD.TRX_REF_LINE_SUB_NUM    = PRCH.PRCH_REQ_LINE_SUB_NUM-->
+<!--                                    AND PD.PO_ORD_NUM              = PAD_IB.PO_ORD_NUM-->
+<!--                                    AND PD.PO_ORD_DTL_LINE_NUM     = PAD_IB.PO_ORD_DTL_LINE_NUM-->
+<!--                                    AND PAD_IB.PO_ACK_DTL_LTST_FLG = 'Y'-->
+<!--                                    <iterate property="ackStsList" var="ackStsList[]" open="AND PAD_IB.VND_PO_ACK_STS_CD IN (" conjunction= ", " close=")">-->
+<!--                                        #ackStsList[]#-->
+<!--                                    </iterate>-->
+<!--                                    AND PAD_IB.EZCANCELFLAG        = '0'-->
+<!--                                    AND PD.EZCANCELFLAG            = '0'-->
+                                    SELECT
+                                        TO_CHAR(TO_DATE(MAX(POYO.P_DATE_STOCK_IN_EST), 'YYYYMMDD') + #days#, 'YYYYMMDD') AS ETA_DT
+                                    FROM
+                                        CSA_PRT_CUST_CPO_V PCC
+                                       ,CSA_PRT_CPO_V      PC
+                                       ,CSA_PRT_VND_XREF_V XREF
+                                       ,CSA_PRT_POYO_V     POYO
+                                       ,PO_ACK_DTL         PAD_IB
+                                    WHERE
+                                        PCC.P_NUM_CUST_PO          = PRCH.PO_ORD_NUM 
+                                    AND PCC.P_NUM_CUST_PO          = PC.P_NUM_CUST_PO
+                                    AND PC.P_NUM_CUST_PO           = XREF.P_NUM_CUST_PO
+                                    AND XREF.P_NUM_PO_PARTS        = POYO.P_NUM_PO_PARTS
+                                    AND POYO.P_DATE_STOCK_IN_EST IS NOT NULL
+                                    AND PRCH.PO_ORD_NUM            = PAD_IB.PO_ORD_NUM
+                                    AND PRCH.PO_ORD_DTL_LINE_NUM   = PAD_IB.PO_ORD_DTL_LINE_NUM
+                                    AND PAD_IB.PO_ACK_DTL_LTST_FLG = 'Y'
+                                    <iterate property="ackStsList" var="ackStsList[]" open="AND PAD_IB.VND_PO_ACK_STS_CD IN (" conjunction= ", " close=")">
+                                        #ackStsList[]#
+                                    </iterate>
+                                    AND POYO.P_PARTS_NUM           = PAD_IB.VND_MDSE_CD
+                                    AND PCC.EZCANCELFLAG           = '0'
+                                    AND PC.EZCANCELFLAG            = '0'
+                                    AND XREF.EZCANCELFLAG          = '0'
+                                    AND POYO.EZCANCELFLAG          = '0'
+                                    AND PAD_IB.EZCANCELFLAG        = '0'
+<!-- END 2023/10/26 T.Kuroda [QC#61494, ADD] -->
+                                  )
+                                  ,
+<!-- START 2023/10/26 T.Kuroda [QC#61494, ADD] -->
+                                  NVL(
+                                  PRCH.PAD_ETA_DT
+                                  ,
+                                  NVL(
+                                  (SELECT
+                                      PD.RQST_RCV_DT
+                                  FROM
+                                      PO_DTL PD
+                                  WHERE
+                                      PD.GLBL_CMPY_CD = PRCH.GLBL_CMPY_CD
+                                  AND PD.PO_ORD_NUM = PRCH.PO_ORD_NUM
+                                  AND PD.PO_ORD_DTL_LINE_NUM = PRCH.PO_ORD_DTL_LINE_NUM
+                                  AND PD.EZCANCELFLAG = '0'
+                                  AND ROWNUM = 1)
+                                  ,
+<!-- END 2023/10/26 T.Kuroda [QC#61494, ADD] -->
+                                  PRCH.RQST_RCV_DT
+                                  )
+                                  )
+<!-- START 2023/10/26 T.Kuroda [QC#61494, ADD] -->
+                                  )
+                                  )
+                                  )
+                                  )
+                                  )
+<!-- END 2023/10/26 T.Kuroda [QC#61494, ADD] -->
+                             )                                        AS RQST_RCV_DT
+<!-- START 2023/10/26 T.Kuroda [QC#61494, MOD] -->
+<!--                              ,NVL(NVL( -->
+                             ,NVL(
+<!-- END 2023/10/26 T.Kuroda [QC#61494, MOD] -->
+                                  (SELECT
+                                       MAX(PSW.EDI_STS_TM)
+                                    FROM (
+                                        SELECT
+                                            PSW.EDI_STS_TM
+                                        FROM
+<!-- START 2023/10/26 T.Kuroda [QC#61494, MOD] -->
+<!--                                             POD_STS_WRK PSW-->
+<!--                                         WHERE -->
+<!--                                             PRCH.GLBL_CMPY_CD   = PSW.GLBL_CMPY_CD-->
+<!--                                         AND PRCH.PRO_NUM        = PSW.EDI_PRO_NUM-->
+<!--                                         <iterate property="podUpdStsList" var="podUpdStsList[]" open="AND PSW.EDI_STS_CD IN (" conjunction= ", " close=")">-->
+<!--                                             #podUpdStsList[]#-->
+<!--                                         </iterate>-->
+                                            SHPG_PLN SP
+                                            ,POD_STS_WRK PSW
+                                        WHERE 
+                                            SP.GLBL_CMPY_CD     = PRCH.GLBL_CMPY_CD
+                                        AND SP.SO_NUM           = PRCH.SO_NUM
+                                        AND SP.TRX_HDR_NUM      = PRCH.INVTY_ORD_NUM
+                                        AND SP.TRX_LINE_NUM     = PRCH.INVTY_ORD_LINE_NUM
+                                        AND SP.GLBL_CMPY_CD     = PSW.GLBL_CMPY_CD
+                                        AND SP.BOL_NUM          = PSW.EDI_PRO_NUM
+                                        <iterate property="ediStsCdList" var="ediStsCdList[]" open="AND PSW.EDI_STS_CD IN (" conjunction= ", " close=")">
+                                            #ediStsCdList[]#
+                                        </iterate>
+                                        AND SP.EZCANCELFLAG    = '0'
+<!-- END 2023/10/26 T.Kuroda [QC#61494, MOD] -->
+                                        AND PSW.EZCANCELFLAG    = '0'
+                                        ORDER BY
+                                            PSW.EZUPTIME DESC
+                                           ,PSW.EDI_STS_DT DESC
+                                           ,PSW.EDI_STS_TM DESC
+                                    ) PSW
+                                    WHERE ROWNUM = 1
+                                  )
+                                  ,
+<!-- START 2023/10/26 T.Kuroda [QC#61494, ADD] -->
+                                  NVL(
+                                  (
+                                    SELECT
+                                         MAX(TRX.WMS_SHIP_DT_TM_TS)
+                                     FROM
+                                         WMS_INBD_TRX TRX
+                                     WHERE
+                                         TRX.GLBL_CMPY_CD = PRCH.GLBL_CMPY_CD
+                                     AND TRX.PRO_NUM = PRCH.PRO_NUM
+                                     AND TRX.WMS_CARR_CD IN (
+                                             SELECT
+                                                 A.TPL_CARR_SVC_LVL_CD
+                                             FROM
+                                                 TPL_CARR_SVC_LVL A
+                                             WHERE
+                                                 A.GLBL_CMPY_CD = TRX.GLBL_CMPY_CD
+                                             AND ((PRCH.PRCH_REQ_TP_CD = #prchReqTpCdPremiumRush# AND A.TPL_CARR_NM LIKE #premiumRushConditionTplCarrNm#)
+                                                 OR
+                                                 (PRCH.PRCH_REQ_TP_CD = #prchReqTpCdRush# AND 
+                                                 <iterate property="rushConditionTplCarrNmList" var="rushConditionTplCarrNmList[]" open="A.TPL_CARR_NM IN (" conjunction= ", " close=")">
+                                                     #rushConditionTplCarrNmList[]#
+                                                 </iterate>
+                                                 ))
+                                             AND A.EZCANCELFLAG = '0'
+                                         )
+                                     AND TRX.EZCANCELFLAG = '0'
+                                  )
+                                  ,
+                                  NVL(
+<!-- END 2023/10/26 T.Kuroda [QC#61494, ADD] -->
+                                  (
+                                    SELECT
+                                        MAX('000000')
+                                    FROM
+                                        SHPG_PLN SP
+                                    WHERE 
+                                        SP.GLBL_CMPY_CD     = PRCH.GLBL_CMPY_CD
+                                    AND SP.SO_NUM           = PRCH.SO_NUM
+                                    AND SP.TRX_HDR_NUM      = PRCH.INVTY_ORD_NUM
+                                    AND SP.TRX_LINE_NUM     = PRCH.INVTY_ORD_LINE_NUM
+                                    AND SP.SHIP_PLN_CANC_FLG = 'N'
+                                    AND SP.EZCANCELFLAG     = '0'
+                                  )
+                                  ,
+<!-- START 2023/10/26 T.Kuroda [QC#61494, ADD] -->
+                                  NVL(
+                                  (
+                                    SELECT
+                                        MAX(PSW.EDI_STS_TM)
+                                    FROM (
+                                        SELECT
+                                            PSW.EDI_STS_TM
+                                        FROM
+                                            EDI_ASN_HDR_WRK EAHW
+                                           ,EDI_ASN_DTL_WRK EADW
+                                           ,POD_STS_WRK PSW
+                                        WHERE
+                                            EAHW.GLBL_CMPY_CD        = PRCH.GLBL_CMPY_CD
+                                        AND EAHW.ASN_SO_NUM          = PRCH.VND_SO_NUM
+                                        AND EAHW.GLBL_CMPY_CD        = EADW.GLBL_CMPY_CD
+                                        AND EAHW.ASN_SO_NUM          = EADW.ASN_SO_NUM
+                                        AND EADW.PO_ORD_NUM          = PRCH.PO_ORD_NUM
+                                        AND EADW.PO_ORD_DTL_LINE_NUM = PRCH.PO_ORD_DTL_LINE_NUM 
+                                        AND EADW.GLBL_CMPY_CD        = PSW.GLBL_CMPY_CD
+                                        AND EADW.ASN_BOL_NUM         = PSW.EDI_PRO_NUM
+                                        <iterate property="ediStsCdList" var="ediStsCdList[]" open="AND PSW.EDI_STS_CD IN (" conjunction= ", " close=")">
+                                            #ediStsCdList[]#
+                                        </iterate>
+                                        AND EAHW.EZCANCELFLAG        = '0'
+                                        AND EADW.EZCANCELFLAG        = '0'
+                                        AND PSW.EZCANCELFLAG         = '0'
+                                        ORDER BY
+                                            PSW.EZUPTIME DESC
+                                           ,PSW.EDI_STS_DT DESC
+                                           ,PSW.EDI_STS_TM DESC
+                                    ) PSW
+                                    WHERE ROWNUM = 1
+                                  )
+                                  ,
+<!-- END 2023/10/26 T.Kuroda [QC#61494, ADD] -->
+                                  NVL(
+                                  (
+                                    SELECT
+                                        MAX('000000')
+                                    FROM
+                                         EDI_ASN_HDR_WRK EAHW
+                                        ,EDI_ASN_DTL_WRK EADW
+                                    WHERE
+                                        EAHW.GLBL_CMPY_CD = PRCH.GLBL_CMPY_CD
+                                    AND EAHW.ASN_SO_NUM   = PRCH.SO_NUM
+                                    AND EAHW.GLBL_CMPY_CD = EADW.GLBL_CMPY_CD
+                                    AND EAHW.ASN_SO_NUM = EADW.ASN_SO_NUM
+                                    AND EADW.PO_ORD_NUM = PRCH.PO_RCV_TRX_HDR_NUM
+                                    AND EADW.PO_ORD_DTL_LINE_NUM = PRCH.PO_RCV_TRX_LINE_NUM 
+                                    AND EAHW.EZCANCELFLAG = '0'
+                                    AND EADW.EZCANCELFLAG = '0'
+                                  )
+                                  ,
+                                  NVL(
+                                  (
+                                    SELECT
+                                        MAX('000000')
+                                    FROM
+<!-- START 2023/10/26 T.Kuroda [QC#61494, MOD] -->
+<!--                                        PO_ACK_DTL         PAD_IB-->
+<!--                                       ,PO_DTL             PD-->
+<!--                                    WHERE-->
+<!--                                        PD.GLBL_CMPY_CD            = PRCH.GLBL_CMPY_CD-->
+<!--                                    AND PD.TRX_REF_NUM             = PRCH.PRCH_REQ_NUM-->
+<!--                                    AND PD.TRX_REF_LINE_NUM        = PRCH.PRCH_REQ_LINE_NUM-->
+<!--                                    AND PD.TRX_REF_LINE_SUB_NUM    = PRCH.PRCH_REQ_LINE_SUB_NUM-->
+<!--                                    AND PD.PO_ORD_NUM              = PAD_IB.PO_ORD_NUM-->
+<!--                                    AND PD.PO_ORD_DTL_LINE_NUM     = PAD_IB.PO_ORD_DTL_LINE_NUM-->
+<!--                                    AND PAD_IB.PO_ACK_DTL_LTST_FLG = 'Y'-->
+<!--                                    <iterate property="ackStsList" var="ackStsList[]" open="AND PAD_IB.VND_PO_ACK_STS_CD IN (" conjunction= ", " close=")">-->
+<!--                                        #ackStsList[]#-->
+<!--                                    </iterate>-->
+<!--                                    AND PAD_IB.EZCANCELFLAG        = '0'-->
+<!--                                    AND PD.EZCANCELFLAG            = '0'-->
+                                        CSA_PRT_CUST_CPO_V PCC
+                                       ,CSA_PRT_CPO_V      PC
+                                       ,CSA_PRT_VND_XREF_V XREF
+                                       ,CSA_PRT_POYO_V     POYO
+                                       ,PO_ACK_DTL         PAD_IB
+                                    WHERE
+                                        PCC.P_NUM_CUST_PO          = PRCH.PO_ORD_NUM 
+                                    AND PCC.P_NUM_CUST_PO          = PC.P_NUM_CUST_PO
+                                    AND PC.P_NUM_CUST_PO           = XREF.P_NUM_CUST_PO
+                                    AND XREF.P_NUM_PO_PARTS        = POYO.P_NUM_PO_PARTS
+                                    AND POYO.P_DATE_STOCK_IN_EST IS NOT NULL
+                                    AND PRCH.PO_ORD_NUM            = PAD_IB.PO_ORD_NUM
+                                    AND PRCH.PO_ORD_DTL_LINE_NUM   = PAD_IB.PO_ORD_DTL_LINE_NUM
+                                    AND PAD_IB.PO_ACK_DTL_LTST_FLG = 'Y'
+                                    <iterate property="ackStsList" var="ackStsList[]" open="AND PAD_IB.VND_PO_ACK_STS_CD IN (" conjunction= ", " close=")">
+                                        #ackStsList[]#
+                                    </iterate>
+                                    AND POYO.P_PARTS_NUM           = PAD_IB.VND_MDSE_CD
+                                    AND PCC.EZCANCELFLAG           = '0'
+                                    AND PC.EZCANCELFLAG            = '0'
+                                    AND XREF.EZCANCELFLAG          = '0'
+                                    AND POYO.EZCANCELFLAG          = '0'
+                                    AND PAD_IB.EZCANCELFLAG        = '0'
+<!-- END 2023/10/26 T.Kuroda [QC#61494, MOD] -->
+                                  )
+                                  ,
+<!-- START 2023/10/26 T.Kuroda [QC#61494, MOD] -->
+<!--                                   PRCH.RQST_RCV_TM -->
+                                  NVL(
+                                      CASE
+                                          WHEN PRCH.PAD_ETA_DT IS NOT NULL
+                                          THEN '000000'
+                                          ELSE NULL
+                                      END
+                                  ,
+                                  NVL(
+                                    (SELECT
+                                        PD.RQST_RCV_TM
+                                    FROM
+                                        PO_DTL PD
+                                    WHERE
+                                        PD.GLBL_CMPY_CD = PRCH.GLBL_CMPY_CD
+                                    AND PD.PO_ORD_NUM = PRCH.PO_ORD_NUM
+                                    AND PD.PO_ORD_DTL_LINE_NUM = PRCH.PO_ORD_DTL_LINE_NUM
+                                    AND PD.EZCANCELFLAG = '0'
+                                    AND ROWNUM = 1)
+                                  ,
+                                    PRCH.RQST_RCV_TM
+                                  )
+                                  )
+                                  )
+                                  )
+                                  )
+<!-- END 2023/10/26 T.Kuroda [QC#61494, MOD] -->
+                                  )
+                                  )
+                             )                                        AS RQST_RCV_TM
+                            ,PRCH.PRCH_REQ_QTY                        AS PRCH_REQ_QTY
+                            ,PRCH.SHIP_QTY                            AS SHIP_QTY
+                            ,PRCH.RWS_PUT_AWAY_QTY                    AS RWS_PUT_AWAY_QTY
+                            ,PRCH.BACK_TO_TECH_QTY                    AS BACK_TO_TECH_QTY
+                            ,PRCH.PRO_NUM                             AS PRO_NUM
+                            ,PRCH.CARR_CD                             AS CARR_CD
+                            ,PRCH.SHIP_TO_CUST_CD                     AS SHIP_TO_CUST_CD
+<!-- START 2017/11/13 M.Naito [QC#18572,MOD] -->
+                            ,ROW_NUMBER() OVER (PARTITION BY PRCH.PRCH_REQ_NUM,PRCH.PRCH_REQ_LINE_NUM,PRCH.PRCH_REQ_LINE_SUB_NUM,PRCH.SO_NUM,PRCH.PRO_NUM ORDER BY PRCH.PRCH_REQ_NUM,PRCH.PRCH_REQ_LINE_NUM,PRCH.PRCH_REQ_LINE_SUB_NUM,PRCH.SO_NUM,PRCH.PRO_NUM) AS ROW_NUM
+<!-- END 2017/11/13 M.Naito [QC#18572,MOD] -->
+<!-- START 2023/06/19 K.Chiba [QC#61262, ADD] -->
+                            ,PRCH.RQST_TECH_TOC_CD AS RQST_TECH_TOC_CD
+<!-- END 2023/06/19 K.Chiba [QC#61262, ADD] -->
+                        FROM
+                            IV_PRCH         PRCH
+                            ,DS_COND_CONST  CN_OP
+                            ,DS_COND_CONST  CN_CL
+                            ,DS_COND_CONST  CN_LN
+                            ,MDSE           DSMD
+                        WHERE
+                            PRCH.GLBL_CMPY_CD                    = CN_OP.GLBL_CMPY_CD(+)
+                            AND PRCH.PRCH_REQ_APVL_STS_CD        = CN_OP.DS_COND_CONST_CD(+)
+                            AND CN_OP.EZCANCELFLAG(+)            = '0'
+                            AND CN_OP.DS_COND_CONST_GRP_ID(+)    = #NPAB1650_PrchHdr#
+                            AND PRCH.GLBL_CMPY_CD                = CN_CL.GLBL_CMPY_CD(+)
+                            AND PRCH.PRCH_REQ_STS_CD             = CN_CL.DS_COND_CONST_CD(+)
+                            AND CN_CL.EZCANCELFLAG(+)            = '0'
+                            AND CN_CL.DS_COND_CONST_GRP_ID(+)    = #NPAB1650_PrchHdr#
+                            AND PRCH.GLBL_CMPY_CD                = CN_LN.GLBL_CMPY_CD(+)
+                            AND PRCH.PRCH_REQ_LINE_STS_CD        = CN_LN.DS_COND_CONST_CD(+)
+                            AND CN_LN.EZCANCELFLAG(+)            = '0'
+                            AND CN_LN.DS_COND_CONST_GRP_ID(+)    = #NPAB1650_PrchLine#
+                            AND PRCH.GLBL_CMPY_CD                = DSMD.GLBL_CMPY_CD(+)
+                            AND PRCH.MDSE_CD                     = DSMD.MDSE_CD(+)
+                            AND DSMD.EZCANCELFLAG(+)             = '0'
+                        UNION ALL
+                        -- OPEN PO
+                        SELECT
+                            POD.GLBL_CMPY_CD                         AS GLBL_CMPY_CD
+                            ,POD.INVTY_LOC_CD                        AS DEST_INVTY_LOC_CD
+                            ,POD.PO_ORD_NUM                          AS PRCH_REQ_NUM
+                            ,POD.PO_ORD_DTL_LINE_NUM                 AS PRCH_REQ_LINE_NUM
+                            ,NULL                                    AS PRCH_REQ_LINE_SUB_NUM
+                            ,NULL                                    AS SVC_TASK_NUM
+                            ,CASE WHEN LENGTH(EDI.ASN_SHIP_DT_TM_TS) = 8 THEN EDI.ASN_SHIP_DT_TM_TS || '000000'
+                                  ELSE EDI.ASN_SHIP_DT_TM_TS
+                             END AS SHIP_DT_TM_TS
+<!-- START 2016/12/02 T.Tomita [QC#16332,MOD] -->
+                            ,CASE
+                                WHEN POD.PO_HDR_STS_CD = #poHdrStsCd#
+                                    THEN CN_OP.DS_COND_CONST_VAL_TXT_02
+                                    ELSE CN_CL.DS_COND_CONST_VAL_TXT_02
+                             END  AS PRCH_REQ_STS_DESC_TXT
+<!--                            ,CASE WHEN POD.PO_HDR_STS_CD &lt;&gt; #poHdrStsCd#  THEN CN_CL.DS_COND_CONST_VAL_TXT_02 -->
+<!--                                  WHEN POD.PO_HDR_STS_CD = #poHdrStsCd# AND POD.PO_STS_CD = #poStsCdConf#  -->
+<!--                                                                         THEN CN_VN.DS_COND_CONST_VAL_TXT_02 -->
+<!--                                  ELSE                                        CN_OP.DS_COND_CONST_VAL_TXT_02 -->
+<!--                             END  AS PRCH_REQ_STS_DESC_TXT -->
+<!-- END 2016/12/02 T.Tomita [QC#16332,MOD] -->
+<!-- START 2017/11/13 M.Naito [QC#18572,ADD] -->
+                            ,RCV.RWS_REF_NUM                         AS TECH_RQST_SO_NUM
+<!-- END 2017/11/13 M.Naito [QC#18572,ADD] -->
+                            ,POD.MDSE_CD                             AS MDSE_CD
+                            ,POD.MDSE_DESC_SHORT_TXT                 AS MDSE_DESC_SHORT_TXT
+<!-- START 2016/12/02 T.Tomita [QC#16332,MOD] -->
+                            ,CASE
+                                WHEN POD.PO_STS_CD = #poStsCdPoConf#
+                                    THEN CN_VN.DS_COND_CONST_VAL_TXT_02
+                                    ELSE CN_LN.DS_COND_CONST_VAL_TXT_02
+                             END  AS PRCH_REQ_LINE_STS_DESC_TXT
+<!--                            ,CN_LN.DS_COND_CONST_VAL_TXT_02          AS PRCH_REQ_LINE_STS_DESC_TXT -->
+<!-- END 2016/12/02 T.Tomita [QC#16332,MOD] -->
+                            ,NULL                                    AS SRC_INVTY_LOC_CD
+                            ,NVL(ACK.ETA_DT, POD.ETA_DT)             AS RQST_RCV_DT
+                            ,'000000'                                AS RQST_RCV_TM
+                            ,POD.PO_QTY                              AS PRCH_REQ_QTY
+<!-- START 2016/12/02 T.Tomita [QC#16332,MOD] -->
+                            ,CASE
+                                WHEN POD.PO_STS_CD = #poStsCdPoConf# AND CN_VN.DS_COND_CONST_VAL_TXT_03 = 'Y'
+                                    THEN NVL(RWS.RWS_QTY,0)
+                                WHEN CN_LN.DS_COND_CONST_VAL_TXT_03 = 'Y'
+                                    THEN NVL(RWS.RWS_QTY,0)
+                                ELSE 0
+                             END AS SHIP_QTY
+<!--                            ,NVL(RWS.RWS_QTY,0)                      AS SHIP_QTY -->
+<!-- END 2016/12/02 T.Tomita [QC#16332,MOD] -->
+                            ,NVL(RWS.RWS_PUT_AWAY_QTY,0)             AS RWS_PUT_AWAY_QTY
+<!-- START 2016/12/02 T.Tomita [QC#16332,MOD] -->
+<!-- START 2017/02/16 K.Kojima [QC#17111,MOD] -->
+<!--                        ,CASE
+                                WHEN POD.PO_STS_CD = '08' AND CN_VN.DS_COND_CONST_VAL_TXT_03 = 'Y'
+                                    THEN NVL(POD.PO_QTY,0) - NVL(RWS.RWS_QTY,0) - NVL(RWS.RWS_PUT_AWAY_QTY,0)
+                                WHEN CN_LN.DS_COND_CONST_VAL_TXT_03 = 'Y'
+                                    THEN NVL(POD.PO_QTY,0) - NVL(RWS.RWS_QTY,0) - NVL(RWS.RWS_PUT_AWAY_QTY,0)
+                                ELSE NVL(POD.PO_QTY,0) - NVL(RWS.RWS_PUT_AWAY_QTY,0)
+                             END AS BACK_TO_TECH_QTY -->
+                            ,NVL(POD.PO_BAL_QTY,0)                   AS BACK_TO_TECH_QTY
+<!-- END 2017/02/16 K.Kojima [QC#17111,MOD] -->
+<!--                            ,NVL(POD.PO_QTY,0) - NVL(RWS.RWS_QTY,0)  AS BACK_TO_TECH_QTY -->
+<!-- END 2016/12/02 T.Tomita [QC#16332,MOD] -->
+                            ,NVL(POD.PRO_NUM, RWS.IMPT_INV_BOL_NUM)  AS PRO_NUM
+                            ,POD.CARR_CD                             AS CARR_CD
+                            ,POD.SHIP_TO_CUST_CD                     AS SHIP_TO_CUST_CD
+<!-- START 2017/11/13 M.Naito [QC#18572,MOD] -->
+                            ,ROW_NUMBER() OVER (PARTITION BY POD.PO_ORD_NUM,POD.PO_ORD_DTL_LINE_NUM,RCV.ASN_SO_NUM ORDER BY POD.PO_ORD_NUM,POD.PO_ORD_DTL_LINE_NUM,RCV.ASN_SO_NUM) AS ROW_NUM
+<!-- END 2017/11/13 M.Naito [QC#18572,MOD] -->
+<!-- START 2023/06/19 K.Chiba [QC#61262, ADD] -->
+                            ,POD.RQST_TECH_TOC_CD AS RQST_TECH_TOC_CD
+<!-- END 2023/06/19 K.Chiba [QC#61262, ADD] -->
+                        FROM
+                            IV_PO_DTL       POD
+                            ,DS_COND_CONST  CN_OP
+                            ,DS_COND_CONST  CN_CL
+                            ,DS_COND_CONST  CN_VN
+                            ,DS_COND_CONST  CN_LN
+                            ,IV_RWS         RWS
+                            ,IV_PO_RCV      RCV
+                            ,IV_EDI_ASN     EDI
+                            ,IV_PO_ACK      ACK
+                        WHERE
+                            POD.GLBL_CMPY_CD                    = CN_OP.GLBL_CMPY_CD(+)
+                            AND POD.PO_APVL_STS_CD              = CN_OP.DS_COND_CONST_CD(+)
+                            AND CN_OP.EZCANCELFLAG(+)           = '0'
+                            AND CN_OP.DS_COND_CONST_GRP_ID(+)   = #NPAB1650_PoHdr#
+                            AND POD.GLBL_CMPY_CD                = CN_CL.GLBL_CMPY_CD(+)
+                            AND POD.PO_HDR_STS_CD               = CN_CL.DS_COND_CONST_CD(+)
+                            AND CN_CL.EZCANCELFLAG(+)           = '0'
+                            AND CN_CL.DS_COND_CONST_GRP_ID(+)   = #NPAB1650_PoHdr#
+                            AND POD.GLBL_CMPY_CD                = CN_VN.GLBL_CMPY_CD(+)
+                            AND POD.VND_PO_ACK_STS_CD           = CN_VN.DS_COND_CONST_CD(+)
+                            AND CN_VN.EZCANCELFLAG(+)           = '0'
+<!-- START 2016/12/02 T.Tomita [QC#16332,MOD] -->
+                            AND CN_VN.DS_COND_CONST_GRP_ID(+)   = #NPAB1650_PoLine#
+<!--                            AND CN_VN.DS_COND_CONST_GRP_ID(+)   = #NPAB1650_PoHdr# -->
+<!-- END 2016/12/02 T.Tomita [QC#16332,MOD] -->
+                            AND POD.GLBL_CMPY_CD                = CN_LN.GLBL_CMPY_CD(+)
+                            AND POD.PO_STS_CD                   = CN_LN.DS_COND_CONST_CD(+)
+                            AND CN_LN.EZCANCELFLAG(+)           = '0'
+                            AND CN_LN.DS_COND_CONST_GRP_ID(+)   = #NPAB1650_PoLine#
+                            AND POD.PO_ORD_NUM                  = RWS.PO_RCV_TRX_HDR_NUM(+)
+                            AND POD.PO_ORD_DTL_LINE_NUM         = RWS.PO_RCV_TRX_LINE_NUM(+)
+                            AND RWS.TRX_ORD_NUM                 = RCV.PO_RCV_NUM(+)
+                            AND RWS.TRX_LINE_NUM                = RCV.PO_RCV_LINE_NUM(+)
+                            AND RCV.ASN_SO_NUM                  = EDI.ASN_SO_NUM(+)
+                            AND RCV.ASN_LINE_NUM                = EDI.ASN_LINE_NUM(+)
+                            AND POD.PO_ORD_NUM                  = ACK.PO_ORD_NUM(+)
+                            AND POD.PO_ORD_DTL_LINE_NUM         = ACK.PO_ORD_DTL_LINE_NUM(+)
+                        )
+                    WHERE
+                        ROW_NUM = 1
+                    )
+        ,IV_THIS AS(
+                    SELECT
+<!-- START 2023/06/19 K.Chiba [QC#61262, MOD] -->
+<!-- LOC.TECH_TOC_CD -->
+                        MAIN.RQST_TECH_TOC_CD AS TECH_TOC_CD 
+<!-- END 2023/06/19 K.Chiba [QC#61262, MOD] -->
+                        ,MAIN.DEST_INVTY_LOC_CD
+                        ,MAIN.PRCH_REQ_NUM
+                        ,MAIN.PRCH_REQ_LINE_NUM
+                        ,MAIN.PRCH_REQ_LINE_SUB_NUM
+                        ,MAIN.SVC_TASK_NUM
+                        ,MAIN.SHIP_DT_TM_TS
+                        ,CUST.DS_ACCT_NM
+                        ,SHIP.FIRST_LINE_ADDR
+                        ,SHIP.SCD_LINE_ADDR
+                        ,SHIP.THIRD_LINE_ADDR
+                        ,SHIP.FRTH_LINE_ADDR
+                        ,PRCH_REQ_STS_DESC_TXT
+<!-- START 2017/11/13 M.Naito [QC#18572,ADD] -->
+                        ,MAIN.TECH_RQST_SO_NUM
+<!-- END 2017/11/13 M.Naito [QC#18572,ADD] -->
+                        ,MDSE_CD
+                        ,MDSE_DESC_SHORT_TXT
+                        ,PRCH_REQ_LINE_STS_DESC_TXT
+                        ,SRC_INVTY_LOC_CD
+                        ,CTP.CARR_TP_NM
+                        ,RQST_RCV_DT
+                        ,RQST_RCV_TM
+                        ,PRCH_REQ_QTY
+                        ,SHIP_QTY
+                        ,RWS_PUT_AWAY_QTY
+                        ,BACK_TO_TECH_QTY
+                        ,PRO_NUM
+                        ,URL.CARR_TRK_URL
+                        ,LOC.LOC_NM
+                        ,WH.RTL_WH_NM
+                    FROM
+                        IV_MAIN         MAIN
+                        ,TECH_LOC       LOC
+                        ,S21_PSN        PSN
+                        ,SHIP_TO_CUST   SHIP
+                        ,SELL_TO_CUST   CUST
+                        ,VND            VND
+                        ,CARR_TP        CTP
+                        ,CARR_URL       URL
+                        ,RTL_SWH        SWH
+                        ,RTL_WH         WH
+                    WHERE
+                        MAIN.GLBL_CMPY_CD                   = LOC.GLBL_CMPY_CD
+                        AND MAIN.DEST_INVTY_LOC_CD          = LOC.TECH_LOC_CD
+                        AND LOC.EZCANCELFLAG                = '0'
+                        AND LOC.EFF_FROM_DT                 &lt;= #slsDt#
+                        AND NVL(LOC.EFF_THRU_DT,#maxDt#)    &gt;= #slsDt#
+                        AND LOC.GLBL_CMPY_CD                = PSN.GLBL_CMPY_CD
+                        AND LOC.TECH_TOC_CD                 = PSN.PSN_CD
+                        AND PSN.EZCANCELFLAG                = '0'
+                        AND PSN.EFF_FROM_DT                 &lt;= #slsDt#
+                        AND NVL(PSN.EFF_THRU_DT,#maxDt#)    &gt;= #slsDt#
+                        AND PSN.DEL_FLG                     = 'N'
+                        AND MAIN.GLBL_CMPY_CD               = SHIP.GLBL_CMPY_CD(+)
+                        AND MAIN.SHIP_TO_CUST_CD            = SHIP.SHIP_TO_CUST_CD(+)
+                        AND SHIP.EZCANCELFLAG(+)            = '0'
+                        AND SHIP.GLBL_CMPY_CD               = CUST.GLBL_CMPY_CD(+)
+                        AND SHIP.SELL_TO_CUST_CD            = CUST.SELL_TO_CUST_CD(+)
+                        AND CUST.EZCANCELFLAG(+)            = '0'
+                        AND MAIN.GLBL_CMPY_CD               = VND.GLBL_CMPY_CD(+)
+                        AND MAIN.CARR_CD                    = VND.VND_CD(+)
+                        AND VND.EZCANCELFLAG(+)             = '0'
+                        AND VND.GLBL_CMPY_CD                = CTP.GLBL_CMPY_CD(+)
+                        AND VND.CARR_TP_CD                  = CTP.CARR_TP_CD(+)
+                        AND CTP.EZCANCELFLAG(+)             = '0'
+                        AND MAIN.GLBL_CMPY_CD               = URL.GLBL_CMPY_CD(+)
+                        AND MAIN.CARR_CD                    = URL.VND_CD(+)
+                        AND URL.EZCANCELFLAG(+)             = '0'
+                        AND LOC.GLBL_CMPY_CD                = SWH.GLBL_CMPY_CD(+)
+                        AND LOC.TECH_LOC_CD                 = SWH.INVTY_LOC_CD(+)
+                        AND SWH.EZCANCELFLAG(+)             = '0'
+                        AND SWH.GLBL_CMPY_CD                = WH.GLBL_CMPY_CD(+)
+                        AND SWH.RTL_WH_CD                   = WH.RTL_WH_CD(+)
+                        AND WH.EZCANCELFLAG(+)              = '0'
+                    )
+            ,IV_DIFF AS(
+                        SELECT 
+                            PRCH_REQ_NUM
+                        FROM
+                           (SELECT * FROM IV_THIS
+                            MINUS
+                            SELECT * FROM IV_BEF)
+                        GROUP BY 
+                            PRCH_REQ_NUM
+                        )
+        SELECT
+            THIS.TECH_TOC_CD
+            ,THIS.DEST_INVTY_LOC_CD
+            ,THIS.PRCH_REQ_NUM
+            ,THIS.PRCH_REQ_LINE_NUM
+            ,THIS.PRCH_REQ_LINE_SUB_NUM
+            ,THIS.SVC_TASK_NUM
+            ,THIS.SHIP_DT_TM_TS
+            ,THIS.DS_ACCT_NM
+            ,THIS.FIRST_LINE_ADDR
+            ,THIS.SCD_LINE_ADDR
+            ,THIS.THIRD_LINE_ADDR
+            ,THIS.FRTH_LINE_ADDR
+            ,THIS.PRCH_REQ_STS_DESC_TXT
+<!-- START 2017/11/13 M.Naito [QC#18572,ADD] -->
+            ,THIS.TECH_RQST_SO_NUM
+<!-- END 2017/11/13 M.Naito [QC#18572,ADD] -->
+            ,THIS.MDSE_CD
+            ,THIS.MDSE_DESC_SHORT_TXT
+            ,THIS.PRCH_REQ_LINE_STS_DESC_TXT
+            ,THIS.SRC_INVTY_LOC_CD
+            ,THIS.CARR_TP_NM
+            ,THIS.RQST_RCV_DT
+            ,THIS.RQST_RCV_TM
+            ,THIS.PRCH_REQ_QTY
+            ,THIS.SHIP_QTY
+            ,THIS.RWS_PUT_AWAY_QTY
+            ,THIS.BACK_TO_TECH_QTY
+            ,THIS.PRO_NUM
+            ,THIS.CARR_TRK_URL
+            ,THIS.LOC_NM
+            ,THIS.RTL_WH_NM
+            ,CASE WHEN DIFF.PRCH_REQ_NUM IS NOT NULL THEN #techProcStsW#
+                                                     ELSE #techProcStsP# END AS TECH_PROC_STS_CD
+        FROM
+            IV_THIS         THIS
+            ,IV_DIFF        DIFF
+        WHERE
+            THIS.PRCH_REQ_NUM  = DIFF.PRCH_REQ_NUM(+)
+        ORDER BY
+            THIS.PRCH_REQ_NUM
+            ,THIS.PRCH_REQ_LINE_NUM
+            ,THIS.PRCH_REQ_LINE_SUB_NUM
+    </statement>
+
+    <statement id="getDeleteList" parameterClass="Map" resultClass="Map"> 
+        SELECT
+            TECH_RQST_LIST_WRK_PK
+        FROM
+            TECH_RQST_LIST_WRK
+        WHERE
+            GLBL_CMPY_CD            = #glblCmpyCd#
+<!-- del start 2016/11/18 CSA Defect#15980 -->
+<!--        AND TECH_PROC_STS_CD    = #techProcStsP# -->
+<!-- del end 2016/11/18 CSA Defect#15980 -->
+            AND EZCANCELFLAG        = '0'
+        ORDER BY
+            TECH_RQST_LIST_WRK_PK
+    </statement>
+
+</sqlMap>

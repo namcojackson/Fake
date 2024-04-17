@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NSBB046001">
+
+    <!-- #################### Type Alias #################### -->
+
+    <!-- #################### Statement #################### -->
+    <statement id="getTaskInfo" parameterClass="Map">
+        WITH TASK_INFO AS (SELECT TASK.SVC_TASK_NUM
+            , TASK.FSR_NUM
+            , EVENT.FSR_EVENT_PK
+            , EVENT.FSR_EVENT_EXE_TS
+            , EVENT.SVC_DISPT_EVENT_CD
+        FROM SVC_TASK TASK
+            , FSR_EVENT EVENT
+        WHERE TASK.GLBL_CMPY_CD = #glblCmpyCd#
+          AND TASK.EZCANCELFLAG = '0'
+
+          AND TASK.GLBL_CMPY_CD = EVENT.GLBL_CMPY_CD
+          AND EVENT.EZCANCELFLAG = '0'
+          AND TASK.SVC_TASK_NUM = EVENT.SVC_TASK_NUM
+          AND EVENT.MBL_INTFC_PROC_CD = '0'
+          <!-- START 2019/03/01 K.Fujimoto [QC#29742, ADD] -->
+          AND MOD(NVL(TASK.FSR_NUM, 0), #multiCnt#) = #usrVar1#
+          <!-- END   2019/03/01 K.Fujimoto [QC#29742, ADD] -->
+        )
+
+        , EVENT_SEND AS (SELECT DISTINCT FE.SVC_TASK_NUM, 'Y' AS SEND_FLG FROM FSR_EVENT FE
+                          WHERE FE.GLBL_CMPY_CD = #glblCmpyCd#
+                            AND FE.EZCANCELFLAG = '0'
+                            AND FE.MBL_INTFC_PROC_CD IN (#procStsProcessed#, #procStsError#)
+                            <!-- START 2019/03/01 K.Fujimoto [QC#29742, ADD] -->
+                            AND MOD(NVL(FE.FSR_NUM, 0), #multiCnt#) = #usrVar1#
+                            <!-- END   2019/03/01 K.Fujimoto [QC#29742, ADD] -->
+        )
+
+        SELECT
+        <!-- 2018/09/19 QC#28334 Mod Start --> 
+           DISTINCT
+             INFO.SVC_TASK_NUM           AS SVC_TASK_NUM
+        <!-- 2018/09/19 QC#28334 Mod End --> 
+           , INFO.FSR_NUM                AS FSR_NUM
+         FROM TASK_INFO      INFO
+           , EVENT_SEND      SEND
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM TASK_INFO INFO_MAX
+            WHERE INFO_MAX.SVC_TASK_NUM = INFO.SVC_TASK_NUM
+            AND INFO_MAX.FSR_EVENT_EXE_TS &gt; INFO.FSR_EVENT_EXE_TS )
+
+            AND INFO.SVC_TASK_NUM = SEND.SVC_TASK_NUM(+)
+            AND NOT ( INFO.SVC_DISPT_EVENT_CD = #svcDisptEvent# AND SEND.SEND_FLG &lt;&gt; 'Y')
+        <isNotNull property="rtrySendProcStsArray">
+        UNION
+        SELECT
+             A.SVC_TASK_NUM     AS SVC_TASK_NUM
+            ,A.FSR_NUM          AS FSR_NUM
+        FROM
+            CLICK_TASK_SEND_RSLT A
+        WHERE
+            A.GLBL_CMPY_CD = #glblCmpyCd#
+        AND A.EZCANCELFLAG = '0'
+        <iterate property="rtrySendProcStsArray" var="rtrySendProcSts[]" open="AND A.RTRY_SEND_PROC_STS_CD IN (" close=")" conjunction=",">
+            #rtrySendProcSts[]#
+        </iterate>
+        <!-- START 2019/03/01 K.Fujimoto [QC#29742, ADD] -->
+        AND MOD(NVL(A.FSR_NUM, 0), #multiCnt#) = #usrVar1#
+        <!-- END   2019/03/01 K.Fujimoto [QC#29742, ADD] -->
+        </isNotNull>
+        ORDER BY
+             FSR_NUM
+            ,SVC_TASK_NUM
+    </statement>
+</sqlMap>

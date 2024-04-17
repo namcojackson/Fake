@@ -1,0 +1,2351 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NMAL6710Query">
+
+    <typeAlias alias="NMAL6710CMsg"        type="business.blap.NMAL6710.NMAL6710CMsg"/>
+    <typeAlias alias="NMAL6710_CSMsg"      type="business.blap.NMAL6710.NMAL6710_CSMsg"/>
+
+    <!-- In case of Quick Lookup -->
+    <statement id="getDsAccountList"  parameterClass ="Map" resultClass="Map">
+        WITH  ACCT_ORG AS ( 
+            SELECT 
+                  ACCT.DS_ACCT_NUM              AS DS_ACCT_NUM
+                , ''                            AS DS_ACCT_RELN_TP_CD
+                , ACCT.DS_ACCT_NM               AS DS_ACCT_NM
+                , ACCT.FIRST_LINE_ADDR ||
+                    DECODE(ACCT.SCD_LINE_ADDR, NULL, '', ' ' || ACCT.SCD_LINE_ADDR) ||
+                    DECODE(ACCT.THIRD_LINE_ADDR, NULL, '', ' ' || ACCT.THIRD_LINE_ADDR) ||
+                    DECODE(ACCT.FRTH_LINE_ADDR, NULL, '', ' ' || ACCT.FRTH_LINE_ADDR) ||
+                    ' ' ||
+                    ACCT.CTY_ADDR        || ' ' ||
+                    ACCT.ST_CD           || ' ' ||
+                    ACCT.POST_CD                   AS SHIP_FROM_FULL_CMPY_ADDR
+                , ACCT.LOC_NUM                   AS LOC_NUM
+                , ACCT.XX_YES_NO_CD
+                , (SELECT DS_ACCT_TP_NM FROM DS_ACCT_TP TP
+                          WHERE TP.GLBL_CMPY_CD = ACCT.GLBL_CMPY_CD
+                          AND TP.EZCANCELFLAG = '0'
+                          AND TP.DS_ACCT_TP_CD = ACCT.DS_ACCT_TP_CD
+                   )                             AS DS_ACCT_TP_NM
+                , ACCT.DS_ACCT_NUM              AS ORIG_ACCT_NUM
+                , ''                            AS RELN_DS_ACCT_NUM
+                , BILL.BILL_TO_CUST_CD          AS BILL_TO_CUST_CD
+                , SHIP.SHIP_TO_CUST_CD          AS SHIP_TO_CUST_CD
+                , ACCT.GLBL_CMPY_CD             AS GLBL_CMPY_CD
+                , ACCT.PTY_LOC_PK               AS PTY_LOC_PK
+                , ACCT.FIRST_LINE_ADDR          AS FIRST_LINE_ADDR
+                , ROWNUM                        AS SORT_NUM
+                <!-- QC#3290 -->
+                , ACCT.DS_ACCT_ACTV_CUST_FLG    AS DS_ACCT_ACTV_CUST_FLG
+                , ACCT.LOC_RGTN_STS_CD          AS LOC_RGTN_STS_CD
+                , ACCT.RGTN_STS_CD              AS PTY_RGTN_STS_CD
+                , BILL.RGTN_STS_CD              AS BILL_RGTN_STS_CD
+                , SHIP.RGTN_STS_CD              AS SHIP_RGTN_STS_CD
+                <isNull property="ctacPsnFlg">
+                , 'Y'                           AS HIT_LOC_CTAC_FLG
+                </isNull>
+                <!-- QC#3395 -->
+                <isNotNull property="ctacPsnFlg">
+                , CTAC.HIT_LOC_CTAC_FLG         AS HIT_LOC_CTAC_FLG
+                 </isNotNull>
+                <!-- QC#19829 Add Start -->
+                , ACCT.EXIST_ACTV_ACCT_LOC_FLG  AS EXIST_ACTV_ACCT_LOC_FLG
+                <!-- QC#19829 Add End -->
+            FROM   ( 
+            <isNotEqual property="dsAcctTpCdCust" compareValue="N">
+                SELECT 
+                     STC.EZCANCELFLAG
+                    ,STC.GLBL_CMPY_CD
+                    ,STC.SELL_TO_CUST_CD AS DS_ACCT_NUM
+                    ,STC.DS_ACCT_TP_CD
+                    ,STC.DS_ACCT_NM
+                    ,STC.DS_ACCT_ACTV_CUST_FLG
+                    ,STC.DS_ACCT_CLS_CD
+                    ,STC.DBA_NM
+                    ,STC.DS_ACCT_LEGAL_NM
+                    ,STC.DS_ACCT_DUNS_NUM
+                    ,STC.DS_ULT_DUNS_NUM
+                    ,STC.DS_ACCT_ITRL_FLG
+                    ,STC.DS_XTRNL_REF_TXT
+                    ,STC.DS_CUST_SIC_DESC_TXT
+                    ,PTY.FIRST_LINE_ADDR
+                    ,PTY.SCD_LINE_ADDR
+                    ,PTY.THIRD_LINE_ADDR
+                    ,PTY.FRTH_LINE_ADDR
+                    ,PTY.CTY_ADDR
+                    ,PTY.ST_CD
+                    ,PTY.POST_CD
+                    ,PTY.LOC_NUM
+                    ,PTY.RGTN_STS_CD
+                    ,PTY.DS_LOC_NM
+                    ,LOC.RGTN_STS_CD          AS LOC_RGTN_STS_CD
+                    ,LOC.LOC_NUM              AS LOC_LOC_NUM
+                    ,LOC.DS_ACCT_NUM          AS LOC_DS_ACCT_NUM
+                    ,PRIN.PTY_LOC_PK
+                    ,CASE WHEN PRIN.PRIN_CUST_PK IS NOT NULL THEN 'Y' ELSE 'N' END AS XX_YES_NO_CD
+                    <!-- START 2018/04/10 Hd.Sugawara [QC#24388,ADD] -->
+                    ,PTY.DUNS_NUM             AS PTY_DUNS_NUM
+                    ,PTY.DS_ULT_DUNS_NUM      AS PTY_DS_ULT_DUNS_NUM
+                    ,PTY.DS_CUST_SIC_DESC_TXT AS PTY_DS_CUST_SIC_DESC_TXT
+                    <!-- END 2018/04/10 Hd.Sugawara [QC#24388,ADD] -->
+                    <!-- QC#19829 Add Start -->
+                    , CASE WHEN
+                        EXISTS (
+                            SELECT
+                                1
+                            FROM
+                                ACCT_LOC LOC2
+                            WHERE
+                                LOC2.EZCANCELFLAG = '0'
+                            AND LOC2.GLBL_CMPY_CD = PTY.GLBL_CMPY_CD
+                            AND LOC2.LOC_NUM      = PTY.LOC_NUM
+                            AND LOC2.RGTN_STS_CD  = #rgtnSts_Actv#
+                        ) THEN 'Y'
+                        ELSE 'N'
+                      END EXIST_ACTV_ACCT_LOC_FLG
+                    <!-- QC#19829 Add End -->
+                FROM 
+                      SELL_TO_CUST STC
+                    , ACCT_LOC LOC
+                    , PTY_LOC_WRK PTY
+                    , PRIN_CUST PRIN
+                WHERE
+                        STC.GLBL_CMPY_CD = #glblCmpyCd#
+                    AND STC.EZCANCELFLAG = '0'
+                        
+                    AND STC.GLBL_CMPY_CD = LOC.GLBL_CMPY_CD(+)
+                    AND STC.SELL_TO_CUST_CD = LOC.DS_ACCT_NUM(+)
+                    AND LOC.EZCANCELFLAG(+) = '0'
+    
+                    AND LOC.GLBL_CMPY_CD = PTY.GLBL_CMPY_CD(+)
+                    AND LOC.PTY_LOC_PK = PTY.PTY_LOC_PK(+)
+                    AND PTY.EZCANCELFLAG(+) = '0'
+    
+                    AND PTY.GLBL_CMPY_CD = PRIN.GLBL_CMPY_CD(+)
+                    AND PTY.LOC_NUM = PRIN.LOC_NUM(+)
+                    AND PRIN.EZCANCELFLAG(+) = '0'
+                    
+                    <isEqual property="xxChkBox_01" compareValue="N">
+                    AND STC.LOC_NUM = LOC.LOC_NUM(+)
+                    </isEqual>
+            </isNotEqual>
+            <isNull property="dsAcctTpCdCust">
+                UNION ALL
+            </isNull>
+            <isNotEqual property="dsAcctTpCdCust" compareValue="Y">
+                SELECT
+                     DAP.EZCANCELFLAG
+                    ,DAP.GLBL_CMPY_CD
+                    ,DAP.DS_ACCT_NUM
+                    ,DAP.DS_ACCT_TP_CD
+                    ,DAP.DS_ACCT_NM
+                    ,DAP.DS_ACCT_ACTV_CUST_FLG
+                    ,DAP.DS_ACCT_CLS_CD
+                    ,DAP.DBA_NM
+                    ,DAP.DS_ACCT_LEGAL_NM
+                    ,DAP.DS_ACCT_DUNS_NUM
+                    ,DAP.DS_ULT_DUNS_NUM
+                    ,DAP.DS_ACCT_ITRL_FLG
+                    ,DAP.DS_XTRNL_REF_TXT
+                    ,DAP.DS_CUST_SIC_DESC_TXT
+                    ,PTY.FIRST_LINE_ADDR
+                    ,PTY.SCD_LINE_ADDR
+                    ,PTY.THIRD_LINE_ADDR
+                    ,PTY.FRTH_LINE_ADDR
+                    ,PTY.CTY_ADDR
+                    ,PTY.ST_CD
+                    ,PTY.POST_CD
+                    ,PTY.LOC_NUM
+                    ,PTY.RGTN_STS_CD
+                    ,PTY.DS_LOC_NM
+                    <!-- QC#22557 BEGIN -->
+                    <!-- 
+                    ,NULL AS LOC_RGTN_STS_CD
+                    ,NULL AS LOC_LOC_NUM
+                    ,NULL AS LOC_DS_ACCT_NUM
+                    ,NULL AS PTY_LOC_PK
+                    -->
+                    ,DAP.RGTN_STS_CD AS LOC_RGTN_STS_CD
+                    ,PTY.LOC_NUM     AS LOC_LOC_NUM
+                    ,DAP.DS_ACCT_NUM AS LOC_DS_ACCT_NUM
+                    ,PTY.PTY_LOC_PK  AS PTY_LOC_PK
+                    <!-- QC#22557 END -->
+                    ,'Y' AS XX_YES_NO_CD
+                    <!-- START 2018/04/10 Hd.Sugawara [QC#24388,ADD] -->
+                    ,PTY.DUNS_NUM             AS PTY_DUNS_NUM
+                    ,PTY.DS_ULT_DUNS_NUM      AS PTY_DS_ULT_DUNS_NUM
+                    ,PTY.DS_CUST_SIC_DESC_TXT AS PTY_DS_CUST_SIC_DESC_TXT
+                    <!-- END 2018/04/10 Hd.Sugawara [QC#24388,ADD] -->
+                    <!-- QC#19829 Add Start -->
+                    , CASE WHEN
+                        EXISTS (
+                            SELECT
+                                1
+                            FROM
+                                PROS_PTY_LOC_WRK LOC2
+                            WHERE
+                                LOC2.EZCANCELFLAG = '0'
+                            AND LOC2.GLBL_CMPY_CD = PTY.GLBL_CMPY_CD
+                            AND LOC2.LOC_NUM      = PTY.LOC_NUM
+                            AND LOC2.RGTN_STS_CD  = #rgtnSts_Actv#
+                        ) THEN 'Y'
+                        ELSE 'N'
+                      END EXIST_ACTV_ACCT_LOC_FLG
+                    <!-- QC#19829 Add End -->
+                FROM 
+                      DS_ACCT_PROS DAP
+                    , PROS_PTY_LOC_WRK PTY
+                WHERE 
+                        DAP.GLBL_CMPY_CD = #glblCmpyCd#
+                    AND DAP.EZCANCELFLAG = '0'
+                        
+                    AND DAP.GLBL_CMPY_CD = PTY.GLBL_CMPY_CD(+)
+                    AND DAP.PTY_LOC_PK = PTY.PTY_LOC_PK(+)
+                    AND PTY.EZCANCELFLAG(+) = '0'
+            </isNotEqual>
+             )                 ACCT
+                , BILL_TO_CUST BILL
+                , SHIP_TO_CUST SHIP
+                <isNotNull property="ctacPsnFlg">
+                  ,(SELECT DISTINCT
+                        PSN_RELN.GLBL_CMPY_CD
+                      , PSN_RELN.EZCANCELFLAG
+                      , PSN_RELN.DS_ACCT_NUM
+                      , PSN_RELN.LOC_NUM
+                      , CASE
+                            WHEN PSN_RELN.LOC_NUM IS NOT NULL
+                            THEN 'Y'
+                            ELSE 'N'
+                        END              AS HIT_LOC_CTAC_FLG
+                    FROM 
+                        DS_CTAC_PSN_RELN    PSN_RELN
+                      , CTAC_PSN            PSN
+                    <isNotNull property="ctacPsnTelNum">
+                      , DS_CTAC_PNT         PNT
+                    </isNotNull>
+                    WHERE
+                        PSN_RELN.GLBL_CMPY_CD = #glblCmpyCd#
+                    AND PSN_RELN.EZCANCELFLAG = '0'
+    
+                    AND PSN_RELN.GLBL_CMPY_CD = PSN.GLBL_CMPY_CD
+                    AND PSN_RELN.CTAC_PSN_PK = PSN.CTAC_PSN_PK
+                    AND PSN.EZCANCELFLAG = '0'
+    
+                    <isNotNull property="ctacPsnFirstNm">
+                    AND UPPER(PSN.CTAC_PSN_FIRST_NM) LIKE UPPER(#ctacPsnFirstNm#)
+                    </isNotNull>
+                    <isNotNull property="ctacPsnLastNm">
+                    AND UPPER(PSN.CTAC_PSN_LAST_NM) LIKE UPPER(#ctacPsnLastNm#)
+                    </isNotNull>
+                    <isNotNull property="ctacPsnTelNum">
+                    AND PSN.GLBL_CMPY_CD = PNT.GLBL_CMPY_CD
+                    AND PSN.CTAC_PSN_PK = PNT.CTAC_PSN_PK
+                    AND PNT.EZCANCELFLAG = '0'
+    
+                    AND PNT.DS_CTAC_PNT_TP_CD = #dsCtacPntTpCd#
+                    AND PNT.DS_CTAC_PNT_VAL_TXT LIKE #ctacPsnTelNum#
+                    </isNotNull>
+                    )  CTAC
+                </isNotNull>
+            WHERE
+                    ACCT.GLBL_CMPY_CD = BILL.GLBL_CMPY_CD(+)
+                AND ACCT.LOC_NUM = BILL.LOC_NUM(+)
+                AND BILL.EZCANCELFLAG(+) = '0'
+    
+                AND ACCT.GLBL_CMPY_CD = SHIP.GLBL_CMPY_CD(+)
+                AND ACCT.LOC_NUM = SHIP.LOC_NUM(+)
+                AND SHIP.EZCANCELFLAG(+) = '0'
+    
+                <isNotNull property="dsAcctNm">
+                AND ACCT.DS_ACCT_NM LIKE #dsAcctNm#
+                </isNotNull>
+                <!-- Address -->
+                <isNotNull property="shipFromFullCmpyAddr">
+                <!-- QC#5890 -->
+                AND UPPER(ACCT.FIRST_LINE_ADDR) || 
+                    DECODE(ACCT.SCD_LINE_ADDR, NULL, '', ' ' || UPPER(ACCT.SCD_LINE_ADDR)) ||
+                    DECODE(ACCT.THIRD_LINE_ADDR, NULL, '', ' ' || UPPER(ACCT.THIRD_LINE_ADDR)) ||
+                    DECODE(ACCT.FRTH_LINE_ADDR, NULL, '', ' ' || UPPER(ACCT.FRTH_LINE_ADDR)) LIKE #shipFromFullCmpyAddr#
+                </isNotNull>
+                <!-- Bill To Code -->
+                <isNotNull property="billToCustCd">
+                AND BILL.BILL_TO_CUST_CD LIKE #billToCustCd#
+                </isNotNull>
+                <!-- Ship To Code -->
+                <isNotNull property="shipToCustCd">
+                AND SHIP.SHIP_TO_CUST_CD LIKE #shipToCustCd#
+                </isNotNull>
+                <!-- City -->
+                <isNotNull property="ctyAddr">
+                AND UPPER(ACCT.CTY_ADDR) LIKE #ctyAddr#
+                </isNotNull>
+                <!-- State -->
+                <isNotNull property="stCd">
+                AND ACCT.ST_CD = #stCd#
+                </isNotNull>
+                <!-- Postal Code -->
+                <isNotNull property="postCd">
+                AND ACCT.POST_CD LIKE #postCd#
+                </isNotNull>
+                <!-- Account Number -->
+                <isNotNull property="dsAcctNum">
+                AND ACCT.DS_ACCT_NUM LIKE #dsAcctNum#
+                </isNotNull>
+                <!-- Location Number -->
+                <isNotNull property="locNum">
+                AND ACCT.LOC_NUM LIKE #locNum#
+                </isNotNull>
+                <!-- DBA Name -->
+                <isNotNull property="dbaNm">
+                AND ACCT.DBA_NM LIKE #dbaNm#
+                </isNotNull>
+                <!-- Account Legal Name -->
+                <isNotNull property="dsAcctLegalNm">
+                AND ACCT.DS_ACCT_LEGAL_NM LIKE #dsAcctLegalNm#
+                </isNotNull>
+                <!-- Account Group Code -->
+                <isNotNull property="dsAcctGrpCd">
+                AND EXISTS (SELECT 1 FROM DS_ACCT_GRP_ASG ASG 
+                            WHERE ASG.GLBL_CMPY_CD = ACCT.GLBL_CMPY_CD
+                            AND ASG.EZCANCELFLAG = '0'
+                            AND ASG.DS_ACCT_NUM = ACCT.DS_ACCT_NUM
+                            AND ASG.EFF_FROM_DT &lt;= #slsDt#
+                            AND (ASG.EFF_THRU_DT &gt;= #slsDt#
+                                OR ASG.EFF_THRU_DT IS NULL ) 
+                            AND ASG.DS_ACCT_GRP_CD LIKE #dsAcctGrpCd#
+                    )
+                </isNotNull>
+                <!-- Account Classification -->
+                <isNotNull property="dsAcctClsCd">
+                AND ACCT.DS_ACCT_CLS_CD = #dsAcctClsCd#
+                </isNotNull>
+                <!-- Location Name -->
+                <isNotNull property="locNm">
+                AND UPPER(ACCT.DS_LOC_NM) LIKE #locNm#
+                </isNotNull>
+                <isNotNull property="dsAcctDunsNum">
+                <!-- START 2018/04/10 Hd.Sugawara [QC#24388,MOD] -->
+                <!-- AND ACCT.DS_ACCT_DUNS_NUM LIKE #dsAcctDunsNum# -->
+                AND (ACCT.DS_ACCT_DUNS_NUM LIKE #dsAcctDunsNum# OR ACCT.PTY_DUNS_NUM LIKE #dsAcctDunsNum#)
+                <!-- END 2018/04/10 Hd.Sugawara [QC#24388,MOD] -->
+                </isNotNull>
+                <!-- UDUNS Number -->
+                <isNotNull property="dsUltDunsNum">
+                <!-- START 2018/04/10 Hd.Sugawara [QC#24388,MOD] -->
+                <!-- AND ACCT.DS_ULT_DUNS_NUM LIKE #dsUltDunsNum# -->
+                AND (ACCT.DS_ULT_DUNS_NUM LIKE #dsUltDunsNum# OR ACCT.PTY_DS_ULT_DUNS_NUM LIKE #dsUltDunsNum#)
+                <!-- END 2018/04/10 Hd.Sugawara [QC#24388,MOD] -->
+                </isNotNull>
+                <!-- Industry -->
+                <isNotNull property="dsCustSicDescTxt">
+                <!-- START 2018/04/10 Hd.Sugawara [QC#24388,MOD] -->
+                <!-- AND UPPER(ACCT.DS_CUST_SIC_DESC_TXT) LIKE UPPER(#dsCustSicDescTxt#) -->
+                AND (UPPER(ACCT.DS_CUST_SIC_DESC_TXT) LIKE UPPER(#dsCustSicDescTxt#) 
+                    OR UPPER(ACCT.PTY_DS_CUST_SIC_DESC_TXT) LIKE UPPER(#dsCustSicDescTxt#))
+                <!-- END 2018/04/10 Hd.Sugawara [QC#24388,MOD] -->
+                </isNotNull>
+                <isNotNull property="ctacPsnFlg">
+                AND ACCT.GLBL_CMPY_CD = CTAC.GLBL_CMPY_CD
+                <!-- QC#22557 Mod begin -->
+                AND ACCT.LOC_DS_ACCT_NUM = CTAC.DS_ACCT_NUM
+                <!-- AND (ACCT.LOC_DS_ACCT_NUM = CTAC.DS_ACCT_NUM OR ACCT.LOC_LOC_NUM = CTAC.LOC_NUM) -->
+                <!-- QC#22557 Mod end -->
+                AND CTAC.EZCANCELFLAG ='0'
+                </isNotNull>
+                <!-- QC#3395 END -->
+                <isNotNull property="dsAcctItrlFlg">
+                AND ACCT.DS_ACCT_ITRL_FLG = #dsAcctItrlFlg#
+                </isNotNull>
+                <isNotNull property="dsXtrnlRefTxt">
+                AND ACCT.DS_XTRNL_REF_TXT LIKE #dsXtrnlRefTxt#
+                </isNotNull>
+                <isNotNull property="dsAcctActvCustFlg">
+                AND ACCT.DS_ACCT_ACTV_CUST_FLG = #dsAcctActvCustFlg# 
+                </isNotNull>
+                <!-- QC#15431 Add Start -->
+                <isEqual property="inacLocFlg" compareValue="N">
+                AND (ACCT.RGTN_STS_CD IS NULL OR ACCT.RGTN_STS_CD = #rgtnSts_Actv#)
+                </isEqual>
+                <!-- QC#15431 Add End -->
+                <isNotNull property="dsAcctClsCd">
+                AND ACCT.DS_ACCT_CLS_CD = #dsAcctClsCd#
+                </isNotNull>
+                <isNotNull property="dsXrefAcctFlg">
+                AND EXISTS (SELECT 1 FROM DS_XREF_ACCT XREF
+                            WHERE XREF.GLBL_CMPY_CD = ACCT.GLBL_CMPY_CD
+                            AND XREF.LOC_NUM = ACCT.LOC_NUM
+                            AND XREF.EZCANCELFLAG = '0'
+                            <isNotNull property="dsXrefAcctTpCd">
+                            AND XREF.DS_XREF_ACCT_TP_CD  = #dsXrefAcctTpCd#
+                            </isNotNull>
+                            <isNotNull property="dsXrefAcctCd">
+                            AND XREF.DS_XREF_ACCT_CD LIKE #dsXrefAcctCd#
+                            </isNotNull>
+                       )
+                </isNotNull>
+                <!-- QC#14340 Add Start -->
+                <isEqual property="isDisplayRelated" compareValue="N">
+                <!-- QC#14340 Add End -->
+                <isEqual property="dispBillToFlg" compareValue="Y">
+                AND BILL.RGTN_STS_CD = #rgtnSts_Actv#
+                </isEqual>
+                <isEqual property="dispShipToFlg" compareValue="Y">
+                AND SHIP.RGTN_STS_CD = #rgtnSts_Actv#
+                </isEqual>
+                </isEqual>
+            <!-- QC#22557 BEGIN -->
+            <isNotNull property="ctacPsnFlg">
+            UNION
+            SELECT
+                  ACCT.DS_ACCT_NUM              AS DS_ACCT_NUM
+                , ''                            AS DS_ACCT_RELN_TP_CD
+                , ACCT.DS_ACCT_NM               AS DS_ACCT_NM
+                , ACCT.FIRST_LINE_ADDR ||
+                    DECODE(ACCT.SCD_LINE_ADDR, NULL, '', ' ' || ACCT.SCD_LINE_ADDR)   ||
+                    DECODE(ACCT.THIRD_LINE_ADDR, NULL, '', ' ' || ACCT.THIRD_LINE_ADDR) ||
+                    DECODE(ACCT.FRTH_LINE_ADDR, NULL, '', ' ' || ACCT.FRTH_LINE_ADDR) ||
+                    ' ' ||
+                    ACCT.CTY_ADDR        || ' ' ||
+                    ACCT.ST_CD           || ' ' ||
+                    ACCT.POST_CD                   AS SHIP_FROM_FULL_CMPY_ADDR
+                , ACCT.LOC_NUM                   AS LOC_NUM
+                , ACCT.XX_YES_NO_CD
+                , (SELECT DS_ACCT_TP_NM FROM DS_ACCT_TP TP
+                          WHERE TP.GLBL_CMPY_CD = ACCT.GLBL_CMPY_CD
+                          AND TP.EZCANCELFLAG = '0'
+                          AND TP.DS_ACCT_TP_CD = ACCT.DS_ACCT_TP_CD
+                   )                             AS DS_ACCT_TP_NM
+                , ACCT.DS_ACCT_NUM              AS ORIG_ACCT_NUM
+                , ''                            AS RELN_DS_ACCT_NUM
+                , BILL.BILL_TO_CUST_CD          AS BILL_TO_CUST_CD
+                , SHIP.SHIP_TO_CUST_CD          AS SHIP_TO_CUST_CD
+                , ACCT.GLBL_CMPY_CD             AS GLBL_CMPY_CD
+                , ACCT.PTY_LOC_PK               AS PTY_LOC_PK
+                , ACCT.FIRST_LINE_ADDR          AS FIRST_LINE_ADDR
+                , ROWNUM                        AS SORT_NUM
+                , ACCT.DS_ACCT_ACTV_CUST_FLG    AS DS_ACCT_ACTV_CUST_FLG
+                , ACCT.LOC_RGTN_STS_CD          AS LOC_RGTN_STS_CD
+                , ACCT.RGTN_STS_CD              AS PTY_RGTN_STS_CD
+                , BILL.RGTN_STS_CD              AS BILL_RGTN_STS_CD
+                , SHIP.RGTN_STS_CD              AS SHIP_RGTN_STS_CD
+                , CTAC.HIT_LOC_CTAC_FLG         AS HIT_LOC_CTAC_FLG
+                <!-- QC#19829 Add Start -->
+                , ACCT.EXIST_ACTV_ACCT_LOC_FLG  AS EXIST_ACTV_ACCT_LOC_FLG
+                <!-- QC#19829 Add End -->
+            FROM   (
+            <isNotEqual property="dsAcctTpCdCust" compareValue="N">
+                SELECT
+                     STC.EZCANCELFLAG
+                    ,STC.GLBL_CMPY_CD
+                    ,STC.SELL_TO_CUST_CD    AS DS_ACCT_NUM
+                    ,STC.DS_ACCT_TP_CD
+                    ,STC.DS_ACCT_NM
+                    ,STC.DS_ACCT_ACTV_CUST_FLG
+                    ,STC.DS_ACCT_CLS_CD
+                    ,STC.DBA_NM
+                    ,STC.DS_ACCT_LEGAL_NM
+                    ,STC.DS_ACCT_DUNS_NUM
+                    ,STC.DS_ULT_DUNS_NUM
+                    ,STC.DS_ACCT_ITRL_FLG
+                    ,STC.DS_XTRNL_REF_TXT
+                    ,STC.DS_CUST_SIC_DESC_TXT
+                    ,PTY.FIRST_LINE_ADDR
+                    ,PTY.SCD_LINE_ADDR
+                    ,PTY.THIRD_LINE_ADDR
+                    ,PTY.FRTH_LINE_ADDR
+                    ,PTY.CTY_ADDR
+                    ,PTY.ST_CD
+                    ,PTY.POST_CD
+                    ,PTY.LOC_NUM
+                    ,PTY.RGTN_STS_CD
+                    ,PTY.DS_LOC_NM
+                    ,LOC.RGTN_STS_CD          AS LOC_RGTN_STS_CD
+                    ,LOC.LOC_NUM              AS LOC_LOC_NUM
+                    ,LOC.DS_ACCT_NUM          AS LOC_DS_ACCT_NUM
+                    ,PRIN.PTY_LOC_PK
+                    ,CASE WHEN PRIN.PRIN_CUST_PK IS NOT NULL THEN 'Y' ELSE 'N' END AS XX_YES_NO_CD
+                    <!-- START 2018/04/10 Hd.Sugawara [QC#24388,ADD] -->
+                    ,PTY.DUNS_NUM             AS PTY_DUNS_NUM
+                    ,PTY.DS_ULT_DUNS_NUM      AS PTY_DS_ULT_DUNS_NUM
+                    ,PTY.DS_CUST_SIC_DESC_TXT AS PTY_DS_CUST_SIC_DESC_TXT
+                    <!-- END 2018/04/10 Hd.Sugawara [QC#24388,ADD] -->
+                    <!-- QC#19829 Add Start -->
+                    , CASE WHEN
+                        EXISTS (
+                            SELECT
+                                1
+                            FROM
+                                ACCT_LOC LOC2
+                            WHERE
+                                LOC2.EZCANCELFLAG = '0'
+                            AND LOC2.GLBL_CMPY_CD = PTY.GLBL_CMPY_CD
+                            AND LOC2.LOC_NUM      = PTY.LOC_NUM
+                            AND LOC2.RGTN_STS_CD  = #rgtnSts_Actv#
+                        ) THEN 'Y'
+                        ELSE 'N'
+                      END EXIST_ACTV_ACCT_LOC_FLG
+                    <!-- QC#19829 Add End -->
+                FROM
+                      SELL_TO_CUST STC
+                    , ACCT_LOC LOC
+                    , PTY_LOC_WRK PTY
+                    , PRIN_CUST PRIN
+                WHERE
+                    STC.GLBL_CMPY_CD     = #glblCmpyCd#
+                AND STC.EZCANCELFLAG     = '0'
+                     
+                AND STC.GLBL_CMPY_CD     = LOC.GLBL_CMPY_CD(+)
+                AND STC.SELL_TO_CUST_CD  = LOC.DS_ACCT_NUM(+)
+                AND LOC.EZCANCELFLAG(+)  = '0'
+    
+                AND LOC.GLBL_CMPY_CD     = PTY.GLBL_CMPY_CD(+)
+                AND LOC.PTY_LOC_PK       = PTY.PTY_LOC_PK(+)
+                AND PTY.EZCANCELFLAG(+)  = '0'
+    
+                AND PTY.GLBL_CMPY_CD     = PRIN.GLBL_CMPY_CD(+)
+                AND PTY.LOC_NUM          = PRIN.LOC_NUM(+)
+                AND PRIN.EZCANCELFLAG(+) = '0'
+                
+                <isEqual property="xxChkBox_01" compareValue="N">
+                AND STC.LOC_NUM          = LOC.LOC_NUM(+)
+                </isEqual>
+            </isNotEqual>
+            <isNull property="dsAcctTpCdCust">
+                UNION ALL
+            </isNull>
+            <isNotEqual property="dsAcctTpCdCust" compareValue="Y">
+                SELECT
+                     DAP.EZCANCELFLAG
+                    ,DAP.GLBL_CMPY_CD
+                    ,DAP.DS_ACCT_NUM
+                    ,DAP.DS_ACCT_TP_CD
+                    ,DAP.DS_ACCT_NM
+                    ,DAP.DS_ACCT_ACTV_CUST_FLG
+                    ,DAP.DS_ACCT_CLS_CD
+                    ,DAP.DBA_NM
+                    ,DAP.DS_ACCT_LEGAL_NM
+                    ,DAP.DS_ACCT_DUNS_NUM
+                    ,DAP.DS_ULT_DUNS_NUM
+                    ,DAP.DS_ACCT_ITRL_FLG
+                    ,DAP.DS_XTRNL_REF_TXT
+                    ,DAP.DS_CUST_SIC_DESC_TXT
+                    ,PTY.FIRST_LINE_ADDR
+                    ,PTY.SCD_LINE_ADDR
+                    ,PTY.THIRD_LINE_ADDR
+                    ,PTY.FRTH_LINE_ADDR
+                    ,PTY.CTY_ADDR
+                    ,PTY.ST_CD
+                    ,PTY.POST_CD
+                    ,PTY.LOC_NUM
+                    ,PTY.RGTN_STS_CD
+                    ,PTY.DS_LOC_NM
+                    ,DAP.RGTN_STS_CD AS LOC_RGTN_STS_CD
+                    ,PTY.LOC_NUM     AS LOC_LOC_NUM
+                    ,DAP.DS_ACCT_NUM AS LOC_DS_ACCT_NUM
+                    ,PTY.PTY_LOC_PK  AS PTY_LOC_PK
+                    ,'Y' AS XX_YES_NO_CD
+                    <!-- START 2018/04/10 Hd.Sugawara [QC#24388,ADD] -->
+                    ,PTY.DUNS_NUM             AS PTY_DUNS_NUM
+                    ,PTY.DS_ULT_DUNS_NUM      AS PTY_DS_ULT_DUNS_NUM
+                    ,PTY.DS_CUST_SIC_DESC_TXT AS PTY_DS_CUST_SIC_DESC_TXT
+                    <!-- END 2018/04/10 Hd.Sugawara [QC#24388,ADD] -->
+                    <!-- QC#19829 Add Start -->
+                    , CASE WHEN
+                        EXISTS (
+                            SELECT
+                                1
+                            FROM
+                                PROS_PTY_LOC_WRK LOC2
+                            WHERE
+                                LOC2.EZCANCELFLAG = '0'
+                            AND LOC2.GLBL_CMPY_CD = PTY.GLBL_CMPY_CD
+                            AND LOC2.LOC_NUM      = PTY.LOC_NUM
+                            AND LOC2.RGTN_STS_CD  = #rgtnSts_Actv#
+                        ) THEN 'Y'
+                        ELSE 'N'
+                      END EXIST_ACTV_ACCT_LOC_FLG
+                    <!-- QC#19829 Add End -->
+                FROM
+                      DS_ACCT_PROS DAP
+                    , PROS_PTY_LOC_WRK PTY
+                WHERE
+                    DAP.GLBL_CMPY_CD    = #glblCmpyCd#
+                AND DAP.EZCANCELFLAG    = '0'
+                AND DAP.GLBL_CMPY_CD    = PTY.GLBL_CMPY_CD(+)
+                AND DAP.PTY_LOC_PK      = PTY.PTY_LOC_PK(+)
+                AND PTY.EZCANCELFLAG(+) = '0'
+            </isNotEqual>
+            )                  ACCT
+                , BILL_TO_CUST BILL
+                , SHIP_TO_CUST SHIP
+                  ,(SELECT  DISTINCT
+                        PSN_RELN.GLBL_CMPY_CD
+                      , PSN_RELN.EZCANCELFLAG
+                      , PSN_RELN.DS_ACCT_NUM
+                      , PSN_RELN.LOC_NUM
+                      , CASE
+                            WHEN PSN_RELN.LOC_NUM IS NOT NULL
+                            THEN 'Y'
+                            ELSE 'N'
+                        END              AS HIT_LOC_CTAC_FLG
+                    FROM
+                        DS_CTAC_PSN_RELN    PSN_RELN
+                      , CTAC_PSN            PSN
+                    <isNotNull property="ctacPsnTelNum">
+                      , DS_CTAC_PNT         PNT
+                    </isNotNull>
+                    WHERE
+                        PSN_RELN.GLBL_CMPY_CD = #glblCmpyCd#
+                    AND PSN_RELN.EZCANCELFLAG = '0'
+    
+                    AND PSN_RELN.GLBL_CMPY_CD = PSN.GLBL_CMPY_CD
+                    AND PSN_RELN.CTAC_PSN_PK  = PSN.CTAC_PSN_PK
+                    AND PSN.EZCANCELFLAG = '0'
+    
+                    <isNotNull property="ctacPsnFirstNm">
+                    AND UPPER(PSN.CTAC_PSN_FIRST_NM) LIKE UPPER(#ctacPsnFirstNm#)
+                    </isNotNull>
+                    <isNotNull property="ctacPsnLastNm">
+                    AND UPPER(PSN.CTAC_PSN_LAST_NM) LIKE UPPER(#ctacPsnLastNm#)
+                    </isNotNull>
+                    <isNotNull property="ctacPsnTelNum">
+                    AND PSN.GLBL_CMPY_CD = PNT.GLBL_CMPY_CD
+                    AND PSN.CTAC_PSN_PK = PNT.CTAC_PSN_PK
+                    AND PNT.EZCANCELFLAG = '0'
+    
+                    AND PNT.DS_CTAC_PNT_TP_CD = #dsCtacPntTpCd#
+                    AND PNT.DS_CTAC_PNT_VAL_TXT LIKE #ctacPsnTelNum#
+                    </isNotNull>
+                    )  CTAC
+            WHERE
+                    ACCT.GLBL_CMPY_CD    = BILL.GLBL_CMPY_CD(+)
+                AND ACCT.LOC_NUM         = BILL.LOC_NUM(+)
+                AND BILL.EZCANCELFLAG(+) = '0'
+    
+                AND ACCT.GLBL_CMPY_CD    = SHIP.GLBL_CMPY_CD(+)
+                AND ACCT.LOC_NUM         = SHIP.LOC_NUM(+)
+                AND SHIP.EZCANCELFLAG(+) = '0'
+    
+                <isNotNull property="dsAcctNm">
+                AND ACCT.DS_ACCT_NM LIKE #dsAcctNm#
+                </isNotNull>
+                <!-- Address -->
+                <isNotNull property="shipFromFullCmpyAddr">
+                <!-- QC#5890 -->
+                AND UPPER(ACCT.FIRST_LINE_ADDR) ||
+                    DECODE(ACCT.SCD_LINE_ADDR, NULL, '', ' ' || UPPER(ACCT.SCD_LINE_ADDR)) ||
+                    DECODE(ACCT.THIRD_LINE_ADDR, NULL, '', ' ' || UPPER(ACCT.THIRD_LINE_ADDR)) ||
+                    DECODE(ACCT.FRTH_LINE_ADDR, NULL, '', ' ' || UPPER(ACCT.FRTH_LINE_ADDR)) LIKE #shipFromFullCmpyAddr#
+                </isNotNull>
+                <!-- Bill To Code -->
+                <isNotNull property="billToCustCd">
+                AND BILL.BILL_TO_CUST_CD LIKE #billToCustCd#
+                </isNotNull>
+                <!-- Ship To Code -->
+                <isNotNull property="shipToCustCd">
+                AND SHIP.SHIP_TO_CUST_CD LIKE #shipToCustCd#
+                </isNotNull>
+                <!-- City -->
+                <isNotNull property="ctyAddr">
+                AND UPPER(ACCT.CTY_ADDR) LIKE #ctyAddr#
+                </isNotNull>
+                <!-- State -->
+                <isNotNull property="stCd">
+                AND ACCT.ST_CD = #stCd#
+                </isNotNull>
+                <!-- Postal Code -->
+                <isNotNull property="postCd">
+                AND ACCT.POST_CD LIKE #postCd#
+                </isNotNull>
+                <!-- Account Number -->
+                <isNotNull property="dsAcctNum">
+                AND ACCT.DS_ACCT_NUM LIKE #dsAcctNum#
+                </isNotNull>
+                <!-- Location Number -->
+                <isNotNull property="locNum">
+                AND ACCT.LOC_NUM LIKE #locNum#
+                </isNotNull>
+                <!-- DBA Name -->
+                <isNotNull property="dbaNm">
+                AND ACCT.DBA_NM LIKE #dbaNm#
+                </isNotNull>
+                <!-- Account Legal Name -->
+                <isNotNull property="dsAcctLegalNm">
+                AND ACCT.DS_ACCT_LEGAL_NM LIKE #dsAcctLegalNm#
+                </isNotNull>
+                <!-- Account Group Code -->
+                <isNotNull property="dsAcctGrpCd">
+                AND EXISTS (SELECT 1 FROM DS_ACCT_GRP_ASG ASG
+                            WHERE ASG.GLBL_CMPY_CD = ACCT.GLBL_CMPY_CD
+                            AND ASG.EZCANCELFLAG = '0'
+                            AND ASG.DS_ACCT_NUM = ACCT.DS_ACCT_NUM
+                            AND ASG.EFF_FROM_DT &lt;= #slsDt#
+                            AND (ASG.EFF_THRU_DT &gt;= #slsDt#
+                                OR ASG.EFF_THRU_DT IS NULL )
+                            AND ASG.DS_ACCT_GRP_CD LIKE #dsAcctGrpCd#
+                    )
+                </isNotNull>
+                <!-- Account Classification -->
+                <isNotNull property="dsAcctClsCd">
+                AND ACCT.DS_ACCT_CLS_CD = #dsAcctClsCd#
+                </isNotNull>
+                <!-- Location Name -->
+                <isNotNull property="locNm">
+                AND UPPER(ACCT.DS_LOC_NM) LIKE #locNm#
+                </isNotNull>
+                <isNotNull property="dsAcctDunsNum">
+                <!-- START 2018/04/10 Hd.Sugawara [QC#24388,MOD] -->
+                <!-- AND ACCT.DS_ACCT_DUNS_NUM LIKE #dsAcctDunsNum# -->
+                AND (ACCT.DS_ACCT_DUNS_NUM LIKE #dsAcctDunsNum# OR ACCT.PTY_DUNS_NUM LIKE #dsAcctDunsNum#)
+                <!-- END 2018/04/10 Hd.Sugawara [QC#24388,MOD] -->
+                </isNotNull>
+                <!-- UDUNS Number -->
+                <isNotNull property="dsUltDunsNum">
+                <!-- START 2018/04/10 Hd.Sugawara [QC#24388,MOD] -->
+                <!-- AND ACCT.DS_ULT_DUNS_NUM LIKE #dsUltDunsNum# -->
+                AND (ACCT.DS_ULT_DUNS_NUM LIKE #dsUltDunsNum# OR ACCT.PTY_DS_ULT_DUNS_NUM LIKE #dsUltDunsNum#)
+                <!-- END 2018/04/10 Hd.Sugawara [QC#24388,MOD] -->
+                </isNotNull>
+                <!-- Industry -->
+                <isNotNull property="dsCustSicDescTxt">
+                <!-- START 2018/04/10 Hd.Sugawara [QC#24388,MOD] -->
+                <!-- AND UPPER(ACCT.DS_CUST_SIC_DESC_TXT) LIKE UPPER(#dsCustSicDescTxt#) -->
+                AND (UPPER(ACCT.DS_CUST_SIC_DESC_TXT) LIKE UPPER(#dsCustSicDescTxt#) 
+                    OR UPPER(ACCT.PTY_DS_CUST_SIC_DESC_TXT) LIKE UPPER(#dsCustSicDescTxt#))
+                <!-- END 2018/04/10 Hd.Sugawara [QC#24388,MOD] -->
+                </isNotNull>
+                <isNotNull property="ctacPsnFlg">
+                AND ACCT.GLBL_CMPY_CD = CTAC.GLBL_CMPY_CD
+                AND ACCT.LOC_LOC_NUM  = CTAC.LOC_NUM
+                AND CTAC.EZCANCELFLAG ='0'
+                </isNotNull>
+                <isNotNull property="dsAcctItrlFlg">
+                AND ACCT.DS_ACCT_ITRL_FLG = #dsAcctItrlFlg#
+                </isNotNull>
+                <isNotNull property="dsXtrnlRefTxt">
+                AND ACCT.DS_XTRNL_REF_TXT LIKE #dsXtrnlRefTxt#
+                </isNotNull>
+                <isNotNull property="dsAcctActvCustFlg">
+                AND ACCT.DS_ACCT_ACTV_CUST_FLG = #dsAcctActvCustFlg#
+                </isNotNull>
+                <isEqual property="inacLocFlg" compareValue="N">
+                AND(ACCT.RGTN_STS_CD IS NULL OR ACCT.RGTN_STS_CD = #rgtnSts_Actv#)
+                </isEqual>
+                <isNotNull property="dsAcctClsCd">
+                AND ACCT.DS_ACCT_CLS_CD = #dsAcctClsCd#
+                </isNotNull>
+                <isNotNull property="dsXrefAcctFlg">
+                AND EXISTS (SELECT 1 FROM DS_XREF_ACCT XREF
+                            WHERE XREF.GLBL_CMPY_CD = ACCT.GLBL_CMPY_CD
+                            AND XREF.LOC_NUM = ACCT.LOC_NUM
+                            AND XREF.EZCANCELFLAG = '0'
+                            <isNotNull property="dsXrefAcctTpCd">
+                            AND XREF.DS_XREF_ACCT_TP_CD  = #dsXrefAcctTpCd#
+                            </isNotNull>
+                            <isNotNull property="dsXrefAcctCd">
+                            AND XREF.DS_XREF_ACCT_CD LIKE #dsXrefAcctCd#
+                            </isNotNull>
+                       )
+                </isNotNull>
+                <isEqual property="isDisplayRelated" compareValue="N">
+                <isEqual property="dispBillToFlg" compareValue="Y">
+                AND BILL.RGTN_STS_CD = #rgtnSts_Actv#
+                </isEqual>
+                <isEqual property="dispShipToFlg" compareValue="Y">
+                AND SHIP.RGTN_STS_CD = #rgtnSts_Actv#
+                </isEqual>
+                </isEqual>
+            </isNotNull>
+            <!-- QC#22557 END -->
+        )
+                <isNotNull property="searchMode">
+                    SELECT DS_ACCT_NUM FROM ACCT_ORG
+                    GROUP BY DS_ACCT_NUM
+                    ORDER BY DS_ACCT_NUM
+                </isNotNull>
+                <isNull property="searchMode">
+                <!-- QC#3290 BEG -->
+        , STS_FLTR_WRK AS (
+            SELECT A.*
+                <isEqual property="inacLocFlg" compareValue="N">
+                <isEqual property="inacBillToShipToFlg" compareValue="N">
+                , CASE 
+                    <!-- QC#3395 BEG -->
+                    WHEN HIT_LOC_CTAC_FLG = 'N' THEN 'ACCT'
+                    <!-- QC#3395 END -->
+                    WHEN LOC_RGTN_STS_CD IS NULL THEN 'ACCT'
+                    WHEN LOC_RGTN_STS_CD != #rgtnSts_Actv# THEN 'ACCT'
+                    WHEN PTY_RGTN_STS_CD != #rgtnSts_Actv# THEN 'ACCT'
+                    WHEN BILL_RGTN_STS_CD IS NULL AND SHIP_RGTN_STS_CD IS NULL THEN 'ACCT+LOC'
+                    WHEN BILL_RGTN_STS_CD = #rgtnSts_Actv# THEN 'ACCT+LOC'
+                    WHEN SHIP_RGTN_STS_CD = #rgtnSts_Actv# THEN 'ACCT+LOC'
+                    <!-- QC#15431 Add Start -->
+                    WHEN LOC_RGTN_STS_CD  = #rgtnSts_Actv# THEN 'ACCT+LOC'
+                    <!-- QC#15431 Add End-->
+                    ELSE 'ACCT'
+                END AS DPLY_TP
+                </isEqual>
+                <isEqual property="inacBillToShipToFlg" compareValue="Y">
+                , CASE 
+                    <!-- QC#3395 BEG -->
+                    WHEN HIT_LOC_CTAC_FLG = 'N' THEN 'ACCT'
+                    <!-- QC#3395 END -->
+                    WHEN LOC_RGTN_STS_CD IS NULL THEN 'ACCT'
+                    WHEN BILL_RGTN_STS_CD IS NULL AND SHIP_RGTN_STS_CD IS NULL AND LOC_RGTN_STS_CD != #rgtnSts_Actv# THEN 'ACCT'
+                    WHEN BILL_RGTN_STS_CD IS NULL AND SHIP_RGTN_STS_CD IS NULL AND PTY_RGTN_STS_CD != #rgtnSts_Actv# THEN 'ACCT'
+                    ELSE 'ACCT+LOC'
+                END AS DPLY_TP
+                </isEqual>
+                </isEqual>
+                <isEqual property="inacLocFlg" compareValue="Y">
+                , CASE 
+                   <!-- QC#3395 BEG -->
+                   WHEN LOC_RGTN_STS_CD IS NULL THEN 'ACCT'
+                   WHEN HIT_LOC_CTAC_FLG = 'N' THEN 'ACCT'
+                   <!-- QC#3395 END -->
+                   ELSE 'ACCT+LOC'
+                END AS DPLY_TP
+                </isEqual>
+            FROM ACCT_ORG A
+            )
+        , LOC_FLTR AS (
+              SELECT DISTINCT
+                     A.DS_ACCT_NUM
+                   , A.DS_ACCT_RELN_TP_CD
+                   , A.DS_ACCT_NM
+                   , A.DS_ACCT_TP_NM
+                   , A.ORIG_ACCT_NUM
+                   , A.RELN_DS_ACCT_NUM
+                   , A.GLBL_CMPY_CD
+                   , A.DS_ACCT_ACTV_CUST_FLG
+                   , CASE WHEN A.DPLY_TP='ACCT+LOC' THEN A.PTY_LOC_PK ELSE P.PTY_LOC_PK END AS PTY_LOC_PK
+                   , CASE WHEN A.DPLY_TP='ACCT+LOC' THEN A.XX_YES_NO_CD ELSE P.XX_YES_NO_CD END AS XX_YES_NO_CD
+                   , CASE WHEN A.DPLY_TP='ACCT+LOC' THEN A.BILL_TO_CUST_CD ELSE P.BILL_TO_CUST_CD END AS BILL_TO_CUST_CD
+                   , CASE WHEN A.DPLY_TP='ACCT+LOC' THEN A.BILL_RGTN_STS_CD ELSE P.BILL_RGTN_STS_CD END AS BILL_RGTN_STS_CD
+                   , CASE WHEN A.DPLY_TP='ACCT+LOC' THEN A.SHIP_TO_CUST_CD ELSE P.SHIP_TO_CUST_CD END AS SHIP_TO_CUST_CD
+                   , CASE WHEN A.DPLY_TP='ACCT+LOC' THEN A.SHIP_RGTN_STS_CD ELSE P.SHIP_RGTN_STS_CD END AS SHIP_RGTN_STS_CD
+                   , CASE WHEN A.DPLY_TP='ACCT+LOC' THEN A.PTY_RGTN_STS_CD ELSE P.PTY_RGTN_STS_CD END AS PTY_RGTN_STS_CD
+                    <!-- QC#15431 Add Start -->
+                   , CASE WHEN A.DPLY_TP='ACCT+LOC' THEN A.LOC_RGTN_STS_CD ELSE P.LOC_RGTN_STS_CD END AS LOC_RGTN_STS_CD
+                    <!-- QC#15431 Add End-->
+                   , CASE WHEN A.DPLY_TP='ACCT+LOC' THEN A.SHIP_FROM_FULL_CMPY_ADDR ELSE P.SHIP_FROM_FULL_CMPY_ADDR END AS SHIP_FROM_FULL_CMPY_ADDR
+                   , CASE WHEN A.DPLY_TP='ACCT+LOC' THEN A.LOC_NUM ELSE P.LOC_NUM END AS LOC_NUM
+                   , CASE WHEN A.DPLY_TP='ACCT+LOC' THEN A.FIRST_LINE_ADDR ELSE P.FIRST_LINE_ADDR END AS FIRST_LINE_ADDR
+                   , CASE WHEN A.DPLY_TP='ACCT+LOC' THEN A.LOC_NUM ELSE NULL END AS ORIG_LOC_NUM
+                   <!-- QC#4373 -->
+                   <!-- QC#19829 Del
+                   , CASE WHEN EXISTS (
+                                SELECT 1 
+                                  FROM ACCT_LOC LOC 
+                                 WHERE LOC.EZCANCELFLAG = '0' 
+                                   AND LOC.GLBL_CMPY_CD = A.GLBL_CMPY_CD
+                                   AND LOC.LOC_NUM = A.LOC_NUM
+                                   AND LOC.RGTN_STS_CD = #rgtnSts_Actv#
+                               )
+                          THEN 'Y' ELSE 'N' END EXIST_ACTV_ACCT_LOC_FLG -->
+                    <!-- QC#19829 Add Start -->
+                    , A.EXIST_ACTV_ACCT_LOC_FLG
+                    <!-- QC#19829 Add End -->
+              FROM STS_FLTR_WRK A
+                   <!-- QC#19829 Del , STS_FLTR_WRK P -->
+                   <!-- QC#19829 Add Start -->
+                   , (
+                       SELECT * FROM STS_FLTR_WRK P2 WHERE P2.XX_YES_NO_CD(+) = 'Y'
+                     ) P
+                   <!-- QC#19829 Add End -->
+              WHERE A.DS_ACCT_NUM = P.DS_ACCT_NUM(+)
+                 <!-- QC#19829 Del AND P.XX_YES_NO_CD(+) = 'Y' -->
+            )
+        , ACCT_FLTR AS (
+            SELECT 
+                <!-- QC#4373 -->
+                  A.DS_ACCT_NUM
+                , A.DS_ACCT_RELN_TP_CD
+                , A.DS_ACCT_NM
+                , A.DS_ACCT_TP_NM
+                , A.ORIG_ACCT_NUM
+                , A.RELN_DS_ACCT_NUM
+                , A.GLBL_CMPY_CD
+                , A.DS_ACCT_ACTV_CUST_FLG
+                , A.PTY_LOC_PK
+                , A.XX_YES_NO_CD
+                <isEqual property="inacLocFlg" compareValue="N">
+                <isEqual property="inacBillToShipToFlg" compareValue="N">
+                , CASE WHEN A.EXIST_ACTV_ACCT_LOC_FLG = 'Y' AND A.PTY_RGTN_STS_CD = #rgtnSts_Actv# AND A.BILL_RGTN_STS_CD = #rgtnSts_Actv# 
+                          THEN A.BILL_TO_CUST_CD ELSE NULL END BILL_TO_CUST_CD
+                , CASE WHEN A.EXIST_ACTV_ACCT_LOC_FLG = 'Y' AND A.PTY_RGTN_STS_CD = #rgtnSts_Actv# AND A.SHIP_RGTN_STS_CD = #rgtnSts_Actv#
+                          THEN A.SHIP_TO_CUST_CD ELSE NULL END SHIP_TO_CUST_CD
+                , CASE WHEN A.EXIST_ACTV_ACCT_LOC_FLG = 'Y' AND A.PTY_RGTN_STS_CD = #rgtnSts_Actv# 
+                          THEN A.PTY_RGTN_STS_CD ELSE NULL END PTY_RGTN_STS_CD
+                </isEqual>
+                <isEqual property="inacBillToShipToFlg" compareValue="Y">
+                , A.BILL_TO_CUST_CD
+                , A.SHIP_TO_CUST_CD
+                , A.PTY_RGTN_STS_CD
+                </isEqual>
+                </isEqual>
+                <isEqual property="inacLocFlg" compareValue="Y">
+                , A.BILL_TO_CUST_CD
+                , A.SHIP_TO_CUST_CD
+                , A.PTY_RGTN_STS_CD
+                </isEqual>
+                , A.BILL_RGTN_STS_CD
+                , A.SHIP_RGTN_STS_CD
+                 <!-- QC#15431 Add Start -->
+                , A.LOC_RGTN_STS_CD
+                 <!-- QC#15431 Add End-->
+                , A.SHIP_FROM_FULL_CMPY_ADDR
+                , A.LOC_NUM
+                , A.FIRST_LINE_ADDR
+                , A.ORIG_LOC_NUM
+                <!-- QC#6189 -->
+                <isNull property="dispRelnFlg">
+                , (SELECT RELN_DS_ACCT_NUM FROM 
+                    (SELECT R.RELN_DS_ACCT_NUM
+                          , ROW_NUMBER() OVER (ORDER BY DECODE(R.RGTN_STS_CD, #rgtnSts_Ready#, 1, #rgtnSts_Pend#, 2, 3)) AS SEQ
+                       FROM DS_ACCT_RELN R 
+                      WHERE R.EZCANCELFLAG = '0' AND R.GLBL_CMPY_CD = #glblCmpyCd# AND R.DS_ACCT_RELN_TP_CD = #dsAcctRelnTp_PrntAcct# 
+                        AND R.DS_ACCT_NUM = A.DS_ACCT_NUM
+                    ) WHERE SEQ = 1
+                  ) PRNT_DS_ACCT_NUM
+                </isNull>
+            FROM  LOC_FLTR A
+                 ,(SELECT DS_ACCT_NUM
+                            , MAX(ORIG_LOC_NUM) ORIG_LOC_NUM
+                      FROM LOC_FLTR
+                      WHERE ORIG_LOC_NUM IS NOT NULL
+                      GROUP BY DS_ACCT_NUM) B
+            WHERE A.DS_ACCT_NUM = B.DS_ACCT_NUM(+)
+                AND NOT (A.ORIG_LOC_NUM IS NULL AND B.ORIG_LOC_NUM IS NOT NULL)
+            )
+            SELECT * FROM (
+            SELECT * FROM ACCT_FLTR
+            <!-- QC#3290 END -->
+                <!-- 2018/05/15 QC#22715 mod start -->
+                <!-- ORDER BY DS_ACCT_NUM, XX_YES_NO_CD DESC, FIRST_LINE_ADDR -->
+                ORDER BY DS_ACCT_NM, XX_YES_NO_CD DESC, FIRST_LINE_ADDR
+                <!-- 2018/05/15 QC#22715 mod end -->
+            )
+            <!-- QC#5890 --> 
+            WHERE ROWNUM &lt;= #rowNum#
+            </isNull>
+    </statement>
+
+    <statement id="getRelatedAccountList" parameterClass="Map" resultClass="Map">
+        WITH WRK_PRNT_UP AS (
+          -- get tree of parent
+          SELECT R.RELN_DS_ACCT_NUM, LEVEL LVL
+            FROM (
+                  SELECT RELN.*
+                    FROM DS_ACCT_RELN RELN 
+                   WHERE RELN.GLBL_CMPY_CD = #glblCmpyCd#
+                     AND RELN.EZCANCELFLAG = '0'
+                     AND RELN.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCd#
+                     <!-- QC#9980 -->
+                    <isNotNull property="rgtnStsCd">
+                     AND RELN.RGTN_STS_CD = #rgtnStsCd# 
+                    </isNotNull>
+           ) R
+           START WITH R.DS_ACCT_NUM = #dsAcctNum#
+           CONNECT BY NOCYCLE
+           PRIOR R.RELN_DS_ACCT_NUM = R.DS_ACCT_NUM
+        )
+        , WRK_TOP AS (
+          -- get top parent
+          SELECT RELN_DS_ACCT_NUM DS_ACCT_NUM FROM WRK_PRNT_UP WHERE LVL = ( 
+            SELECT MAX(LVL) FROM WRK_PRNT_UP W
+          ) AND ROWNUM = 1
+          -- in the case that origin account do not have parent relation, set itself as tree top
+          UNION ALL
+          SELECT #dsAcctNum# DS_ACCT_NUM FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM WRK_PRNT_UP)
+        )
+        , WRK_PRNT_ALL AS (
+          -- get child tree from top parent
+          SELECT R.DS_ACCT_NUM, R.RELN_DS_ACCT_NUM, R.DS_ACCT_RELN_TP_CD, R.DS_ACCT_RELN_BILL_TO_FLG, R.DS_ACCT_RELN_SHIP_TO_FLG
+               , SYS_CONNECT_BY_PATH (R.RELN_DS_ACCT_NUM, '/')  || '/' || R.DS_ACCT_NUM TREE_PATH
+            FROM (
+                  SELECT * FROM DS_ACCT_RELN RELN 
+                   WHERE RELN.GLBL_CMPY_CD = #glblCmpyCd#
+                     AND RELN.EZCANCELFLAG = '0'
+                     AND RELN.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCd#
+                     <!-- QC#9980 -->
+                    <isNotNull property="rgtnStsCd">
+                     AND RELN.RGTN_STS_CD = #rgtnStsCd# 
+                    </isNotNull>
+                 ) R
+           START WITH R.RELN_DS_ACCT_NUM = (SELECT WRK_TOP.DS_ACCT_NUM FROM WRK_TOP)
+           CONNECT BY NOCYCLE
+           PRIOR R.DS_ACCT_NUM = R.RELN_DS_ACCT_NUM
+          --
+          UNION ALL
+          --
+          SELECT (SELECT WRK_TOP.DS_ACCT_NUM FROM WRK_TOP) DS_ACCT_NUM
+               , '' RELN_DS_ACCT_NUM, '' DS_ACCT_RELN_TP_CD, '' DS_ACCT_RELN_BILL_TO_FLG, '' DS_ACCT_RELN_SHIP_TO_FLG
+               , '/' || (SELECT WRK_TOP.DS_ACCT_NUM FROM WRK_TOP) TREE_PATH
+            FROM DUAL
+        )
+        , WRK_LEASE_RELN AS (
+          -- get lease/related relation
+          SELECT RELN.RELN_DS_ACCT_NUM DS_ACCT_NUM, '' RELN_DS_ACCT_NUM, RELN.DS_ACCT_RELN_TP_CD, RELN.DS_ACCT_RELN_BILL_TO_FLG, RELN.DS_ACCT_RELN_SHIP_TO_FLG
+               ---------------------------------------------------------------------
+               -- Related/Lease TREE_PATH decide the its position in the search result list.
+               -- Make sure the parent hierarchy separator '/' is sorted before the Related/Lease separator ';'.
+               -- e.g.
+               ---------------------------------------------------------------------
+               -- Parent Hierarchy  Related/Lease     Tree Path   Tree Display
+               -- /A                B relate to E     /A          - A
+               -- /A/B              B lease to  F     /A/B        -   B  
+               -- /A/B/C                              /A/B/C      -     C
+               -- /A/D                                /A/B; (E)   -   E
+               --                                     /A/B; (F)   -   F
+               --                                     /A/D        - D
+               ---------------------------------------------------------------------
+               , T.TREE_PATH
+            FROM DS_ACCT_RELN RELN
+               <!-- QC#9980 -->
+               , (SELECT A.TREE_PATH  || ';' AS TREE_PATH
+                       , A. DS_ACCT_NUM
+                    FROM WRK_PRNT_ALL A 
+                   WHERE A.DS_ACCT_NUM = #dsAcctNum#
+                 ) T 
+           WHERE RELN.GLBL_CMPY_CD = #glblCmpyCd#
+             AND RELN.EZCANCELFLAG = '0'
+             AND RELN.DS_ACCT_RELN_TP_CD != #dsAcctRelnTpCd#
+             AND RELN.DS_ACCT_NUM = T.DS_ACCT_NUM
+            <isNotNull property="rgtnStsCd">
+             AND RELN.RGTN_STS_CD = #rgtnStsCd# 
+            </isNotNull>
+        )
+        , WRK AS (
+          -- merge parent relation with lease/related relation
+          SELECT * FROM WRK_PRNT_ALL
+          UNION ALL
+          SELECT * FROM WRK_LEASE_RELN
+        )
+        , ACCT_ORG_TMP AS (
+            SELECT
+                W.DS_ACCT_NUM                 AS DS_ACCT_NUM   
+                , W.DS_ACCT_RELN_TP_CD        AS DS_ACCT_RELN_TP_CD
+                , ACCT.DS_ACCT_NM               AS DS_ACCT_NM
+                , ACCT.FIRST_LINE_ADDR ||
+                  DECODE(ACCT.SCD_LINE_ADDR, NULL, '', ' ' || ACCT.SCD_LINE_ADDR) ||
+                  DECODE(ACCT.THIRD_LINE_ADDR, NULL, '', ' ' || ACCT.THIRD_LINE_ADDR) ||
+                  DECODE(ACCT.FRTH_LINE_ADDR, NULL, '', ' ' || ACCT.FRTH_LINE_ADDR) ||
+                  ' ' ||
+                  ACCT.CTY_ADDR        || ' ' ||
+                  ACCT.ST_CD           || ' ' ||
+                  ACCT.POST_CD                   AS SHIP_FROM_FULL_CMPY_ADDR
+                , ACCT.LOC_NUM                   AS LOC_NUM
+                , ACCT.XX_YES_NO_CD
+                , (SELECT DS_ACCT_TP_NM FROM DS_ACCT_TP TP
+                       WHERE TP.GLBL_CMPY_CD = ACCT.GLBL_CMPY_CD
+                       AND TP.EZCANCELFLAG = '0'
+                       AND TP.DS_ACCT_TP_CD = ACCT.DS_ACCT_TP_CD
+                  )                             AS DS_ACCT_TP_NM
+                , #dsAcctNum#                     AS ORIG_ACCT_NUM
+                , W.RELN_DS_ACCT_NUM            AS RELN_DS_ACCT_NUM
+                , BTC.BILL_TO_CUST_CD          AS BILL_TO_CUST_CD
+                , STC.SHIP_TO_CUST_CD           AS SHIP_TO_CUST_CD
+                , ACCT.PTY_LOC_PK               AS PTY_LOC_PK
+                , ACCT.FIRST_LINE_ADDR           AS FIRST_LINE_ADDR
+                <!-- QC#3290 -->
+                , #glblCmpyCd#                  AS GLBL_CMPY_CD
+                , ACCT.DS_ACCT_ACTV_CUST_FLG    AS DS_ACCT_ACTV_CUST_FLG
+                , ACCT.LOC_RGTN_STS_CD          AS LOC_RGTN_STS_CD
+                , ACCT.RGTN_STS_CD               AS PTY_RGTN_STS_CD
+                , BTC.RGTN_STS_CD               AS BILL_RGTN_STS_CD
+                , STC.RGTN_STS_CD               AS SHIP_RGTN_STS_CD
+                <!-- QC#5890 -->
+                , W.TREE_PATH
+        FROM
+            WRK W
+            , ( 
+            <isNotEqual property="dsAcctTpCust" compareValue="N">
+                SELECT 
+                     SETC.EZCANCELFLAG
+                    ,SETC.GLBL_CMPY_CD
+                    ,SETC.SELL_TO_CUST_CD AS DS_ACCT_NUM
+                    ,SETC.DS_ACCT_TP_CD
+                    ,SETC.DS_ACCT_NM
+                    ,SETC.DS_ACCT_ACTV_CUST_FLG
+                    ,PTY.FIRST_LINE_ADDR
+                    ,PTY.SCD_LINE_ADDR
+                    ,PTY.THIRD_LINE_ADDR
+                    ,PTY.FRTH_LINE_ADDR
+                    ,PTY.CTY_ADDR
+                    ,PTY.ST_CD
+                    ,PTY.POST_CD
+                    ,PTY.LOC_NUM
+                    ,PTY.RGTN_STS_CD
+                    ,PTY.DS_LOC_NM
+                    ,LOC.RGTN_STS_CD               AS LOC_RGTN_STS_CD
+                    ,PRIN.PTY_LOC_PK
+                    ,CASE WHEN PRIN.PRIN_CUST_PK IS NOT NULL THEN 'Y' ELSE 'N' END AS XX_YES_NO_CD
+                FROM 
+                      SELL_TO_CUST SETC
+                    , ACCT_LOC LOC
+                    , PTY_LOC_WRK PTY
+                    , PRIN_CUST PRIN
+                    , WRK W
+                WHERE
+                
+                        W.DS_ACCT_NUM    = LOC.DS_ACCT_NUM(+)
+                        
+                    AND SETC.GLBL_CMPY_CD = #glblCmpyCd#
+                    AND SETC.EZCANCELFLAG = '0'
+                    
+                    AND SETC.GLBL_CMPY_CD     = LOC.GLBL_CMPY_CD(+)
+                    AND SETC.SELL_TO_CUST_CD  = LOC.DS_ACCT_NUM(+)    
+                    AND LOC.EZCANCELFLAG      = '0'    
+                        
+                    AND LOC.GLBL_CMPY_CD = PTY.GLBL_CMPY_CD(+)    
+                    AND LOC.PTY_LOC_PK   = PTY.PTY_LOC_PK(+)    
+                    AND PTY.EZCANCELFLAG = '0'    
+                        
+                    AND PTY.GLBL_CMPY_CD = PRIN.GLBL_CMPY_CD (+)    
+                    AND PTY.LOC_NUM = PRIN.LOC_NUM (+)    
+                    AND PRIN.EZCANCELFLAG (+) = '0'    
+            </isNotEqual>
+            <isNull property="dsAcctTpCust">
+                UNION ALL
+            </isNull>
+            <isNotEqual property="dsAcctTpCust" compareValue="Y">
+                SELECT
+                     DAP.EZCANCELFLAG
+                    ,DAP.GLBL_CMPY_CD
+                    ,DAP.DS_ACCT_NUM
+                    ,DAP.DS_ACCT_TP_CD
+                    ,DAP.DS_ACCT_NM
+                    ,DAP.DS_ACCT_ACTV_CUST_FLG
+                    ,PTY.FIRST_LINE_ADDR
+                    ,PTY.SCD_LINE_ADDR
+                    ,PTY.THIRD_LINE_ADDR
+                    ,PTY.FRTH_LINE_ADDR
+                    ,PTY.CTY_ADDR
+                    ,PTY.ST_CD
+                    ,PTY.POST_CD
+                    ,PTY.LOC_NUM
+                    ,PTY.RGTN_STS_CD
+                    ,PTY.DS_LOC_NM
+                    ,NULL AS LOC_RGTN_STS_CD
+                    ,NULL AS PTY_LOC_PK
+                    ,'Y' AS XX_YES_NO_CD
+                FROM 
+                      DS_ACCT_PROS DAP
+                    , PROS_PTY_LOC_WRK PTY
+                WHERE
+                        DAP.GLBL_CMPY_CD = #glblCmpyCd#
+                    AND DAP.EZCANCELFLAG = '0'
+
+                    AND DAP.GLBL_CMPY_CD = PTY.GLBL_CMPY_CD(+)
+                    AND DAP.PTY_LOC_PK = PTY.PTY_LOC_PK(+)
+                    AND PTY.EZCANCELFLAG(+) = '0'
+            </isNotEqual>
+                ) ACCT
+            
+            , BILL_TO_CUST BTC
+            , SHIP_TO_CUST STC
+        
+        WHERE
+                W.DS_ACCT_NUM    = ACCT.DS_ACCT_NUM
+
+            AND ACCT.GLBL_CMPY_CD= BTC.GLBL_CMPY_CD(+)
+            AND ACCT.LOC_NUM      = BTC.LOC_NUM(+)  
+            AND BTC.EZCANCELFLAG  (+)    = '0'
+
+            AND ACCT.GLBL_CMPY_CD    = STC.GLBL_CMPY_CD(+)  
+            AND ACCT.LOC_NUM         = STC.LOC_NUM(+)  
+            AND STC.EZCANCELFLAG  (+)     = '0'
+
+            <isNotNull property="dsAcctActvCustFlg">
+            AND ACCT.DS_ACCT_ACTV_CUST_FLG = #dsAcctActvCustFlg# 
+            </isNotNull>
+
+            AND ((ACCT.DS_ACCT_NUM != #dsAcctNum# AND 1=1
+
+             <!-- QC#14340 Add Start -->
+             <isEqual property="dispBillToFlg" compareValue="Y">
+              AND BTC.RGTN_STS_CD = #rgtnSts_Actv#
+             </isEqual>
+             <isNotEqual property="dispBillToFlg" compareValue="Y">
+             <!-- QC#14340 Add End -->
+                 <isNotNull property="dsAcctRelnBillToFlg">
+                  AND W.DS_ACCT_RELN_BILL_TO_FLG = #dsAcctRelnBillToFlg#
+                  AND BTC.RGTN_STS_CD = #rgtnSts_Actv#
+                 </isNotNull>
+             </isNotEqual>
+             <!-- QC#14340 Add Start -->
+             <isEqual property="dispShipToFlg" compareValue="Y">
+             AND STC.RGTN_STS_CD = #rgtnSts_Actv#
+             </isEqual>
+             <isNotEqual property="dispShipToFlg" compareValue="Y">
+             <!-- QC#14340 Add End -->
+                 <isNotNull property="dsAcctRelnShipToFlg">
+                  AND W.DS_ACCT_RELN_SHIP_TO_FLG = #dsAcctRelnShipToFlg#
+                  AND STC.RGTN_STS_CD = #rgtnSts_Actv#
+                 </isNotNull>
+             </isNotEqual>
+             <isNotNull property="dsAcctRelnTpCdLease">
+              AND W.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCdLease#
+             </isNotNull>
+             <isNotNull property="dsAcctNm_RT">
+              AND ACCT.DS_ACCT_NM LIKE #dsAcctNm_RT#
+             </isNotNull>
+             <!-- QC#5890 -->
+             <isNotNull property="dsAcctNum_RT">
+              AND W.DS_ACCT_NUM LIKE #dsAcctNum_RT#
+             </isNotNull>
+             <isNotNull property="xxAllLineAddr_RT">
+              <!-- QC#5890 -->
+              AND UPPER(ACCT.FIRST_LINE_ADDR) || 
+                  DECODE(ACCT.SCD_LINE_ADDR, NULL, '', ' ' || UPPER(ACCT.SCD_LINE_ADDR)) ||
+                  DECODE(ACCT.THIRD_LINE_ADDR, NULL, '', ' ' || UPPER(ACCT.THIRD_LINE_ADDR)) ||
+                  DECODE(ACCT.FRTH_LINE_ADDR, NULL, '', ' ' || UPPER(ACCT.FRTH_LINE_ADDR)) LIKE #xxAllLineAddr_RT#
+             </isNotNull>
+           ) OR (ACCT.DS_ACCT_NUM = #dsAcctNum# AND 1=1
+              <isEqual property="dispBillToFlg" compareValue="Y">
+              AND BTC.RGTN_STS_CD = #rgtnSts_Actv#
+              </isEqual>
+              <isEqual property="dispShipToFlg" compareValue="Y">
+              AND STC.RGTN_STS_CD = #rgtnSts_Actv#
+              </isEqual>
+              <isNotNull property="shipFromFullCmpyAddr">
+              AND UPPER(ACCT.FIRST_LINE_ADDR) || 
+                  DECODE(ACCT.SCD_LINE_ADDR, NULL, '', ' ' || UPPER(ACCT.SCD_LINE_ADDR)) ||
+                  DECODE(ACCT.THIRD_LINE_ADDR, NULL, '', ' ' || UPPER(ACCT.THIRD_LINE_ADDR)) ||
+                  DECODE(ACCT.FRTH_LINE_ADDR, NULL, '', ' ' || UPPER(ACCT.FRTH_LINE_ADDR)) LIKE #shipFromFullCmpyAddr#
+              </isNotNull>
+              <isNotNull property="ctyAddr">
+              AND UPPER(ACCT.CTY_ADDR) LIKE #ctyAddr#
+              </isNotNull>
+              <isNotNull property="stCd">
+              AND ACCT.ST_CD = #stCd#
+              </isNotNull>
+              <isNotNull property="postCd">
+              AND ACCT.POST_CD LIKE #postCd#
+              </isNotNull>
+              <isNotNull property="locNum">
+              AND ACCT.LOC_NUM LIKE #locNum#
+              </isNotNull>
+              <isNotNull property="locNm">
+              AND UPPER(ACCT.DS_LOC_NM) LIKE #locNm#
+              </isNotNull>
+              <isNotNull property="dsXrefAcctFlg">
+                  AND EXISTS (SELECT 1 FROM DS_XREF_ACCT XREF
+                              WHERE XREF.GLBL_CMPY_CD = ACCT.GLBL_CMPY_CD
+                              AND XREF.LOC_NUM = ACCT.LOC_NUM
+                              AND XREF.EZCANCELFLAG = '0'
+                              <isNotNull property="dsXrefAcctTpCd">
+                               AND XREF.DS_XREF_ACCT_TP_CD  = #dsXrefAcctTpCd#
+                              </isNotNull>
+                              <isNotNull property="dsXrefAcctCd">
+                               AND XREF.DS_XREF_ACCT_CD LIKE #dsXrefAcctCd#
+                              </isNotNull>
+                         )
+              </isNotNull>
+              <isNotNull property="billToCustCd">
+              AND BTC.BILL_TO_CUST_CD LIKE #billToCustCd#
+              </isNotNull>
+              <isNotNull property="shipToCustCd">
+              AND STC.SHIP_TO_CUST_CD LIKE #shipToCustCd#
+              </isNotNull>
+           ))
+    )
+        <!-- QC#13340 BEG -->
+        , ACCT_ORG AS (
+         <isNotNull property="dispAcctFlg">
+          SELECT * 
+            FROM ACCT_ORG_TMP T
+           WHERE T.XX_YES_NO_CD = 'Y'
+             AND T.DS_ACCT_NUM != #dsAcctNum#
+          UNION
+          SELECT DISTINCT
+              <!-- Need to keep column order same as ACCT_ORG_TMP above -->
+              T.DS_ACCT_NUM
+            , T.DS_ACCT_RELN_TP_CD
+            , T.DS_ACCT_NM
+            , null SHIP_FROM_FULL_CMPY_ADDR
+            , null LOC_NUM
+            , null XX_YES_NO_CD
+            , T.DS_ACCT_TP_NM
+            , T.ORIG_ACCT_NUM
+            , T.RELN_DS_ACCT_NUM
+            , null BILL_TO_CUST_CD
+            , null SHIP_TO_CUST_CD
+            , null PTY_LOC_PK
+            , null FIRST_LINE_ADDR
+            , T.GLBL_CMPY_CD
+            , T.DS_ACCT_ACTV_CUST_FLG
+            , null LOC_RGTN_STS_CD
+            , null PTY_RGTN_STS_CD
+            , null BILL_RGTN_STS_CD
+            , null SHIP_RGTN_STS_CD
+            , T.TREE_PATH
+            FROM ACCT_ORG_TMP T
+           WHERE NOT EXISTS (
+                  SELECT 1 FROM ACCT_ORG_TMP T2 WHERE T2.XX_YES_NO_CD = 'Y' AND T.DS_ACCT_NUM = T2.DS_ACCT_NUM
+                 )
+             AND T.DS_ACCT_NUM != #dsAcctNum#
+         </isNotNull>
+         <isNull property="dispAcctFlg">
+          SELECT * 
+            FROM ACCT_ORG_TMP T
+           WHERE T.DS_ACCT_NUM != #dsAcctNum#
+         </isNull>
+         UNION
+         <isNotEqual property="xxChkBox_01" compareValue="Y">
+          SELECT * 
+            FROM ACCT_ORG_TMP T
+           WHERE T.XX_YES_NO_CD = 'Y'
+             AND T.DS_ACCT_NUM = #dsAcctNum#
+          UNION
+          SELECT DISTINCT
+              <!-- Need to keep column order same as ACCT_ORG_TMP above -->
+              T.DS_ACCT_NUM
+            , T.DS_ACCT_RELN_TP_CD
+            , T.DS_ACCT_NM
+            , null SHIP_FROM_FULL_CMPY_ADDR
+            , null LOC_NUM
+            , null XX_YES_NO_CD
+            , T.DS_ACCT_TP_NM
+            , T.ORIG_ACCT_NUM
+            , T.RELN_DS_ACCT_NUM
+            , null BILL_TO_CUST_CD
+            , null SHIP_TO_CUST_CD
+            , null PTY_LOC_PK
+            , null FIRST_LINE_ADDR
+            , T.GLBL_CMPY_CD
+            , T.DS_ACCT_ACTV_CUST_FLG
+            , null LOC_RGTN_STS_CD
+            , null PTY_RGTN_STS_CD
+            , null BILL_RGTN_STS_CD
+            , null SHIP_RGTN_STS_CD
+            , T.TREE_PATH
+            FROM ACCT_ORG_TMP T
+           WHERE NOT EXISTS (
+                  SELECT 1 FROM ACCT_ORG_TMP T2 WHERE T2.XX_YES_NO_CD = 'Y' AND T.DS_ACCT_NUM = T2.DS_ACCT_NUM
+                 )
+             AND T.DS_ACCT_NUM = #dsAcctNum#         
+         </isNotEqual>
+         <isEqual property="xxChkBox_01" compareValue="Y">
+          SELECT * 
+            FROM ACCT_ORG_TMP T
+           WHERE T.DS_ACCT_NUM = #dsAcctNum#
+         </isEqual>
+        )
+        <!-- QC#13340 END -->
+         <!-- QC#3290 BEG -->
+        , STS_FLTR_WRK AS (
+          SELECT A.*
+         <isEqual property="inacLocFlg" compareValue="N">
+           <isEqual property="inacBillToShipToFlg" compareValue="N">
+         , CASE WHEN LOC_RGTN_STS_CD IS NULL THEN 'ACCT'
+                WHEN LOC_RGTN_STS_CD != #rgtnSts_Actv# THEN 'ACCT'
+                WHEN PTY_RGTN_STS_CD != #rgtnSts_Actv# THEN 'ACCT'
+                WHEN BILL_RGTN_STS_CD IS NULL AND SHIP_RGTN_STS_CD IS NULL THEN 'ACCT+LOC'
+                WHEN BILL_RGTN_STS_CD = #rgtnSts_Actv# THEN 'ACCT+LOC'
+                WHEN SHIP_RGTN_STS_CD = #rgtnSts_Actv# THEN 'ACCT+LOC'
+                <!-- QC#15431 Add Start -->
+                WHEN LOC_RGTN_STS_CD  = #rgtnSts_Actv# THEN 'ACCT+LOC'
+                <!-- QC#15431 Add End-->
+                ELSE 'ACCT'
+            END AS DPLY_TP
+           </isEqual>
+           <isEqual property="inacBillToShipToFlg" compareValue="Y">
+         , CASE WHEN LOC_RGTN_STS_CD IS NULL THEN 'ACCT'
+                WHEN BILL_RGTN_STS_CD IS NULL AND SHIP_RGTN_STS_CD IS NULL AND LOC_RGTN_STS_CD != #rgtnSts_Actv# THEN 'ACCT'
+                WHEN BILL_RGTN_STS_CD IS NULL AND SHIP_RGTN_STS_CD IS NULL AND PTY_RGTN_STS_CD != #rgtnSts_Actv# THEN 'ACCT'
+                ELSE 'ACCT+LOC'
+            END AS DPLY_TP
+           </isEqual>
+         </isEqual>
+         <isEqual property="inacLocFlg" compareValue="Y">
+         , 'ACCT+LOC' AS DPLY_TP
+         </isEqual>
+          FROM ACCT_ORG A
+        )
+        , LOC_FLTR AS (
+          SELECT DISTINCT
+                 A.DS_ACCT_NUM
+               , A.DS_ACCT_RELN_TP_CD
+               , A.DS_ACCT_NM
+               , A.DS_ACCT_TP_NM
+               , A.ORIG_ACCT_NUM
+               , A.RELN_DS_ACCT_NUM
+               , A.GLBL_CMPY_CD
+               , A.DS_ACCT_ACTV_CUST_FLG
+               <!-- QC#5890 -->
+               , A.TREE_PATH
+               , CASE WHEN A.DPLY_TP='ACCT+LOC' THEN A.PTY_LOC_PK ELSE P.PTY_LOC_PK END AS PTY_LOC_PK
+               , CASE WHEN A.DPLY_TP='ACCT+LOC' THEN A.XX_YES_NO_CD ELSE P.XX_YES_NO_CD END AS XX_YES_NO_CD
+               , CASE WHEN A.DPLY_TP='ACCT+LOC' THEN A.BILL_TO_CUST_CD ELSE P.BILL_TO_CUST_CD END AS BILL_TO_CUST_CD
+               , CASE WHEN A.DPLY_TP='ACCT+LOC' THEN A.BILL_RGTN_STS_CD ELSE P.BILL_RGTN_STS_CD END AS BILL_RGTN_STS_CD
+               , CASE WHEN A.DPLY_TP='ACCT+LOC' THEN A.SHIP_TO_CUST_CD ELSE P.SHIP_TO_CUST_CD END AS SHIP_TO_CUST_CD
+               , CASE WHEN A.DPLY_TP='ACCT+LOC' THEN A.SHIP_RGTN_STS_CD ELSE P.SHIP_RGTN_STS_CD END AS SHIP_RGTN_STS_CD
+               , CASE WHEN A.DPLY_TP='ACCT+LOC' THEN A.PTY_RGTN_STS_CD ELSE P.PTY_RGTN_STS_CD END AS PTY_RGTN_STS_CD
+                <!-- QC#15431 Add Start -->
+               , CASE WHEN A.DPLY_TP='ACCT+LOC' THEN A.LOC_RGTN_STS_CD ELSE P.LOC_RGTN_STS_CD END AS LOC_RGTN_STS_CD
+                <!-- QC#15431 Add End-->
+               , CASE WHEN A.DPLY_TP='ACCT+LOC' THEN A.SHIP_FROM_FULL_CMPY_ADDR ELSE P.SHIP_FROM_FULL_CMPY_ADDR END AS SHIP_FROM_FULL_CMPY_ADDR
+               , CASE WHEN A.DPLY_TP='ACCT+LOC' THEN A.LOC_NUM ELSE P.LOC_NUM END AS LOC_NUM
+               , CASE WHEN A.DPLY_TP='ACCT+LOC' THEN A.FIRST_LINE_ADDR ELSE P.FIRST_LINE_ADDR END AS FIRST_LINE_ADDR
+               , CASE WHEN A.DPLY_TP='ACCT+LOC' THEN A.LOC_NUM ELSE NULL END AS ORIG_LOC_NUM
+               <!-- QC#4373 -->
+               , CASE WHEN EXISTS (
+                            SELECT 1 
+                              FROM ACCT_LOC LOC 
+                             WHERE LOC.EZCANCELFLAG = '0' 
+                               AND LOC.GLBL_CMPY_CD = A.GLBL_CMPY_CD
+                               AND LOC.LOC_NUM = A.LOC_NUM
+                               AND LOC.RGTN_STS_CD = #rgtnSts_Actv#
+                           )
+                      THEN 'Y' ELSE 'N' END EXIST_ACTV_ACCT_LOC_FLG
+            FROM STS_FLTR_WRK A
+               , STS_FLTR_WRK P
+           WHERE A.DS_ACCT_NUM = P.DS_ACCT_NUM(+)
+             AND P.XX_YES_NO_CD(+) = 'Y'
+        )
+        , ACCT_FLTR AS (
+          SELECT 
+                <!-- QC#4373 -->
+                 A.DS_ACCT_NUM
+               , A.DS_ACCT_RELN_TP_CD
+               , A.DS_ACCT_NM
+               , A.DS_ACCT_TP_NM
+               , A.ORIG_ACCT_NUM
+               , A.RELN_DS_ACCT_NUM
+               , A.GLBL_CMPY_CD
+               , A.DS_ACCT_ACTV_CUST_FLG
+               <!-- QC#5890 -->
+               , A.TREE_PATH
+               , A.PTY_LOC_PK
+               , A.XX_YES_NO_CD
+         <isEqual property="inacLocFlg" compareValue="N">
+           <isEqual property="inacBillToShipToFlg" compareValue="N">
+               , CASE WHEN A.EXIST_ACTV_ACCT_LOC_FLG = 'Y' AND A.PTY_RGTN_STS_CD = #rgtnSts_Actv# AND A.BILL_RGTN_STS_CD = #rgtnSts_Actv# 
+                      THEN A.BILL_TO_CUST_CD ELSE NULL END BILL_TO_CUST_CD
+               , CASE WHEN A.EXIST_ACTV_ACCT_LOC_FLG = 'Y' AND A.PTY_RGTN_STS_CD = #rgtnSts_Actv# AND A.SHIP_RGTN_STS_CD = #rgtnSts_Actv#
+                      THEN A.SHIP_TO_CUST_CD ELSE NULL END SHIP_TO_CUST_CD
+               , CASE WHEN A.EXIST_ACTV_ACCT_LOC_FLG = 'Y' AND A.PTY_RGTN_STS_CD = #rgtnSts_Actv# 
+                      THEN A.PTY_RGTN_STS_CD ELSE NULL END PTY_RGTN_STS_CD
+           </isEqual>
+           <isEqual property="inacBillToShipToFlg" compareValue="Y">
+               , A.BILL_TO_CUST_CD
+               , A.SHIP_TO_CUST_CD
+               , A.PTY_RGTN_STS_CD
+           </isEqual>
+         </isEqual>
+         <isEqual property="inacLocFlg" compareValue="Y">
+               , A.BILL_TO_CUST_CD
+               , A.SHIP_TO_CUST_CD
+               , A.PTY_RGTN_STS_CD
+   </isEqual>
+               , A.BILL_RGTN_STS_CD
+               , A.SHIP_RGTN_STS_CD
+               <!-- QC#15431 Add Start -->
+               , A.LOC_RGTN_STS_CD
+               <!-- QC#15431 Add End -->
+               , A.SHIP_FROM_FULL_CMPY_ADDR
+               , A.LOC_NUM
+               , A.FIRST_LINE_ADDR
+               , A.ORIG_LOC_NUM
+            FROM LOC_FLTR A
+           WHERE NOT EXISTS (
+                      SELECT 1 FROM LOC_FLTR B WHERE A.DS_ACCT_NUM = B.DS_ACCT_NUM AND A.ORIG_LOC_NUM IS NULL AND B.ORIG_LOC_NUM IS NOT NULL
+                 )  
+        )
+        SELECT * FROM (
+         SELECT * FROM ACCT_FLTR
+            ORDER BY TREE_PATH NULLS LAST, DS_ACCT_RELN_TP_CD, DS_ACCT_NUM, XX_YES_NO_CD DESC, FIRST_LINE_ADDR 
+        )
+        <!-- QC#3290 END -->
+    WHERE ROWNUM &lt;= #rowNum#
+    </statement>
+
+    <statement id="getMostParentNode"  parameterClass ="Map" resultClass="Map">
+    SELECT
+         PARENT.P_DS_ACCT_NUM AS DS_ACCT_NUM
+    FROM (
+        SELECT
+             STRU.P_DS_ACCT_NUM  AS P_DS_ACCT_NUM
+            ,STRU.DS_ACCT_NUM    AS DS_ACCT_NUM
+            ,LEVEL
+        FROM
+            (
+            SELECT
+                 DAR1.DS_ACCT_NUM        AS DS_ACCT_NUM
+                ,DAR1.RELN_DS_ACCT_NUM   AS P_DS_ACCT_NUM
+                ,DAR1.DS_ACCT_RELN_TP_CD AS DS_ACCT_RELN_TP_CD
+            FROM
+                 DS_ACCT_RELN DAR1
+                ,DS_ACCT_RELN DAR2
+            WHERE
+                    DAR1.GLBL_CMPY_CD           = #glblCmpyCd#
+                AND DAR1.EZCANCELFLAG           = '0'
+                AND DAR1.DS_ACCT_RELN_TP_CD     = #dsAcctRelnTpCd#
+                <isNotNull property="readyForOrderTaking">
+                AND  DAR1.RGTN_STS_CD           = #readyForOrderTaking#
+                </isNotNull>
+                <isNotNull property="primaryOnly">
+                AND EXISTS (
+                    SELECT
+                        'OK'
+                    FROM
+                        (
+                        <isNotEqual property="dsAcctTpCust" compareValue="N">
+                        SELECT
+                             DS.EZCANCELFLAG
+                            ,DS.GLBL_CMPY_CD
+                            ,DS.SELL_TO_CUST_CD AS DS_ACCT_NUM
+                            ,DS.PTY_LOC_PK
+                        FROM
+                             SELL_TO_CUST DS
+                            ,ACCT_LOC AL
+                        WHERE
+                                DAR1.GLBL_CMPY_CD  = DS.GLBL_CMPY_CD
+                            AND DS.EZCANCELFLAG    = '0'
+                            AND DAR1.DS_ACCT_NUM   = DS.SELL_TO_CUST_CD
+                            
+                            AND DS.GLBL_CMPY_CD    = AL.GLBL_CMPY_CD
+                            AND DS.PTY_LOC_PK      = AL.PTY_LOC_PK
+                            AND AL.EZCANCELFLAG    = '0'
+                        </isNotEqual>
+                        <isNull property="dsAcctTpCust">
+                        UNION ALL
+                        </isNull>
+                        <isNotEqual property="dsAcctTpCust" compareValue="Y">
+                        SELECT
+                             DAP.EZCANCELFLAG
+                            ,DAP.GLBL_CMPY_CD
+                            ,DAP.DS_ACCT_NUM
+                            ,DAP.PTY_LOC_PK
+                        FROM
+                             DS_ACCT_PROS DAP
+                            ,PROS_PTY_LOC_WRK PTW
+                        WHERE
+                                DAR1.GLBL_CMPY_CD  = DAP.GLBL_CMPY_CD
+                            AND DAP.EZCANCELFLAG   = '0'
+                            AND DAR1.DS_ACCT_NUM   = DAP.DS_ACCT_NUM
+                            
+                            AND DAP.GLBL_CMPY_CD    = PTW.GLBL_CMPY_CD
+                            AND DAP.PTY_LOC_PK      = PTW.PTY_LOC_PK
+                            AND PTW.EZCANCELFLAG    = '0'
+                        </isNotEqual>
+                       )
+                  )
+                </isNotNull>
+                AND DAR2.GLBL_CMPY_CD(+)        = #glblCmpyCd#
+                AND DAR2.EZCANCELFLAG(+)        = '0'
+                AND DAR2.DS_ACCT_RELN_TP_CD(+)  = #dsAcctRelnTpCd#
+                <isNotNull property="readyForOrderTaking">
+                AND  DAR2.RGTN_STS_CD           = #readyForOrderTaking#
+                </isNotNull>
+                <isNotNull property="primaryOnly">
+                AND EXISTS (
+                    SELECT
+                        'OK'
+                    FROM
+                        (
+                        <isNotEqual property="dsAcctTpCust" compareValue="N">
+                      SELECT
+                              DS.EZCANCELFLAG
+                             ,DS.GLBL_CMPY_CD
+                             ,DS.SELL_TO_CUST_CD AS DS_ACCT_NUM
+                             ,DS.PTY_LOC_PK
+                      FROM
+                            SELL_TO_CUST DS
+                          , ACCT_LOC AL
+                      WHERE
+                              DAR2.GLBL_CMPY_CD  = DS.GLBL_CMPY_CD
+                          AND DS.EZCANCELFLAG    = '0'
+                          AND DAR2.DS_ACCT_NUM   = DS.SELL_TO_CUST_CD
+                          
+                          AND DS.GLBL_CMPY_CD    = AL.GLBL_CMPY_CD
+                          AND DS.PTY_LOC_PK      = AL.PTY_LOC_PK
+                          AND AL.EZCANCELFLAG    = '0'
+                        </isNotEqual>
+                        <isNull property ="dsAcctTpCust">
+                              UNION ALL
+                        </isNull>
+                        <isNotEqual property="dsAcctTpCust" compareValue="Y">
+                          SELECT
+                              DAP.EZCANCELFLAG
+                             ,DAP.GLBL_CMPY_CD
+                             ,DAP.DS_ACCT_NUM
+                             ,DAP.PTY_LOC_PK
+                          FROM
+                                DS_ACCT_PROS DAP
+                              , PROS_PTY_LOC_WRK PTW
+                          WHERE
+                                   DAR2.GLBL_CMPY_CD  = DAP.GLBL_CMPY_CD
+                              AND  DAP.EZCANCELFLAG   = '0'
+                              AND  DAR2.DS_ACCT_NUM   = DAP.DS_ACCT_NUM
+                              
+                              AND DAP.GLBL_CMPY_CD    = PTW.GLBL_CMPY_CD
+                              AND DAP.PTY_LOC_PK      = PTW.PTY_LOC_PK
+                              AND PTW.EZCANCELFLAG    = '0'
+                          </isNotEqual>
+                    ) 
+                )
+               </isNotNull>
+               AND DAR1.DS_ACCT_NUM            = DAR2.DS_ACCT_NUM
+            ) STRU
+        WHERE
+             LEVEL &lt;= #maxLevel#
+        START WITH STRU.DS_ACCT_NUM = #targetDsAcctNum#
+        CONNECT BY NOCYCLE PRIOR STRU.P_DS_ACCT_NUM = STRU.DS_ACCT_NUM
+        ORDER BY LEVEL DESC
+    ) PARENT
+    WHERE
+        ROWNUM =  1
+    </statement>
+    
+    <!-- In case of Display Account Hierarchy -->
+    <!-- Get Account Hierarchy FROM Root -->
+     <statement id="getTreeListParent"  parameterClass ="Map" resultClass="Map">
+    SELECT
+         TREE_INFO.P_DS_ACCT_NUM       P_DS_ACCT_NUM
+        ,TREE_INFO.DS_ACCT_NUM         DS_ACCT_NUM
+        ,TREE_INFO.DS_ACCT_RELN_TP_CD  DS_ACCT_RELN_TP_CD
+        ,CASE WHEN INSTR(TREE_INFO.TREE_PATH,'/', 1, 1) &gt; 0 THEN 
+             CASE WHEN INSTR(TREE_INFO.TREE_PATH,'/', 1, 2) &gt; 0 THEN 
+                 SUBSTR(TREE_INFO.TREE_PATH, INSTR(TREE_INFO.TREE_PATH,'/', 1, 1) + 1, INSTR(TREE_INFO.TREE_PATH,'/', 1, 2)-2)
+             ELSE SUBSTR(TREE_INFO.TREE_PATH, INSTR(TREE_INFO.TREE_PATH,'/', 1, 1) + 1)
+             END
+         ELSE '' END dsAcctNum_T1
+        ,CASE WHEN INSTR(TREE_INFO.TREE_PATH,'/', 1, 2) &gt; 0 THEN 
+             CASE WHEN INSTR(TREE_INFO.TREE_PATH,'/', 1, 3) &gt; 0 THEN 
+                  SUBSTR(TREE_INFO.TREE_PATH, INSTR(TREE_INFO.TREE_PATH,'/', 1, 2) + 1, INSTR(TREE_INFO.TREE_PATH,'/', 1, 3) - INSTR(TREE_INFO.TREE_PATH,'/', 1, 2) - 1 )
+             ELSE SUBSTR(TREE_INFO.TREE_PATH, INSTR(TREE_INFO.TREE_PATH,'/', 1, 2) + 1)
+             END
+         ELSE '' END dsAcctNum_T2
+        ,CASE WHEN INSTR(TREE_INFO.TREE_PATH,'/', 1, 3) &gt; 0 THEN 
+             CASE WHEN INSTR(TREE_INFO.TREE_PATH,'/', 1, 4) &gt; 0 THEN 
+                  SUBSTR(TREE_INFO.TREE_PATH, INSTR(TREE_INFO.TREE_PATH,'/', 1, 3) + 1, INSTR(TREE_INFO.TREE_PATH,'/', 1, 4) - INSTR(TREE_INFO.TREE_PATH,'/', 1, 3) - 1 )
+             ELSE SUBSTR(TREE_INFO.TREE_PATH, INSTR(TREE_INFO.TREE_PATH,'/', 1, 3) + 1)
+             END
+         ELSE '' END dsAcctNum_T3
+        ,CASE WHEN INSTR(TREE_INFO.TREE_PATH,'/', 1, 4) &gt; 0 THEN 
+             CASE WHEN INSTR(TREE_INFO.TREE_PATH,'/', 1, 5) &gt; 0 THEN 
+              SUBSTR(TREE_INFO.TREE_PATH, INSTR(TREE_INFO.TREE_PATH,'/', 1, 4) + 1, INSTR(TREE_INFO.TREE_PATH,'/', 1, 5) - INSTR(TREE_INFO.TREE_PATH,'/', 1, 4) - 1 )
+             ELSE SUBSTR(TREE_INFO.TREE_PATH, INSTR(TREE_INFO.TREE_PATH,'/', 1, 4) + 1)
+             END
+         ELSE '' END dsAcctNum_T4
+        ,CASE WHEN INSTR(TREE_INFO.TREE_PATH,'/', 1, 5) &gt; 0 THEN 
+             CASE WHEN INSTR(TREE_INFO.TREE_PATH,'/', 1, 6) &gt; 0 THEN 
+                  SUBSTR(TREE_INFO.TREE_PATH, INSTR(TREE_INFO.TREE_PATH,'/', 1, 5) + 1, INSTR(TREE_INFO.TREE_PATH,'/', 1, 6) - INSTR(TREE_INFO.TREE_PATH,'/', 1, 5) - 1 )
+             ELSE SUBSTR(TREE_INFO.TREE_PATH, INSTR(TREE_INFO.TREE_PATH,'/', 1, 5) + 1)
+             END
+         ELSE '' END dsAcctNum_T5
+        ,CASE WHEN INSTR(TREE_INFO.TREE_PATH,'/', 1, 6) &gt; 0 THEN 
+             CASE WHEN INSTR(TREE_INFO.TREE_PATH,'/', 1, 7) &gt; 0 THEN 
+                  SUBSTR(TREE_INFO.TREE_PATH, INSTR(TREE_INFO.TREE_PATH,'/', 1, 6) + 1, INSTR(TREE_INFO.TREE_PATH,'/', 1, 7) - INSTR(TREE_INFO.TREE_PATH,'/', 1, 6) - 1 )
+             ELSE SUBSTR(TREE_INFO.TREE_PATH, INSTR(TREE_INFO.TREE_PATH,'/', 1, 6) + 1)
+             END
+         ELSE '' END dsAcctNum_T6
+        ,CASE WHEN INSTR(TREE_INFO.TREE_PATH,'/', 1, 7) &gt; 0 THEN 
+             CASE WHEN INSTR(TREE_INFO.TREE_PATH,'/', 1, 8) &gt; 0 THEN 
+                  SUBSTR(TREE_INFO.TREE_PATH, INSTR(TREE_INFO.TREE_PATH,'/', 1, 7) + 1, INSTR(TREE_INFO.TREE_PATH,'/', 1, 8) - INSTR(TREE_INFO.TREE_PATH,'/', 1, 7) - 1 )
+             ELSE SUBSTR(TREE_INFO.TREE_PATH, INSTR(TREE_INFO.TREE_PATH,'/', 1, 7) + 1)
+             END
+         ELSE '' END dsAcctNum_T7
+        ,CASE WHEN INSTR(TREE_INFO.TREE_PATH,'/', 1, 8) &gt; 0 THEN 
+             CASE WHEN INSTR(TREE_INFO.TREE_PATH,'/', 1, 9) &gt; 0 THEN 
+                  SUBSTR(TREE_INFO.TREE_PATH, INSTR(TREE_INFO.TREE_PATH,'/', 1, 8) + 1, INSTR(TREE_INFO.TREE_PATH,'/', 1, 9) - INSTR(TREE_INFO.TREE_PATH,'/', 1, 8) - 1 )
+             ELSE SUBSTR(TREE_INFO.TREE_PATH, INSTR(TREE_INFO.TREE_PATH,'/', 1, 8) + 1)
+             END
+         ELSE '' END dsAcctNum_T8
+        ,CASE WHEN INSTR(TREE_INFO.TREE_PATH,'/', 1, 9) &gt; 0 THEN 
+             CASE WHEN INSTR(TREE_INFO.TREE_PATH,'/', 1, 10) &gt; 0 THEN 
+                  SUBSTR(TREE_INFO.TREE_PATH, INSTR(TREE_INFO.TREE_PATH,'/', 1, 9) + 1, INSTR(TREE_INFO.TREE_PATH,'/', 1, 10) - INSTR(TREE_INFO.TREE_PATH,'/', 1, 9) - 1 )
+             ELSE SUBSTR(TREE_INFO.TREE_PATH, INSTR(TREE_INFO.TREE_PATH,'/', 1, 9) + 1)
+             END
+         ELSE '' END dsAcctNum_T9
+        ,CASE WHEN INSTR(TREE_INFO.TREE_PATH,'/', 1, 10) &gt; 0 THEN 
+             CASE WHEN INSTR(TREE_INFO.TREE_PATH,'/', 1, 11) &gt; 0 THEN 
+                  SUBSTR(TREE_INFO.TREE_PATH, INSTR(TREE_INFO.TREE_PATH,'/', 1, 10) + 1, INSTR(TREE_INFO.TREE_PATH,'/', 1, 11) - INSTR(TREE_INFO.TREE_PATH,'/', 1, 10) - 1 )
+             ELSE SUBSTR(TREE_INFO.TREE_PATH, INSTR(TREE_INFO.TREE_PATH,'/', 1, 10) + 1)
+             END
+         ELSE '' END dsAcctNum_TA
+        ,TREE_INFO.DS_ACCT_NM   DS_ACCT_NM
+        , ''                            AS SHIP_FROM_FULL_CMPY_ADDR
+        , ''                            AS XX_YES_NO_CD
+        , DAP.DS_ACCT_TP_NM             AS DS_ACCT_TP_NM
+        , ''                            AS BILL_TO_CUST_CD
+        , ''                            AS SHIP_TO_CUST_CD
+        , ''                            AS LOC_NUM
+        , TREE_INFO.DS_ACCT_RELN_BILL_TO_FLG AS DS_ACCT_RELN_BILL_TO_FLG
+        , TREE_INFO.DS_ACCT_RELN_SHIP_TO_FLG AS DS_ACCT_RELN_SHIP_TO_FLG
+        <!-- QC#3290 -->
+        , TREE_INFO.DS_ACCT_ACTV_CUST_FLG
+        , ''               AS LOC_RGTN_STS_CD
+        , ''               AS PTY_RGTN_STS_CD
+        , ''               AS BILL_RGTN_STS_CD
+        , ''               AS SHIP_RGTN_STS_CD 
+    FROM (
+        SELECT
+            STRU.GLBL_CMPY_CD                           GLBL_CMPY_CD
+           ,STRU.P_DS_ACCT_NUM                          P_DS_ACCT_NUM
+           ,STRU.DS_ACCT_NUM                            DS_ACCT_NUM
+           ,STRU.DS_ACCT_RELN_TP_CD                     DS_ACCT_RELN_TP_CD
+           ,SYS_CONNECT_BY_PATH (STRU.DS_ACCT_NUM, '/') TREE_PATH
+           ,LEVEL                                       LVL
+           ,STRU.DS_ACCT_TP_CD                          DS_ACCT_TP_CD
+           ,STRU.RGTN_STS_CD                            RGTN_STS_CD
+           ,STRU.PTY_LOC_PK                             PTY_LOC_PK
+           ,STRU.DS_ACCT_NM                             DS_ACCT_NM
+           ,STRU.DS_ACCT_RELN_BILL_TO_FLG               DS_ACCT_RELN_BILL_TO_FLG
+           ,STRU.DS_ACCT_RELN_SHIP_TO_FLG               DS_ACCT_RELN_SHIP_TO_FLG
+           <!-- QC#3290 -->
+           ,STRU.DS_ACCT_ACTV_CUST_FLG                  DS_ACCT_ACTV_CUST_FLG
+        FROM (
+            SELECT
+                A.GLBL_CMPY_CD         GLBL_CMPY_CD
+               ,A.DS_ACCT_NUM          DS_ACCT_NUM
+               ,B.RELN_DS_ACCT_NUM     P_DS_ACCT_NUM
+               ,B.DS_ACCT_RELN_TP_CD   DS_ACCT_RELN_TP_CD
+               ,A.DS_ACCT_TP_CD        DS_ACCT_TP_CD
+               ,A.PTY_LOC_PK           PTY_LOC_PK
+               ,B.RGTN_STS_CD          RGTN_STS_CD
+               ,A.DS_ACCT_NM           DS_ACCT_NM
+               ,B.DS_ACCT_RELN_BILL_TO_FLG          DS_ACCT_RELN_BILL_TO_FLG
+               ,B.DS_ACCT_RELN_SHIP_TO_FLG          DS_ACCT_RELN_SHIP_TO_FLG
+               <!-- QC#3290 -->
+               , A.DS_ACCT_ACTV_CUST_FLG    AS DS_ACCT_ACTV_CUST_FLG
+            FROM 
+                (
+                <isNotEqual property="dsAcctTpCust" compareValue="N">	
+                SELECT 
+                      CUST.EZCANCELFLAG
+                    , CUST.GLBL_CMPY_CD
+                    , CUST.SELL_TO_CUST_CD AS DS_ACCT_NUM
+                    , CUST.DS_ACCT_TP_CD
+                    , CUST.PTY_LOC_PK
+                    , CUST.DS_ACCT_NM
+                    , CUST.DS_ACCT_ACTV_CUST_FLG  
+                FROM 
+                      SELL_TO_CUST CUST
+                    , PTY_LOC_WRK  PLW 
+                WHERE 
+                        CUST.GLBL_CMPY_CD = #glblCmpyCd# 
+                    AND CUST.EZCANCELFLAG = '0'
+                    
+                    AND CUST.GLBL_CMPY_CD          = PLW.GLBL_CMPY_CD(+)
+                    AND CUST.PTY_LOC_PK            = PLW.PTY_LOC_PK(+)
+                    AND PLW.EZCANCELFLAG(+)        = '0'
+                </isNotEqual>
+                <isNull property="dsAcctTpCust">
+                UNION ALL
+                </isNull>
+                <isNotEqual property="dsAcctTpCust" compareValue="Y">
+                SELECT 
+                      PROS.EZCANCELFLAG
+                    , PROS.GLBL_CMPY_CD
+                    , PROS.DS_ACCT_NUM
+                    , PROS.DS_ACCT_TP_CD
+                    , PROS.PTY_LOC_PK
+                    , PROS.DS_ACCT_NM
+                    , PROS.DS_ACCT_ACTV_CUST_FLG
+                FROM  
+                      DS_ACCT_PROS PROS
+                    , PROS_PTY_LOC_WRK  PLW 
+                WHERE 
+                        PROS.GLBL_CMPY_CD = #glblCmpyCd# 
+                    AND PROS.EZCANCELFLAG = '0'
+                    
+                    AND PROS.GLBL_CMPY_CD          = PLW.GLBL_CMPY_CD(+)
+                    AND PROS.PTY_LOC_PK            = PLW.PTY_LOC_PK(+)
+                    AND PLW.EZCANCELFLAG(+)        = '0'
+                </isNotEqual>
+                ) A
+                ,( SELECT * 
+                     FROM DS_ACCT_RELN  B 
+                   WHERE B.GLBL_CMPY_CD = #glblCmpyCd#
+                       AND B.EZCANCELFLAG = '0' 
+                       AND B.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCd#
+                       <isNotNull property="rgtnStsCd">
+                       AND B.RGTN_STS_CD = #rgtnStsCd# 
+                       </isNotNull>
+                ) B
+            WHERE
+                    1=1
+                AND A.GLBL_CMPY_CD           = #glblCmpyCd#
+                <isNotNull property="dsAcctActvCustFlg">
+                AND A.DS_ACCT_ACTV_CUST_FLG = #dsAcctActvCustFlg#
+                </isNotNull>
+                AND A.EZCANCELFLAG           = '0'
+                
+                AND A.GLBL_CMPY_CD           = B.GLBL_CMPY_CD(+)
+                AND A.DS_ACCT_NUM            = B.DS_ACCT_NUM(+)
+                AND B.EZCANCELFLAG(+)        = '0'
+        ) STRU
+        WHERE   1=1
+            AND LEVEL &lt;= #childrenMaxLevel#
+            START WITH STRU.DS_ACCT_NUM = #parentDsAcctNum#
+            CONNECT BY NOCYCLE
+            PRIOR STRU.DS_ACCT_NUM    = STRU.P_DS_ACCT_NUM 
+            AND   STRU.DS_ACCT_NUM   != STRU.P_DS_ACCT_NUM
+    ) TREE_INFO
+    , DS_ACCT_TP   DAP
+    WHERE
+            TREE_INFO.GLBL_CMPY_CD          = DAP.GLBL_CMPY_CD
+        AND TREE_INFO.DS_ACCT_TP_CD         = DAP.DS_ACCT_TP_CD
+        AND DAP.EZCANCELFLAG      = '0'
+    
+    ORDER BY
+        TREE_INFO.TREE_PATH
+    </statement>
+
+    <statement id="getTreeListLeaseReln"  parameterClass ="Map" resultClass="Map">
+    SELECT 
+          RELN.DS_ACCT_NUM AS P_DS_ACCT_NUM
+        , RELN.RELN_DS_ACCT_NUM AS DS_ACCT_NUM
+        , RELN.DS_ACCT_RELN_TP_CD AS DS_ACCT_RELN_TP_CD
+        , #parentDsAcctNum# AS DSACCTNUM_T1
+        , RELN.RELN_DS_ACCT_NUM AS DSACCTNUM_T2
+        , '' AS DSACCTNUM_T3
+        , '' AS DSACCTNUM_T4
+        , '' AS DSACCTNUM_T5
+        , '' AS DSACCTNUM_T6
+        , '' AS DSACCTNUM_T7
+        , '' AS DSACCTNUM_T8
+        , '' AS DSACCTNUM_T9
+        , '' AS DSACCTNUM_TA
+        , ACCT.DS_ACCT_NM   DS_ACCT_NM
+        , '' AS SHIP_FROM_FULL_CMPY_ADDR
+        , '' AS XX_YES_NO_CD
+        , (SELECT DS_ACCT_TP_NM FROM DS_ACCT_TP TP
+               WHERE TP.GLBL_CMPY_CD = ACCT.GLBL_CMPY_CD
+               AND TP.EZCANCELFLAG = '0'
+               AND TP.DS_ACCT_TP_CD = ACCT.DS_ACCT_TP_CD
+          )                             AS DS_ACCT_TP_NM
+        , ''           AS BILL_TO_CUST_CD
+        , ''           AS SHIP_TO_CUST_CD
+        , ''           AS LOC_NUM
+        , ACCT.DS_ACCT_ACTV_CUST_FLG
+        , ''               AS LOC_RGTN_STS_CD
+        , ''               AS PTY_RGTN_STS_CD
+        , ''               AS BILL_RGTN_STS_CD
+        , ''               AS SHIP_RGTN_STS_CD  
+        FROM 
+            (
+            <isNotEqual property="dsAcctTpCust" compareValue="Y">
+            SELECT 
+                  PROS.GLBL_CMPY_CD 
+                , PROS.DS_ACCT_NUM 
+                , PROS.DS_ACCT_NM
+                , PROS.DS_ACCT_TP_CD
+                , PROS.PTY_LOC_PK
+                , PROS.DS_ACCT_ACTV_CUST_FLG
+            FROM 
+                  DS_ACCT_PROS PROS
+            WHERE 
+                    PROS.GLBL_CMPY_CD         = #glblCmpyCd#
+                AND PROS.EZCANCELFLAG         = '0'
+                
+            </isNotEqual>
+            <isNull property="dsAcctTpCust">
+            UNION ALL
+            </isNull>
+            <isNotEqual property="dsAcctTpCust" compareValue="N">
+            SELECT 
+                  CUST.GLBL_CMPY_CD
+                , CUST.SELL_TO_CUST_CD AS DS_ACCT_NUM
+                , CUST.DS_ACCT_NM
+                , CUST.DS_ACCT_TP_CD
+                , CUST.PTY_LOC_PK
+                , CUST.DS_ACCT_ACTV_CUST_FLG
+            FROM 
+                  SELL_TO_CUST CUST
+            WHERE 
+                    CUST.GLBL_CMPY_CD         = #glblCmpyCd#
+                AND CUST.EZCANCELFLAG         = '0'
+                
+            </isNotEqual>
+            ) ACCT
+            , PTY_LOC_WRK  PLW
+            , PROS_PTY_LOC_WRK  PPLW
+            , DS_ACCT_TP   DAP
+            , DS_ACCT_RELN RELN
+        WHERE
+                ACCT.GLBL_CMPY_CD         = DAP.GLBL_CMPY_CD
+            AND ACCT.DS_ACCT_TP_CD        = DAP.DS_ACCT_TP_CD
+            AND DAP.EZCANCELFLAG          = '0'
+            
+            AND ACCT.GLBL_CMPY_CD         = PLW.GLBL_CMPY_CD(+)
+            AND ACCT.PTY_LOC_PK           = PLW.PTY_LOC_PK(+)
+            AND PLW.EZCANCELFLAG(+)       = '0'
+                
+            AND ACCT.GLBL_CMPY_CD         = PPLW.GLBL_CMPY_CD(+)
+            AND ACCT.PTY_LOC_PK           = PPLW.PTY_LOC_PK(+)
+            AND PPLW.EZCANCELFLAG(+)      = '0'
+
+            AND ACCT.GLBL_CMPY_CD         = RELN.GLBL_CMPY_CD
+            AND ACCT.DS_ACCT_NUM          = RELN.RELN_DS_ACCT_NUM
+            AND RELN.DS_ACCT_NUM          = #targetDsAcctNum#
+            AND RELN.EZCANCELFLAG         = '0'
+            <isNotNull property="dsAcctActvCustFlg">
+            AND ACCT.DS_ACCT_ACTV_CUST_FLG = #dsAcctActvCustFlg# 
+            </isNotNull> 
+            <isNotNull property="rgtnStsCd"> 
+            AND RELN.RGTN_STS_CD = #rgtnStsCd# 
+            </isNotNull>
+            <iterate property="dsAcctRelnTpList" var="dsAcctRelnTpList[]" open="AND RELN.DS_ACCT_RELN_TP_CD IN (" close=")" conjunction=",">
+                          #dsAcctRelnTpList[]#
+            </iterate>
+        <!-- QC#4506 -->
+        ORDER BY RELN.DS_ACCT_RELN_TP_CD, ACCT.DS_ACCT_NUM
+    </statement>
+
+    <statement id="getTreeListLocation"  parameterClass ="Map" resultClass="Map">
+     <!-- QC#3290 BEG -->
+     WITH WRK_TMP AS (
+     <!-- QC#3290 END -->
+        SELECT  ''       AS P_DS_ACCT_NUM
+           ,#dsAcctNum#  AS DS_ACCT_NUM
+           ,''           AS DS_ACCT_RELN_TP_CD
+           ,''           AS dsAcctNum_T1
+           ,''           AS dsAcctNum_T2
+           ,''           AS dsAcctNum_T3
+           ,''           AS dsAcctNum_T4
+           ,''           AS dsAcctNum_T5
+           ,''           AS dsAcctNum_T6
+           ,''           AS dsAcctNum_T7
+           ,''           AS dsAcctNum_T8
+           ,''           AS dsAcctNum_T9
+           ,''           AS dsAcctNum_TA
+           ,ACCT.DS_ACCT_NM  AS DS_ACCT_NM
+           , ACCT.FIRST_LINE_ADDR ||
+             DECODE(ACCT.SCD_LINE_ADDR, NULL, '', ' ' || ACCT.SCD_LINE_ADDR) ||
+             DECODE(ACCT.THIRD_LINE_ADDR, NULL, '', ' ' || ACCT.THIRD_LINE_ADDR) ||
+             DECODE(ACCT.FRTH_LINE_ADDR, NULL, '', ' ' || ACCT.FRTH_LINE_ADDR) ||
+             ' ' ||
+                      ACCT.CTY_ADDR        || ' ' ||
+                      ACCT.ST_CD           || ' ' ||
+                      ACCT.POST_CD                   AS SHIP_FROM_FULL_CMPY_ADDR
+                    , ACCT.XX_YES_NO_CD
+                    , (SELECT DS_ACCT_TP_NM FROM DS_ACCT_TP TP
+                       WHERE TP.GLBL_CMPY_CD = ACCT.GLBL_CMPY_CD
+                       AND TP.EZCANCELFLAG = '0'
+                       AND TP.DS_ACCT_TP_CD = ACCT.DS_ACCT_TP_CD
+                      )                             AS DS_ACCT_TP_NM
+                    , BTC.BILL_TO_CUST_CD           AS BILL_TO_CUST_CD
+                    , STC.SHIP_TO_CUST_CD           AS SHIP_TO_CUST_CD
+                    , ACCT.LOC_NUM                   AS LOC_NUM
+                 <!-- QC#3290 -->
+                 , ACCT.DS_ACCT_ACTV_CUST_FLG    AS DS_ACCT_ACTV_CUST_FLG
+                 , ACCT.RGTN_STS_CD                AS LOC_RGTN_STS_CD
+                 , ACCT.RGTN_STS_CD               AS PTY_RGTN_STS_CD
+                 , BTC.RGTN_STS_CD               AS BILL_RGTN_STS_CD
+                 , STC.RGTN_STS_CD               AS SHIP_RGTN_STS_CD
+                 <!-- QC#4373 -->
+                    , ACCT.PTY_LOC_PK    AS PTY_LOC_PK
+                    , ACCT.GLBL_CMPY_CD    AS GLBL_CMPY_CD
+        FROM
+         (
+         <isNotEqual property="dsAcctTpCust" compareValue="Y">
+         SELECT 
+               PROS.GLBL_CMPY_CD
+             , PROS.DS_ACCT_NUM
+             , PROS.DS_ACCT_NM
+             , PROS.DS_ACCT_TP_CD
+             , PROS.DS_ACCT_ACTV_CUST_FLG 
+             , PLW.FIRST_LINE_ADDR
+             , PLW.SCD_LINE_ADDR
+             , PLW.THIRD_LINE_ADDR
+             , PLW.FRTH_LINE_ADDR
+             , PLW.CTY_ADDR
+             , PLW.ST_CD
+             , PLW.POST_CD
+             , PLW.LOC_NUM
+             , PLW.RGTN_STS_CD
+             , PLW.DS_LOC_NM
+             , PLW.PTY_LOC_PK
+             , NULL              AS LOC_RGTN_STS_CD
+             , CASE WHEN PLW.LOC_NUM IS NOT NULL THEN 'Y' ELSE 'N' END AS XX_YES_NO_CD
+         FROM 
+               DS_ACCT_PROS PROS
+             , PROS_PTY_LOC_WRK  PLW
+         WHERE 
+                 PROS.GLBL_CMPY_CD         = #glblCmpyCd#
+             AND PROS.DS_ACCT_NUM          = #dsAcctNum#
+             AND PROS.EZCANCELFLAG         = '0'
+             
+             AND PROS.GLBL_CMPY_CD = PLW.GLBL_CMPY_CD(+)
+             AND PROS.PTY_LOC_PK = PLW.PTY_LOC_PK(+)
+             AND PLW.EZCANCELFLAG(+) = '0'
+        </isNotEqual>
+        <isNull property="dsAcctTpCust">
+           UNION ALL
+        </isNull>
+        <isNotEqual property="dsAcctTpCust" compareValue="N">
+           SELECT 
+                 CUST.GLBL_CMPY_CD
+               , CUST.SELL_TO_CUST_CD AS DS_ACCT_NUM
+               , CUST.DS_ACCT_NM
+               , CUST.DS_ACCT_TP_CD
+               , CUST.DS_ACCT_ACTV_CUST_FLG 
+               , PLW.FIRST_LINE_ADDR
+               , PLW.SCD_LINE_ADDR
+               , PLW.THIRD_LINE_ADDR
+               , PLW.FRTH_LINE_ADDR
+               , PLW.CTY_ADDR
+               , PLW.ST_CD
+               , PLW.POST_CD
+               , PLW.LOC_NUM
+               , PLW.RGTN_STS_CD
+               , PLW.DS_LOC_NM
+               , PLW.PTY_LOC_PK
+               , AL.RGTN_STS_CD                AS LOC_RGTN_STS_CD
+               , CASE WHEN PC.PRIN_CUST_PK IS NOT NULL THEN 'Y' ELSE 'N' END AS XX_YES_NO_CD
+           FROM 
+                 SELL_TO_CUST CUST
+               , ACCT_LOC     AL
+               , PTY_LOC_WRK  PLW
+               , PRIN_CUST    PC
+           WHERE 
+                   CUST.GLBL_CMPY_CD         = #glblCmpyCd#
+               AND CUST.SELL_TO_CUST_CD      = #dsAcctNum#
+               AND CUST.EZCANCELFLAG         = '0'
+               
+               AND CUST.GLBL_CMPY_CD       = AL.GLBL_CMPY_CD(+)
+               AND CUST.SELL_TO_CUST_CD        = AL.DS_ACCT_NUM(+)
+               AND AL.EZCANCELFLAG(+)      = '0'
+               
+               AND AL.GLBL_CMPY_CD         = PLW.GLBL_CMPY_CD(+)
+               AND AL.PTY_LOC_PK           = PLW.PTY_LOC_PK(+)
+               AND PLW.EZCANCELFLAG(+)     = '0'
+               
+               AND PLW.GLBL_CMPY_CD = PC.GLBL_CMPY_CD (+)
+               AND PLW.PTY_LOC_PK = PC.PTY_LOC_PK (+)
+               AND PLW.LOC_NUM = PC.LOC_NUM (+)
+               AND PC.EZCANCELFLAG (+) = '0'
+       </isNotEqual>
+       ) ACCT
+         ,BILL_TO_CUST BTC
+         ,SHIP_TO_CUST STC
+        WHERE
+
+            ACCT.GLBL_CMPY_CD        = BTC.GLBL_CMPY_CD(+)
+        AND ACCT.PTY_LOC_PK          = BTC.PTY_LOC_PK(+)
+        AND BTC.EZCANCELFLAG(+)     = '0'
+
+        AND ACCT.GLBL_CMPY_CD        = STC.GLBL_CMPY_CD(+)
+        AND ACCT.PTY_LOC_PK          = STC.PTY_LOC_PK(+)
+        AND STC.EZCANCELFLAG(+)     = '0'
+        
+        <isNotNull property="dsAcctActvCustFlg">
+        AND ACCT.DS_ACCT_ACTV_CUST_FLG = #dsAcctActvCustFlg# 
+        </isNotNull>
+        <!-- QC#5890 --> 
+        <isNull property="tagetDsAcctNumFlg">
+
+          <isNotNull property="dsAcctNm_RT">
+           AND ACCT.DS_ACCT_NM LIKE #dsAcctNm_RT#
+          </isNotNull>
+          <isNotNull property="dsAcctNum_RT">
+           AND ACCT.DS_ACCT_NUM LIKE #dsAcctNum_RT#
+          </isNotNull>
+          <isNotNull property="xxAllLineAddr_RT">
+           <!-- QC#5890 -->
+           AND UPPER(ACCT.FIRST_LINE_ADDR) || 
+             DECODE(ACCT.SCD_LINE_ADDR, NULL, '', ' ' || UPPER(ACCT.SCD_LINE_ADDR)) ||
+             DECODE(ACCT.THIRD_LINE_ADDR, NULL, '', ' ' || UPPER(ACCT.THIRD_LINE_ADDR)) ||
+             DECODE(ACCT.FRTH_LINE_ADDR, NULL, '', ' ' || UPPER(ACCT.FRTH_LINE_ADDR)) LIKE #xxAllLineAddr_RT#
+          </isNotNull>
+         </isNull>
+         <!-- QC#3290 BEG -->
+         <!-- QC#4526 -->
+         <isNotNull property="tagetDsAcctNumFlg">
+           <isEqual property="dispBillToFlg" compareValue="Y">
+           AND BTC.BILL_TO_CUST_CD IS NOT NULL
+           </isEqual>
+           <isEqual property="dispShipToFlg" compareValue="Y">
+           AND STC.SHIP_TO_CUST_CD IS NOT NULL
+           </isEqual>
+           <isNotNull property="shipFromFullCmpyAddr">
+           AND UPPER(ACCT.FIRST_LINE_ADDR) || 
+               DECODE(ACCT.SCD_LINE_ADDR, NULL, '', ' ' || UPPER(ACCT.SCD_LINE_ADDR)) ||
+               DECODE(ACCT.THIRD_LINE_ADDR, NULL, '', ' ' || UPPER(ACCT.THIRD_LINE_ADDR)) ||
+               DECODE(ACCT.FRTH_LINE_ADDR, NULL, '', ' ' || UPPER(ACCT.FRTH_LINE_ADDR)) LIKE #shipFromFullCmpyAddr#
+           </isNotNull>
+           <isNotNull property="ctyAddr">
+           AND UPPER(ACCT.CTY_ADDR) LIKE #ctyAddr#
+           </isNotNull>
+           <isNotNull property="stCd">
+           AND ACCT.ST_CD = #stCd#
+           </isNotNull>
+           <isNotNull property="postCd">
+           AND ACCT.POST_CD LIKE #postCd#
+           </isNotNull>
+           <isNotNull property="locNum">
+           AND ACCT.LOC_NUM LIKE #locNum#
+           </isNotNull>
+           <isNotNull property="locNm">
+           AND UPPER(ACCT.DS_LOC_NM) LIKE #locNm#
+           </isNotNull>
+           <isNotNull property="dsXrefAcctFlg">
+               AND EXISTS (SELECT 1 FROM DS_XREF_ACCT XREF
+                           WHERE XREF.GLBL_CMPY_CD = ACCT.GLBL_CMPY_CD
+                           AND XREF.LOC_NUM = ACCT.LOC_NUM
+                           AND XREF.EZCANCELFLAG = '0'
+                           <isNotNull property="dsXrefAcctTpCd">
+                            AND XREF.DS_XREF_ACCT_TP_CD  = #dsXrefAcctTpCd#
+                           </isNotNull>
+                           <isNotNull property="dsXrefAcctCd">
+                            AND XREF.DS_XREF_ACCT_CD LIKE #dsXrefAcctCd#
+                           </isNotNull>
+                      )
+           </isNotNull>
+           <isNotNull property="billToCustCd">
+           AND BTC.BILL_TO_CUST_CD LIKE #billToCustCd#
+           </isNotNull>
+           <isNotNull property="shipToCustCd">
+           AND STC.SHIP_TO_CUST_CD LIKE #shipToCustCd#
+           </isNotNull>
+         </isNotNull>
+         )
+     <!-- QC#13340 BEG -->
+     , WRK AS (
+        <isNull property="tagetDsAcctNumFlg">
+          <isNull property="dispAcctFlg">
+          SELECT *
+            FROM WRK_TMP T
+          </isNull>
+        </isNull>
+        <isNotNull property="tagetDsAcctNumFlg">
+             <isNotEqual property="xxChkBox_01" compareValue="Y">
+          SELECT *
+            FROM WRK_TMP T
+           WHERE T.XX_YES_NO_CD = 'Y'
+          UNION
+          SELECT
+                 <!-- Need to keep column order same as WRK_TMP above --> 
+                    T.P_DS_ACCT_NUM
+                  , T.DS_ACCT_NUM
+                  , T.DS_ACCT_RELN_TP_CD
+                  , T.dsAcctNum_T1
+                  , T.dsAcctNum_T2
+                  , T.dsAcctNum_T3
+                  , T.dsAcctNum_T4
+                  , T.dsAcctNum_T5
+                  , T.dsAcctNum_T6
+                  , T.dsAcctNum_T7
+                  , T.dsAcctNum_T8
+                  , T.dsAcctNum_T9
+                  , T.dsAcctNum_TA
+                  , T.DS_ACCT_NM
+                  , null SHIP_FROM_FULL_CMPY_ADDR
+                  , null XX_YES_NO_CD
+                  , T.DS_ACCT_TP_NM
+                  , null BILL_TO_CUST_CD
+                  , null SHIP_TO_CUST_CD
+                  , null LOC_NUM
+                  , T.DS_ACCT_ACTV_CUST_FLG
+                  , null LOC_RGTN_STS_CD
+                  , null PTY_RGTN_STS_CD
+                  , null BILL_RGTN_STS_CD
+                  , null SHIP_RGTN_STS_CD
+                  , null PTY_LOC_PK
+                  , T.GLBL_CMPY_CD
+            FROM WRK_TMP T
+              WHERE NOT EXISTS (
+                     SELECT 1 FROM WRK_TMP T2 WHERE T2.XX_YES_NO_CD = 'Y' AND T.DS_ACCT_NUM = T2.DS_ACCT_NUM
+                    )
+             </isNotEqual>
+             <isEqual property="xxChkBox_01" compareValue="Y">
+          SELECT *
+            FROM WRK_TMP T
+             </isEqual>
+        </isNotNull>
+     )
+     <!-- QC#13340 END -->
+     , LOC_FLTR AS (  
+         SELECT WRK.*
+           FROM WRK
+          WHERE 1=1
+         <isEqual property="inacLocFlg" compareValue="N">
+           <isEqual property="inacBillToShipToFlg" compareValue="N">
+            <!-- QC#13340 BEG -->
+            AND ( LOC_RGTN_STS_CD IS NULL OR (
+            <!-- QC#13340 END -->
+                LOC_RGTN_STS_CD = #rgtnSts_Actv#
+            AND PTY_RGTN_STS_CD = #rgtnSts_Actv#
+            AND (
+                (BILL_RGTN_STS_CD IS NULL AND SHIP_RGTN_STS_CD IS NULL)
+              OR BILL_RGTN_STS_CD = #rgtnSts_Actv# 
+              OR SHIP_RGTN_STS_CD = #rgtnSts_Actv#
+            )
+            <!-- QC#13340 BEG -->
+            ) )
+            <!-- QC#13340 END -->
+           </isEqual>
+           <isEqual property="inacBillToShipToFlg" compareValue="Y">
+            <!-- QC#13340 BEG -->
+            AND ( LOC_RGTN_STS_CD IS NULL OR (
+            <!-- QC#13340 END -->
+            (
+                (BILL_RGTN_STS_CD IS NULL AND SHIP_RGTN_STS_CD IS NULL 
+             AND LOC_RGTN_STS_CD = #rgtnSts_Actv#
+             AND PTY_RGTN_STS_CD = #rgtnSts_Actv#
+             )
+             OR BILL_RGTN_STS_CD IS NOT NULL
+             OR SHIP_RGTN_STS_CD IS NOT NULL
+         )
+            <!-- QC#13340 BEG -->
+            ) )
+            <!-- QC#13340 END -->
+           </isEqual>
+         </isEqual>
+         <!-- QC#3290 END -->
+         <!-- QC#3395 BEG -->
+         <isNotNull property="tagetDsAcctNumFlg">
+          <isNotNull property="ctacPsnFlg">
+            AND EXISTS (SELECT 1 
+                        FROM 
+                            DS_CTAC_PSN_RELN    PSN_RELN
+                          , CTAC_PSN            PSN
+                        <isNotNull property="ctacPsnTelNum">
+                          , DS_CTAC_PNT         PNT
+                        </isNotNull>
+                        WHERE
+                            WRK.LOC_NUM = PSN_RELN.LOC_NUM
+                        AND PSN_RELN.GLBL_CMPY_CD = #glblCmpyCd#
+                        AND PSN_RELN.EZCANCELFLAG = '0'
+
+                        AND PSN_RELN.GLBL_CMPY_CD = PSN.GLBL_CMPY_CD
+                        AND PSN_RELN.CTAC_PSN_PK = PSN.CTAC_PSN_PK
+                        AND PSN.EZCANCELFLAG = '0'
+
+                        <isNotNull property="ctacPsnFirstNm">
+                        AND UPPER(PSN.CTAC_PSN_FIRST_NM) LIKE UPPER(#ctacPsnFirstNm#)
+                        </isNotNull>
+                        <isNotNull property="ctacPsnLastNm">
+                        AND UPPER(PSN.CTAC_PSN_LAST_NM) LIKE UPPER(#ctacPsnLastNm#)
+                        </isNotNull>
+                        <isNotNull property="ctacPsnTelNum">
+                        AND PSN.GLBL_CMPY_CD = PNT.GLBL_CMPY_CD
+                        AND PSN.CTAC_PSN_PK = PNT.CTAC_PSN_PK
+                        AND PNT.EZCANCELFLAG = '0'
+
+                        AND PNT.DS_CTAC_PNT_TP_CD = #dsCtacPntTpCd#
+                        AND PNT.DS_CTAC_PNT_VAL_TXT LIKE #ctacPsnTelNum#
+                        </isNotNull>
+                   )
+          </isNotNull>
+         </isNotNull>
+        )
+        <!--QC#4373 -->
+     , LOC_STS_FLTR AS (
+        SELECT
+              P_DS_ACCT_NUM
+            , DS_ACCT_NUM
+            , DS_ACCT_RELN_TP_CD
+            , DSACCTNUM_T1
+            , DSACCTNUM_T2
+            , DSACCTNUM_T3
+            , DSACCTNUM_T4
+            , DSACCTNUM_T5
+            , DSACCTNUM_T6
+            , DSACCTNUM_T7
+            , DSACCTNUM_T8
+            , DSACCTNUM_T9
+            , DSACCTNUM_TA
+            , DS_ACCT_NM
+            , SHIP_FROM_FULL_CMPY_ADDR
+            , XX_YES_NO_CD
+            , DS_ACCT_TP_NM
+            , BILL_TO_CUST_CD
+            , SHIP_TO_CUST_CD
+            , LOC_NUM
+            , DS_ACCT_ACTV_CUST_FLG
+            , LOC_RGTN_STS_CD
+            , PTY_RGTN_STS_CD
+            , BILL_RGTN_STS_CD
+            , SHIP_RGTN_STS_CD
+            , PTY_LOC_PK
+            , GLBL_CMPY_CD
+            <!-- QC#4373 BEG -->
+            , CASE WHEN EXISTS (
+                         SELECT 1 
+                           FROM ACCT_LOC LOC 
+                          WHERE LOC.EZCANCELFLAG = '0' 
+                            AND LOC.GLBL_CMPY_CD = A.GLBL_CMPY_CD 
+                            AND LOC.PTY_LOC_PK = A.PTY_LOC_PK
+                            AND LOC.RGTN_STS_CD = #rgtnSts_Actv#
+                        )
+                   THEN 'Y' ELSE 'N' END EXIST_ACTV_ACCT_LOC_FLG
+            <!-- QC#4373 END -->
+          FROM LOC_FLTR A
+        UNION ALL
+        SELECT W.* 
+            <!-- QC#4373 BEG -->
+            , CASE WHEN EXISTS (
+                         SELECT 1 
+                           FROM ACCT_LOC LOC 
+                          WHERE LOC.EZCANCELFLAG = '0' 
+                            AND LOC.GLBL_CMPY_CD = W.GLBL_CMPY_CD 
+                            AND LOC.PTY_LOC_PK = W.PTY_LOC_PK
+                            AND LOC.RGTN_STS_CD = #rgtnSts_Actv#
+                        )
+                   THEN 'Y' ELSE 'N' END EXIST_ACTV_ACCT_LOC_FLG
+            <!-- QC#4373 END -->
+          FROM WRK W
+         WHERE NOT EXISTS (
+            SELECT 1 
+              FROM LOC_FLTR L 
+             WHERE L.DS_ACCT_NUM = W.DS_ACCT_NUM
+            ) 
+           AND W.XX_YES_NO_CD = 'Y'
+       )
+       SELECT 
+              <!-- QC#4373 -->
+              P_DS_ACCT_NUM
+            , DS_ACCT_NUM
+            , DS_ACCT_RELN_TP_CD
+            , DSACCTNUM_T1
+            , DSACCTNUM_T2
+            , DSACCTNUM_T3
+            , DSACCTNUM_T4
+            , DSACCTNUM_T5
+            , DSACCTNUM_T6
+            , DSACCTNUM_T7
+            , DSACCTNUM_T8
+            , DSACCTNUM_T9
+            , DSACCTNUM_TA
+            , DS_ACCT_NM
+            , SHIP_FROM_FULL_CMPY_ADDR
+            , XX_YES_NO_CD
+            , DS_ACCT_TP_NM
+        <isEqual property="inacLocFlg" compareValue="N">
+           <isEqual property="inacBillToShipToFlg" compareValue="N">
+               , CASE WHEN A.EXIST_ACTV_ACCT_LOC_FLG = 'Y' AND A.PTY_RGTN_STS_CD = #rgtnSts_Actv# AND A.BILL_RGTN_STS_CD = #rgtnSts_Actv# 
+                      THEN A.BILL_TO_CUST_CD ELSE NULL END BILL_TO_CUST_CD
+               , CASE WHEN A.EXIST_ACTV_ACCT_LOC_FLG = 'Y' AND A.PTY_RGTN_STS_CD = #rgtnSts_Actv# AND A.SHIP_RGTN_STS_CD = #rgtnSts_Actv#
+                      THEN A.SHIP_TO_CUST_CD ELSE NULL END SHIP_TO_CUST_CD
+               , CASE WHEN A.EXIST_ACTV_ACCT_LOC_FLG = 'Y' AND A.PTY_RGTN_STS_CD = #rgtnSts_Actv# 
+                      THEN A.PTY_RGTN_STS_CD ELSE NULL END PTY_RGTN_STS_CD
+           </isEqual>
+           <isEqual property="inacBillToShipToFlg" compareValue="Y">
+               , A.BILL_TO_CUST_CD
+               , A.SHIP_TO_CUST_CD
+               , A.PTY_RGTN_STS_CD
+           </isEqual>
+         </isEqual>
+         <isEqual property="inacLocFlg" compareValue="Y">
+               , A.BILL_TO_CUST_CD
+               , A.SHIP_TO_CUST_CD
+               , A.PTY_RGTN_STS_CD
+   </isEqual>
+            , A.LOC_NUM
+            , A.DS_ACCT_ACTV_CUST_FLG
+            , A.LOC_RGTN_STS_CD
+            , A.BILL_RGTN_STS_CD
+            , A.SHIP_RGTN_STS_CD
+         FROM LOC_STS_FLTR A
+         <!-- 2018/05/15 QC#22715 mod start -->
+         <!-- ORDER BY DS_ACCT_NUM, XX_YES_NO_CD DESC, SHIP_FROM_FULL_CMPY_ADDR -->
+         ORDER BY DS_ACCT_NM, XX_YES_NO_CD DESC, SHIP_FROM_FULL_CMPY_ADDR
+         <!-- 2018/05/15 QC#22715 mod end -->
+      <!-- QC#3395 END -->
+    </statement>
+</sqlMap>

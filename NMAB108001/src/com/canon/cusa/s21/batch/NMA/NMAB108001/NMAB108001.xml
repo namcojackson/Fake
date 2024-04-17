@@ -1,0 +1,144 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NMAB108001">
+    <statement id="getMdseInfo" parameterClass="Map" resultClass="Map">
+        WITH SCUBE_MDSE_V AS (
+            SELECT A1.MDSE_CD
+                  ,A1.SPLY_ITEM_NUM
+                  ,A1.GLBL_CMPY_CD
+                  ,CPV.P_CODE_VENDR      AS CUSA_VND_CD
+                  ,CPV.P_CODE_PROD_MAIN  AS CUSA_P_CODE_PROD_MAIN
+                  ,A1.VND_CD
+                  ,A1.VND_MIN_ORD_QTY
+                  ,A1.VND_INCR_ORD_QTY
+                  ,A1.UNIT_PRC_AMT
+            FROM   ASL_DTL A1
+                  ,(
+                    SELECT AD.GLBL_CMPY_CD
+                          ,AD.ASL_DTL_PK
+                          ,ROW_NUMBER() OVER (PARTITION BY AD.MDSE_CD ORDER BY PRIM_SPLY_FLG DESC, NVL(AD.EFF_FROM_DT, #effFromDtDefalut#) DESC) IDX
+                    FROM   ASL_DTL AD
+                          ,PRNT_CMPY_VND PV
+                    WHERE  AD.GLBL_CMPY_CD     = PV.GLBL_CMPY_CD
+                    AND    PV.PRNT_CMPY_VND_CD = AD.VND_CD
+                    <iterate property="vndSysTpCdList" var="vndSysTpCdList[]" open="AND PV.VND_SYS_TP_CD IN (" close=")" conjunction=",">
+                        #vndSysTpCdList[]#
+                    </iterate> 
+                    AND    AD.EZCANCELFLAG     = '0'
+                    AND    PV.EZCANCELFLAG     = '0'
+                    ) A2
+                   ,CSA_PRT_V     CPV
+                   ,DS_COND_CONST DCC
+            WHERE  A1.GLBL_CMPY_CD          = A2.GLBL_CMPY_CD
+            AND    A1.ASL_DTL_PK            = A2.ASL_DTL_PK
+            <isNotNull property="exclMdseCdList">
+                <iterate property="exclMdseCdList" var="exclMdseCdList[]" open="AND A1.MDSE_CD NOT IN (" close=")" conjunction=",">
+                #exclMdseCdList[]#
+                </iterate> 
+            </isNotNull>
+            AND    A2.IDX                   = #IDX_1#
+            AND    CPV.P_PARTS_NUM          = NVL(A1.SPLY_ITEM_NUM, A1.MDSE_CD)
+            AND    CPV.P_CODE_VENDR         = DCC.DS_COND_CONST_VAL_TXT_01
+            AND    DCC.GLBL_CMPY_CD         = A1.GLBL_CMPY_CD
+            AND    DCC.DS_COND_CONST_GRP_ID = #dsCondConstGrpIdCusaVndCd#
+            AND    A1.EZCANCELFLAG          = '0'
+            AND    CPV.EZCANCELFLAG         = '0'
+            AND    DCC.EZCANCELFLAG         = '0'
+        )
+        SELECT
+            M.MDSE_CD
+           ,M.ZEROTH_PROD_CTRL_CD
+           ,M.FIRST_PROD_CTRL_CD
+           ,M.SCD_PROD_CTRL_CD
+           ,M.THIRD_PROD_CTRL_CD
+           ,M.FRTH_PROD_CTRL_CD
+           ,M.FIFTH_PROD_CTRL_CD
+           ,M.SIXTH_PROD_CTRL_CD
+           ,M.SVNTH_PROD_CTRL_CD
+           ,M.MDSE_NM
+           ,M.DSCTN_FLG
+           ,M.THIS_MTH_TOT_STD_COST_AMT
+           ,G.GLBL_CMPY_CD
+           ,M.EZINTIME
+           ,SMV.CUSA_VND_CD
+           ,SMV.CUSA_P_CODE_PROD_MAIN
+           ,SMV.VND_CD
+           ,SMV.VND_MIN_ORD_QTY
+           ,SMV.VND_INCR_ORD_QTY
+           ,CPPCCV.P_CODE_PROD_LINE_VENDOR
+        FROM
+            MDSE                   M
+           ,VND                    V
+           ,GLBL_CMPY              G
+           ,SCUBE_MDSE_V           SMV
+           ,CSA_PRT_PROD_CD_CONV_V CPPCCV
+        WHERE
+            M.GLBL_CMPY_CD                = #glblCmpyCd#
+        <iterate property="rgtnStsCdList" var="rgtnStsCdList[]" open="AND M.RGTN_STS_CD NOT IN (" close=")" conjunction=",">
+            #rgtnStsCdList[]#
+        </iterate> 
+        AND M.GLBL_CMPY_CD            = SMV.GLBL_CMPY_CD
+        AND M.MDSE_CD                 = SMV.MDSE_CD
+        AND SMV.GLBL_CMPY_CD          = V.GLBL_CMPY_CD (+)
+        AND SMV.VND_CD                = V.VND_CD (+)
+        AND V.COA_AFFL_CD             = G.GLBL_CMPY_CD (+)
+        AND SMV.CUSA_VND_CD           = CPPCCV.P_CODE_VENDR (+)
+        AND SMV.CUSA_P_CODE_PROD_MAIN = CPPCCV.P_CODE_PROD_LINE (+)
+        AND M.EZCANCELFLAG            = '0'
+        AND V.EZCANCELFLAG (+)        = '0'
+        AND G.EZCANCELFLAG (+)        = '0'
+        ORDER BY
+            M.MDSE_CD
+    </statement>
+
+    <statement id="getMdseDataFindByIntfcCratDt" parameterClass="Map" resultClass="Map">
+        SELECT
+            A.GLBL_CMPY_CD
+           ,A.INTFC_PRT_MDSE_CD
+           ,A.PRT_SIZE_TXT
+           ,A.INTFC_CRAT_DT
+        FROM 
+            PRT_MSTR_WRK A
+        WHERE
+            A.GLBL_CMPY_CD       = #glblCmpyCd#
+        AND A.INTFC_CRAT_DT      = #intfcCratDt#
+        AND A.EZCANCELFLAG       = '0'
+        ORDER BY
+            A.INTFC_PRT_MDSE_CD
+           ,A.PRT_SIZE_TXT
+           ,A.INTFC_CRAT_DT DESC
+    </statement>
+
+    <statement id="getPreIntfcCratDt" parameterClass="Map" resultClass="String">
+        SELECT
+            MAX(A.INTFC_CRAT_DT)
+        FROM 
+            PRT_MSTR_WRK A
+        WHERE
+            A.GLBL_CMPY_CD       = #glblCmpyCd#
+        AND A.INTFC_CRAT_DT   &lt; #intfcCratDt#
+        AND A.EZCANCELFLAG       = '0'
+        ORDER BY
+            A.INTFC_PRT_MDSE_CD
+           ,A.PRT_SIZE_TXT
+           ,A.INTFC_CRAT_DT DESC
+    </statement>
+
+    <statement id="getPastData" parameterClass="Map">
+        SELECT
+            A.GLBL_CMPY_CD
+           ,A.INTFC_PRT_MDSE_CD
+           ,A.PRT_SIZE_TXT
+           ,A.INTFC_CRAT_DT
+        FROM 
+            PRT_MSTR_WRK A
+        WHERE
+            A.GLBL_CMPY_CD       = #glblCmpyCd#
+        AND A.INTFC_CRAT_DT   &lt; #preIntfcCratDt#
+        AND A.EZCANCELFLAG       = '0'
+        ORDER BY
+            A.INTFC_PRT_MDSE_CD
+           ,A.PRT_SIZE_TXT
+           ,A.INTFC_CRAT_DT DESC
+    </statement>
+</sqlMap>

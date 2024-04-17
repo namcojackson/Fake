@@ -1,0 +1,382 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<sqlMap namespace="NLAB314001">
+
+     <statement id="getPartsUsagePK" parameterClass="Map" resultClass="Map"> 
+        SELECT
+             PRT_USG_DLY_SMRY_PK
+            ,GLBL_CMPY_CD
+        FROM
+            PRT_USG_DLY_SMRY 
+        WHERE
+            GLBL_CMPY_CD     =    #glblCmpyCd#
+            AND INVTY_TRX_DT =    #prcDt#
+            AND EZCANCELFLAG =    '0'
+        ORDER BY
+            PRT_USG_DLY_SMRY_PK
+    </statement>
+    
+
+    <statement id="getPartsUsageInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+            GLBL_CMPY_CD
+            ,MDSE_CD
+            ,INVTY_LOC_CD
+            ,INVTY_TRX_DT
+            ,SUM(INVTY_TRX_QTY) * -1 AS INVTY_QTY
+            ,LOC_STS_CD
+            ,STK_STS_CD
+        FROM
+            INVTY_TRX
+        WHERE
+            GLBL_CMPY_CD     =    #glblCmpyCd#
+            AND INVTY_TRX_DT =    #prcDt#
+            AND (TRX_CD , TRX_RSN_CD , SYS_SRC_CD) IN ($combDsCondConst$)
+            AND LOC_STS_CD   =    #locStsCd#
+            AND STK_STS_CD   =    #stkStsCd#
+            AND EZCANCELFLAG =    '0'
+        GROUP BY
+            GLBL_CMPY_CD
+            ,INVTY_LOC_CD
+            ,MDSE_CD
+            ,INVTY_TRX_DT
+            ,LOC_STS_CD
+            ,STK_STS_CD
+        ORDER BY
+            INVTY_LOC_CD 
+            ,MDSE_CD
+    </statement>
+
+    <statement id="getPartsUsageWkPK" parameterClass="Map" resultClass="Map">
+        SELECT
+             PRT_USG_RPT_WRK_PK
+            ,GLBL_CMPY_CD
+        FROM
+            PRT_USG_RPT_WRK 
+        WHERE
+            GLBL_CMPY_CD           =    #glblCmpyCd#
+            AND PRT_USG_RPT_WRK_DT =    #prcDt#
+            AND EZCANCELFLAG       =    '0'
+        ORDER BY
+            PRT_USG_RPT_WRK_PK
+    </statement>
+    
+    <statement id="getPartsUsageReport" parameterClass="Map" resultClass="Map">
+         WITH 
+         IV_TOC AS(
+                SELECT 
+                    GLBL_CMPY_CD
+                    ,PSN_CD
+                    ,ORG_CD
+                    ,ORG_FUNC_ROLE_TP_CD
+                FROM
+                    (SELECT 
+                        OS.GLBL_CMPY_CD
+                        ,OS.PSN_CD
+                        ,TC.ORG_CD
+                        ,TC.ORG_FUNC_ROLE_TP_CD
+                        ,ROW_NUMBER() OVER(PARTITION BY OS.GLBL_CMPY_CD,OS.PSN_CD ORDER BY TC.ORG_FUNC_ROLE_TP_CD DESC) AS ROW_NUM
+                    FROM 
+                        ORG_FUNC_ASG      OS
+                        ,TOC              TC
+                        ,ORG_FUNC_ROLE_TP RT
+                    WHERE
+                        OS.GLBL_CMPY_CD             =    #glblCmpyCd#
+                        AND OS.GLBL_CMPY_CD         =    TC.GLBL_CMPY_CD
+                        AND OS.TOC_CD               =    TC.TOC_CD
+                        AND OS.GNRN_TP_CD           =    #gnrnTpCd#
+                        AND TC.GLBL_CMPY_CD         =    RT.GLBL_CMPY_CD
+                        AND TC.ORG_FUNC_ROLE_TP_CD  =    RT.ORG_FUNC_ROLE_TP_CD
+                        AND RT.TECH_MSTR_REQ_FLG    =    'Y'
+                        AND RT.EZCANCELFLAG         =    '0'
+                        AND OS.EZCANCELFLAG         =    '0'
+                        AND TC.EZCANCELFLAG         =    '0')
+                WHERE
+                    ROW_NUM =    1    )
+        ,IV_INVTY_1 AS(
+            SELECT 
+                GLBL_CMPY_CD
+                ,INVTY_LOC_CD
+                ,MDSE_CD
+                ,SUM(INVTY_QTY) AS INVTY_QTY
+            FROM
+                INVTY
+            WHERE
+                    GLBL_CMPY_CD   =    #glblCmpyCd#
+                AND LOC_STS_CD     =    #locStsCd#
+                AND LOC_TP_CD      =    #locTpCd#
+                AND EZCANCELFLAG   =    '0' 
+            GROUP BY 
+                GLBL_CMPY_CD
+                ,INVTY_LOC_CD
+                ,MDSE_CD    )
+        , IV_PR1 AS (
+            SELECT 
+                GLBL_CMPY_CD
+                ,INVTY_LOC_CD
+                ,MDSE_CD
+                ,SUM(INVTY_QTY) AS SIXTH_MTH_USG_QTY
+            FROM
+                PRT_USG_DLY_SMRY
+            WHERE 
+                GLBL_CMPY_CD     =    #glblCmpyCd#
+                AND INVTY_TRX_DT BETWEEN 
+                                    TO_CHAR(TRUNC(ADD_MONTHS(TO_DATE(#prcDt#,'YYYYMMDD'),-1),'MM'),'YYYYMMDD') 
+                                        AND TO_CHAR(LAST_DAY(ADD_MONTHS(TO_DATE(#prcDt#,'YYYYMMDD'), -1)),'YYYYMMDD')
+                AND EZCANCELFLAG =    '0'
+            GROUP BY 
+                GLBL_CMPY_CD
+                ,INVTY_LOC_CD
+                ,MDSE_CD    )
+        , IV_PR2 AS (
+            SELECT 
+                GLBL_CMPY_CD
+                ,INVTY_LOC_CD
+                ,MDSE_CD
+                ,SUM(INVTY_QTY) AS FIFTH_MTH_USG_QTY
+            FROM
+                PRT_USG_DLY_SMRY
+            WHERE 
+                GLBL_CMPY_CD     =    #glblCmpyCd#
+                AND INVTY_TRX_DT BETWEEN 
+                                    TO_CHAR(TRUNC(ADD_MONTHS(TO_DATE(#prcDt#,'YYYYMMDD'),-2),'MM'),'YYYYMMDD') 
+                                        AND TO_CHAR(LAST_DAY(ADD_MONTHS(TO_DATE(#prcDt#,'YYYYMMDD'), -2)),'YYYYMMDD')
+                AND EZCANCELFLAG =    '0'
+            GROUP BY 
+                GLBL_CMPY_CD
+                ,INVTY_LOC_CD
+                ,MDSE_CD    )
+        , IV_PR3 AS (
+            SELECT 
+                GLBL_CMPY_CD
+                ,INVTY_LOC_CD
+                ,MDSE_CD
+                ,SUM(INVTY_QTY) AS FRTH_MTH_USG_QTY
+            FROM
+                PRT_USG_DLY_SMRY
+            WHERE 
+                GLBL_CMPY_CD     =    #glblCmpyCd#
+                AND INVTY_TRX_DT BETWEEN 
+                                    TO_CHAR(TRUNC(ADD_MONTHS(TO_DATE(#prcDt#,'YYYYMMDD'),-3),'MM'),'YYYYMMDD') 
+                                        AND TO_CHAR(LAST_DAY(ADD_MONTHS(TO_DATE(#prcDt#,'YYYYMMDD'), -3)),'YYYYMMDD')
+                AND EZCANCELFLAG =    '0'
+            GROUP BY 
+                GLBL_CMPY_CD
+                ,INVTY_LOC_CD
+                ,MDSE_CD    )
+        , IV_PR4 AS (
+            SELECT 
+                GLBL_CMPY_CD
+                ,INVTY_LOC_CD
+                ,MDSE_CD
+                ,SUM(INVTY_QTY) AS THIRD_MTH_USG_QTY
+            FROM
+                PRT_USG_DLY_SMRY
+            WHERE 
+                GLBL_CMPY_CD     =    #glblCmpyCd#
+                AND INVTY_TRX_DT BETWEEN 
+                                    TO_CHAR(TRUNC(ADD_MONTHS(TO_DATE(#prcDt#,'YYYYMMDD'),-4),'MM'),'YYYYMMDD') 
+                                        AND TO_CHAR(LAST_DAY(ADD_MONTHS(TO_DATE(#prcDt#,'YYYYMMDD'), -4)),'YYYYMMDD')
+                AND EZCANCELFLAG =    '0'
+            GROUP BY 
+                GLBL_CMPY_CD
+                ,INVTY_LOC_CD
+                ,MDSE_CD    )
+        , IV_PR5 AS (
+            SELECT 
+                GLBL_CMPY_CD
+                ,INVTY_LOC_CD
+                ,MDSE_CD
+                ,SUM(INVTY_QTY) AS SCD_MTH_USG_QTY
+            FROM
+                PRT_USG_DLY_SMRY
+            WHERE 
+                GLBL_CMPY_CD     =    #glblCmpyCd#
+                AND INVTY_TRX_DT BETWEEN 
+                                    TO_CHAR(TRUNC(ADD_MONTHS(TO_DATE(#prcDt#,'YYYYMMDD'),-5),'MM'),'YYYYMMDD') 
+                                        AND TO_CHAR(LAST_DAY(ADD_MONTHS(TO_DATE(#prcDt#,'YYYYMMDD'), -5)),'YYYYMMDD')
+                AND EZCANCELFLAG =    '0'
+            GROUP BY 
+                GLBL_CMPY_CD
+                ,INVTY_LOC_CD
+                ,MDSE_CD    )
+        , IV_PR6 AS (
+            SELECT 
+                GLBL_CMPY_CD
+                ,INVTY_LOC_CD
+                ,MDSE_CD
+                ,SUM(INVTY_QTY) AS FIRST_MTH_USG_QTY
+            FROM
+                PRT_USG_DLY_SMRY
+            WHERE 
+                GLBL_CMPY_CD    =    #glblCmpyCd#
+                AND INVTY_TRX_DT BETWEEN 
+                                    TO_CHAR(TRUNC(ADD_MONTHS(TO_DATE(#prcDt#,'YYYYMMDD'),-6),'MM'),'YYYYMMDD') 
+                                        AND TO_CHAR(LAST_DAY(ADD_MONTHS(TO_DATE(#prcDt#,'YYYYMMDD'), -6)),'YYYYMMDD')
+                AND EZCANCELFLAG =    '0'
+            GROUP BY 
+                GLBL_CMPY_CD
+                ,INVTY_LOC_CD
+                ,MDSE_CD    )
+                
+        , IV_DTM AS (
+            SELECT 
+                    GLBL_CMPY_CD
+                    ,INVTY_LOC_CD
+                    ,MDSE_CD
+                    ,MAX(INVTY_TRX_DT) AS LAST_TRX_DT
+                FROM
+                    PRT_USG_DLY_SMRY
+                WHERE 
+                    GLBL_CMPY_CD     =    #glblCmpyCd#
+                    AND EZCANCELFLAG =    '0'
+                GROUP BY 
+                    GLBL_CMPY_CD
+                    ,INVTY_LOC_CD
+                    ,MDSE_CD    )
+        , IV_INV_LAST AS(
+            SELECT
+                GLBL_CMPY_CD
+                ,INVTY_LOC_CD
+                ,MDSE_CD
+                ,MAX(INVTY_TRX_DT) AS LAST_RCPT_DT
+            FROM
+                INVTY_TRX
+            WHERE 
+                GLBL_CMPY_CD             =    #glblCmpyCd#
+                AND INVTY_TRX.LOC_STS_CD =    #locStsCd#
+                AND INVTY_TRX_QTY       &gt;  0
+                AND EZCANCELFLAG         =    '0'
+            GROUP BY 
+                GLBL_CMPY_CD
+                ,INVTY_LOC_CD
+                ,MDSE_CD    )
+        , IV_BEF AS(
+            SELECT 
+                GLBL_CMPY_CD
+                ,INVTY_LOC_CD
+                ,MDSE_CD
+                ,MAX(LAST_TRX_DT) AS LAST_TRX_DT
+                ,MAX(LAST_RCPT_DT) AS LAST_RCPT_DT
+            FROM
+                PRT_USG_RPT_WRK
+            WHERE
+                GLBL_CMPY_CD               =    #glblCmpyCd#
+                AND PRT_USG_RPT_WRK_DT &lt;=    TO_CHAR(TO_DATE(#prcDt#,'YYYYMMDD') -1 ,'YYYYMMDD')
+                AND EZCANCELFLAG           =    '0'
+            GROUP BY 
+                GLBL_CMPY_CD
+                ,INVTY_LOC_CD
+                ,MDSE_CD    )
+        --MAIN
+        SELECT
+            TE.GLBL_CMPY_CD
+            ,#prcDt# AS PRT_USG_RPT_WRK_DT
+            ,RT.INVTY_LOC_CD
+            ,RT.RTL_WH_CD
+            ,RT.RTL_SWH_CD
+            ,TE.TECH_TOC_CD
+            ,TM.TECH_NM
+            ,IV_TOC.ORG_CD
+            ,MD.MDSE_CD
+            ,MD.MDSE_NM
+            ,MD.THIS_MTH_TOT_STD_COST_AMT
+            ,DECODE(MR.GLBL_CMPY_CD,NULL,'N','Y') AS MRP_CTRL_FLG
+            ,MR.MIN_ORD_QTY
+            ,MR.MAX_INVTY_QTY
+            ,INVTY_QTY
+            ,CASE
+                WHEN 
+                    IV_PR1.SIXTH_MTH_USG_QTY IS NULL AND IV_PR2.FIFTH_MTH_USG_QTY IS NULL AND IV_PR3.FRTH_MTH_USG_QTY IS NULL AND
+                    IV_PR4.THIRD_MTH_USG_QTY IS NULL AND IV_PR5.SCD_MTH_USG_QTY IS NULL AND IV_PR6.FIRST_MTH_USG_QTY IS NULL 
+                THEN
+                    NULL
+                ELSE
+                    ROUND(((NVL(IV_PR1.SIXTH_MTH_USG_QTY,0) + NVL(IV_PR2.FIFTH_MTH_USG_QTY,0) + NVL(IV_PR3.FRTH_MTH_USG_QTY,0) +
+                             NVL(IV_PR4.THIRD_MTH_USG_QTY,0) + NVL(IV_PR5.SCD_MTH_USG_QTY,0) + NVL(IV_PR6.FIRST_MTH_USG_QTY,0)) / 6) , 2 )
+             END  AS AVG_USG_NUM
+            ,IV_PR1.SIXTH_MTH_USG_QTY
+            ,IV_PR2.FIFTH_MTH_USG_QTY
+            ,IV_PR3.FRTH_MTH_USG_QTY
+            ,IV_PR4.THIRD_MTH_USG_QTY
+            ,IV_PR5.SCD_MTH_USG_QTY
+            ,IV_PR6.FIRST_MTH_USG_QTY
+            ,NVL(IV_DTM.LAST_TRX_DT,IV_BEF.LAST_TRX_DT) AS LAST_TRX_DT
+            ,NVL(IV_INV_LAST.LAST_RCPT_DT,IV_BEF.LAST_RCPT_DT) AS LAST_RCPT_DT
+        FROM
+            TECH_LOC      TE
+            ,TECH_MSTR    TM
+            ,RTL_SWH      RT
+            ,S21_PSN      PN
+            ,IV_TOC
+            ,IV_INVTY_1
+            ,MDSE         MD
+            ,MRP_INFO     MR
+            ,IV_PR1
+            ,IV_PR2
+            ,IV_PR3
+            ,IV_PR4
+            ,IV_PR5
+            ,IV_PR6
+            ,IV_DTM
+            ,IV_INV_LAST
+            ,IV_BEF
+        WHERE
+            TE.GLBL_CMPY_CD        =    #glblCmpyCd#
+            AND TE.EFF_FROM_DT    &lt;= #prcDt#
+            AND TE.EFF_THRU_DT    &gt;= #prcDt#
+            AND TE.EZCANCELFLAG    =    '0'
+            AND TE.GLBL_CMPY_CD    =    TM.GLBL_CMPY_CD 
+            AND TE.TECH_TOC_CD     =    TM.TECH_TOC_CD
+            AND TM.EZCANCELFLAG    =    '0'
+            AND TE.GLBL_CMPY_CD    =    RT.GLBL_CMPY_CD 
+            AND TE.TECH_LOC_CD     =    RT.INVTY_LOC_CD
+            AND RT.EZCANCELFLAG    =    '0'
+            AND TE.GLBL_CMPY_CD    =    PN.GLBL_CMPY_CD
+            AND TE.TECH_TOC_CD     =    PN.PSN_CD
+            AND PN.DEL_FLG         =    'N'
+            AND PN.EZCANCELFLAG    =    '0'
+            AND PN.GLBL_CMPY_CD    =    IV_TOC.GLBL_CMPY_CD
+            AND PN.PSN_CD          =    IV_TOC.PSN_CD
+            AND RT.GLBL_CMPY_CD    =    IV_INVTY_1.GLBL_CMPY_CD 
+            AND RT.INVTY_LOC_CD    =    IV_INVTY_1.INVTY_LOC_CD
+            AND IV_INVTY_1.GLBL_CMPY_CD   =    IV_PR1.GLBL_CMPY_CD(+)
+            AND IV_INVTY_1.INVTY_LOC_CD   =    IV_PR1.INVTY_LOC_CD(+)
+            AND IV_INVTY_1.MDSE_CD        =    IV_PR1.MDSE_CD(+)
+            AND IV_INVTY_1.GLBL_CMPY_CD   =    IV_PR2.GLBL_CMPY_CD(+)
+            AND IV_INVTY_1.INVTY_LOC_CD   =    IV_PR2.INVTY_LOC_CD(+)
+            AND IV_INVTY_1.MDSE_CD        =    IV_PR2.MDSE_CD(+)
+            AND IV_INVTY_1.GLBL_CMPY_CD   =    IV_PR3.GLBL_CMPY_CD(+)
+            AND IV_INVTY_1.INVTY_LOC_CD   =    IV_PR3.INVTY_LOC_CD(+)
+            AND IV_INVTY_1.MDSE_CD        =    IV_PR3.MDSE_CD(+)
+            AND IV_INVTY_1.GLBL_CMPY_CD   =    IV_PR4.GLBL_CMPY_CD(+)
+            AND IV_INVTY_1.INVTY_LOC_CD   =    IV_PR4.INVTY_LOC_CD(+)
+            AND IV_INVTY_1.MDSE_CD        =    IV_PR4.MDSE_CD(+)
+            AND IV_INVTY_1.GLBL_CMPY_CD   =    IV_PR5.GLBL_CMPY_CD(+)
+            AND IV_INVTY_1.INVTY_LOC_CD   =    IV_PR5.INVTY_LOC_CD(+)
+            AND IV_INVTY_1.MDSE_CD        =    IV_PR5.MDSE_CD(+)
+            AND IV_INVTY_1.GLBL_CMPY_CD   =    IV_PR6.GLBL_CMPY_CD(+)
+            AND IV_INVTY_1.INVTY_LOC_CD   =    IV_PR6.INVTY_LOC_CD(+)
+            AND IV_INVTY_1.MDSE_CD        =    IV_PR6.MDSE_CD(+)
+            AND IV_INVTY_1.GLBL_CMPY_CD   =    MD.GLBL_CMPY_CD
+            AND IV_INVTY_1.MDSE_CD        =    MD.MDSE_CD
+            AND MD.EZCANCELFLAG           =    '0'
+            AND IV_INVTY_1.GLBL_CMPY_CD   =    MR.GLBL_CMPY_CD(+)
+            AND IV_INVTY_1.INVTY_LOC_CD   =    MR.INVTY_LOC_CD(+)
+            AND IV_INVTY_1.MDSE_CD        =    MR.MDSE_CD(+)
+            AND MR.EZCANCELFLAG(+)        =    '0'
+            AND IV_INVTY_1.GLBL_CMPY_CD   =    IV_DTM.GLBL_CMPY_CD(+)
+            AND IV_INVTY_1.INVTY_LOC_CD   =    IV_DTM.INVTY_LOC_CD(+)
+            AND IV_INVTY_1.MDSE_CD        =    IV_DTM.MDSE_CD(+)
+            AND IV_INVTY_1.GLBL_CMPY_CD   =    IV_INV_LAST.GLBL_CMPY_CD(+)
+            AND IV_INVTY_1.INVTY_LOC_CD   =    IV_INV_LAST.INVTY_LOC_CD(+)
+            AND IV_INVTY_1.MDSE_CD        =    IV_INV_LAST.MDSE_CD(+)
+            AND IV_INVTY_1.GLBL_CMPY_CD   =    IV_BEF.GLBL_CMPY_CD(+)
+            AND IV_INVTY_1.INVTY_LOC_CD   =    IV_BEF.INVTY_LOC_CD(+)
+            AND IV_INVTY_1.MDSE_CD        =    IV_BEF.MDSE_CD(+)
+        ORDER BY 
+            IV_INVTY_1.INVTY_LOC_CD
+            ,IV_INVTY_1.MDSE_CD
+    </statement>
+
+</sqlMap>

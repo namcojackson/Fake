@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NSXC001001GetEndOfLifeInfo">
+
+    <statement id="getMdlIdFromMdlConfig" parameterClass="Map" resultClass="BigDecimal">
+    SELECT
+          MDL_ID
+    FROM
+        (
+        SELECT
+              DMC.MDL_ID
+             ,DMC.EFF_FROM_DT
+             ,'1'           PRIORITY_NUM
+        FROM
+              DS_MDL_CONFIG DMC
+        WHERE
+              DMC.GLBL_CMPY_CD                    = #glblCmpyCd#
+          AND DMC.PRNT_MDSE_CD                    = #mdseCd#
+          AND DMC.CHILD_MDSE_CD                  IS NULL
+          AND DMC.EFF_FROM_DT                 &lt;= #eolDt#
+          AND NVL(DMC.EFF_THRU_DT, #maxDate#) &gt;= #eolDt#
+          AND DMC.EZCANCELFLAG                    = '0'
+        UNION ALL
+        SELECT
+              DMC.MDL_ID
+             ,DMC.EFF_FROM_DT
+             ,'2'           PRIORITY_NUM
+        FROM
+              DS_MDL_CONFIG DMC
+             ,ORD_TAKE_MDSE OTM
+        WHERE
+              DMC.GLBL_CMPY_CD                    = #glblCmpyCd#
+          AND OTM.GLBL_CMPY_CD                    = DMC.GLBL_CMPY_CD
+          AND OTM.ORD_TAKE_MDSE_CD                = DMC.PRNT_MDSE_CD
+          AND OTM.EZCANCELFLAG                    = '0'
+          AND DMC.PRNT_MDSE_CD                    = SUBSTR(#mdseCd#, 0, 8)
+          AND DMC.CHILD_MDSE_CD                  IS NULL
+          AND DMC.EFF_FROM_DT                 &lt;= #eolDt#
+          AND NVL(DMC.EFF_THRU_DT, #maxDate#) &gt;= #eolDt#
+          AND DMC.EZCANCELFLAG                    = '0'
+        ORDER BY
+              PRIORITY_NUM
+             ,EFF_FROM_DT   DESC
+        )
+    WHERE ROWNUM = 1
+    </statement>
+    <statement id="getMdlIdFromCpo" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            DCC.MDL_ID
+        FROM
+            SVC_MACH_MSTR      MAC
+           ,CPO_DTL            CPO
+           ,DS_CPO_CONFIG      DCC
+        WHERE
+            MAC.GLBL_CMPY_CD          = #glblCmpyCd#
+        AND MAC.SVC_MACH_MSTR_PK      = #svcMachMstrPk#
+        AND MAC.GLBL_CMPY_CD          = CPO.GLBL_CMPY_CD
+        <!-- START 2018/08/24 M.Naito [QC#27901, MOD] -->
+        <!-- AND MAC.TRX_HDR_NUM           = CPO.CPO_ORD_NUM -->
+        <!-- AND MAC.TRX_LINE_NUM          = CPO.CPO_DTL_LINE_NUM -->
+        <!-- AND MAC.TRX_LINE_SUB_NUM      = CPO.CPO_DTL_LINE_SUB_NUM -->
+        AND MAC.CPO_ORD_NUM           = CPO.CPO_ORD_NUM
+        AND MAC.CPO_DTL_LINE_NUM      = CPO.CPO_DTL_LINE_NUM
+        AND MAC.CPO_DTL_LINE_SUB_NUM  = CPO.CPO_DTL_LINE_SUB_NUM
+        <!-- END 2018/08/24 M.Naito [QC#27901, MOD] -->
+        AND CPO.GLBL_CMPY_CD          = DCC.GLBL_CMPY_CD
+        AND CPO.DS_CPO_CONFIG_PK      = DCC.DS_CPO_CONFIG_PK
+        AND MAC.EZCANCELFLAG          = '0'
+        AND CPO.EZCANCELFLAG          = '0'
+        AND DCC.EZCANCELFLAG          = '0'
+    </statement>
+    <statement id="getAvalFlgFromEol" parameterClass="Map" resultClass="Map">
+    SELECT
+          DS_MDL_EOL_DT
+         ,CONTR_AVAL_FLG
+         ,SVC_AVAL_FLG
+    FROM
+        (
+        SELECT
+              MDL.MDL_ID            MDL_ID
+             ,STS.CONTR_AVAL_FLG    CONTR_AVAL_FLG
+             ,STS.SVC_AVAL_FLG      SVC_AVAL_FLG
+             ,EOL.DS_MDL_EOL_DT     DS_MDL_EOL_DT
+        FROM  
+               DS_MDL           MDL
+              ,DS_MDL_EOL       EOL
+              ,DS_MDL_EOL_STS   STS
+        WHERE
+              MDL.GLBL_CMPY_CD                    = #glblCmpyCd#
+          AND MDL.MDL_ID                          = #mdlId#
+          AND MDL.EZCANCELFLAG                    = '0'
+          AND MDL.MDL_ID                          = EOL.MDL_ID
+          AND MDL.GLBL_CMPY_CD                    = EOL.GLBL_CMPY_CD
+          <!-- START 2018/06/08 U.Kim [QC#25449, MOD] -->
+          <!-- AND EOL.DS_MDL_EOL_DT               &lt;= #eolDt# -->
+          AND EOL.DS_MDL_EOL_DT                &lt; #eolDt#
+          <!-- END 2018/06/08 U.Kim [QC#25449, MOD] -->
+          AND EOL.EZCANCELFLAG                    = '0'
+          AND EOL.DS_MDL_EOL_STS_CD               = STS.DS_MDL_EOL_STS_CD
+          AND EOL.GLBL_CMPY_CD                    = STS.GLBL_CMPY_CD
+          AND STS.EZCANCELFLAG                    = '0'
+        ORDER BY
+              STS.EOL_INAC_FLG   DESC
+             ,STS.EOL_SVC_FLG    DESC
+             ,STS.EOL_CONTR_FLG  DESC
+        )
+    WHERE ROWNUM = 1
+    </statement>
+
+    <statement id="getAvalFlgFromEolEx" parameterClass="Map" resultClass="Map">
+    SELECT
+          EEX.SER_NUM           SER_NUM
+         ,EEX.DS_MDL_EOL_DT     DS_MDL_EOL_DT
+         ,STS.CONTR_AVAL_FLG    CONTR_AVAL_FLG
+         ,STS.SVC_AVAL_FLG      SVC_AVAL_FLG
+    FROM  
+           DS_MDL_EOL_EX    EEX
+          ,DS_MDL_EOL_STS   STS
+    WHERE
+          EEX.GLBL_CMPY_CD                    = #glblCmpyCd#
+      AND EEX.MDL_ID                          = #mdlId#
+      AND EEX.SER_NUM                         = #serNum#
+      AND EEX.EZCANCELFLAG                    = '0'
+      AND EEX.DS_MDL_EOL_STS_CD               = STS.DS_MDL_EOL_STS_CD
+      AND EEX.GLBL_CMPY_CD                    = STS.GLBL_CMPY_CD
+   AND STS.EZCANCELFLAG                    = '0'
+    ORDER BY
+          STS.EOL_INAC_FLG   DESC
+         ,STS.EOL_SVC_FLG    DESC
+         ,STS.EOL_CONTR_FLG  DESC
+    </statement>
+
+    <statement id="getEolComment" parameterClass="Map" resultClass="Map">
+    SELECT
+          MDL.EOL_SVC_CONTR_CMNT_TXT
+         ,MDL.EOL_TM_MAT_CMNT_TXT
+         ,MDL.EOL_TECH_SPRT_CMNT_TXT
+         ,MDL.EOL_OTH_CMNT_TXT
+
+    FROM  
+           DS_MDL           MDL
+          ,DS_MDL_EOL       EOL
+    WHERE
+          MDL.GLBL_CMPY_CD                    = #glblCmpyCd#
+      AND MDL.MDL_ID                          = #mdlId#
+      AND MDL.EZCANCELFLAG                    = '0'
+      AND MDL.MDL_ID                          = EOL.MDL_ID
+      AND MDL.GLBL_CMPY_CD                    = EOL.GLBL_CMPY_CD
+      AND EOL.DS_MDL_EOL_DT               &lt;= #eolDt#
+      AND EOL.EZCANCELFLAG                    = '0'
+    </statement>
+    
+    <statement id="getMdlIdFromConfigMstrDtl" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+             MDN.T_MDL_ID
+        FROM
+             SVC_CONFIG_MSTR_DTL  SCMD
+            ,SVC_CONFIG_MSTR      SCM
+            ,MDL_NM               MDN
+        WHERE
+            SCMD.GLBL_CMPY_CD         =  #glblCmpyCd#
+        AND SCMD.SVC_MACH_MSTR_PK     =  #svcMachMstrPk#
+        AND SCMD.SVC_MACH_RMV_DT      IS NULL
+        AND SCMD.EZCANCELFLAG         =  '0'
+        AND SCMD.GLBL_CMPY_CD         =  SCM.GLBL_CMPY_CD
+        AND SCMD.SVC_CONFIG_MSTR_PK   =  SCM.SVC_CONFIG_MSTR_PK
+        AND SCM.EZCANCELFLAG          =  '0'
+        AND SCM.GLBL_CMPY_CD          =  MDN.T_GLBL_CMPY_CD
+        AND SCM.MDL_ID                =  MDN.T_MDL_ID
+        AND MDN.EZCANCELFLAG          =  '0'
+    </statement>
+
+<!-- add start 2018/06/13 QC#26028 -->
+    <statement id="countEOL" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            COUNT(*)
+        FROM (
+            SELECT
+                 A.MDL_ID                              AS MDL_ID
+                ,B.DS_MDL_EOL_STS_CD                   AS DS_MDL_EOL_STS_CD
+                ,NVL(D.DS_MDL_EOL_DT, B.DS_MDL_EOL_DT) AS DS_MDL_EOL_DT
+                ,E.CONTR_AVAL_FLG
+                ,E.SVC_AVAL_FLG
+            FROM
+                 DS_MDL          A
+                ,DS_MDL_EOL      B
+                ,SVC_MACH_MSTR   C
+                ,DS_MDL_EOL_EX   D
+                ,DS_MDL_EOL_STS  E
+            WHERE
+                    A.GLBL_CMPY_CD           = #glblCmpyCd#
+                AND A.MDL_ID                 = #mdlId#
+                AND A.EZCANCELFLAG           = '0'
+                AND A.GLBL_CMPY_CD           = B.GLBL_CMPY_CD
+                AND A.MDL_ID                 = B.MDL_ID
+                AND B.EZCANCELFLAG           = '0'
+                AND B.GLBL_CMPY_CD           = C.GLBL_CMPY_CD
+                AND C.SVC_MACH_MSTR_PK       = #svcMachMstrPk#
+                AND C.EZCANCELFLAG           = '0'
+                AND B.GLBL_CMPY_CD           = D.GLBL_CMPY_CD       (+)
+                AND B.MDL_ID                 = D.MDL_ID             (+)
+                AND B.DS_MDL_EOL_STS_CD      = D.DS_MDL_EOL_STS_CD  (+)
+                AND C.SER_NUM                = D.SER_NUM            (+)
+                AND D.EZCANCELFLAG       (+) = '0'
+                AND B.GLBL_CMPY_CD           = E.GLBL_CMPY_CD
+                AND B.DS_MDL_EOL_STS_CD      = E.DS_MDL_EOL_STS_CD
+                AND E.EZCANCELFLAG           = '0'
+                <isNotNull property="contrAvalFlg">
+                AND E.CONTR_AVAL_FLG         = #contrAvalFlg#
+                </isNotNull>
+                <isNotNull property="svcAvalFlg">
+                AND E.SVC_AVAL_FLG           = #svcAvalFlg#
+                </isNotNull>
+            ) Z
+        WHERE
+            Z.DS_MDL_EOL_DT                  &lt; #eolDt#
+    </statement>
+<!-- add end 2018/06/13 QC#26028 -->
+</sqlMap>

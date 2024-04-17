@@ -1,0 +1,440 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NLCB117001">
+    
+    <statement id="OLD_getPhysInvtyNum" parameterClass="Map" resultClass="Map">
+    <![CDATA[
+        SELECT DISTINCT
+            PIC.GLBL_CMPY_CD
+            ,PIC.PHYS_INVTY_CTRL_NM
+            ,PIC.PHYS_INVTY_DT
+            ,PIC.PHYS_INVTY_NUM
+            ,PIC.TECH_TOC_CD
+            ,PIC.TECH_NM
+        FROM
+            PHYS_INVTY_CTRL PIC
+            ,CANON_E437_PHYS_INVTY_CNT_HDR EPICH
+            ,CANON_E437_PHYS_INVTY_CNT_DTL EPICD
+        WHERE
+            PIC.GLBL_CMPY_CD            = #GLBL_CMPY_CD#
+        AND PIC.PHYS_INVTY_STS_CD       = #PHYS_INVTY_STS_CD#
+        AND PIC.EZCANCELFLAG            = '0'
+        AND EPICH.GLBL_CMPY_CD          = PIC.GLBL_CMPY_CD
+        AND EPICH.PHYS_INVTY_CTRL_PK    = PIC.PHYS_INVTY_CTRL_PK
+        AND EPICH.EZCANCELFLAG          = '0'
+        AND EPICD.GLBL_CMPY_CD          = EPICH.GLBL_CMPY_CD
+        AND EPICD.PHYS_INVTY_CNT_HDR_PK = EPICH.PHYS_INVTY_CNT_HDR_PK
+        AND EPICD.EZCANCELFLAG          = '0'
+        AND EPICD.CNT_COMP_FLG          = 'Y'
+        ORDER BY
+            PIC.GLBL_CMPY_CD
+            ,PIC.PHYS_INVTY_NUM
+    ]]>
+    </statement>
+    
+    <!--
+     getPhysInvtyNum
+     Query PHYS_INVTY_NUM that is:
+     * Related PHYS_INVTY_CNT_DTL has more than 1 CNT_COMP_FLG=Y
+     * Related PHYS_INVTY_CNT_DTL has no CNT_COMP_FLG=N
+     -->
+    <statement id="getPhysInvtyNum" parameterClass="Map" resultClass="Map">
+    <![CDATA[
+        SELECT
+            PICS.GLBL_CMPY_CD
+            ,PICS.PHYS_INVTY_NUM
+        FROM
+            (
+                SELECT
+                    PIN.GLBL_CMPY_CD
+                    ,PIN.PHYS_INVTY_NUM
+                    ,(
+                        SELECT COUNT(*)
+                        FROM
+                            CANON_E437_PHYS_INVTY_CNT_DTL   EPICD
+                            ,PHYS_INVTY_CTRL                PIC
+                        WHERE
+                            PIC.GLBL_CMPY_CD    = PIN.GLBL_CMPY_CD
+                        AND PIC.PHYS_INVTY_NUM  = PIN.PHYS_INVTY_NUM
+                        AND PIC.EZCANCELFLAG    = '0'
+                        AND EPICD.GLBL_CMPY_CD          = PIC.GLBL_CMPY_CD
+                        AND EPICD.PHYS_INVTY_CTRL_PK    = PIC.PHYS_INVTY_CTRL_PK
+                        AND EPICD.CNT_COMP_FLG          = 'Y'
+                        AND EPICD.EZCANCELFLAG          = '0'
+                    ) CNT_COMP_Y_CNT
+                    ,(
+                        SELECT COUNT(*)
+                        FROM
+                            CANON_E437_PHYS_INVTY_CNT_DTL   EPICD
+                            ,PHYS_INVTY_CTRL                PIC
+                        WHERE
+                            PIC.GLBL_CMPY_CD    = PIN.GLBL_CMPY_CD
+                        AND PIC.PHYS_INVTY_NUM  = PIN.PHYS_INVTY_NUM
+                        AND PIC.EZCANCELFLAG    = '0'
+                        AND EPICD.GLBL_CMPY_CD          = PIC.GLBL_CMPY_CD
+                        AND EPICD.PHYS_INVTY_CTRL_PK    = PIC.PHYS_INVTY_CTRL_PK
+                        AND EPICD.CNT_COMP_FLG          = 'N'
+                        AND EPICD.EZCANCELFLAG          = '0'
+                    ) CNT_COMP_N_CNT
+                FROM
+                    (
+                        SELECT DISTINCT
+                            PIC.GLBL_CMPY_CD
+                            ,PIC.PHYS_INVTY_NUM
+                        FROM
+                            PHYS_INVTY_CTRL PIC
+                        WHERE
+                            PIC.GLBL_CMPY_CD                = #GLBL_CMPY_CD#
+                        AND PIC.PHYS_INVTY_STS_CD           = #PHYS_INVTY_STS_CD#
+                        AND PIC.PHYS_INVTY_CNT_STS_CD       = #PHYS_INVTY_CNT_STS_CD#
+                        AND PIC.EZCANCELFLAG                = '0'
+                    ) PIN
+            ) PICS
+        WHERE
+            PICS.CNT_COMP_Y_CNT         > 0
+        AND PICS.CNT_COMP_N_CNT         <= 0
+        ORDER BY
+            PICS.GLBL_CMPY_CD
+            ,PICS.PHYS_INVTY_NUM
+    ]]>
+    </statement>
+    
+    <statement id="getPhysInvtyCntDtls" parameterClass="Map" resultClass="Map">
+        SELECT
+            EPICD2.GLBL_CMPY_CD
+            ,EPICD2.PHYS_INVTY_CNT_DTL_PK
+            ,EPICD2.PHYS_INVTY_CNT_HDR_PK
+            ,EPICD2.PHYS_INVTY_CTRL_PK
+            ,EPICH2.PHYS_INVTY_CTRL_NM
+            ,EPICH2.PHYS_INVTY_DT
+            ,EPICH2.WH_CD
+            ,EPICD2.RTL_WH_CD
+            ,EPICD2.RTL_SWH_CD
+            ,EPICD2.MDSE_CD
+            ,M.RCV_SER_TAKE_FLG
+            ,EPICH2.STK_STS_CD
+            ,EPICH2.TECH_LOC_TP_CD
+            ,EPICH2.TECH_TOC_CD
+            ,EPICH2.SYS_CNT_REGD_FLG
+            ,EPICD2.SER_NUM
+            ,EPICD2.CNT_INP_QTY
+            ,DECODE(SMM.SER_NUM, NULL, 'N', 'Y') SVC_MACH_MSTR_AVAL_FLG
+            ,EPICH2.FIRST_CNT_INP_QTY
+            ,EPICH2.FIRST_CNT_INP_TS
+            ,EPICH2.SCD_CNT_INP_QTY
+            ,EPICH2.SCD_CNT_INP_TS
+            ,EPICH2.LTST_CNT_INP_QTY
+            ,EPICH2.LTST_CNT_INP_TS
+            ,EPICH2.INVTY_AVAL_QTY
+            ,EPICH2.INVTY_REGD_TS
+            ,EPICH2.ADJ_VAR_FLG
+            ,EPICH2.ADJ_VAR_QTY
+            ,EPICH2.ADJ_VAR_AMT
+            ,EPICH2.INVTY_ORD_NUM
+            ,EPICH2.PHYS_INVTY_ADJ_NM
+            ,EPICD2.PHYS_INVTY_ADJ_STS_CD
+            ,EPICD2.PHYS_INVTY_ADJ_MSG_TXT
+            ,EPICD2.SVC_CONFIG_MSTR_PK
+            ,EPICD2.TAG_NO
+            ,EPICD2.CNT_COMP_FLG
+        FROM
+            (
+                --Summate invty qty in each HDR
+                SELECT
+                    EPICH.GLBL_CMPY_CD
+                    ,EPICH.PHYS_INVTY_CNT_HDR_PK
+                    ,EPICH.PHYS_INVTY_CTRL_PK
+                    ,EPICH.PHYS_INVTY_CTRL_NM
+                    ,EPICH.PHYS_INVTY_DT
+                    ,EPICH.WH_CD
+                    ,EPICH.RTL_WH_CD
+                    ,EPICH.RTL_SWH_CD
+                    ,EPICH.MDSE_CD
+                    ,EPICH.STK_STS_CD
+                    ,EPICH.TECH_LOC_TP_CD
+                    ,EPICH.TECH_TOC_CD
+                    ,EPICH.SYS_CNT_REGD_FLG
+                    --,EPICH.FIRST_CNT_INP_QTY
+                    ,(
+                        SELECT SUM(EPICD.CNT_INP_QTY)
+                        FROM CANON_E437_PHYS_INVTY_CNT_DTL EPICD
+                        WHERE
+                            EPICD.GLBL_CMPY_CD              = EPICH.GLBL_CMPY_CD
+                        AND EPICD.PHYS_INVTY_CNT_HDR_PK = EPICH.PHYS_INVTY_CNT_HDR_PK
+                        AND EPICD.EZCANCELFLAG              = '0'
+                    ) FIRST_CNT_INP_QTY
+                    ,EPICH.FIRST_CNT_INP_TS
+                    ,EPICH.SCD_CNT_INP_QTY
+                    ,EPICH.SCD_CNT_INP_TS
+                    ,EPICH.LTST_CNT_INP_QTY
+                    ,EPICH.LTST_CNT_INP_TS
+                    --,EPICH.INVTY_AVAL_QTY
+                    ,(
+                        SELECT NVL(SUM(NVL(I.INVTY_QTY, 0)), 0)
+                        FROM INVTY I
+                        WHERE
+                            I.GLBL_CMPY_CD      = EPICH.GLBL_CMPY_CD
+                        AND I.INVTY_LOC_CD      = EPICH.WH_CD
+                        AND I.MDSE_CD           = EPICH.MDSE_CD
+                        AND I.LOC_STS_CD        = #LOC_STS_CD#
+                        AND I.STK_STS_CD        = #STK_STS_CD#
+                        AND I.LOC_TP_CD         = #LOC_TP_CD#
+                        AND I.EZCANCELFLAG      = '0'
+                    ) INVTY_AVAL_QTY
+                    ,EPICH.INVTY_REGD_TS
+                    ,EPICH.ADJ_VAR_FLG
+                    ,EPICH.ADJ_VAR_QTY
+                    ,EPICH.ADJ_VAR_AMT
+                    ,EPICH.INVTY_ORD_NUM
+                    ,EPICH.PHYS_INVTY_ADJ_NM
+                FROM
+                    PHYS_INVTY_CTRL PIC
+                    ,CANON_E437_PHYS_INVTY_CNT_HDR EPICH
+                WHERE
+                    PIC.GLBL_CMPY_CD            = #GLBL_CMPY_CD#
+                AND PIC.PHYS_INVTY_NUM          = #PHYS_INVTY_NUM#
+                AND PIC.EZCANCELFLAG            = '0'
+                AND EPICH.GLBL_CMPY_CD          = PIC.GLBL_CMPY_CD
+                AND EPICH.PHYS_INVTY_CTRL_PK    = PIC.PHYS_INVTY_CTRL_PK
+                AND EPICH.EZCANCELFLAG          = '0'
+            )                               EPICH2
+            ,CANON_E437_PHYS_INVTY_CNT_DTL  EPICD2
+            ,MDSE                           M
+            ,SVC_MACH_MSTR                  SMM
+        WHERE
+            EPICD2.GLBL_CMPY_CD             = EPICH2.GLBL_CMPY_CD
+        AND EPICD2.PHYS_INVTY_CNT_HDR_PK    = EPICH2.PHYS_INVTY_CNT_HDR_PK
+        AND EPICD2.EZCANCELFLAG             = '0'
+        AND M.GLBL_CMPY_CD                  = EPICD2.GLBL_CMPY_CD
+        AND M.MDSE_CD                       = EPICD2.MDSE_CD
+        AND M.EZCANCELFLAG                  = '0'
+        AND SMM.GLBL_CMPY_CD(+)             = EPICD2.GLBL_CMPY_CD
+        AND SMM.SER_NUM(+)                  = EPICD2.SER_NUM
+        AND SMM.CUR_LOC_NUM(+)              = EPICH2.WH_CD
+        AND SMM.MDSE_CD(+)                  = EPICH2.MDSE_CD
+        AND SMM.SVC_MACH_MSTR_LOC_STS_CD(+) = #LOC_STS_CD#
+        AND SMM.STK_STS_CD(+)               = #STK_STS_CD#
+        <iterate property="SVC_MACH_MSTR_STS_CD" var="SVC_MACH_MSTR_STS_CD[]" open="AND SMM.SVC_MACH_MSTR_STS_CD(+) IN (" close=")" conjunction=",">
+        #SVC_MACH_MSTR_STS_CD[]#
+        </iterate>
+        AND SMM.EZCANCELFLAG(+)             = '0'
+        ORDER BY
+            EPICH2.GLBL_CMPY_CD
+            ,EPICH2.PHYS_INVTY_CNT_HDR_PK
+            ,EPICD2.PHYS_INVTY_CNT_DTL_PK
+    </statement>
+    
+    <statement id="getPhysInvtyCntHdrs" parameterClass="Map" resultClass="Map">
+    <![CDATA[
+        SELECT
+            PICH.GLBL_CMPY_CD
+            ,PICH.PHYS_INVTY_CNT_HDR_PK
+            ,SUM(PICD.CNT_INP_QTY) CNT_INP_QTY
+            ,SUM(CASE WHEN PICD.ADJ_VAR_FLG='Y' THEN 1 ELSE 0 END) ADJ_VAR_Y_CNT
+            ,SUM(PICD.ADJ_VAR_QTY) ADJ_VAR_QTY
+            ,SUM(PICD.ADJ_VAR_AMT) ADJ_VAR_AMT
+        FROM
+            PHYS_INVTY_CTRL PIC
+            ,PHYS_INVTY_CNT_HDR PICH
+            ,PHYS_INVTY_CNT_DTL PICD
+        WHERE
+            PIC.GLBL_CMPY_CD            = #GLBL_CMPY_CD#
+        AND PIC.PHYS_INVTY_NUM          = #PHYS_INVTY_NUM#
+        AND PIC.EZCANCELFLAG            = '0'
+        AND PICH.GLBL_CMPY_CD           = PIC.GLBL_CMPY_CD
+        AND PICH.PHYS_INVTY_CTRL_PK     = PIC.PHYS_INVTY_CTRL_PK
+        AND PICH.EZCANCELFLAG           = '0'
+        AND PICD.GLBL_CMPY_CD           = PICH.GLBL_CMPY_CD
+        AND PICD.PHYS_INVTY_CNT_HDR_PK  = PICH.PHYS_INVTY_CNT_HDR_PK
+        AND PICD.EZCANCELFLAG           = '0'
+        GROUP BY
+            PICH.GLBL_CMPY_CD
+            ,PICH.PHYS_INVTY_CNT_HDR_PK
+        ORDER BY
+            PICH.GLBL_CMPY_CD
+            ,PICH.PHYS_INVTY_CNT_HDR_PK
+    ]]>
+    </statement>
+    
+    <statement id="getPhysInvtyCntHdrsByPhysInvtyNum" parameterClass="Map" resultClass="Map">
+    <![CDATA[
+        SELECT
+            PICH.GLBL_CMPY_CD
+            ,PICH.PHYS_INVTY_CNT_HDR_PK
+        FROM
+            PHYS_INVTY_CTRL PIC
+            ,PHYS_INVTY_CNT_HDR PICH
+        WHERE
+            PIC.GLBL_CMPY_CD        = #GLBL_CMPY_CD#
+        AND PIC.PHYS_INVTY_NUM      = #PHYS_INVTY_NUM#
+        AND PIC.EZCANCELFLAG        = '0'
+        AND PICH.GLBL_CMPY_CD       = PIC.GLBL_CMPY_CD
+        AND PICH.PHYS_INVTY_CTRL_PK = PIC.PHYS_INVTY_CTRL_PK
+        AND PICH.EZCANCELFLAG       = '0'
+        ORDER BY
+            PICH.GLBL_CMPY_CD
+            ,PICH.PHYS_INVTY_CNT_HDR_PK
+    ]]>
+    </statement>
+    
+    <statement id="getPhysInvtyCntDtlsByPhysInvtyNum" parameterClass="Map" resultClass="Map">
+    <![CDATA[
+        SELECT
+            PICD.GLBL_CMPY_CD
+            ,PICD.PHYS_INVTY_CNT_DTL_PK
+        FROM
+            PHYS_INVTY_CTRL PIC
+            ,PHYS_INVTY_CNT_DTL PICD
+        WHERE
+            PIC.GLBL_CMPY_CD        = #GLBL_CMPY_CD#
+        AND PIC.PHYS_INVTY_NUM      = #PHYS_INVTY_NUM#
+        AND PIC.EZCANCELFLAG        = '0'
+        AND PICD.GLBL_CMPY_CD       = PIC.GLBL_CMPY_CD
+        AND PICD.PHYS_INVTY_CTRL_PK = PIC.PHYS_INVTY_CTRL_PK
+        AND PICD.EZCANCELFLAG       = '0'
+        ORDER BY
+            PICD.GLBL_CMPY_CD
+            ,PICD.PHYS_INVTY_CNT_DTL_PK
+    ]]>
+    </statement>
+    
+    <statement id="getPhysInvtyCtrls" parameterClass="Map" resultClass="Map">
+    <![CDATA[
+        SELECT
+            PIC.GLBL_CMPY_CD
+            ,PIC.PHYS_INVTY_CTRL_PK
+            ,PIC.PHYS_INVTY_CTRL_NM
+            ,PIC.PHYS_INVTY_DT
+            ,PIC.PHYS_INVTY_NUM
+            ,PIC.TECH_TOC_CD
+            ,PIC.TECH_NM
+        FROM
+            PHYS_INVTY_CTRL PIC
+        WHERE
+            PIC.GLBL_CMPY_CD        = #GLBL_CMPY_CD#
+        AND PIC.PHYS_INVTY_NUM      = #PHYS_INVTY_NUM#
+        AND PIC.EZCANCELFLAG        = '0'
+        ORDER BY
+            PIC.GLBL_CMPY_CD
+            ,PIC.PHYS_INVTY_CTRL_PK
+    ]]>
+    </statement>
+
+    <!-- QC#50029 -->
+    <statement id="adjustmentPiCount" parameterClass="Map" resultClass="Map">
+         SELECT
+              PICH.PHYS_INVTY_CTRL_PK
+             ,PICH.PHYS_INVTY_ADJ_NM
+             ,PICH.MDSE_CD
+             ,PICH.RTL_WH_CD
+             ,PICH.WH_CD
+             ,PICH.PHYS_INVTY_CNT_HDR_PK
+             ,PICH.STK_STS_CD
+             ,PIC.PHYS_INVTY_STS_CD
+             ,PIC.PHYS_INVTY_STS_NM
+             ,PICD.PHYS_INVTY_CNT_DTL_PK
+             ,PICD.SER_NUM
+             ,PICD.ADJ_VAR_QTY
+             ,PICD.ADJ_VAR_AMT
+             ,PICD.SVC_CONFIG_MSTR_PK
+             ,M.MDSE_CD AS MSTR_MDSE_CD
+             ,M.RCV_SER_TAKE_FLG
+         FROM
+             PHYS_INVTY_CTRL      PIC
+             ,PHYS_INVTY_CNT_HDR  PICH
+             ,PHYS_INVTY_CNT_DTL  PICD
+             ,INVTY               I
+             ,MDSE                M
+         WHERE
+         -- JOIN TO PHYS_INVTY_CTRL
+             PIC.GLBL_CMPY_CD             = #GLBL_CMPY_CD#
+         AND PIC.PHYS_INVTY_NUM           = #PHYS_INVTY_NUM#
+         -- JOIN TO PHYS_INVTY_CNT_HDR
+         AND PIC.GLBL_CMPY_CD             = PICH.GLBL_CMPY_CD
+         AND PIC.PHYS_INVTY_CTRL_PK       = PICH.PHYS_INVTY_CTRL_PK
+         -- JOIN TO PHYS_INVTY_CNT_DTL
+         AND PICH.GLBL_CMPY_CD            = PICD.GLBL_CMPY_CD
+         AND PICH.PHYS_INVTY_CNT_HDR_PK   = PICD.PHYS_INVTY_CNT_HDR_PK
+         AND PICD.ADJ_VAR_FLG             = #FLG_ON_Y#
+         -- JOIN TO INVTY
+         AND PIC.GLBL_CMPY_CD             = I.GLBL_CMPY_CD(+)
+         AND PIC.WH_CD                    = I.INVTY_LOC_CD(+)
+         AND PICH.MDSE_CD                 = I.MDSE_CD(+)
+         AND PICH.STK_STS_CD              = I.STK_STS_CD(+)
+         AND I.LOC_STS_CD(+)              = #DC_STOCK#
+         -- JOIN TO MDSE
+         AND PICH.GLBL_CMPY_CD            = M.GLBL_CMPY_CD(+)
+         AND PICH.MDSE_CD                 = M.MDSE_CD(+)
+         AND PIC.EZCANCELFLAG             = '0'
+         AND PICH.EZCANCELFLAG            = '0'
+         AND PICD.EZCANCELFLAG            = '0'
+         AND I.EZCANCELFLAG(+)            = '0'
+         AND M.EZCANCELFLAG(+)            = '0'
+         ORDER BY
+             PICD.ADJ_VAR_QTY ASC
+             ,PICD.SER_NUM ASC
+             ,PICH.WH_CD ASC
+             ,PICH.MDSE_CD ASC
+             ,PICH.STK_STS_CD ASC
+    </statement>
+
+    <!-- QC#50029 -->
+    <statement id="summaryPICountHeader" parameterClass="Map" resultClass="Map">
+         SELECT
+             PICH.PHYS_INVTY_CNT_HDR_PK
+             ,NVL(PICD.SUB_TOT_ADJ_VAR_QTY, 0) AS SUB_TOT_ADJ_VAR_QTY
+             ,NVL(PICD.SUB_TOT_ADJ_VAR_AMT, 0) AS SUB_TOT_ADJ_VAR_AMT
+         FROM
+             PHYS_INVTY_CTRL      PIC
+             ,PHYS_INVTY_CNT_HDR  PICH
+             ,(
+                 SELECT
+                     D.PHYS_INVTY_CNT_HDR_PK
+                     ,SUM(NVL(D.ADJ_VAR_QTY,0)) AS SUB_TOT_ADJ_VAR_QTY
+                     ,SUM(NVL(D.ADJ_VAR_AMT,0)) AS SUB_TOT_ADJ_VAR_AMT
+                 FROM
+                     PHYS_INVTY_CNT_DTL  D
+                 WHERE
+                         D.GLBL_CMPY_CD                   = #GLBL_CMPY_CD#
+                     AND D.PHYS_INVTY_ADJ_STS_CD   &lt;&gt; #PHYS_INVTY_ADJ_STS_CD#
+                     AND D.EZCANCELFLAG                   = '0'
+                 GROUP BY
+                     D.PHYS_INVTY_CNT_HDR_PK
+               ) PICD
+         WHERE
+         -- JOIN TO PHYS_INVTY_CTRL
+             PIC.GLBL_CMPY_CD                    = #GLBL_CMPY_CD#
+         AND PIC.PHYS_INVTY_NUM                  = #PHYS_INVTY_NUM#
+         -- JOIN TO PHYS_INVTY_CNT_HDR
+         AND PIC.GLBL_CMPY_CD                    = PICH.GLBL_CMPY_CD
+         AND PIC.PHYS_INVTY_CTRL_PK              = PICH.PHYS_INVTY_CTRL_PK
+         -- JOIN TO PHYS_INVTY_CNT_DTL
+         AND PICH.PHYS_INVTY_CNT_HDR_PK          = PICD.PHYS_INVTY_CNT_HDR_PK(+)
+         AND PIC.EZCANCELFLAG                    = '0'
+         AND PICH.EZCANCELFLAG                   = '0'
+    </statement>
+    
+    <!-- QC#50029 -->
+    <statement id="summaryPIControl" parameterClass="Map" resultClass="Map">
+         SELECT
+             PIC.PHYS_INVTY_CTRL_PK
+             ,SUM(NVL(ABS(PICD.ADJ_VAR_AMT),0)) AS TOT_ADJ_VAR_GRS_AMT
+             ,SUM(NVL(PICD.ADJ_VAR_AMT,0)) AS TOT_ADJ_VAR_NET_AMT
+         FROM
+             PHYS_INVTY_CTRL PIC
+             ,PHYS_INVTY_CNT_DTL PICD
+         WHERE
+         -- JOIN TO PHYS_INVTY_CTRL
+             PIC.GLBL_CMPY_CD       = #GLBL_CMPY_CD#
+         AND PIC.PHYS_INVTY_NUM     = #PHYS_INVTY_NUM#
+         -- JOIN TO PHYS_INVTY_CNT_HDR
+         AND PIC.GLBL_CMPY_CD       = PICD.GLBL_CMPY_CD(+)
+         AND PIC.PHYS_INVTY_CTRL_PK = PICD.PHYS_INVTY_CTRL_PK(+)
+         AND PICD.PHYS_INVTY_ADJ_STS_CD   &lt;&gt; #PHYS_INVTY_ADJ_STS_CD#
+         AND PIC.EZCANCELFLAG       = '0'
+         AND PICD.EZCANCELFLAG(+)   = '0'
+         GROUP BY
+            PIC.PHYS_INVTY_CTRL_PK
+    </statement>
+
+</sqlMap>

@@ -1,0 +1,233 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NSBB084001">
+    <statement id="getInputData" parameterClass="Map" resultClass="Map">
+        WITH
+            TG_SCHD AS (
+                SELECT
+                     DCBS.GLBL_CMPY_CD
+                    ,DCBS.DS_CONTR_BLLG_SCHD_PK
+                    ,DCBS.DS_CONTR_DTL_PK
+                    ,DCBS.DS_CONTR_BLLG_SCHD_SMRY_PK
+                    ,DCBS.DS_CONTR_BLLG_MTR_PK
+                    ,DCBS.SVC_PHYS_MTR_READ_GRP_SQ
+                    ,DCBS.BLLG_SCHD_FROM_DT
+                    ,DCBS.INV_DT
+                    ,DDTL.DS_CONTR_PK
+                    ,DDTL.SVC_MACH_MSTR_PK
+                    ,DDTL.DS_CONTR_DTL_TP_CD
+                    ,DCCG.DS_CONTR_CATG_ABBR_NM
+                    ,DCON.DS_CONTR_NUM
+                FROM
+                     DS_CONTR_BLLG_SCHD DCBS
+                    ,DS_CONTR_DTL       DDTL
+                    ,DS_CONTR           DCON
+                    ,DS_CONTR_CATG      DCCG
+                WHERE
+                        DCBS.GLBL_CMPY_CD               = #glblCmpyCd#
+                    AND DCBS.INV_DT                    &gt;= TO_CHAR(ADD_MONTHS(LAST_DAY(TO_DATE(#slsDt#, 'YYYYMMDD')), #addMonth#), 'YYYYMMDD')
+                    AND DCBS.INV_FLG                    = 'Y'
+                    AND DCBS.USG_CHRG_FLG               = 'Y'
+                    AND DCBS.DS_CONTR_BLLG_SCHD_SMRY_PK IS NOT NULL
+                    AND DCBS.SVC_CR_REBIL_PK            IS NULL
+                    AND DCBS.DS_CONTR_DTL_TP_CD        &lt;&gt; #dsContrDtlTpCd_agg#
+                    AND DCBS.EZCANCELFLAG               = '0'
+                    AND DCBS.GLBL_CMPY_CD               = DDTL.GLBL_CMPY_CD
+                    AND DCBS.DS_CONTR_DTL_PK            = DDTL.DS_CONTR_DTL_PK
+                    AND DDTL.EZCANCELFLAG               = '0'
+                    AND DDTL.GLBL_CMPY_CD               = DCON.GLBL_CMPY_CD
+                    AND DDTL.DS_CONTR_PK                = DCON.DS_CONTR_PK
+                    AND DCON.EZCANCELFLAG               = '0'
+                    AND DCON.GLBL_CMPY_CD               = DCCG.GLBL_CMPY_CD
+                    AND DCON.DS_CONTR_CATG_CD           = DCCG.DS_CONTR_CATG_CD
+                    AND DCCG.EZCANCELFLAG               = '0'
+            )
+            ,TG_PHYS_MTR AS (
+                SELECT
+                     TG_SCHD.DS_CONTR_BLLG_SCHD_PK
+                    ,SUM(READ.READ_MTR_CNT)     AS READ_MTR_CNT
+                    ,SUM(READ.TEST_MTR_CNT)     AS TEST_MTR_CNT
+                FROM
+                     TG_SCHD
+                    ,CONTR_PHYS_BLLG_MTR_RELN   RELN
+                    ,SVC_PHYS_MTR_READ          READ
+                WHERE
+                        TG_SCHD.GLBL_CMPY_CD                = RELN.GLBL_CMPY_CD
+                    AND TG_SCHD.DS_CONTR_BLLG_MTR_PK        = RELN.DS_CONTR_BLLG_MTR_PK
+                    AND RELN.EZCANCELFLAG                   = '0'
+                    AND TG_SCHD.GLBL_CMPY_CD                = READ.GLBL_CMPY_CD
+                    AND TG_SCHD.SVC_PHYS_MTR_READ_GRP_SQ    = READ.SVC_PHYS_MTR_READ_GRP_SQ
+                    AND RELN.SVC_PHYS_MTR_PK                = READ.SVC_PHYS_MTR_PK
+                    AND READ.EZCANCELFLAG                   = '0'
+                GROUP BY
+                    TG_SCHD.DS_CONTR_BLLG_SCHD_PK
+            )
+            ,TG_PHYS_MTR_FEET AS (
+                SELECT
+                     TG_SCHD.DS_CONTR_BLLG_SCHD_PK
+                    ,SUM(READ.READ_MTR_CNT)     AS READ_MTR_CNT
+                    ,SUM(READ.TEST_MTR_CNT)     AS TEST_MTR_CNT
+                FROM
+                     TG_SCHD
+                    ,DS_CONTR_BLLG_MTR          BMTR
+                    ,DS_CONTR_DTL               CDTL
+                    ,CONTR_PHYS_BLLG_MTR_RELN   RELN
+                    ,SVC_PHYS_MTR_READ          READ
+                WHERE
+                        TG_SCHD.DS_CONTR_DTL_TP_CD  = #dsContrDtlTpCd_fleet#
+                    AND TG_SCHD.GLBL_CMPY_CD        = BMTR.GLBL_CMPY_CD
+                    AND TG_SCHD.DS_CONTR_BLLG_MTR_PK= BMTR.DS_CONTR_BLLG_MTR_PK
+                    AND BMTR.EZCANCELFLAG           = '0'
+                    AND TG_SCHD.GLBL_CMPY_CD        = CDTL.GLBL_CMPY_CD
+                    AND TG_SCHD.DS_CONTR_PK         = CDTL.DS_CONTR_PK
+                    AND CDTL.DS_CONTR_DTL_TP_CD    &lt;&gt; #dsContrDtlTpCd_fleet#
+                    AND CDTL.EZCANCELFLAG           = '0'
+                    AND CDTL.GLBL_CMPY_CD           = RELN.GLBL_CMPY_CD
+                    AND CDTL.DS_CONTR_DTL_PK        = RELN.DS_CONTR_DTL_PK
+                    AND BMTR.BLLG_MTR_LB_CD         = RELN.BLLG_MTR_LB_CD
+                    AND RELN.EZCANCELFLAG           = '0'
+                    AND RELN.GLBL_CMPY_CD           = READ.GLBL_CMPY_CD
+                    AND RELN.SVC_PHYS_MTR_PK        = READ.SVC_PHYS_MTR_PK
+                    AND READ.EZCANCELFLAG           = '0'
+                GROUP BY
+                    TG_SCHD.DS_CONTR_BLLG_SCHD_PK
+            )
+            ,TG_MTR_DT AS (
+                SELECT DISTINCT
+                     TG_SCHD.DS_CONTR_BLLG_SCHD_PK
+                    ,READ.MTR_READ_DT
+                FROM
+                     TG_SCHD
+                    ,SVC_PHYS_MTR_READ  READ
+                WHERE
+                        TG_SCHD.GLBL_CMPY_CD                = READ.GLBL_CMPY_CD
+                    AND TG_SCHD.SVC_PHYS_MTR_READ_GRP_SQ    = READ.SVC_PHYS_MTR_READ_GRP_SQ
+                    AND READ.EZCANCELFLAG                   = '0'
+            )
+            ,PRE_SCHD AS (
+                SELECT
+                     TG_SCHD.GLBL_CMPY_CD
+                    ,TG_SCHD.DS_CONTR_BLLG_SCHD_PK
+                    ,DCBS.SVC_PHYS_MTR_READ_GRP_SQ
+                FROM
+                     TG_SCHD
+                    ,DS_CONTR_BLLG_SCHD   DCBS
+                WHERE
+                        TG_SCHD.GLBL_CMPY_CD           = DCBS.GLBL_CMPY_CD
+                    AND TG_SCHD.DS_CONTR_DTL_PK        = DCBS.DS_CONTR_DTL_PK
+                    AND TG_SCHD.DS_CONTR_BLLG_MTR_PK   = DCBS.DS_CONTR_BLLG_MTR_PK
+                    AND TO_CHAR(TO_DATE(TG_SCHD.BLLG_SCHD_FROM_DT, 'YYYYMMDD') - 1, 'YYYYMMDD') BETWEEN DCBS.BLLG_SCHD_FROM_DT AND DCBS.BLLG_SCHD_THRU_DT
+                    AND DCBS.SVC_CR_REBIL_PK            IS NULL
+                    AND DCBS.INV_FLG                    = 'Y'
+                    AND DCBS.USG_CHRG_FLG               = 'Y'
+                    AND DCBS.INV_TP_CD                  = '1'
+                    AND DCBS.EZCANCELFLAG               = '0'
+            )
+        SELECT
+             MACH.SVC_CONFIG_MSTR_PK                                                            AS SVC_CONFIG_MSTR_PK
+            ,MGRP.MDL_GRP_NM                                                                    AS MDL_GRP_NM
+            ,MLNM.T_MDL_NM                                                                      AS T_MDL_NM
+            ,CASE
+                WHEN TG_SCHD.DS_CONTR_DTL_TP_CD = #dsContrDtlTpCd_fleet# THEN TG_SCHD.DS_CONTR_CATG_ABBR_NM || '_' || TG_SCHD.DS_CONTR_NUM
+                ELSE MACH.SER_NUM
+             END                                                                                AS SER_NUM
+            ,SCMR.XS_MTR_COPY_QTY                                                               AS XS_MTR_COPY_QTY
+            ,CASE
+                WHEN TG_SCHD.DS_CONTR_DTL_TP_CD = #dsContrDtlTpCd_fleet# THEN TG_PHYS_MTR_FEET.TEST_MTR_CNT
+                ELSE TG_PHYS_MTR.TEST_MTR_CNT
+             END                                                                                AS TEST_MTR_CNT
+            ,CASE
+                WHEN TG_SCHD.DS_CONTR_DTL_TP_CD = #dsContrDtlTpCd_fleet# THEN TG_PHYS_MTR_FEET.READ_MTR_CNT
+                ELSE TG_PHYS_MTR.READ_MTR_CNT
+             END                                                                                AS READ_MTR_CNT
+            ,CASE
+                WHEN PRE_SCHD.SVC_PHYS_MTR_READ_GRP_SQ IS NOT NULL THEN PRE_SCHD.SVC_PHYS_MTR_READ_GRP_SQ
+                ELSE SPMR.SVC_PHYS_MTR_READ_GRP_SQ
+             END                                                                                AS PHYS_MTR_READ_GRP_FROM_SQ
+            ,TG_SCHD.SVC_PHYS_MTR_READ_GRP_SQ                                                   AS PHYS_MTR_READ_GRP_THRU_SQ
+            ,''                                                                                 AS FILL_4_TXT
+            ,SUBSTR(TG_SCHD.INV_DT, 1, #strLen_6#)                                                       AS INV_YR_MTH
+            ,TO_NUMBER(TO_DATE(TG_MTR_DT.MTR_READ_DT, 'YYYYMMDD')
+                     - TO_DATE(CASE
+                               WHEN PRE_MTR_DT.MTR_READ_DT IS NOT NULL THEN PRE_MTR_DT.MTR_READ_DT
+                               ELSE SPMR.MTR_READ_DT
+                               END
+                               , 'YYYYMMDD'))                                                   AS COPY_VOL_DAYS_AOT
+            ,''                                                                                 AS FILL_2_TXT
+            ,''                                                                                 AS FILL_1_TXT_01
+            ,''                                                                                 AS FILL_1_TXT_02
+        FROM
+             TG_SCHD
+            ,TG_PHYS_MTR
+            ,TG_PHYS_MTR_FEET
+            ,TG_MTR_DT
+            ,PRE_SCHD
+            ,SVC_MACH_MSTR              MACH
+            ,SVC_CONFIG_MSTR            CONF
+            ,DS_MDL                     DMDL
+            ,MDL_NM                     MLNM
+            ,DS_MDL_GRP                 MGRP
+            ,DS_CONTR_BLLG_SCHD_SMRY    SCSM
+            ,DS_CONTR_BLLG_SCHD_MTR     SCMR
+            ,(
+                SELECT DISTINCT
+                     PRE_SCHD.DS_CONTR_BLLG_SCHD_PK
+                    ,READ.MTR_READ_DT
+                FROM
+                     PRE_SCHD
+                    ,SVC_PHYS_MTR_READ  READ
+                WHERE
+                        PRE_SCHD.GLBL_CMPY_CD               = READ.GLBL_CMPY_CD
+                    AND PRE_SCHD.SVC_PHYS_MTR_READ_GRP_SQ   = READ.SVC_PHYS_MTR_READ_GRP_SQ
+                    AND READ.EZCANCELFLAG                   = '0'
+            ) PRE_MTR_DT
+            ,(
+                SELECT DISTINCT
+                     TG_SCHD.DS_CONTR_BLLG_SCHD_PK
+                    ,READ.SVC_PHYS_MTR_READ_GRP_SQ
+                    ,READ.MTR_READ_DT
+                FROM
+                     TG_SCHD
+                    ,SVC_PHYS_MTR_READ  READ
+                WHERE
+                        TG_SCHD.GLBL_CMPY_CD        = READ.GLBL_CMPY_CD
+                    AND TG_SCHD.DS_CONTR_DTL_PK     = READ.DS_CONTR_DTL_PK
+                    AND READ.EZCANCELFLAG           = '0'
+            ) SPMR
+        WHERE
+                TG_SCHD.GLBL_CMPY_CD                = MACH.GLBL_CMPY_CD(+)
+            AND TG_SCHD.SVC_MACH_MSTR_PK            = MACH.SVC_MACH_MSTR_PK(+)
+            AND MACH.EZCANCELFLAG(+)                = '0'
+            AND MACH.GLBL_CMPY_CD                   = CONF.GLBL_CMPY_CD(+)
+            AND MACH.SVC_CONFIG_MSTR_PK             = CONF.SVC_CONFIG_MSTR_PK(+)
+            AND CONF.EZCANCELFLAG(+)                = '0'
+            AND CONF.GLBL_CMPY_CD                   = DMDL.GLBL_CMPY_CD(+)
+            AND CONF.MDL_ID                         = DMDL.MDL_ID(+)
+            AND DMDL.EZCANCELFLAG (+)               = '0'
+            AND DMDL.GLBL_CMPY_CD                   = MLNM.T_GLBL_CMPY_CD(+)
+            AND DMDL.MDL_ID                         = MLNM.T_MDL_ID(+)
+            AND MLNM.EZCANCELFLAG(+)                = '0'
+            AND DMDL.GLBL_CMPY_CD                   = MGRP.GLBL_CMPY_CD(+)
+            AND DMDL.MDL_GRP_ID                     = MGRP.MDL_GRP_ID(+)
+            AND MGRP.EZCANCELFLAG(+)                = '0'
+            AND TG_SCHD.GLBL_CMPY_CD                = SCSM.GLBL_CMPY_CD
+            AND TG_SCHD.DS_CONTR_BLLG_SCHD_SMRY_PK  = SCSM.DS_CONTR_BLLG_SCHD_SMRY_PK
+            AND SCSM.EZCANCELFLAG                   = '0'
+            AND SCSM.GLBL_CMPY_CD                   = SCMR.GLBL_CMPY_CD
+            AND SCSM.DS_CONTR_BLLG_SCHD_SMRY_PK     = SCMR.DS_CONTR_BLLG_SCHD_SMRY_PK
+            AND SCMR.XS_MTR_FIRST_FLG               = 'Y'
+            AND SCMR.EZCANCELFLAG                   = '0'
+            AND TG_SCHD.DS_CONTR_BLLG_SCHD_PK       = TG_PHYS_MTR.DS_CONTR_BLLG_SCHD_PK(+)
+            AND TG_SCHD.DS_CONTR_BLLG_SCHD_PK       = TG_PHYS_MTR_FEET.DS_CONTR_BLLG_SCHD_PK(+)
+            AND TG_SCHD.DS_CONTR_BLLG_SCHD_PK       = TG_MTR_DT.DS_CONTR_BLLG_SCHD_PK(+)
+            AND TG_SCHD.DS_CONTR_BLLG_SCHD_PK       = PRE_SCHD.DS_CONTR_BLLG_SCHD_PK(+)
+            AND PRE_SCHD.DS_CONTR_BLLG_SCHD_PK      = PRE_MTR_DT.DS_CONTR_BLLG_SCHD_PK(+)
+            AND TG_SCHD.DS_CONTR_BLLG_SCHD_PK       = SPMR.DS_CONTR_BLLG_SCHD_PK(+)
+        ORDER BY
+             MACH.SVC_CONFIG_MSTR_PK        ASC
+            ,MGRP.MDL_GRP_NM                ASC
+            ,MLNM.T_MDL_NM                  ASC
+            ,MACH.SER_NUM                   ASC
+            ,TG_SCHD.DS_CONTR_BLLG_SCHD_PK  ASC
+    </statement>
+</sqlMap>

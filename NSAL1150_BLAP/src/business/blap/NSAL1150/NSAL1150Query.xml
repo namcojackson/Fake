@@ -1,0 +1,274 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NSAL1150Query">
+    <typeAlias alias="NSAL1150_ASMsg" type="business.blap.NSAL1150.NSAL1150_ASMsg"/>
+
+    <statement id="getSvcTermCondAttrbPk" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+             SVC_TERM_COND_ATTRB_PK
+        FROM
+             SVC_TERM_COND_ATTRB
+        WHERE
+                GLBL_CMPY_CD                        =  #glblCmpyCd#
+            AND SVC_TERM_COND_ATTRB_NM              =  #svcTermCondAttrbNm#
+            AND SVC_TERM_ATTRB_ACTV_FLG             =  #flgY#
+            AND EFF_FROM_DT                     &lt;= #slsDt#
+            AND NVL(EFF_THRU_DT, #limitThruDt#) &gt;= #slsDt#
+            AND EZCANCELFLAG                        =  '0'
+    </statement>
+
+    <statement id="getSearchData" parameterClass="Map" resultMap="result.getSearchData">
+        WITH IV_SPLY_DTL AS (
+            SELECT
+                 ALW.SHIP_TO_CUST_ACCT_CD   AS SHIP_TO_CUST_ACCT_CD
+                ,STC.DS_ACCT_NM             AS DS_ACCT_NM
+                ,COH.DS_CONTR_NUM           AS DS_CONTR_NUM
+                ,COH.DS_CONTR_STS_CD        AS DS_CONTR_STS_CD
+                ,ALW.SVC_PGM_MDSE_CD        AS SVC_PGM_MDSE_CD
+                ,MDS.MDSE_DESC_SHORT_TXT    AS MDSE_DESC_SHORT_TXT
+                ,MDL.T_MDL_NM               AS T_MDL_NM
+                ,MCM.SER_NUM                AS SER_NUM
+                ,MCM.SVC_MACH_MSTR_STS_CD   AS SVC_MACH_MSTR_STS_CD
+                ,(
+                    SELECT
+                        TMC.SVC_TERM_ATTRB_MAP_VAL_CD
+                    FROM
+                        SVC_TERM_COND  TMC
+                    WHERE
+                            TMC.GLBL_CMPY_CD           = CD1.GLBL_CMPY_CD
+                        AND TMC.DS_CONTR_PK            = CD1.DS_CONTR_PK
+                        AND TMC.DS_CONTR_DTL_PK        = CD1.DS_CONTR_DTL_PK
+                        AND TMC.SVC_TERM_COND_ATTRB_PK = #svcTermCondAttrbPk#
+                        AND TMC.EZCANCELFLAG           = '0'
+                 )                          AS SVC_TERM_ATTRB_MAP_VAL_CD
+                ,(
+                    SELECT
+                        MAX(PMR.INV_DT)
+                    FROM
+                          DS_CONTR_DTL      CD2
+                        ,SVC_PHYS_MTR_READ  PMR
+                    WHERE
+                            CD1.GLBL_CMPY_CD                              = CD2.GLBL_CMPY_CD
+                        AND CD1.DS_CONTR_DTL_PK                           = CD2.DS_CONTR_DTL_PK
+                        AND CD2.GLBL_CMPY_CD                              = PMR.GLBL_CMPY_CD
+                        AND CD2.SVC_MACH_MSTR_PK                          = PMR.SVC_MACH_MSTR_PK
+                        AND PMR.INV_PROC_FLG                              = #flgY#
+                        AND CD2.CONTR_EFF_FROM_DT                     &lt;= PMR.MTR_READ_DT
+                        AND NVL(CD2.CONTR_EFF_THRU_DT, #limitThruDt#) &gt;= PMR.MTR_READ_DT
+                        AND NVL(CD2.CONTR_CLO_DAY, #limitThruDt#)     &gt;= PMR.MTR_READ_DT
+                        AND CD2.EZCANCELFLAG                              = '0'
+                        AND PMR.EZCANCELFLAG                              = '0'
+                 )                          AS INV_DT
+                ,ALW.BW_AVG_MLY_COPY_CNT    AS BW_AVG_MLY_COPY_CNT
+                ,ALW.COLOR_AVG_MLY_COPY_CNT AS COLOR_AVG_MLY_COPY_CNT
+                ,ALW.BW_PRRT_QTY            AS BW_PRRT_QTY
+                ,ALW.COLOR_PRRT_QTY         AS COLOR_PRRT_QTY
+                ,USD.BW_USED_QTY            AS BW_USED_QTY
+                ,USD.COLOR_USED_QTY         AS COLOR_USED_QTY
+            FROM
+                 SVC_SPLY_MACH_ALLW  ALW
+                ,DS_CONTR            COH
+                ,SELL_TO_CUST        STC
+                ,SVC_MACH_MSTR       MCM
+                ,SVC_CONFIG_MSTR     CFM
+                ,MDL_NM              MDL
+                ,MDSE                MDS
+                ,SVC_SPLY_MACH_USED  USD
+                ,DS_CONTR_DTL        CD1
+            WHERE
+                    ALW.GLBL_CMPY_CD                              = #glblCmpyCd#
+                <isNotNull property="shipToCustAcctCdArray" >
+                <iterate property="shipToCustAcctCdArray" var="shipToCustAcctCd[]" open="AND ALW.SHIP_TO_CUST_ACCT_CD IN ("  close=")" conjunction=",">
+                    #shipToCustAcctCd[]#
+                </iterate>
+                </isNotNull>
+                AND ALW.FRZ_FLG                                   = #flgN#
+                AND ALW.GLBL_CMPY_CD                              = COH.GLBL_CMPY_CD
+                AND ALW.DS_CONTR_PK                               = COH.DS_CONTR_PK
+                <isNotNull property="dsContrNumArray" >
+                <iterate property="dsContrNumArray" var="dsContrNum[]" open="AND COH.DS_CONTR_NUM IN ("  close=")" conjunction=",">
+                    #dsContrNum[]#
+                </iterate>
+                </isNotNull>
+                AND ALW.GLBL_CMPY_CD                              = STC.GLBL_CMPY_CD
+                AND ALW.SHIP_TO_CUST_ACCT_CD                      = STC.SELL_TO_CUST_CD
+                <isNotNull property="dsAcctNm" >
+                AND STC.DS_ACCT_NM                                LIKE #dsAcctNm#
+                </isNotNull>
+                AND ALW.GLBL_CMPY_CD                              = MCM.GLBL_CMPY_CD
+                AND ALW.SVC_MACH_MSTR_PK                          = MCM.SVC_MACH_MSTR_PK
+                AND MCM.GLBL_CMPY_CD                              = CFM.GLBL_CMPY_CD
+                AND MCM.SVC_CONFIG_MSTR_PK                        = CFM.SVC_CONFIG_MSTR_PK
+                AND CFM.GLBL_CMPY_CD                              = MDL.T_GLBL_CMPY_CD
+                AND CFM.MDL_ID                                    = MDL.T_MDL_ID
+                AND ALW.GLBL_CMPY_CD                              = MDS.GLBL_CMPY_CD
+                AND ALW.SVC_PGM_MDSE_CD                           = MDS.MDSE_CD
+                AND ALW.GLBL_CMPY_CD                              = USD.GLBL_CMPY_CD
+                AND ALW.SHIP_TO_CUST_ACCT_CD                      = USD.SHIP_TO_CUST_ACCT_CD
+                AND ALW.DS_CONTR_PK                               = USD.DS_CONTR_PK
+                AND ALW.SVC_MACH_MSTR_PK                          = USD.SVC_MACH_MSTR_PK
+                AND ALW.SVC_PGM_MDSE_CD                           = USD.SVC_PGM_MDSE_CD
+                AND USD.FRZ_FLG                                   = #flgN#
+                AND ALW.GLBL_CMPY_CD                              = CD1.GLBL_CMPY_CD
+                AND ALW.DS_CONTR_PK                              = CD1.DS_CONTR_PK
+                AND ALW.SVC_MACH_MSTR_PK                          = CD1.SVC_MACH_MSTR_PK
+                AND CD1.DS_CONTR_DTL_STS_CD                   &lt;&gt; #cancelled#
+                AND CD1.CONTR_EFF_FROM_DT                     &lt;= ALW.PROC_DT
+                AND NVL(CD1.CONTR_EFF_THRU_DT, #limitThruDt#) &gt;= ALW.PROC_DT
+                AND ALW.EZCANCELFLAG                              = '0'
+                AND COH.EZCANCELFLAG                              = '0'
+                AND STC.EZCANCELFLAG                              = '0'
+                AND MCM.EZCANCELFLAG                              = '0'
+                AND CFM.EZCANCELFLAG                              = '0'
+                AND MDL.EZCANCELFLAG                              = '0'
+                AND MDS.EZCANCELFLAG                              = '0'
+                AND USD.EZCANCELFLAG                              = '0'
+                AND CD1.EZCANCELFLAG                              = '0'
+        )
+        SELECT
+             CASE 
+                  WHEN XX_TP_CD = '1' THEN SHIP_TO_CUST_ACCT_CD
+                  WHEN XX_TP_CD = '2' THEN #totalTitle#
+             END                            AS SHIP_TO_CUST_ACCT_CD_A
+            ,CASE WHEN XX_TP_CD = '1' THEN DS_ACCT_NM
+                  WHEN XX_TP_CD = '2' THEN #ContrNumTitle#
+             END                            AS DS_ACCT_NM_A
+            ,DS_CONTR_NUM                   AS DS_CONTR_NUM_A
+            ,CASE WHEN DS_CONTR_STS_CD IS NULL THEN NULL
+                  WHEN DS_CONTR_STS_CD = #effective# THEN #flgY#
+                  ELSE #flgN#
+             END                            AS ACTV_FLG_AC
+            ,MDSE_DESC_SHORT_TXT            AS MDSE_DESC_SHORT_TXT_A
+            ,T_MDL_NM                       AS T_MDL_NM_A
+            ,SER_NUM                        AS SER_NUM_A
+            ,CASE WHEN SVC_MACH_MSTR_STS_CD IS NULL THEN NULL
+                  WHEN SVC_MACH_MSTR_STS_CD = #w4i# THEN #flgY#
+                  WHEN SVC_MACH_MSTR_STS_CD = #instaled# THEN #flgY#
+                  ELSE #flgN#
+             END                            AS ACTV_FLG_AM
+            ,SVC_TERM_ATTRB_MAP_VAL_CD      AS SVC_TERM_ATTRB_MAP_VAL_CD_A
+            ,CASE WHEN INV_DT IS NULL THEN NULL
+                  ELSE TO_DATE(#slsDt#,'YYYY-MM-DD') - TO_DATE(INV_DT,'YYYY-MM-DD')
+             END                            AS BIZ_DAYS_AOT_A
+            ,BW_AVG_MLY_COPY_CNT            AS BW_AVG_MLY_COPY_CNT_A
+            ,COLOR_AVG_MLY_COPY_CNT         AS COLOR_AVG_MLY_COPY_CNT_A
+            ,BW_PRRT_QTY                    AS BW_PRRT_QTY_A
+            ,COLOR_PRRT_QTY                 AS COLOR_PRRT_QTY_A
+            ,BW_USED_QTY                    AS BW_USED_QTY_A
+            ,COLOR_USED_QTY                 AS COLOR_USED_QTY_A
+            ,CASE WHEN XX_TP_CD = '1' THEN NULL
+                  WHEN XX_TP_CD = '2' AND BW_PRRT_QTY = 0 THEN 0
+                  WHEN ROUND(BW_USED_QTY/BW_PRRT_QTY*100, 2) &lt;= #maxPct# THEN ROUND(BW_USED_QTY/BW_PRRT_QTY*100, 2)
+                  ELSE #maxPct#
+             END                            AS SPLY_ALLOC_PCT_AB
+            ,CASE WHEN XX_TP_CD = '1' THEN NULL
+                  WHEN XX_TP_CD = '2' AND COLOR_PRRT_QTY = 0 THEN 0
+                  WHEN ROUND(COLOR_USED_QTY/COLOR_PRRT_QTY*100, 2) &lt;= #maxPct# THEN ROUND(COLOR_USED_QTY/COLOR_PRRT_QTY*100, 2)
+                  ELSE #maxPct#
+             END                            AS SPLY_ALLOC_PCT_AC
+            ,XX_TP_CD                       AS XX_TP_CD_A
+        FROM
+            (
+                SELECT
+                     SHIP_TO_CUST_ACCT_CD
+                    ,DS_ACCT_NM
+                    ,DS_CONTR_NUM
+                    ,DS_CONTR_STS_CD
+                    ,SVC_PGM_MDSE_CD
+                    ,MDSE_DESC_SHORT_TXT
+                    ,T_MDL_NM
+                    ,SER_NUM
+                    ,SVC_MACH_MSTR_STS_CD
+                    ,SVC_TERM_ATTRB_MAP_VAL_CD
+                    ,INV_DT
+                    ,BW_AVG_MLY_COPY_CNT
+                    ,COLOR_AVG_MLY_COPY_CNT
+                    ,BW_PRRT_QTY
+                    ,COLOR_PRRT_QTY
+                    ,BW_USED_QTY
+                    ,COLOR_USED_QTY
+                    ,XX_TP_CD
+                FROM
+                    (
+                        SELECT
+                             SHIP_TO_CUST_ACCT_CD
+                            ,DS_ACCT_NM
+                            ,DS_CONTR_NUM
+                            ,DS_CONTR_STS_CD
+                            ,SVC_PGM_MDSE_CD
+                            ,MDSE_DESC_SHORT_TXT
+                            ,T_MDL_NM
+                            ,SER_NUM
+                            ,SVC_MACH_MSTR_STS_CD
+                            ,SVC_TERM_ATTRB_MAP_VAL_CD
+                            ,INV_DT
+                            ,BW_AVG_MLY_COPY_CNT
+                            ,COLOR_AVG_MLY_COPY_CNT
+                            ,BW_PRRT_QTY                             AS BW_PRRT_QTY
+                            ,COLOR_PRRT_QTY                          AS COLOR_PRRT_QTY
+                            ,NULL                                    AS BW_USED_QTY
+                            ,NULL                                    AS COLOR_USED_QTY
+                            ,'1'                                     AS XX_TP_CD
+                        FROM
+                            IV_SPLY_DTL
+                        UNION ALL
+                        SELECT 
+                             SHIP_TO_CUST_ACCT_CD
+                            ,DS_ACCT_NM
+                            ,DS_CONTR_NUM
+                            ,NULL                                    AS DS_CONTR_STS_CD
+                            ,SVC_PGM_MDSE_CD                         AS SVC_PGM_MDSE_CD
+                            ,NULL                                    AS MDSE_DESC_SHORT_TXT
+                            ,NULL                                    AS T_MDL_NM
+                            ,NULL                                    AS SER_NUM
+                            ,NULL                                    AS SVC_MACH_MSTR_STS_CD
+                            ,NULL                                    AS SVC_TERM_ATTRB_MAP_VAL_CD
+                            ,NULL                                    AS INV_DT
+                            ,NULL                                    AS BW_AVG_MLY_COPY_CNT
+                            ,NULL                                    AS COLOR_AVG_MLY_COPY_CNT
+                            ,SUM(BW_PRRT_QTY)                        AS BW_PRRT_QTY
+                            ,SUM(COLOR_PRRT_QTY)                     AS COLOR_PRRT_QTY
+                            ,SUM(BW_USED_QTY)                        AS BW_USED_QTY
+                            ,SUM(COLOR_USED_QTY)                     AS COLOR_USED_QTY
+                            ,'2'                                     AS XX_TP_CD
+                        FROM
+                            IV_SPLY_DTL
+                        GROUP BY
+                             SHIP_TO_CUST_ACCT_CD
+                            ,DS_ACCT_NM
+                            ,DS_CONTR_NUM
+                            ,SVC_PGM_MDSE_CD
+                    )
+                ORDER BY
+                     DS_ACCT_NM
+                    ,DS_CONTR_NUM
+                    ,SVC_PGM_MDSE_CD
+                    ,XX_TP_CD
+                    ,SER_NUM
+            )
+        WHERE
+            ROWNUM &lt;= #rowNum#
+    </statement>
+
+    <resultMap id="result.getSearchData" class="NSAL1150_ASMsg">
+        <result property="shipToCustAcctCd_A"      column="SHIP_TO_CUST_ACCT_CD_A"        javaType="EZDSStringItem"/>
+        <result property="dsAcctNm_A"              column="DS_ACCT_NM_A"                  javaType="EZDSStringItem"/>
+        <result property="dsContrNum_A"            column="DS_CONTR_NUM_A"                javaType="EZDSStringItem"/>
+        <result property="actvFlg_AC"              column="ACTV_FLG_AC"                   javaType="EZDSStringItem"/>
+        <result property="mdseDescShortTxt_A"      column="MDSE_DESC_SHORT_TXT_A"         javaType="EZDSStringItem"/>
+        <result property="t_MdlNm_A"               column="T_MDL_NM_A"                    javaType="EZDSStringItem"/>
+        <result property="serNum_A"                column="SER_NUM_A"                     javaType="EZDSStringItem"/>
+        <result property="actvFlg_AM"              column="ACTV_FLG_AM"                   javaType="EZDSStringItem"/>
+        <result property="svcTermAttrbMapValCd_A"  column="SVC_TERM_ATTRB_MAP_VAL_CD_A"   javaType="EZDSStringItem"/>
+        <result property="fromLastBillDtDaysAot_A" column="BIZ_DAYS_AOT_A"                javaType="EZDSBigDecimalItem"/>
+        <result property="bwAvgMlyCopyCnt_A"       column="BW_AVG_MLY_COPY_CNT_A"         javaType="EZDSBigDecimalItem"/>
+        <result property="colorAvgMlyCopyCnt_A"    column="COLOR_AVG_MLY_COPY_CNT_A"      javaType="EZDSBigDecimalItem"/>
+        <result property="bwPrrtQty_A"             column="BW_PRRT_QTY_A"                 javaType="EZDSBigDecimalItem"/>
+        <result property="colorPrrtQty_A"          column="COLOR_PRRT_QTY_A"              javaType="EZDSBigDecimalItem"/>
+        <result property="bwUsedQty_A"             column="BW_USED_QTY_A"                 javaType="EZDSBigDecimalItem"/>
+        <result property="colorUsedQty_A"          column="COLOR_USED_QTY_A"              javaType="EZDSBigDecimalItem"/>
+        <result property="splyAllocPct_AB"         column="SPLY_ALLOC_PCT_AB"             javaType="EZDSBigDecimalItem"/>
+        <result property="splyAllocPct_AC"         column="SPLY_ALLOC_PCT_AC"             javaType="EZDSBigDecimalItem"/>
+        <result property="xxTpCd_A"                column="XX_TP_CD_A"                    javaType="EZDSStringItem"/>
+    </resultMap>
+</sqlMap>

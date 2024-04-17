@@ -1,0 +1,497 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NLZC402001">
+
+    <statement id="getShpgPlnInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+            SP.GLBL_CMPY_CD
+           ,SP.SHPG_PLN_NUM
+           ,SOCD.SO_NUM
+           ,SOCD.SO_SLP_NUM
+           ,SOCD.WH_CD                                    AS INVTY_LOC_CD
+           ,DECODE(SOCD.BOL_NUM, '*', NULL, SOCD.BOL_NUM) AS BOL_NUM
+           ,SP.SHPG_STS_CD
+           ,SS.SHIP_FLG
+           ,DECODE(SOCD.PRO_NUM, '*', NULL, SOCD.PRO_NUM) AS PRO_NUM
+           ,DECODE(SOCD.VND_CD,  '*', NULL, SOCD.VND_CD)  AS CARR_CD
+           ,ETR.EDI_TP_CD                                 AS EDI_TP_CD
+           ,RSW.RTL_WH_CD
+           ,SO.SCHD_DELY_DT
+        FROM
+            SHPG_ORD_CONF_DTL SOCD
+           ,SHPG_ORD_DTL      SOD
+           ,SHPG_PLN          SP
+           ,SHPG_STS          SS
+           ,EDI_TP_RELN       ETR
+           ,RTL_SWH           RSW
+           ,SHPG_ORD          SO
+        WHERE
+            SOCD.GLBL_CMPY_CD   = #glblCmpyCd#
+        AND SOCD.SO_NUM         = #soNum#
+        <isNotNull property="soSlpNum">
+        AND SOCD.SO_SLP_NUM     = #soSlpNum#
+        </isNotNull>
+        AND SOCD.EZCANCELFLAG   = '0'
+        AND SOCD.GLBL_CMPY_CD   = SOD.GLBL_CMPY_CD
+        AND SOCD.SO_NUM         = SOD.SO_NUM
+        AND SOCD.SO_SLP_NUM     = SOD.SO_SLP_NUM
+        AND SOD.EZCANCELFLAG    = '0'
+        AND SOD.GLBL_CMPY_CD    = SP.GLBL_CMPY_CD
+        AND SOD.SHPG_PLN_NUM    = SP.SHPG_PLN_NUM
+        AND SP.EZCANCELFLAG     = '0'
+        AND SP.GLBL_CMPY_CD     = SS.GLBL_CMPY_CD
+        AND SP.SHPG_STS_CD      = SS.SHPG_STS_CD
+        AND SS.EZCANCELFLAG     = '0'
+        AND SOCD.GLBL_CMPY_CD   = ETR.GLBL_CMPY_CD(+)
+        AND SOCD.VND_CD         = ETR.CARR_CD(+)
+        AND ETR.EZCANCELFLAG(+) = '0'
+        AND SOCD.GLBL_CMPY_CD   = RSW.GLBL_CMPY_CD(+)
+        AND SOCD.WH_CD          = RSW.INVTY_LOC_CD(+)
+        AND RSW.EZCANCELFLAG(+) = '0'
+        AND SOD.GLBL_CMPY_CD    = SO.GLBL_CMPY_CD(+)
+        AND SOD.SO_NUM          = SO.SO_NUM(+)
+        AND SO.EZCANCELFLAG(+) = '0'
+        ORDER BY
+            SP.BOL_NUM
+           ,SP.PRO_NUM
+           ,SP.SHPG_PLN_NUM
+    </statement>
+
+    <statement id="getBolStatus" parameterClass="Map" resultClass="Map">
+        SELECT
+            BL.GLBL_CMPY_CD
+           ,BL.WH_CD
+           ,BL.BOL_NUM
+           ,BL.SHPG_STS_CD
+           ,SS.SHIP_FLG
+           ,BLR.PRO_NUM
+           <isNotNull property="carrCd">
+           ,BLR.CARR_CD
+           </isNotNull>
+           <isNotNull property="ediTpCd">
+           ,NVL(ETR.CARR_CD, #ediTpCd#) AS CARR_CD
+           </isNotNull>
+        FROM
+            BOL_RELN    BLR
+           ,BOL         BL
+           ,SHPG_STS    SS
+           <isNotNull property="ediTpCd">
+           ,EDI_TP_RELN ETR
+           </isNotNull>
+        WHERE 
+            BLR.GLBL_CMPY_CD    = #glblCmpyCd#
+        AND BLR.PRO_NUM      LIKE #proNum#
+        AND BLR.EZCANCELFLAG    = '0'
+        AND BLR.GLBL_CMPY_CD    = BL.GLBL_CMPY_CD
+        AND BLR.WH_CD           = BL.WH_CD
+        AND BLR.BOL_NUM         = BL.BOL_NUM
+        <isNotNull property="carrCd">
+        AND BLR.CARR_CD         = #carrCd#
+        </isNotNull>
+        AND BL.EZCANCELFLAG     = '0'
+        AND BL.GLBL_CMPY_CD     = SS.GLBL_CMPY_CD
+        AND BL.SHPG_STS_CD      = SS.SHPG_STS_CD
+        AND SS.EZCANCELFLAG     = '0'
+        <isNotNull property="ediTpCd">
+        AND BLR.GLBL_CMPY_CD    = ETR.GLBL_CMPY_CD(+)
+        AND BLR.CARR_CD         = ETR.CARR_CD(+)
+        AND ETR.EDI_TP_CD(+)    = #ediTpCd#
+        AND ETR.EZCANCELFLAG(+) = '0'
+        </isNotNull>
+    </statement>
+
+    <statement id="getMaxPodSeqNum" parameterClass="Map" resultClass="String">
+        SELECT
+            MAX(POD.POD_SQ_NUM)
+        FROM
+            POD POD
+        WHERE
+            POD.GLBL_CMPY_CD = #glblCmpyCd#
+        AND POD.CARR_CD      = #carrCd#
+        AND POD.PRO_NUM      = #proNum#
+        AND POD.EZCANCELFLAG = '0'
+    </statement>
+
+    <statement id="getShppingPlanList" parameterClass="Map" resultClass="Map">
+        SELECT
+            SP.SHPG_PLN_NUM
+           ,SP.BOL_NUM
+           ,SP.PRO_NUM
+           ,SP.INVTY_LOC_CD
+           ,SP.SO_NUM
+           ,SP.SO_SLP_NUM
+           ,SO.SCHD_DELY_DT
+           ,NVL(SP.PDD_DT, SP.RDD_DT) AS PDD_DT
+        FROM
+            SHPG_PLN      SP
+           ,SHPG_ORD      SO
+        WHERE
+            SP.GLBL_CMPY_CD     = #glblCmpyCd#
+        AND SP.BOL_NUM          = #bolNum#
+        AND SP.EZCANCELFLAG     = '0'
+        AND (EXISTS (
+                     SELECT
+                         1
+                     FROM
+                         RTL_SWH RSW
+                     WHERE  
+                         RSW.GLBL_CMPY_CD = SP.GLBL_CMPY_CD
+                     AND RSW.INVTY_LOC_CD = SP.INVTY_LOC_CD
+                     AND RSW.RTL_WH_CD    = #whCd#
+                     AND RSW.EZCANCELFLAG = '0'
+                    )
+                 OR SP.INVTY_LOC_CD = #whCd#
+                )
+        AND SP.GLBL_CMPY_CD     = SO.GLBL_CMPY_CD(+)
+        AND SP.SO_NUM           = SO.SO_NUM(+)
+        AND SO.EZCANCELFLAG(+) = '0'
+        ORDER BY
+            BOL_NUM
+           ,INVTY_LOC_CD
+           ,SHPG_PLN_NUM
+    </statement>
+
+    <statement id="getShppingPlanListFromSo" parameterClass="Map" resultClass="Map">
+        SELECT
+            SP.GLBL_CMPY_CD
+           ,SP.SHPG_PLN_NUM
+           ,SOCD.SO_NUM
+           ,SOCD.SO_SLP_NUM
+           ,SOCD.WH_CD                                    AS INVTY_LOC_CD
+           ,DECODE(SOCD.BOL_NUM, '*', NULL, SOCD.BOL_NUM) AS BOL_NUM
+           ,SP.SHPG_STS_CD
+           ,SS.SHIP_FLG
+           ,DECODE(SOCD.PRO_NUM, '*', NULL, SOCD.PRO_NUM) AS PRO_NUM
+           ,DECODE(SOCD.VND_CD,  '*', NULL, SOCD.VND_CD)  AS CARR_CD
+           ,ETR.EDI_TP_CD                                 AS EDI_TP_CD
+           ,RSW.RTL_WH_CD
+           ,SO.SCHD_DELY_DT
+        FROM
+            SHPG_ORD_CONF_DTL SOCD
+           ,SHPG_ORD_CONF     SOCH
+           ,SHPG_ORD_DTL      SOD
+           ,SHPG_PLN          SP
+           ,SHPG_STS          SS
+           ,EDI_TP_RELN       ETR
+           ,RTL_SWH           RSW
+           ,SHPG_ORD          SO
+        WHERE
+            SOCD.GLBL_CMPY_CD   = #glblCmpyCd#
+        AND SOCD.BOL_NUM        = #bolNum#
+        AND SOCD.EZCANCELFLAG   = '0'
+        AND SOCD.GLBL_CMPY_CD   = SOCH.GLBL_CMPY_CD
+        AND SOCD.SO_NUM         = SOCH.SO_NUM
+        AND SOCH.WH_CD          = #whCd#
+        AND SOCH.EZCANCELFLAG   = '0'
+        AND SOCD.GLBL_CMPY_CD   = SOD.GLBL_CMPY_CD
+        AND SOCD.SO_NUM         = SOD.SO_NUM
+        AND SOCD.SO_SLP_NUM     = SOD.SO_SLP_NUM
+        AND SOD.EZCANCELFLAG    = '0'
+        AND SOD.GLBL_CMPY_CD    = SP.GLBL_CMPY_CD
+        AND SOD.SHPG_PLN_NUM    = SP.SHPG_PLN_NUM
+        AND SP.EZCANCELFLAG     = '0'
+        AND SP.GLBL_CMPY_CD     = SS.GLBL_CMPY_CD
+        AND SP.SHPG_STS_CD      = SS.SHPG_STS_CD
+        AND SS.EZCANCELFLAG     = '0'
+        AND SOCD.GLBL_CMPY_CD   = ETR.GLBL_CMPY_CD(+)
+        AND SOCD.VND_CD         = ETR.CARR_CD(+)
+        AND ETR.EZCANCELFLAG(+) = '0'
+        AND SOCD.GLBL_CMPY_CD   = RSW.GLBL_CMPY_CD(+)
+        AND SOCD.WH_CD          = RSW.INVTY_LOC_CD(+)
+        AND RSW.EZCANCELFLAG(+) = '0'
+        AND SOD.GLBL_CMPY_CD    = SO.GLBL_CMPY_CD(+)
+        AND SOD.SO_NUM          = SO.SO_NUM(+)
+        AND SO.EZCANCELFLAG(+) = '0'
+        ORDER BY
+            SP.BOL_NUM
+           ,SP.PRO_NUM
+           ,SP.SHPG_PLN_NUM
+    </statement>
+
+    <statement id="getLatestShpgOrdDelyTrk" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            SHPG_ORD_DELY_TRK_PK
+        FROM
+            SHPG_ORD_DELY_TRK
+        WHERE
+            GLBL_CMPY_CD     = #glblCmpyCd#
+        AND SO_NUM           = #soNum#
+        AND SO_SLP_NUM       = #soSlpNum#
+        AND POD_LTST_REC_FLG = #flgY#
+        AND EZCANCELFLAG     = '0'
+    </statement>
+
+    <statement id="getFsrTaskList" parameterClass="Map" resultClass="Map">
+        WITH FSR_LST AS (
+            SELECT
+                SO.GLBL_CMPY_CD
+               ,SO.TRX_HDR_NUM
+               ,SO.DS_CPO_CONFIG_PK
+               ,ST.FSR_NUM
+               ,ST.SVC_TASK_NUM
+               ,SMM.SVC_MACH_MSTR_PK
+               ,SMM.SER_NUM
+               ,SMM.CUST_MACH_CTRL_NUM
+<!-- START 2018/06/07 M.Naito [QC#26066, ADD] -->
+               ,SO.TECH_MEET_TRUCK_FLG
+<!-- END 2018/06/07 M.Naito [QC#26066, ADD] -->
+            FROM
+                SHPG_ORD        SO
+               ,SHPG_ORD_DTL    SOD
+               ,SVC_MACH_MSTR   SMM
+               ,SVC_TASK        ST
+               ,FSR_VISIT       FV
+            WHERE
+                SOD.GLBL_CMPY_CD       = #glblCmpyCd#
+            AND SOD.SO_NUM             = #soNum#
+            AND SOD.SO_SLP_NUM         = #soSlpNum#
+            AND SOD.EZCANCELFLAG       = '0'
+            AND SOD.GLBL_CMPY_CD       = SO.GLBL_CMPY_CD
+            AND SOD.SO_NUM             = SO.SO_NUM
+            AND SO.EZCANCELFLAG        = '0'
+            AND SOD.GLBL_CMPY_CD       = SMM.GLBL_CMPY_CD
+            AND SOD.SO_NUM             = SMM.SO_NUM
+            AND SOD.SO_SLP_NUM         = SMM.SO_SLP_NUM
+            AND SMM.EZCANCELFLAG       = '0'
+            AND SMM.GLBL_CMPY_CD       = ST.GLBL_CMPY_CD
+            AND SMM.SVC_MACH_MSTR_PK   = ST.SVC_MACH_MSTR_PK
+            AND ST.EZCANCELFLAG        = '0'
+            AND ST.GLBL_CMPY_CD        = FV.GLBL_CMPY_CD
+            AND ST.FSR_NUM             = FV.FSR_NUM
+            AND ST.SVC_TASK_NUM        = FV.SVC_TASK_NUM
+<!-- START 2018/05/09 M.Naito [QC#26023, MOD] -->
+            <!-- AND FV.FSR_VISIT_STS_CD  = #svcTaskStsPendInstl# -->
+            AND FV.FSR_VISIT_STS_CD    IN (#svcTaskStsTBO#, #svcTaskStsScheduled#, #svcTaskStsAssigned#)
+<!-- START 2018/06/07 M.Naito [QC#26066, DEL] -->
+            <!-- AND SO.TECH_MEET_TRUCK_FLG = 'N' -->
+<!-- END 2018/06/07 M.Naito [QC#26066, DEL] -->
+<!-- END 2018/05/09 M.Naito [QC#26023, MOD] -->
+            AND FV.EZCANCELFLAG        = '0'
+        )
+        , CONFIG_TECH AS (
+            SELECT
+                DCII.CPO_ORD_NUM
+               ,DCII.DS_CPO_CONFIG_PK
+               ,DCII.ISTL_TECH_CD
+               ,ROW_NUMBER() OVER(PARTITION BY DCII.CPO_ORD_NUM, DCII.DS_CPO_CONFIG_PK ORDER BY DCII.DS_CPO_ISTL_INFO_PK) AS ROW_NUM
+            FROM
+                FSR_LST          FL
+               ,DS_CPO_ISTL_INFO DCII
+            WHERE
+                FL.GLBL_CMPY_CD     = DCII.GLBL_CMPY_CD
+            AND FL.TRX_HDR_NUM      = DCII.CPO_ORD_NUM
+            AND FL.DS_CPO_CONFIG_PK = DCII.DS_CPO_CONFIG_PK
+            AND DCII.EZCANCELFLAG   = '0'
+        )
+        , CPO_TECH AS (
+            SELECT
+                DCII.CPO_ORD_NUM
+               ,DCII.ISTL_TECH_CD
+               ,ROW_NUMBER() OVER(PARTITION BY DCII.CPO_ORD_NUM ORDER BY DCII.DS_CPO_ISTL_INFO_PK) AS ROW_NUM
+            FROM
+                FSR_LST          FL
+               ,DS_CPO_ISTL_INFO DCII
+            WHERE
+                FL.GLBL_CMPY_CD     = DCII.GLBL_CMPY_CD
+            AND FL.TRX_HDR_NUM      = DCII.CPO_ORD_NUM
+            AND DCII.EZCANCELFLAG   = '0'
+        )
+        SELECT
+            FSRL.FSR_NUM
+           ,FSRL.SVC_TASK_NUM
+           ,SVC_MACH_MSTR_PK
+           ,SER_NUM
+           ,CUST_MACH_CTRL_NUM
+           ,NVL(CONT.ISTL_TECH_CD, CPOT.ISTL_TECH_CD) AS ISTL_TECH_CD
+<!-- START 2018/06/07 M.Naito [QC#26066, ADD] -->
+           ,FSRL.TECH_MEET_TRUCK_FLG
+<!-- END 2018/06/07 M.Naito [QC#26066, ADD] -->
+        FROM
+            FSR_LST     FSRL
+           ,CONFIG_TECH CONT
+           ,CPO_TECH    CPOT
+        WHERE
+            FSRL.TRX_HDR_NUM      = CONT.CPO_ORD_NUM(+)
+        AND FSRL.DS_CPO_CONFIG_PK = CONT.DS_CPO_CONFIG_PK(+)
+        AND CONT.ROW_NUM(+)       = 1
+        AND FSRL.TRX_HDR_NUM      = CPOT.CPO_ORD_NUM(+)
+        AND CPOT.ROW_NUM(+)       = 1
+        ORDER BY
+            FSRL.FSR_NUM
+    </statement>
+
+    <statement id="getRmvFsrTaskList" parameterClass="Map" resultClass="Map">
+        SELECT
+            ST.FSR_NUM
+           ,ST.SVC_TASK_NUM
+           ,SMM.SVC_MACH_MSTR_PK
+           ,SMM.SER_NUM
+           ,SMM.CUST_MACH_CTRL_NUM
+        FROM
+            SVC_TASK      ST
+           ,FSR_VISIT     FV
+           ,SVC_MACH_MSTR SMM
+        WHERE
+            ST.GLBL_CMPY_CD      = #glblCmpyCd#
+        AND ST.DS_SVC_CALL_TP_CD = #dsSvcCallTpRmaWithInstl#
+        AND ST.EZCANCELFLAG      = '0'
+        AND ST.GLBL_CMPY_CD      = FV.GLBL_CMPY_CD
+        AND ST.FSR_NUM           = FV.FSR_NUM
+        AND ST.SVC_TASK_NUM      = FV.SVC_TASK_NUM
+        AND FV.FSR_VISIT_STS_CD  = #svcTaskStsPendInstl#
+        AND FV.EZCANCELFLAG      = '0'
+        AND ST.GLBL_CMPY_CD      = SMM.GLBL_CMPY_CD
+        AND ST.SVC_MACH_MSTR_PK  = SMM.SVC_MACH_MSTR_PK
+        AND SMM.EZCANCELFLAG     = '0'
+        AND EXISTS (
+                    SELECT
+                        1
+                    FROM
+                       SHPG_ORD        SO
+                      ,DS_CPO_RTRN_DTL RD
+                      ,SVC_CONFIG_MSTR SCM
+                    WHERE
+                        SO.GLBL_CMPY_CD       = SMM.GLBL_CMPY_CD
+                    AND SO.SO_NUM             = #soNum#
+                    AND SO.EZCANCELFLAG       = '0'
+                    AND SO.GLBL_CMPY_CD       = RD.GLBL_CMPY_CD
+                    AND SO.TRX_HDR_NUM        = RD.CPO_ORD_NUM
+                    AND RD.EZCANCELFLAG       = '0'
+                    AND RD.GLBL_CMPY_CD       = SCM.GLBL_CMPY_CD
+                    AND RD.SVC_CONFIG_MSTR_PK = SCM.SVC_CONFIG_MSTR_PK
+                    AND SCM.SVC_MACH_MSTR_PK  = SMM.SVC_MACH_MSTR_PK
+                    AND SCM.EZCANCELFLAG      = '0'
+                   )
+        ORDER BY
+            ST.FSR_NUM
+    </statement>
+
+    <statement id="getSMMPk" parameterClass="Map" resultClass="Map">
+        SELECT
+            SMM.SER_NUM
+           ,SMM.SVC_MACH_MSTR_PK
+        FROM
+            SVC_MACH_MSTR   SMM
+        WHERE
+            SMM.GLBL_CMPY_CD         = #glblCmpyCd#
+        AND SMM.SO_NUM               = #soNum#
+        AND SMM.SO_SLP_NUM           = #soSlpNum#
+        AND SMM.SVC_MACH_MSTR_STS_CD = #stsWtngForInstl#
+        AND SMM.SVC_MACH_USG_STS_CD &lt;&gt; #usgStsAtCust#
+        AND SMM.EZCANCELFLAG         = '0'
+    </statement>
+
+     <statement id="countNotDeliveryConfRecord" parameterClass="Map" resultClass="Integer">
+        SELECT
+            COUNT(*)
+        FROM
+            SHPG_ORD_DTL SOD
+        WHERE
+            SOD.GLBL_CMPY_CD = #glblCmpyCd#
+        AND SOD.SO_NUM       = #soNum#
+        AND SOD.ACTL_DELY_DT IS NULL
+        AND SOD.SHPG_STS_CD  = #shpgStsCd#
+        AND SOD.EZCANCELFLAG = '0'
+     </statement>
+
+    <statement id="getShppingPlanSoNum" parameterClass="Map" resultClass="String">
+        SELECT DISTINCT
+           SP.SO_NUM
+        FROM
+            SHPG_PLN      SP
+        WHERE
+            SP.GLBL_CMPY_CD     = #glblCmpyCd#
+        AND SP.PRO_NUM          = #proNum#
+        AND SP.EZCANCELFLAG     = '0'
+    </statement>
+
+    <statement id="getPartCallFsrTaskList" parameterClass="Map" resultClass="Map">
+        SELECT
+            ST.FSR_NUM
+           ,ST.SVC_TASK_NUM
+           ,FV.FSR_VISIT_STS_CD
+           ,ST.SVC_MACH_MSTR_PK
+        FROM
+            SVC_TASK      ST
+           ,FSR_VISIT     FV
+        WHERE
+            ST.GLBL_CMPY_CD      = #glblCmpyCd#
+        AND ST.EZCANCELFLAG      = '0'
+        AND ST.GLBL_CMPY_CD      = FV.GLBL_CMPY_CD
+        AND ST.FSR_NUM           = FV.FSR_NUM
+        AND ST.SVC_TASK_NUM      = FV.SVC_TASK_NUM
+        <iterate property="fsrVisitStsList" var="fsrVisitStsList[]" open="AND FV.FSR_VISIT_STS_CD IN (" conjunction= ", " close=")">
+            #fsrVisitStsList[]#
+        </iterate>
+        AND FV.EZCANCELFLAG      = '0'
+        AND EXISTS (
+                SELECT
+                    1
+                FROM
+                   PRCH_REQ        PR
+                  ,PRCH_REQ_DTL    PRD
+                  ,SHPG_ORD_DTL    SOD
+                WHERE
+                    PR.GLBL_CMPY_CD       = ST.GLBL_CMPY_CD
+                AND PR.FSR_NUM            = ST.FSR_NUM
+                AND PR.SVC_TASK_NUM       = ST.SVC_TASK_NUM
+                AND PR.EZCANCELFLAG       = '0'
+                AND PR.GLBL_CMPY_CD       = PRD.GLBL_CMPY_CD
+                AND PR.PRCH_REQ_NUM       = PRD.PRCH_REQ_NUM
+                AND PRD.SO_NUM            = #soNum#
+                AND PRD.EZCANCELFLAG      = '0'
+                AND PRD.GLBL_CMPY_CD      = SOD.GLBL_CMPY_CD
+                AND PRD.SO_NUM            = SOD.SO_NUM
+                AND SOD.SO_SLP_NUM        = #soSlpNum#
+            )
+        ORDER BY
+            ST.FSR_NUM
+    </statement>
+
+    <statement id="getPartCallFsrTaskListByEDI" parameterClass="Map" resultClass="Map">
+        SELECT
+            ST.FSR_NUM
+           ,ST.SVC_TASK_NUM
+           ,FV.FSR_VISIT_STS_CD
+           ,ST.SVC_MACH_MSTR_PK
+           ,EADW.ASN_PLN_DELY_DT
+           ,EADW.EZUPUSERID
+        FROM
+            EDI_ASN_DTL_WRK EADW
+           ,PO_DTL          PD
+           ,PRCH_REQ_DTL    PRD
+           ,PRCH_REQ        PR
+           ,SVC_TASK        ST
+           ,FSR_VISIT       FV
+        WHERE
+            ST.GLBL_CMPY_CD          = #glblCmpyCd#
+        AND ST.EZCANCELFLAG          = '0'
+        AND ST.GLBL_CMPY_CD          = FV.GLBL_CMPY_CD
+        AND ST.FSR_NUM               = FV.FSR_NUM
+        AND ST.SVC_TASK_NUM          = FV.SVC_TASK_NUM
+        <iterate property="fsrVisitStsList" var="fsrVisitStsList[]" open="AND FV.FSR_VISIT_STS_CD IN (" conjunction= ", " close=")">
+            #fsrVisitStsList[]#
+        </iterate>
+        AND FV.EZCANCELFLAG          = '0'
+        AND ST.GLBL_CMPY_CD          = EADW.GLBL_CMPY_CD
+        AND EADW.ASN_BOL_NUM      LIKE #bolNum#
+        AND EADW.GLBL_CMPY_CD        = PD.GLBL_CMPY_CD
+        AND EADW.PO_ORD_NUM          = PD.PO_ORD_NUM
+        AND EADW.PO_ORD_DTL_LINE_NUM = PD.PO_ORD_DTL_LINE_NUM
+        AND PD.GLBL_CMPY_CD          = PRD.GLBL_CMPY_CD
+        AND PD.TRX_REF_NUM           = PRD.PRCH_REQ_NUM
+        AND PD.TRX_REF_LINE_NUM      = PRD.PRCH_REQ_LINE_NUM
+        AND PD.TRX_REF_LINE_SUB_NUM  = PRD.PRCH_REQ_LINE_SUB_NUM
+        AND PRD.GLBL_CMPY_CD         = PR.GLBL_CMPY_CD
+        AND PRD.PRCH_REQ_NUM         = PR.PRCH_REQ_NUM
+        AND PR.FSR_NUM               = ST.FSR_NUM
+        AND PR.SVC_TASK_NUM          = ST.SVC_TASK_NUM
+        AND EADW.EZCANCELFLAG        = '0'
+        AND PD.EZCANCELFLAG          = '0'
+        AND PRD.EZCANCELFLAG         = '0'
+        AND PR.EZCANCELFLAG          = '0'
+        ORDER BY
+            EADW.ASN_PLN_DELY_DT DESC
+           ,ST.FSR_NUM
+    </statement>
+</sqlMap>

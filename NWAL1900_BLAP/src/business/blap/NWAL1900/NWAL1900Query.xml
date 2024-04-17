@@ -1,0 +1,108 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NWAL1900Query">
+
+    <statement id="getPrcRuleInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+                  PRH.PRC_RULE_HDR_PK        PRC_RULE_HDR_PK
+                , PRH.PRC_RULE_NM            PRC_RULE_NM
+                , PRCT.PRC_RULE_COND_TP_CD   PRC_RULE_COND_TP_CD
+                , PRCT.PRC_RULE_COND_TP_NM   PRC_RULE_COND_TP_NM
+                , PRH.APPLY_AUTO_FLG         APPLY_AUTO_FLG
+                , PRH.OVRD_FLG               OVRD_FLG
+                , PRH.DEF_RULE_PRCD_NUM      DEF_RULE_PRCD_NUM
+                , PRH.EFF_FROM_DT            EFF_FROM_DT
+                , PRH.EFF_THRU_DT            EFF_THRU_DT
+            FROM
+                  PRC_RULE_HDR      PRH
+                , PRC_RULE_COND_TP  PRCT
+            WHERE
+                PRH.GLBL_CMPY_CD               = #glblCmpyCd#
+                AND PRH.EZCANCELFLAG           = '0'
+                AND PRH.ACTV_FLG               = #actvFlg#
+                AND PRH.DEL_FLG                = #delFlg#
+                AND PRH.EFF_FROM_DT        &lt;= #slsDt#
+                AND NVL(PRH.EFF_THRU_DT, '99991231') &gt;= #slsDt#
+                AND (PRH.PRC_RULE_MOD_TP_CD    = #prcRuleModTpCd#
+                     OR EXISTS (SELECT    * 
+                                    FROM
+                                          PRC_RULE_DTL DTL
+                                    WHERE
+                                          DTL.GLBL_CMPY_CD            = #glblCmpyCd#
+                                          AND DTL.EZCANCELFLAG        = '0'
+                                          AND PRH.PRC_RULE_HDR_PK     = DTL.PRC_RULE_HDR_PK
+                                          AND DTL.PRC_RULE_MOD_TP_CD  = #prcRuleModTpCd#))
+                <isNotNull property="prcRuleAdjLvlCd">
+                AND (PRH.PRC_RULE_ADJ_LVL_CD    = #prcRuleAdjLvlCd#
+                     OR EXISTS (SELECT    * 
+                                    FROM
+                                          PRC_RULE_DTL DTL
+                                    WHERE
+                                          DTL.GLBL_CMPY_CD            = #glblCmpyCd#
+                                          AND DTL.EZCANCELFLAG        = '0'
+                                          AND PRH.PRC_RULE_HDR_PK     = DTL.PRC_RULE_HDR_PK
+                                          AND DTL.PRC_RULE_ADJ_LVL_CD  = #prcRuleAdjLvlCd#))
+                </isNotNull>
+                AND PRH.LINE_BIZ_TP_CD         = #lineBizTpCd#
+                AND PRH.PRC_GRP_TRX_TP_CD      = #dsTrxRuleTpCd#
+                AND PRH.GLBL_CMPY_CD           = PRCT.GLBL_CMPY_CD
+                AND PRH.EZCANCELFLAG           = PRCT.EZCANCELFLAG
+                AND PRH.PRC_RULE_COND_TP_CD    = PRCT.PRC_RULE_COND_TP_CD
+            ORDER BY
+                PRH.DEF_RULE_PRCD_NUM, PRH.PRC_RULE_HDR_PK
+    </statement>
+
+    <statement id="getOrdPrcCalcBase" parameterClass="Map" resultClass="Map">
+    <!--  Price Rule -->
+        SELECT
+                PRH.PRC_RULE_HDR_PK
+                ,NULL                AS PRC_ADJ_DTL_PK
+            FROM
+                  SPEC_COND_PRC      SCP
+                , PRC_RULE_DTL       PRD
+                , PRC_RULE_HDR       PRH
+            WHERE
+                    SCP.GLBL_CMPY_CD        = #glblCmpyCd# 
+                AND SCP.EZCANCELFLAG        = '0' 
+                AND SCP.SPEC_COND_PRC_PK    = #specCondPrcPk#
+                AND SCP.GLBL_CMPY_CD        = PRD.GLBL_CMPY_CD 
+                AND SCP.EZCANCELFLAG        = PRD.EZCANCELFLAG 
+                --AND SCP.PRC_RULE_DTL_PK     = PRD.PRC_RULE_HDR_PK
+                AND SCP.PRC_RULE_DTL_PK     = PRD.PRC_RULE_DTL_PK
+                AND PRD.GLBL_CMPY_CD        = PRH.GLBL_CMPY_CD
+                AND PRD.EZCANCELFLAG        = PRH.EZCANCELFLAG
+                AND PRD.PRC_RULE_HDR_PK     = PRH.PRC_RULE_HDR_PK
+        UNION ALL
+        <!--  Adjustment -->
+        SELECT
+                PRH.PRC_RULE_HDR_PK
+                ,PRC_ADJ_DTL_PK      AS PRC_ADJ_DTL_PK
+            FROM
+                  SPEC_COND_PRC      SCP
+                , PRC_ADJ_DTL        PAD
+                , PRC_RULE_HDR       PRH
+            WHERE
+                    SCP.GLBL_CMPY_CD        = #glblCmpyCd# 
+                AND SCP.EZCANCELFLAG        = '0' 
+                AND SCP.SPEC_COND_PRC_PK    = #specCondPrcPk#
+                AND SCP.GLBL_CMPY_CD        = PAD.GLBL_CMPY_CD 
+                AND SCP.EZCANCELFLAG        = PAD.EZCANCELFLAG 
+                --AND SCP.PRC_RULE_DTL_PK     = PAD.PRC_RULE_HDR_PK
+                AND SCP.PRC_RULE_DTL_PK     = PAD.PRC_RULE_DTL_PK 
+                AND PAD.GLBL_CMPY_CD        = PRH.GLBL_CMPY_CD
+                AND PAD.EZCANCELFLAG        = PRH.EZCANCELFLAG
+                AND PAD.PRC_RULE_HDR_PK     = PRH.PRC_RULE_HDR_PK
+    </statement>
+
+    <statement id="getPrcPrcdActNm" parameterClass="Map" resultClass="String">
+        SELECT
+              PRC_PRCD_ACT_TP_NM
+        FROM  PRC_RULE_PRCD    PRCD
+             ,PRC_PRCD_ACT_TP  ACT
+        WHERE PRCD.GLBL_CMPY_CD       = #glblCmpyCd#
+        AND   PRCD.EZCANCELFLAG       = '0'
+        AND   PRCD.PRC_RULE_PRCD_PK   = #prcRulePrcdPk#
+        AND   PRCD.GLBL_CMPY_CD       = ACT.GLBL_CMPY_CD
+        AND   PRCD.EZCANCELFLAG       = ACT.EZCANCELFLAG
+        AND   PRCD.PRC_PRCD_ACT_TP_CD = ACT.PRC_PRCD_ACT_TP_CD
+    </statement>
+</sqlMap>

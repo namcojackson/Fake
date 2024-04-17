@@ -1,0 +1,223 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NSAL1380Query">
+    <statement id="getHeaderInfoTmpl" parameterClass="Map" resultClass="Map">
+        SELECT
+                 SCT.SCHD_CRAT_TMPL_PK
+                ,SCT.SPLY_BASE_AMT
+                ,SCT.QTY_CONTR_CAP_QTY
+                ,SCT.EZUPTIME
+                ,SCT.EZUPTIMEZONE
+        FROM     SCHD_CRAT_TMPL      SCT
+                ,SCHD_CRAT_TMPL_LINE SCL
+        WHERE
+                 SCT.GLBL_CMPY_CD           = #glblCmpyCd#
+             AND SCT.EZCANCELFLAG           = '0'
+
+             AND SCT.GLBL_CMPY_CD           = SCL.GLBL_CMPY_CD
+             AND SCT.SCHD_CRAT_TMPL_PK      = SCL.SCHD_CRAT_TMPL_PK
+             AND SCL.DS_CONTR_DTL_PK        = #dsContrDtlPk#
+             AND SCL.EZCANCELFLAG           = '0'
+             AND ROWNUM                     = 1
+    </statement>
+
+    <statement id="getHeaderInfoPln" parameterClass="Map" resultClass="Map">
+        SELECT
+                 SAP.SPLY_AGMT_PLN_PK
+                ,SAP.SPLY_AGMT_PLN_NM
+                ,SAP.SPLY_AGMT_PLN_SHORT_NM
+                ,SAP.SPLY_AGMT_PLN_DESC_TXT
+                ,SAP.SPLY_AGMT_DOC_TP_CD
+                ,SADT.SPLY_AGMT_DOC_TP_DESC_TXT
+                ,SAP.SPLY_AGMT_PLN_TP_CD
+                ,SAPT.SPLY_AGMT_PLN_TP_DESC_TXT
+                ,SAP.ANN_TERM_CAP_NUM
+        FROM
+                  PRC_LIST_SPLY_PGM  PLSP
+                , SPLY_AGMT_PLN      SAP
+                , SPLY_AGMT_DOC_TP   SADT
+                , SPLY_AGMT_PLN_TP   SAPT
+                , PRC_LIST_BAND      PLB
+        WHERE
+                 PLSP.GLBL_CMPY_CD          = #glblCmpyCd#
+             AND PLSP.MDL_ID                = #mdlId#
+             AND PLSP.PRC_MTR_PKG_PK        = #prcMtrPkgPk#
+             AND PLSP.PRC_SVC_PLN_TP_CD     = #prcSvcPlnTpCd#
+             AND PLSP.PRC_SVC_CONTR_TP_CD   = #prcSvcContrTpCd#
+             AND PLSP.BLLG_MTR_LB_CD        = #bllgMtrLbCd#
+             AND PLSP.PRC_CATG_CD           = #prcCatgCd#
+             AND PLSP.EFF_FROM_DT          &lt;= #slsDt#
+             AND ( 
+                 PLSP.EFF_THRU_DT          IS NULL
+                 OR PLSP.EFF_THRU_DT       &gt;= #slsDt#
+             ) 
+             AND PLSP.TERM_FROM_MTH_AOT    &lt;= #termMthAot#
+             AND PLSP.TERM_THRU_MTH_AOT    &gt;= #termMthAot#
+             
+             AND PLSP.GLBL_CMPY_CD          = SAP.GLBL_CMPY_CD
+             AND PLSP.SPLY_AGMT_PLN_PK      = SAP.SPLY_AGMT_PLN_PK
+             
+             AND SAP.GLBL_CMPY_CD           = SADT.GLBL_CMPY_CD
+             AND SAP.SPLY_AGMT_DOC_TP_CD    = SADT.SPLY_AGMT_DOC_TP_CD
+
+             AND SAP.GLBL_CMPY_CD           = SAPT.GLBL_CMPY_CD(+)
+             AND SAP.SPLY_AGMT_PLN_TP_CD    = SAPT.SPLY_AGMT_PLN_TP_CD(+)
+             --
+             AND PLSP.GLBL_CMPY_CD          = PLB.GLBL_CMPY_CD
+             AND PLSP.PRC_LIST_BAND_CD      = PLB.PRC_LIST_BAND_CD
+             AND PLB.PRC_LIST_BAND_DESC_TXT = #prcListBandDescTxt#
+
+             AND SAP.EZCANCELFLAG           = '0'
+             AND PLSP.EZCANCELFLAG          = '0'
+             AND SADT.EZCANCELFLAG          = '0'
+             AND SAPT.EZCANCELFLAG(+)       = '0'
+             AND PLB.EZCANCELFLAG           = '0'
+             AND ROWNUM                     = 1
+    </statement>
+
+    <statement id="getDetailInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+                 SCTL.SCHD_CRAT_TMPL_PK
+                ,SCTL.SCHD_CRAT_TMPL_LINE_NUM
+                ,IST.IMG_SPLY_TP_NM
+                ,SCTL.MDSE_CD
+                ,M.MNF_ITEM_CD
+                ,M.MDSE_DESC_SHORT_TXT
+                ,SCTL.SHPG_INTVL_CD
+                ,SCTL.OTM_SHIP_QTY
+                ,SCTL.SCHD_ALLW_QTY
+                ,SCTL.FIRST_SHIP_QTY
+                -- Annual Entitlement = Qty * RoundDown(12Months / Frequency Months)
+                ,CASE
+                   WHEN SI.SHPG_INTVL_MTH_NUM IS NOT NULL AND SI.SHPG_INTVL_MTH_NUM != 0
+                     THEN SCTL.OTM_SHIP_QTY * (TRUNC(#numberOfMonths# / SI.SHPG_INTVL_MTH_NUM))
+                   ELSE 0
+                 END ANN_ETTL_CNT
+                <!-- 2018/08/10 S21_NA#27491 Mod Start -->
+                <!-- Term Total Entitlement = (Term Total Entitlement) * RoundDown(Term Months Number / 12Months) -->
+                <!-- ,CASE -->
+                <!--    WHEN SI.SHPG_INTVL_MTH_NUM IS NOT NULL AND SI.SHPG_INTVL_MTH_NUM != 0 -->
+                <!--      THEN (SCTL.OTM_SHIP_QTY * (TRUNC(#numberOfMonths# / SI.SHPG_INTVL_MTH_NUM))) * (TRUNC(#termMthAot# / #numberOfMonths#)) -->
+                <!--    ELSE NULL -->
+                <!--  END TERM_TOT_ETTL_CNT -->
+                ,SCTL.SCHD_ALLW_QTY      TERM_TOT_ETTL_CNT
+                <!-- 2018/08/10 S21_NA#27491 Mod End -->
+                ,SCTL.EZUPTIME
+                ,SCTL.EZUPTIMEZONE
+        FROM
+                  SCHD_CRAT_TMPL_LINE SCTL
+                , SHPG_INTVL          SI
+                , ALL_MDSE_V          M
+                , IMG_SPLY_TP         IST
+        WHERE
+                 SCTL.GLBL_CMPY_CD           = #glblCmpyCd#
+             AND SCTL.DS_CONTR_DTL_PK        = #dsContrDtlPk#
+             AND SCTL.EZCANCELFLAG           = '0'
+
+             AND SCTL.GLBL_CMPY_CD           = SI.GLBL_CMPY_CD(+)
+             AND SCTL.SHPG_INTVL_CD          = SI.SHPG_INTVL_CD(+)
+             AND SI.EZCANCELFLAG(+)          = '0'
+
+             AND SCTL.GLBL_CMPY_CD           = M.GLBL_CMPY_CD(+)
+             AND SCTL.MDSE_CD                = M.MDSE_CD(+)
+             AND M.EZCANCELFLAG(+)           = '0'
+
+             AND M.GLBL_CMPY_CD              = IST.GLBL_CMPY_CD(+)
+             AND M.IMG_SPLY_TP_CD            = IST.IMG_SPLY_TP_CD(+)
+             AND IST.EZCANCELFLAG(+)         = '0'
+        ORDER BY
+            SCTL.SCHD_CRAT_TMPL_PK
+           ,SCTL.SCHD_CRAT_TMPL_LINE_NUM
+    </statement>
+    <!-- START 2017/10/16 [QC#20001, ADD] -->
+    <statement id="getSchdCratTmplPkByDsContrDtlGrpNum" parameterClass="Map" resultClass="Map">
+        SELECT DISTINCT
+                 SCT.SCHD_CRAT_TMPL_PK
+                ,SCL.DS_CONTR_DTL_PK
+                ,CD.DS_ORD_POSN_NUM
+        FROM     SCHD_CRAT_TMPL      SCT
+                ,SCHD_CRAT_TMPL_LINE SCL
+                ,DS_CONTR_DTL        DCD
+                ,CPO_DTL             CD
+        WHERE
+                 SCT.GLBL_CMPY_CD           = #glblCmpyCd#
+             AND SCT.EZCANCELFLAG           = '0'
+             AND SCT.GLBL_CMPY_CD           = SCL.GLBL_CMPY_CD
+             AND SCT.SCHD_CRAT_TMPL_PK      = SCL.SCHD_CRAT_TMPL_PK
+             AND SCL.GLBL_CMPY_CD           = DCD.GLBL_CMPY_CD
+             AND SCL.DS_CONTR_DTL_PK        = DCD.DS_CONTR_DTL_PK
+             AND DCD.DS_CONTR_DTL_GRP_NUM   = #dsContrDtlGrpNum#
+             AND DCD.DS_CONTR_DTL_PK &lt;&gt; #dsContrDtlPk#
+             AND SCL.EZCANCELFLAG           = '0'
+             AND DCD.GLBL_CMPY_CD           = CD.GLBL_CMPY_CD
+             AND DCD.CPO_ORD_NUM            = CD.CPO_ORD_NUM
+             AND DCD.CPO_DTL_LINE_NUM       = CD.CPO_DTL_LINE_NUM
+             AND DCD.CPO_DTL_LINE_SUB_NUM   = CD.CPO_DTL_LINE_SUB_NUM
+             AND CD.EZCANCELFLAG            = '0'
+        ORDER BY
+                 CD.DS_ORD_POSN_NUM
+    </statement>
+    <!-- END   2017/10/16 [QC#20001, ADD] -->
+    <!-- START 2018/09/05 [QC#28055, ADD] -->
+    <statement id="getScrtEntAvalFlg" parameterClass="Map" resultClass="String">
+        SELECT
+            CASE 
+                WHEN CD.DS_CONTR_DTL_STS_CD &lt;&gt; #order# THEN 'N'
+                WHEN DCD.ORD_LINE_STS_CD    &gt;= #partiallyShipped#   THEN 'N'
+                WHEN EXISTS (
+                    SELECT
+                        1
+                    FROM
+                          DS_CPO_CONFIG     CV
+                        , CPO_DTL           DV
+                        , SHPG_PLN          SP
+                    WHERE
+                            CV.GLBL_CMPY_CD          = DCD.GLBL_CMPY_CD
+                        AND CV.CPO_ORD_NUM           = DCD.CPO_ORD_NUM
+                        AND CV.EZCANCELFLAG          = '0'
+                        AND CV.GLBL_CMPY_CD          = DV.GLBL_CMPY_CD
+                        AND CV.DS_CPO_CONFIG_PK      = DV.DS_CPO_CONFIG_PK
+                        AND CV.DS_ORD_POSN_NUM       = DV.DS_ORD_POSN_NUM
+                        AND DV.BASE_CMPT_FLG         = 'Y'
+                        AND DV.EZCANCELFLAG          = '0'
+                        AND DV.GLBL_CMPY_CD          = CD.GLBL_CMPY_CD
+                        AND DV.CPO_ORD_NUM           = CD.CPO_ORD_NUM
+                        AND DV.CPO_DTL_LINE_NUM      = CD.CPO_DTL_LINE_NUM
+                        AND DV.CPO_DTL_LINE_SUB_NUM  = CD.CPO_DTL_LINE_SUB_NUM
+                        AND DV.CPO_ORD_NUM           = SP.TRX_HDR_NUM
+                        AND DV.CPO_DTL_LINE_NUM      = SP.TRX_LINE_NUM
+                        AND DV.CPO_DTL_LINE_SUB_NUM  = SP.TRX_LINE_SUB_NUM
+                        AND SP.SHPG_STS_CD          &gt;= #arrived#
+                        AND SP.EZCANCELFLAG          = '0'
+                ) THEN 'N'
+                ELSE 'Y'
+            END AS SCR_ENT_AVAL_FLG
+        FROM
+             DS_CONTR_DTL          CD
+            ,CPO_DTL               DCD
+        WHERE
+            CD.GLBL_CMPY_CD         = #glblCmpyCd#
+        AND CD.DS_CONTR_DTL_PK      = #dsContrDtlPk#
+        AND CD.EZCANCELFLAG         = '0'
+        AND CD.GLBL_CMPY_CD         = DCD.GLBL_CMPY_CD
+        AND CD.CPO_ORD_NUM          = DCD.CPO_ORD_NUM
+        AND CD.CPO_DTL_LINE_NUM     = DCD.CPO_DTL_LINE_NUM
+        AND CD.CPO_DTL_LINE_SUB_NUM = DCD.CPO_DTL_LINE_SUB_NUM
+        AND DCD.EZCANCELFLAG        = '0'
+    </statement>
+    <!-- END 2018/09/05 [QC#28055, ADD] -->
+    
+    <!-- 2018/09/10 S21_NA#28104 Add Start -->
+    <statement id="getSvcTermCondAttrbPk" parameterClass="Map" resultClass="Map">
+        SELECT
+                 STC.SVC_TERM_COND_PK
+        FROM     SVC_TERM_COND      STC
+        WHERE
+                 STC.GLBL_CMPY_CD           = #glblCmpyCd#
+             AND STC.EZCANCELFLAG           = '0'
+
+             AND STC.DS_CONTR_DTL_PK        = #dsContrDtlPk#
+             AND STC.SVC_TERM_COND_ATTRB_PK = #svcTermCondAttrbPk#
+             AND ROWNUM                     = 1
+    </statement>
+    <!-- 2018/09/10 S21_NA#28104 Add End -->
+</sqlMap>

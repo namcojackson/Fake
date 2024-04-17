@@ -1,0 +1,220 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NSAL1250Query">
+    <statement id="getTransactionInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+            A.DS_CONTR_NUM
+           ,A.DS_CONTR_CATG_CD
+           ,A.SER_NUM
+           ,A.SVC_MACH_MSTR_PK
+           ,A.DS_CONTR_PK
+           <!-- START 2019/09/02 K.Kitachi [QC#52695, ADD] -->
+           ,A.DS_CONTR_DTL_PK
+           <!-- END 2019/09/02 K.Kitachi [QC#52695, ADD] -->
+           ,A.BILL_TO_CUST_CD
+           ,A.SVC_CONTR_BLLG_THRU_DT
+           ,NVL(A.BLLG_LIMIT_AMT, 0) BLLG_LIMIT_AMT
+           <!-- START 2018/03/23 U.Kim [QC#18884(Sol337), ADD]  -->
+           ,A.MTR_COPY_QTY
+           <!-- END 2018/03/23 U.Kim [QC#18884(Sol337), ADD]  -->
+        FROM(
+            SELECT
+                DC.DS_CONTR_NUM
+               ,DC.DS_CONTR_CATG_CD
+	           ,(
+	               CASE
+	                   WHEN
+	                       DC.DS_CONTR_CATG_CD = #dsContrCatgCd_Fleet#
+	                   THEN
+	                       CTG.DS_CONTR_CATG_ABBR_NM || '_' || DC.DS_CONTR_NUM
+	                   ELSE
+	                       SMM.SER_NUM
+	               END
+	           ) AS SER_NUM
+               ,SCB.SVC_MACH_MSTR_PK
+               ,SCB.DS_CONTR_PK
+               <!-- START 2019/09/02 K.Kitachi [QC#52695, ADD] -->
+               ,SCB.DS_CONTR_DTL_PK
+               <!-- END 2019/09/02 K.Kitachi [QC#52695, ADD] -->
+               ,SCB.BILL_TO_CUST_CD
+               ,SCB.SVC_CONTR_BLLG_THRU_DT
+               ,DEF.BLLG_LIMIT_AMT
+               <!-- START 2018/03/23 U.Kim [QC#18884(Sol337), ADD]  -->
+               ,(
+                   SELECT 
+                        SCMB.MTR_COPY_QTY
+                   FROM
+                        SVC_CONTR_MTR_BLLG SCMB
+                   WHERE
+                        SCMB.GLBL_CMPY_CD       = SCB.GLBL_CMPY_CD
+                   AND SCMB.SVC_CONTR_BLLG_PK   = SCB.SVC_CONTR_BLLG_PK
+                   AND SCMB.EZCANCELFLAG        = '0'
+               ) AS MTR_COPY_QTY
+               <!-- END 2018/03/23 U.Kim [QC#18884(Sol337), ADD]  -->
+            FROM
+                SVC_CONTR_BLLG SCB
+               ,DS_CONTR       DC
+               ,SVC_MACH_MSTR  SMM
+               ,DS_CONTR_CATG  CTG
+               ,DS_CONTR_INTFC_DEF_RULE DEF
+            WHERE
+                SCB.GLBL_CMPY_CD          = #glblCmpyCd#
+                AND SCB.SVC_CONTR_BLLG_PK = #svcContrBllgPk#
+                AND SCB.EZCANCELFLAG      = '0'
+                AND SCB.GLBL_CMPY_CD      = DC.GLBL_CMPY_CD
+                AND SCB.DS_CONTR_PK       = DC.DS_CONTR_PK
+                AND DC.EZCANCELFLAG       = '0'
+                AND SCB.GLBL_CMPY_CD      = SMM.GLBL_CMPY_CD(+)
+                AND SCB.SVC_MACH_MSTR_PK  = SMM.SVC_MACH_MSTR_PK(+)
+                AND SMM.EZCANCELFLAG(+)   = '0'
+                AND DC.GLBL_CMPY_CD       = CTG.GLBL_CMPY_CD(+)
+                AND DC.DS_CONTR_CATG_CD   = CTG.DS_CONTR_CATG_CD(+)
+                AND CTG.EZCANCELFLAG(+)   = '0'
+                AND DC.GLBL_CMPY_CD       = DEF.GLBL_CMPY_CD          (+)
+                AND DC.DS_CONTR_SRC_TP_CD = DEF.CONTR_INTFC_SRC_TP_CD (+)
+                AND DC.DS_CONTR_CLS_CD    = DEF.DS_CONTR_CLS_CD       (+)
+                AND DC.SVC_LINE_BIZ_CD    = DEF.SVC_LINE_BIZ_CD       (+)
+                AND DEF.EFF_FROM_DT  (+)  &lt;= #slsDt#
+                AND DEF.ENBL_FLG     (+)  = 'Y'
+                AND DEF.EZCANCELFLAG (+)  = '0'
+            ) A
+        WHERE
+            ROWNUM &lt;= #limitNum#
+    </statement>
+
+    <statement id="getDetail1" parameterClass="Map" resultClass="Map">
+        SELECT
+             A.MTR_LB_DESC_TXT
+            ,A.SVC_CONTR_BLLG_FROM_DT
+            ,A.SVC_CONTR_BLLG_THRU_DT
+            ,NVL(A.MTR_CHRG_DEAL_AMT_AV, 0) MTR_CHRG_DEAL_AMT_AV
+            ,A.MTR_CHRG_DEAL_AMT_AA
+        FROM (
+            SELECT
+                 ML.MTR_LB_DESC_TXT          MTR_LB_DESC_TXT
+                ,SCB.SVC_CONTR_BLLG_FROM_DT  SVC_CONTR_BLLG_FROM_DT
+                ,SCB.SVC_CONTR_BLLG_THRU_DT  SVC_CONTR_BLLG_THRU_DT
+                <!-- mod start 2019/10/11 QC#53574 -->
+                <!-- ,(SELECT 
+                       ROUND(AVG(NVL(SILM.MTR_CHRG_DEAL_AMT, 0)), 2) 
+                  FROM 
+                       SVC_INV_LINE_MTR   SILM
+                      ,SVC_INV_LINE       SIL
+                  WHERE
+                          SCMB.GLBL_CMPY_CD          = SILM.GLBL_CMPY_CD
+                      AND SCMB.DS_CONTR_BLLG_MTR_PK  = SILM.DS_CONTR_BLLG_MTR_PK
+                      AND SILM.EZCANCELFLAG          = '0'
+                      AND SIL.GLBL_CMPY_CD           = #glblCmpyCd#
+                      AND SILM.SVC_INV_LINE_PK       = SIL.SVC_INV_LINE_PK
+                      AND SIL.BLLG_PER_FROM_DT BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(SCB.SVC_CONTR_BLLG_FROM_DT, 'YYYYMMDD'), -12), 'YYYYMMDD') AND TO_CHAR(TO_DATE(SCB.SVC_CONTR_BLLG_FROM_DT, 'YYYYMMDD') -1, 'YYYYMMDD')
+                      AND SIL.EZCANCELFLAG        = '0'
+                  GROUP BY DS_CONTR_BLLG_MTR_PK
+                 )  AS MTR_CHRG_DEAL_AMT_AV -->
+                ,(SELECT 
+                      ROUND(AVG(NVL(A.MTR_CHRG_FUNC_AMT, 0)), 2) 
+                  FROM 
+                      DS_CONTR_BLLG_SCHD   A
+                  WHERE
+                          SCMB.GLBL_CMPY_CD          = A.GLBL_CMPY_CD
+                      AND SCMB.DS_CONTR_BLLG_MTR_PK  = A.DS_CONTR_BLLG_MTR_PK
+                      AND A.USG_CHRG_FLG             = 'Y'
+                      AND A.INV_FLG                  = 'Y'
+                      AND A.MTR_CHRG_FUNC_AMT        &gt;= 0
+                      AND A.BLLG_SCHD_FROM_DT BETWEEN TO_CHAR(ADD_MONTHS(TO_DATE(SCB.SVC_CONTR_BLLG_FROM_DT, 'YYYYMMDD'), -12), 'YYYYMMDD') AND TO_CHAR(TO_DATE(SCB.SVC_CONTR_BLLG_FROM_DT, 'YYYYMMDD') -1, 'YYYYMMDD')
+                      AND A.INV_TP_CD                = #invTpInv#
+                      AND A.EZCANCELFLAG             = '0'
+                      AND NOT EXISTS(
+                              SELECT
+                                  1
+                              FROM
+                                  DS_CONTR_BLLG_SCHD B
+                              WHERE
+                                       B.GLBL_CMPY_CD              = A.GLBL_CMPY_CD
+                                  AND B.ORIG_DS_CONTR_BLLG_SCHD_PK = A.DS_CONTR_BLLG_SCHD_PK
+                                  AND B.INV_FLG                    = 'Y'
+                                  AND B.INV_TP_CD                  = #invTpInv#
+                                  AND B.EZCANCELFLAG               = '0'
+                          )
+                  GROUP BY DS_CONTR_BLLG_MTR_PK
+                 )  AS MTR_CHRG_DEAL_AMT_AV
+                 <!-- mod end 2019/10/11 QC#53574 -->
+                ,SCMB.MTR_CHRG_DEAL_AMT      MTR_CHRG_DEAL_AMT_AA
+            FROM
+                 SVC_CONTR_BLLG     SCB
+                ,SVC_CONTR_MTR_BLLG SCMB
+                ,DS_CONTR_BLLG_MTR  DCBM
+                ,MTR_LB             ML
+            WHERE 
+                SCB.GLBL_CMPY_CD               = #glblCmpyCd#
+                <isNotNull property="svcMachMstrPk">
+                AND SCB.SVC_MACH_MSTR_PK           = #svcMachMstrPk#
+                </isNotNull>
+                <isNotNull property="dsContrPk">
+                AND SCB.DS_CONTR_PK                = #dsContrPk#
+                </isNotNull>
+                AND SCB.BILL_TO_CUST_CD        = #billToCustCd#
+                AND SCB.SVC_CONTR_BLLG_THRU_DT = #svcContrBllgThruDt#
+                AND SCB.USG_CHRG_FLG           = 'Y'
+<!-- START 2018/06/15 T.Ogura [QC#24930,ADD] -->
+                <isEqual property="fleetFlg" compareValue="Y">
+                AND SCB.FLEET_CALC_FLG         = 'Y'
+                </isEqual>
+<!-- END   2018/06/15 T.Ogura [QC#24930,ADD] -->
+                AND SCB.EZCANCELFLAG           = '0'
+                AND SCB.GLBL_CMPY_CD           = SCMB.GLBL_CMPY_CD
+                AND SCB.SVC_CONTR_BLLG_PK      = SCMB.SVC_CONTR_BLLG_PK
+                AND SCMB.EZCANCELFLAG          = '0'
+                AND SCMB.GLBL_CMPY_CD          = DCBM.GLBL_CMPY_CD
+                AND SCMB.DS_CONTR_BLLG_MTR_PK  = DCBM.DS_CONTR_BLLG_MTR_PK
+                AND DCBM.EZCANCELFLAG          = '0'
+                AND DCBM.GLBL_CMPY_CD          = ML.GLBL_CMPY_CD
+                AND DCBM.BLLG_MTR_LB_CD        = ML.MTR_LB_CD
+                AND ML.EZCANCELFLAG            = '0'
+            ORDER BY
+                SCB.SVC_CONTR_BLLG_FROM_DT
+               ,ML.MTR_LB_SORT_NUM
+                ) A
+        WHERE
+            ROWNUM &lt;= #limitNum#
+    </statement>
+<!-- START 2019/11/28 [QC#53567,ADD] -->
+    <statement id="getSvcContrBllgPk" parameterClass="Map" resultClass="Map">
+        SELECT
+            A.SVC_CONTR_BLLG_PK
+           ,1 AS SQ
+        FROM
+            SVC_CONTR_BLLG          A
+        WHERE
+                A.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND A.EZCANCELFLAG          = '0'
+            AND A.BLLG_APVL_REQ_FLG     = 'Y'
+            AND A.BLLG_APVL_CPLT_FLG    = 'N'
+            AND A.SVC_CONTR_BLLG_PK     = #svcContrBllgPk#
+        UNION
+        SELECT
+            A.SVC_CONTR_BLLG_PK
+           ,2 AS SQ
+        FROM
+            SVC_CONTR_BLLG          A
+        WHERE
+                A.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND A.EZCANCELFLAG          = '0'
+            AND A.BLLG_APVL_REQ_FLG     = 'Y'
+            AND A.BLLG_APVL_CPLT_FLG    = 'N'
+            AND A.DS_CONTR_BLLG_MTR_PK  IS NOT NULL
+            AND (A.DS_CONTR_DTL_PK, A.BILL_TO_CUST_CD, A.MTR_BLLG_NEXT_BLLG_DT)   IN (
+                SELECT
+                    B.DS_CONTR_DTL_PK
+                   ,B.BILL_TO_CUST_CD
+                   ,B.MTR_BLLG_NEXT_BLLG_DT
+               FROM
+                    SVC_CONTR_BLLG                  B
+                WHERE
+                        B.GLBL_CMPY_CD      = #glblCmpyCd#
+                    AND B.EZCANCELFLAG      = '0'
+                    AND B.SVC_CONTR_BLLG_PK = #svcContrBllgPk#
+            )
+        ORDER BY SQ
+    </statement>
+<!-- END   2019/11/28 [QC#53567,ADD] -->
+</sqlMap>

@@ -1,0 +1,234 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sqlMap namespace="NPAB166001">
+    <statement id="getTechnicianRequestInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+             A.TECH_RQST_LIST_WRK_PK
+            ,A.TECH_TOC_CD
+            ,A.DEST_INVTY_LOC_CD
+            ,A.PRCH_REQ_NUM
+            ,A.SVC_TASK_NUM
+            ,A.SHIP_DT_TM_TS
+            ,A.DS_ACCT_NM
+            <!-- START 2017/12/08 M.Naito [QC#18572,MOD] -->
+            ,RPAD (A.FIRST_LINE_ADDR, LENGTH (A.FIRST_LINE_ADDR) + 1)
+              || RPAD (A.SCD_LINE_ADDR, LENGTH (A.SCD_LINE_ADDR) + 1)
+              || RPAD (A.THIRD_LINE_ADDR, LENGTH (A.THIRD_LINE_ADDR) + 1)
+              || RPAD (A.FRTH_LINE_ADDR, LENGTH (A.FRTH_LINE_ADDR) + 1)  AS CUST_ADDR
+            <!-- END 2017/12/08 M.Naito [QC#18572,MOD] -->
+            ,A.PRCH_REQ_STS_DESC_TXT
+            ,A.MDSE_CD
+            ,A.MDSE_DESC_SHORT_TXT
+            ,A.PRCH_REQ_LINE_STS_DESC_TXT
+            ,A.SRC_INVTY_LOC_CD
+            ,A.CARR_TP_NM
+            ,A.RQST_RCV_DT
+            ,A.RQST_RCV_TM
+            ,A.PRCH_REQ_QTY
+            ,A.SHIP_QTY
+            ,A.RWS_PUT_AWAY_QTY
+            ,A.BACK_TO_TECH_QTY
+            ,CASE
+                WHEN B.PRO_NUM = #asterisk#
+                THEN B.SO_NUM
+                ELSE A.PRO_NUM
+             END    AS PRO_NUM
+            ,A.CARR_TRK_URL
+            ,A.LOC_NM
+            ,A.RTL_WH_NM
+            ,A.PRCH_REQ_LINE_NUM
+            ,A.PRCH_REQ_LINE_SUB_NUM
+            <!-- START 2017/12/08 M.Naito [QC#18572,ADD] -->
+            ,A.TECH_RQST_SO_NUM
+            <!-- END 2017/12/08 M.Naito [QC#18572,ADD] -->
+        FROM
+             TECH_RQST_LIST_WRK A
+            ,PRCH_REQ_DTL       B
+        WHERE
+                A.GLBL_CMPY_CD              = #glblCmpyCd#
+            AND A.TECH_PROC_STS_CD          = #techProcStsW#
+            AND A.EZCANCELFLAG              = '0'
+            AND A.GLBL_CMPY_CD              = B.GLBL_CMPY_CD          (+)
+            AND A.PRCH_REQ_NUM              = B.PRCH_REQ_NUM          (+)
+            AND A.PRCH_REQ_LINE_NUM         = B.PRCH_REQ_LINE_NUM     (+)
+            AND A.PRCH_REQ_LINE_SUB_NUM     = B.PRCH_REQ_LINE_SUB_NUM (+)
+            AND B.EZCANCELFLAG          (+) = '0'
+        ORDER BY
+             A.TECH_TOC_CD
+            ,A.PRCH_REQ_NUM
+            <!-- START 2017/02/24 K.Kojima [QC#17111,ADD] -->
+            ,A.SHIP_DT_TM_TS DESC NULLS LAST
+            ,A.PRCH_REQ_LINE_NUM
+            ,A.PRCH_REQ_LINE_SUB_NUM
+            <!-- END 2017/02/24 K.Kojima [QC#17111,ADD] -->
+    </statement>
+
+    <statement id="getProNumList" parameterClass="Map" resultClass="Map">
+        SELECT
+            DISTINCT SOPNL.PRO_NUM, SOPNL.CARR_ENC_TRK_URL
+        FROM
+            SHPG_ORD_PRO_NUM_LIST SOPNL
+        WHERE 1=1
+        AND SOPNL.GLBL_CMPY_CD          = #glblCmpyCd#
+        AND SOPNL.EZCANCELFLAG          = '0'
+        AND SOPNL.TRX_HDR_NUM           = #soNum#
+        AND SOPNL.TRX_LINE_NUM         IS NULL
+        AND SOPNL.PRO_NUM              != #proNum#
+        AND SOPNL.MSTR_PRO_NUM         != SOPNL.PRO_NUM
+        ORDER BY
+        	SOPNL.PRO_NUM
+    </statement>
+
+    <statement id="getTargetReqList" parameterClass="Map" resultClass="Map">
+        SELECT
+             B.PRCH_REQ_NUM
+            ,B.TECH_TOC_CD
+            ,B.PRCH_REQ_STS_DESC_TXT
+            ,B.SVC_TASK_NUM
+            <!-- START 2018/05/21 K.Kojima [QC#22220,MOD] -->
+            <!-- ,B.SHIP_DT_TM_TS -->
+            ,MAX(B.SHIP_DT_TM_TS) AS SHIP_DT_TM_TS
+            <!-- END 2018/05/21 K.Kojima [QC#22220,MOD] -->
+            ,B.DS_ACCT_NM
+            ,B.CUST_ADDR
+            ,B.RTL_WH_NM
+        FROM (
+            SELECT 
+                 A.PRCH_REQ_NUM           AS PRCH_REQ_NUM
+                ,A.TECH_TOC_CD            AS TECH_TOC_CD
+                ,A.PRCH_REQ_STS_DESC_TXT  AS PRCH_REQ_STS_DESC_TXT
+                ,A.SVC_TASK_NUM           AS SVC_TASK_NUM
+                ,A.SHIP_DT_TM_TS          AS SHIP_DT_TM_TS
+                ,A.DS_ACCT_NM             AS DS_ACCT_NM
+                ,RPAD (A.FIRST_LINE_ADDR,     LENGTH (A.FIRST_LINE_ADDR) + 1)
+                  || RPAD (A.SCD_LINE_ADDR,   LENGTH (A.SCD_LINE_ADDR)   + 1)
+                  || RPAD (A.THIRD_LINE_ADDR, LENGTH (A.THIRD_LINE_ADDR) + 1)
+                  || RPAD (A.FRTH_LINE_ADDR,  LENGTH (A.FRTH_LINE_ADDR)  + 1)  AS CUST_ADDR
+                ,A.RTL_WH_NM              AS RTL_WH_NM
+            FROM
+                 TECH_RQST_LIST_WRK A
+            WHERE
+                    A.GLBL_CMPY_CD              = #glblCmpyCd#
+                AND A.TECH_PROC_STS_CD          = #techProcStsW#
+                AND A.EZCANCELFLAG              = '0'
+            ) B
+        GROUP BY
+             B.PRCH_REQ_NUM
+            ,B.TECH_TOC_CD
+            ,B.PRCH_REQ_STS_DESC_TXT
+            ,B.SVC_TASK_NUM
+            <!-- START 2018/05/21 K.Kojima [QC#22220,MOD] -->
+            <!-- ,B.SHIP_DT_TM_TS -->
+            <!-- END 2018/05/21 K.Kojima [QC#22220,MOD] -->
+            ,B.DS_ACCT_NM
+            ,B.CUST_ADDR
+            ,B.RTL_WH_NM
+        ORDER BY
+             B.PRCH_REQ_NUM
+
+    </statement>
+
+    <statement id="getPrtReqDtlList" parameterClass="Map" resultClass="Map">
+        SELECT
+             A.TECH_RQST_LIST_WRK_PK       AS TECH_RQST_LIST_WRK_PK
+            ,A.MDSE_CD                     AS MDSE_CD
+            ,A.PRCH_REQ_NUM                AS PRCH_REQ_NUM
+            ,A.PRCH_REQ_LINE_NUM           AS PRCH_REQ_LINE_NUM
+            ,A.PRCH_REQ_LINE_SUB_NUM       AS PRCH_REQ_LINE_SUB_NUM
+        FROM
+            TECH_RQST_LIST_WRK A
+        WHERE
+            A.GLBL_CMPY_CD         = #glblCmpyCd#
+        AND A.EZCANCELFLAG         = '0'
+        AND A.PRCH_REQ_NUM         = #prchReqNum#
+        AND A.TECH_PROC_STS_CD     = #techProcStsW#
+        ORDER BY
+             A.MDSE_CD
+            ,A.PRCH_REQ_NUM
+            ,A.PRCH_REQ_LINE_NUM
+            ,A.PRCH_REQ_LINE_SUB_NUM
+    </statement>
+
+    <statement id="getPrtReqShipList" parameterClass="Map" resultClass="Map">
+        SELECT
+             A.PRCH_REQ_NUM           AS PRCH_REQ_NUM
+            ,A.PRCH_REQ_LINE_NUM      AS PRCH_REQ_LINE_NUM
+            ,A.PRCH_REQ_LINE_SUB_NUM  AS PRCH_REQ_LINE_SUB_NUM
+            ,A.MDSE_CD                AS MDSE_CD
+            ,A.TECH_RQST_SO_NUM       AS TECH_RQST_SO_NUM
+            ,A.SHIP_QTY               AS SHIP_QTY
+            ,A.RQST_RCV_DT            AS RQST_RCV_DT
+            ,A.RQST_RCV_TM
+            ,CASE
+                WHEN B.PRO_NUM = '*'
+                THEN B.SO_NUM
+                ELSE A.PRO_NUM
+             END                      AS PRO_NUM
+            ,A.CARR_TP_NM             AS CARR_TP_NM
+            ,A.CARR_TRK_URL           AS CARR_TRK_URL
+            ,CASE
+                WHEN A.PRCH_REQ_LINE_NUM IS NULL THEN NULL
+                ELSE
+                    CASE
+                        WHEN A.PRCH_REQ_LINE_SUB_NUM IS NULL THEN A.PRCH_REQ_LINE_NUM
+                        ELSE A.PRCH_REQ_LINE_NUM || '.' || A.PRCH_REQ_LINE_SUB_NUM
+                    END
+             END                      AS LINE_NUM
+<!-- QC#58372-2 Add -->
+             ,B.PRO_NUM               AS PRCH_REQ_DTL_PRO_NUM
+        FROM
+             TECH_RQST_LIST_WRK A
+            ,PRCH_REQ_DTL       B
+        WHERE
+            A.GLBL_CMPY_CD                   =  #glblCmpyCd#
+        AND A.EZCANCELFLAG                   =  '0'
+        AND A.TECH_RQST_LIST_WRK_PK          =  #techRqstListWrkPk#
+        AND A.GLBL_CMPY_CD                   =  B.GLBL_CMPY_CD          (+)
+        AND A.PRCH_REQ_NUM                   =  B.PRCH_REQ_NUM          (+)
+        AND A.PRCH_REQ_LINE_NUM              =  B.PRCH_REQ_LINE_NUM     (+)
+        AND A.PRCH_REQ_LINE_SUB_NUM          =  B.PRCH_REQ_LINE_SUB_NUM (+)
+        AND B.EZCANCELFLAG               (+) =  '0'
+        ORDER BY
+             A.PRCH_REQ_NUM
+            ,A.PRCH_REQ_LINE_NUM
+            ,A.PRCH_REQ_LINE_SUB_NUM
+    </statement>
+
+    <statement id="getProNumListMnx" parameterClass="Map" resultClass="Map">
+        SELECT
+            DISTINCT SOPNL.PRO_NUM, SOPNL.CARR_ENC_TRK_URL
+        FROM
+            SHPG_ORD_PRO_NUM_LIST SOPNL
+        WHERE 1=1
+        AND SOPNL.GLBL_CMPY_CD          = #glblCmpyCd#
+        AND SOPNL.EZCANCELFLAG          = '0'
+        AND SOPNL.TRX_HDR_NUM           = #soNum#
+        AND SOPNL.PRO_NUM               = #proNum#
+        ORDER BY
+            SOPNL.PRO_NUM
+    </statement>
+
+    <!--QC#58372 Add Start -->
+    <statement id="getPrchReqLineSts" parameterClass="Map" resultClass="String">
+        SELECT 
+            DS_COND_CONST_VAL_TXT_02
+        FROM
+            (
+            SELECT 
+                B.DS_COND_CONST_VAL_TXT_02 
+            FROM 
+                PRCH_REQ_DTL    A 
+                ,DS_COND_CONST  B 
+            WHERE 
+                A.GLBL_CMPY_CD         = #glblCmpyCd#
+            AND A.PRCH_REQ_NUM         = #prchReqNum#
+            AND A.PRCH_REQ_LINE_NUM    = #prchReqLineNum#
+            AND A.EZCANCELFLAG         = '0'
+            AND A.GLBL_CMPY_CD         = B.GLBL_CMPY_CD
+            AND A.PRCH_REQ_LINE_STS_CD = B.DS_COND_CONST_CD  
+            AND B.EZCANCELFLAG         = '0' 
+            AND DS_COND_CONST_GRP_ID   = #npab1650PrchLine#
+            )
+        WHERE ROWNUM = 1
+    </statement>
+    <!--QC#58372 Add End -->
+</sqlMap>

@@ -1,0 +1,190 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NLCB109001">
+    <statement id="getPurgeWorkDiscrepancySerReport" parameterClass="Map">
+     SELECT
+            GLBL_CMPY_CD
+           ,INVTY_DISCR_RPT_SER_WRK_PK
+     FROM
+            INVTY_DISCR_RPT_SER_WRK
+     WHERE
+            GLBL_CMPY_CD             =  #glblCmpyCd#
+     AND    INVTY_DISCR_RPT_SER_CRAT_DT  &lt;  #dateCondition#
+    </statement>
+    <statement id="getWmsWarehouse" parameterClass="Map">
+        SELECT
+            DRWV.WMS_WH_CD
+        FROM
+            DS_RTL_WH_V DRWV
+            ,WMS_WH WW
+        WHERE
+                DRWV.GLBL_CMPY_CD = #glblCmpyCd#
+            AND DRWV.GLBL_CMPY_CD = WW.GLBL_CMPY_CD
+            AND DRWV.WMS_WH_CD    = WW.WH_CD
+            AND DRWV.EZCANCELFLAG = '0'
+            AND WW.EZCANCELFLAG   = '0'
+        GROUP BY
+            DRWV.WMS_WH_CD
+        ORDER BY
+            DRWV.WMS_WH_CD
+    </statement>
+    <statement id="search" parameterClass="Map">
+        WITH S21MM AS (
+            SELECT
+                SMM.GLBL_CMPY_CD
+                ,SMM.MDSE_CD
+                ,SMM.CUR_LOC_NUM AS INVTY_LOC_CD
+                ,SMM.STK_STS_CD
+                ,SMM.SER_NUM
+                ,SMM.SVC_CONFIG_MSTR_PK
+<!-- QC#28821 Mod Start -->
+<!--            ,SMM.SVC_MACH_QTY AS QTY -->
+                ,SUM(SMM.SVC_MACH_QTY) AS QTY
+<!-- QC#28821 Mod End -->
+                ,DRWV.WMS_WH_CD
+                ,DRWV.RTL_WH_CD
+                ,DRWV.RTL_WH_NM
+                ,DRWV.RTL_SWH_CD
+                ,DRWV.RTL_SWH_NM
+            FROM
+                SVC_MACH_MSTR SMM
+                ,DS_RTL_WH_V DRWV
+            WHERE
+                    SMM.GLBL_CMPY_CD = #glblCmpyCd#
+                    <isNotNull property="svcMachMstrStsCd">
+                        AND SMM.SVC_MACH_MSTR_STS_CD IN
+                        <iterate property="svcMachMstrStsCd" var="svcMachMstrStsCdList[]" open="(" close=")" conjunction=",">
+                            #svcMachMstrStsCdList[]#
+                        </iterate>
+                    </isNotNull>
+                    <isNotNull property="svcMachMstrLocStsCd">
+                        AND SMM.SVC_MACH_MSTR_LOC_STS_CD IN
+                        <iterate property="svcMachMstrLocStsCd" var="svcMachMstrLocStsCdList[]" open="(" close=")" conjunction=",">
+                            #svcMachMstrLocStsCdList[]#
+                        </iterate>
+                    </isNotNull>
+                AND (
+                        SMM.SER_NUM IS NOT NULL
+                    OR  SMM.SVC_CONFIG_MSTR_PK IS NOT NULL
+                )
+                AND SMM.GLBL_CMPY_CD    = DRWV.GLBL_CMPY_CD
+                AND SMM.CUR_LOC_NUM     = DRWV.INVTY_LOC_CD
+                AND DRWV.WMS_WH_CD      = #wmsWhCd#
+                AND SMM.EZCANCELFLAG    = '0'
+                AND DRWV.EZCANCELFLAG   = '0'
+<!-- QC#28821 Add Start -->
+            GROUP BY
+                SMM.GLBL_CMPY_CD
+                ,SMM.MDSE_CD
+                ,SMM.CUR_LOC_NUM
+                ,SMM.STK_STS_CD
+                ,SMM.SER_NUM
+                ,SMM.SVC_CONFIG_MSTR_PK
+                ,DRWV.WMS_WH_CD
+                ,DRWV.RTL_WH_CD
+                ,DRWV.RTL_WH_NM
+                ,DRWV.RTL_SWH_CD
+                ,DRWV.RTL_SWH_NM
+<!-- QC#28821 Add End -->
+        ),
+        WMS AS (
+            SELECT
+                WII.GLBL_CMPY_CD
+                ,WII.WMS_MDSE_CD AS MDSE_CD
+                ,SUBSTR(WII.S80_STK_STS_CD,2,1) AS STK_STS_CD
+                ,WII.SER_NUM
+                ,WII.SVC_CONFIG_MSTR_PK
+                ,WII.ALL_OH_QTY AS QTY
+                ,DRWV.WMS_WH_CD
+                ,DRWV.RTL_WH_CD
+                ,DRWV.RTL_WH_NM
+                ,DRWV.RTL_SWH_CD
+                ,DRWV.RTL_SWH_NM
+                ,DRWV.INVTY_LOC_CD
+            FROM
+                WMS_INBD_INVTY WII
+                ,DS_RTL_WH_V DRWV
+            WHERE
+                    WII.GLBL_CMPY_CD   = #glblCmpyCd#
+                AND WII.WMS_INVTY_DT   = #wmsInvtyDt#
+                AND (
+                        WII.SER_NUM IS NOT NULL
+                    OR  WII.SVC_CONFIG_MSTR_PK IS NOT NULL
+                )
+                AND WII.GLBL_CMPY_CD   = DRWV.GLBL_CMPY_CD
+                AND WII.RTL_WH_CD      = DRWV.RTL_WH_CD
+                AND WII.RTL_SWH_CD     = DRWV.RTL_SWH_CD
+                AND WII.WH_CD          = DRWV.WMS_WH_CD
+                AND DRWV.WMS_WH_CD     = #wmsWhCd#
+                AND WII.EZCANCELFLAG   = '0'
+                AND DRWV.EZCANCELFLAG  = '0'
+        )
+        SELECT
+             I.MDSE_CD
+            ,I.INVTY_LOC_CD
+            ,I.RTL_WH_CD
+            ,I.RTL_WH_NM
+            ,I.RTL_SWH_CD
+            ,I.RTL_SWH_NM
+            ,I.STK_STS_CD
+            ,STK_ST.STK_STS_NM
+            ,I.SER_NUM
+            ,I.SVC_CONFIG_MSTR_PK
+            ,I.S21_QTY
+            ,I.WMS_QTY
+            ,I.DIFF_QTY
+            ,I.WMS_WH_CD
+            ,WMS_WH.WMS_DESC_NM
+            ,M.MDSE_NM
+            ,M.ZEROTH_PROD_CTRL_CD
+            ,M.ZEROTH_PROD_CTRL_NM
+            ,M.FIRST_PROD_CTRL_CD
+            ,M.FIRST_PROD_CTRL_NM
+        FROM
+            MDSE M
+           ,STK_STS STK_ST
+           ,WMS_WH  WMS_WH
+            ,(
+                SELECT
+                    CASE WHEN S.GLBL_CMPY_CD IS NOT NULL THEN S.GLBL_CMPY_CD ELSE W.GLBL_CMPY_CD END                    AS GLBL_CMPY_CD
+                    ,CASE WHEN S.MDSE_CD IS NOT NULL THEN S.MDSE_CD ELSE W.MDSE_CD END                                  AS MDSE_CD
+                    ,CASE WHEN S.INVTY_LOC_CD IS NOT NULL THEN S.INVTY_LOC_CD ELSE W.INVTY_LOC_CD END                   AS INVTY_LOC_CD
+                    ,CASE WHEN S.RTL_WH_CD IS NOT NULL THEN S.RTL_WH_CD ELSE W.RTL_WH_CD END                            AS RTL_WH_CD
+                    ,CASE WHEN S.RTL_WH_NM IS NOT NULL THEN S.RTL_WH_NM ELSE W.RTL_WH_NM END                            AS RTL_WH_NM
+                    ,CASE WHEN S.RTL_SWH_CD IS NOT NULL THEN S.RTL_SWH_CD ELSE W.RTL_SWH_CD END                         AS RTL_SWH_CD
+                    ,CASE WHEN S.RTL_SWH_NM IS NOT NULL THEN S.RTL_SWH_NM ELSE W.RTL_SWH_NM END                         AS RTL_SWH_NM
+                    ,CASE WHEN S.STK_STS_CD IS NOT NULL THEN S.STK_STS_CD ELSE W.STK_STS_CD END                         AS STK_STS_CD
+                    ,CASE WHEN S.SER_NUM IS NOT NULL THEN S.SER_NUM ELSE W.SER_NUM END                                  AS SER_NUM
+                    ,CASE WHEN S.SVC_CONFIG_MSTR_PK IS NOT NULL THEN S.SVC_CONFIG_MSTR_PK ELSE W.SVC_CONFIG_MSTR_PK END AS SVC_CONFIG_MSTR_PK
+                    ,NVL(S.QTY,0)                                                                                       AS S21_QTY
+                    ,NVL(W.QTY,0)                                                                                       AS WMS_QTY
+                    ,NVL(S.QTY,0) - NVL(W.QTY,0)                                                                        AS DIFF_QTY
+                    ,CASE WHEN S.WMS_WH_CD IS NOT NULL THEN S.WMS_WH_CD ELSE W.WMS_WH_CD END                            AS WMS_WH_CD
+                FROM
+                    S21MM S
+                    FULL JOIN WMS W
+                ON
+                        S.MDSE_CD = W.MDSE_CD
+                    AND S.INVTY_LOC_CD = W.INVTY_LOC_CD
+                    AND S.STK_STS_CD = W.STK_STS_CD
+                    AND NVL(S.SVC_CONFIG_MSTR_PK,-1) = NVL(W.SVC_CONFIG_MSTR_PK,-1)
+                    AND NVL(S.SER_NUM,-1) = NVL(W.SER_NUM,-1)
+                WHERE
+                        NVL(S.QTY,0) - NVL(W.QTY,0) &lt;&gt; 0
+            ) I
+        WHERE
+                I.MDSE_CD        = M.MDSE_CD
+            AND I.GLBL_CMPY_CD   = M.GLBL_CMPY_CD
+            AND M.EZCANCELFLAG   = '0'
+            AND I.GLBL_CMPY_CD   = STK_ST.GLBL_CMPY_CD
+            AND I.STK_STS_CD     = STK_ST.STK_STS_CD
+            AND STK_ST.EZCANCELFLAG = '0'
+            AND I.GLBL_CMPY_CD   = WMS_WH.GLBL_CMPY_CD
+            AND I.WMS_WH_CD      = WMS_WH.WH_CD
+            AND WMS_WH.EZCANCELFLAG = '0'
+        ORDER BY
+            I.SVC_CONFIG_MSTR_PK
+            ,M.MDSE_CD
+            ,I.SER_NUM
+    </statement>
+</sqlMap>
+    

@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sqlMap namespace="NWZC189001">
+
+    <statement id="getMachineInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+             SCM.MDL_ID                         MDL_ID
+            ,SMM.OWNR_ACCT_NUM                  OWNR_ACCT_NUM
+            ,SMM.OWNR_LOC_NUM                   OWNR_LOC_NUM
+            ,SMM.BILL_TO_ACCT_NUM               BILL_TO_ACCT_NUM
+            ,SMM.BILL_TO_LOC_NUM                BILL_TO_LOC_NUM
+            ,SMM.CUR_LOC_ACCT_NUM               CUR_LOC_ACCT_NUM
+            ,SMM.CUR_LOC_NUM                    CUR_LOC_NUM
+            ,SMM.SVC_BY_LINE_BIZ_TP_CD          SVC_BY_LINE_BIZ_TP_CD
+            ,SMM.SHIP_TO_CUST_CD                SHIP_TO_CUST_CD
+            ,SMM.FIN_BR_CD                      FIN_BR_CD
+<!-- START 2018/01/09 M.Kidokoro [QC#20635,DEL] -->
+<!--        ,SCB.TOC_CD                         TOC_CD -->
+<!-- END 2018/01/09 M.Kidokoro [QC#20635,DEL] -->
+            ,SMM.SVC_MACH_MSTR_PK               SVC_MACH_MSTR_PK
+        FROM
+             SVC_MACH_MSTR          SMM
+            ,SVC_CONFIG_MSTR        SCM
+<!-- START 2018/01/09 M.Kidokoro [QC#20635,DEL] -->
+<!--        ,SUB_CONTR_BR_MAP       SCB -->
+<!-- END 2018/01/09 M.Kidokoro [QC#20635,DEL] -->
+        WHERE
+                SMM.GLBL_CMPY_CD        = #glblCmpyCd#
+            AND SMM.SER_NUM             = #serNum#
+            AND SMM.MDSE_CD             = #mdseCd#
+            AND SMM.EZCANCELFLAG        = '0'
+            AND SMM.SVC_CONFIG_MSTR_PK  = SCM.SVC_CONFIG_MSTR_PK
+            AND SMM.GLBL_CMPY_CD        = SCM.GLBL_CMPY_CD
+            AND SCM.EZCANCELFLAG        = '0'
+<!-- START 2018/01/09 M.Kidokoro [QC#20635,DEL] -->
+<!--        AND SMM.FIN_BR_CD           = SCB.SVC_CONTR_BR_CD(+) -->
+<!--        AND SMM.GLBL_CMPY_CD        = SCB.GLBL_CMPY_CD(+) -->
+<!--        AND SCB.ENBL_FLG(+)         = 'Y' -->
+<!--        AND SCB.EZCANCELFLAG(+)     = '0' -->
+<!-- END 2018/01/09 M.Kidokoro [QC#20635,DEL] -->
+    </statement>
+    
+    <statement id="getSupplyList" parameterClass="Map" resultClass="Map">
+        SELECT 
+              NVL(MSR.MDSE_CD, MSR.ORD_TAKE_MDSE_CD)     MDSE_CD
+            , MSR.MDL_ID 
+        FROM 
+            DS_MDL_SPLY_RELN       MSR
+        WHERE
+                MSR.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND MSR.MDL_ID                = #mdlId#
+            AND MSR.EFF_FROM_DT       &lt;= #slsDt#
+            AND NVL(MSR.EFF_THRU_DT, '99991231') &gt;= #slsDt#
+            AND MSR.EZCANCELFLAG          = '0'
+    </statement>
+    <!-- QC#23207 Add Start-->
+    <statement id="getDefaultFreightTermInfo"  parameterClass="Map" resultClass="Map">
+        SELECT
+             DFN.FRT_COND_CD
+            ,FRT.FRT_COND_DESC_TXT
+            ,DFN.DEF_SHPG_SVC_LVL_CD
+        FROM
+             DS_ORD_TP_PROC_DFN DFN
+            ,FRT_COND           FRT
+        WHERE
+                DFN.GLBL_CMPY_CD   = #glblCmpyCd#
+            AND DFN.DS_ORD_TP_CD   = #dsOrdTpCd#
+            AND DFN.LINE_BIZ_TP_CD = #lineBizTpCd#
+            AND DFN.EZCANCELFLAG   = '0'
+            AND DFN.GLBL_CMPY_CD   = FRT.GLBL_CMPY_CD
+            AND DFN.FRT_COND_CD    = FRT.FRT_COND_CD
+            AND FRT.EZCANCELFLAG   = '0'
+    </statement>
+    <!-- QC#23207 Add End-->
+    
+    <!-- 2018/02/19 QC#23811 Add Start-->
+    <statement id="isTonerExistsSplyReln" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            COUNT(*)
+        FROM
+            MDSE           A
+        WHERE
+                A.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND A.MDSE_CD          = #mdseCd#
+            <iterate property="imgSplyTpCd" var="imgSplyTpCd[]" open="AND A.IMG_SPLY_TP_CD IN (" close=")" conjunction=",">
+            #imgSplyTpCd[]#
+            </iterate>
+            AND A.EZCANCELFLAG     = '0'
+            AND EXISTS (
+                SELECT
+                    1
+                FROM
+                    DS_MDL_SPLY_RELN X
+                WHERE
+                        X.GLBL_CMPY_CD     = A.GLBL_CMPY_CD
+                    AND X.MDSE_CD          = A.MDSE_CD
+                    AND X.EZCANCELFLAG     = '0'
+            )
+            AND ROWNUM           = 1
+    </statement>
+    <statement id="isTonerExistsSplyRelnForOrdTakeMdse" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            COUNT(*)
+        FROM
+             ORD_TAKE_MDSE A
+            ,MDSE          B
+        WHERE
+                A.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND A.ORD_TAKE_MDSE_CD = #mdseCd#
+            AND A.EZCANCELFLAG     = '0'
+            AND A.GLBL_CMPY_CD     = B.GLBL_CMPY_CD
+            AND A.MDSE_CD          = B.MDSE_CD
+            <iterate property="imgSplyTpCd" var="imgSplyTpCd[]" open="AND B.IMG_SPLY_TP_CD IN (" close=")" conjunction=",">
+            #imgSplyTpCd[]#
+            </iterate>
+            AND B.EZCANCELFLAG     = '0'
+            AND EXISTS (
+                SELECT
+                    1
+                FROM
+                    DS_MDL_SPLY_RELN X
+                WHERE
+                        X.GLBL_CMPY_CD     = A.GLBL_CMPY_CD
+                    AND X.ORD_TAKE_MDSE_CD = A.ORD_TAKE_MDSE_CD
+                    AND X.EZCANCELFLAG     = '0'
+            )
+            AND ROWNUM           = 1
+    </statement>
+    
+    <statement id="getSvcTermCondDataDispTxt" parameterClass="Map" resultClass="String">
+        SELECT
+            <isEqual property="fltFlg" compareValue="N">
+            NVL(DTL_COND.SVC_TERM_COND_DATA_DISP_TXT, CONTR_COND.SVC_TERM_COND_DATA_DISP_TXT)
+            </isEqual>
+            <isEqual property="fltFlg" compareValue="Y">
+            CONTR_COND.SVC_TERM_COND_DATA_DISP_TXT
+            </isEqual>
+                                                AS  SVC_TERM_COND_DATA_DISP_TXT
+        FROM
+             SVC_TERM_COND_ATTRB    TCA
+            ,(SELECT
+                   TCN.SVC_TERM_COND_ATTRB_PK
+                  ,TCD.SVC_TERM_COND_DATA_SRC_CD
+                  ,TCD.SVC_TERM_COND_DATA_DISP_TXT  
+              FROM
+                   SVC_TERM_COND          TCN
+                  ,SVC_TERM_COND_DATA_SRC TCD
+                  ,DS_CONTR_DTL DCD
+              WHERE
+                      TCN.GLBL_CMPY_CD                = #glblCmpyCd#
+                  AND TCN.EZCANCELFLAG                = '0'
+                  AND TCN.GLBL_CMPY_CD                = DCD.GLBL_CMPY_CD
+                  AND TCN.DS_CONTR_DTL_PK             = DCD.DS_CONTR_DTL_PK
+                  AND DCD.DS_CONTR_PK                 = #dsContrPk#
+                  AND DCD.SVC_MACH_MSTR_PK            = #svcMachMstrPk#
+                  AND DCD.EZCANCELFLAG                = '0'
+                  AND TCN.GLBL_CMPY_CD                = TCD.GLBL_CMPY_CD
+                  AND TCN.SVC_TERM_ATTRB_MAP_VAL_CD   = TCD.SVC_TERM_COND_DATA_VAL_CD
+                  AND TCD.EZCANCELFLAG                = '0'
+                  
+             ) DTL_COND
+            ,(SELECT
+                   TCN.SVC_TERM_COND_ATTRB_PK
+                  ,TCD.SVC_TERM_COND_DATA_SRC_CD
+                  ,TCD.SVC_TERM_COND_DATA_DISP_TXT  
+              FROM
+                   SVC_TERM_COND          TCN
+                  ,SVC_TERM_COND_DATA_SRC TCD
+              WHERE
+                      TCN.GLBL_CMPY_CD                = #glblCmpyCd#
+                  AND TCN.DS_CONTR_PK                 = #dsContrPk#
+                  AND TCN.DS_CONTR_DTL_PK             IS NULL
+                  AND TCN.EZCANCELFLAG                = '0'
+                  AND TCN.GLBL_CMPY_CD                = TCD.GLBL_CMPY_CD
+                  AND TCN.SVC_TERM_ATTRB_MAP_VAL_CD   = TCD.SVC_TERM_COND_DATA_VAL_CD
+                  AND TCD.EZCANCELFLAG                = '0'
+             ) CONTR_COND
+        WHERE
+                TCA.GLBL_CMPY_CD                = #glblCmpyCd#
+            <isNotNull property="svcTermCondAttrbNm">
+            AND TCA.SVC_TERM_COND_ATTRB_NM      = #svcTermCondAttrbNm#
+            </isNotNull>
+            AND TCA.EFF_FROM_DT             &lt;= #slsDt#
+            AND (TCA.EFF_THRU_DT            &gt;= #slsDt#
+            OR   TCA.EFF_THRU_DT               IS NULL)
+            AND TCA.EZCANCELFLAG                = '0'
+            AND TCA.SVC_TERM_COND_ATTRB_PK      = DTL_COND.SVC_TERM_COND_ATTRB_PK(+)
+            AND TCA.SVC_TERM_COND_DATA_SRC_CD   = DTL_COND.SVC_TERM_COND_DATA_SRC_CD(+)
+            AND TCA.SVC_TERM_COND_ATTRB_PK      = CONTR_COND.SVC_TERM_COND_ATTRB_PK(+)
+            AND TCA.SVC_TERM_COND_DATA_SRC_CD   = CONTR_COND.SVC_TERM_COND_DATA_SRC_CD(+)
+    </statement>
+    <!-- 2018/02/19 QC#23811 Add End-->
+
+</sqlMap>

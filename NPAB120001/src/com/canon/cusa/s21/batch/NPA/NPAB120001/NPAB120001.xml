@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NPAB120001">
+
+    <statement id="getPoList" parameterClass="Map" resultClass="String">
+        SELECT DISTINCT
+            A.PO_ORD_NUM
+            ,A.INVTY_LOC_CD
+            ,A.PO_CHRG_CD
+            ,A.VND_CD
+            ,A.PO_SUBMT_PSN_CD
+            ,A.DP_TRSMT_METH_TP_CD
+            ,A.PO_HDR_TXT
+            ,A.DP_SEND_PO_EML_ADDR
+            ,A.SEND_PO_FAX_NUM
+            ,A.VD_TRSMT_METH_TP_CD
+            ,A.VD_SEND_PO_EML_ADDR
+            ,A.FAX_NUM
+            ,A.SHIP_TO_CUST_CD
+        FROM
+            (SELECT 
+                P.PO_ORD_NUM
+                ,P.INVTY_LOC_CD
+                ,P.PO_CHRG_CD
+                ,P.VND_CD
+                ,P.PO_SUBMT_PSN_CD
+                ,P.TRSMT_METH_TP_CD  AS DP_TRSMT_METH_TP_CD
+                ,P.PO_HDR_TXT
+                ,P.SEND_PO_EML_ADDR  AS DP_SEND_PO_EML_ADDR
+                ,P.SEND_PO_FAX_NUM
+                ,VD.TRSMT_METH_TP_CD  AS VD_TRSMT_METH_TP_CD
+                ,VD.SEND_PO_EML_ADDR AS VD_SEND_PO_EML_ADDR
+                ,VD.FAX_NUM
+                ,PD.SHIP_TO_CUST_CD
+            FROM
+                 PO        P
+                ,VND      VD
+                ,DS_PO_TP DPT
+                ,PO_DTL   PD
+            WHERE
+                P.GLBL_CMPY_CD         = #glblCmpyCd#
+                AND P.EZCANCELFLAG     = '0'
+                AND P.PO_STS_CD        = #poStsCd#
+                AND P.PO_SEND_FLG      = #poSendFlg#
+                AND P.PO_APVL_STS_CD  IN (#poApvlStsCd01#, #poApvlStsCd02#)
+                AND P.GLBL_CMPY_CD     = VD.GLBL_CMPY_CD(+)
+                AND P.VND_CD           = VD.VND_CD(+)
+                AND VD.EZCANCELFLAG(+) = '0'
+                AND (
+                    P.TRSMT_METH_TP_CD    IN (#trsmtMethTpCd05#, #trsmtMethTpCd06#)
+                    OR VD.TRSMT_METH_TP_CD IN (#trsmtMethTpCd05#, #trsmtMethTpCd06#)
+                )
+                AND P.GLBL_CMPY_CD     = DPT.GLBL_CMPY_CD
+                AND P.DS_PO_TP_CD      = DPT.DS_PO_TP_CD
+                AND P.PO_APVL_DT       = #salesDate#
+                AND DPT.EDI_SEND_FLG    = #ediSendFlg#
+                AND DPT.EZCANCELFLAG    = '0'
+                AND P.GLBL_CMPY_CD      = PD.GLBL_CMPY_CD
+                AND P.PO_ORD_NUM        = PD.PO_ORD_NUM
+                AND PD.EZCANCELFLAG     = '0'
+            ORDER BY
+                 PD.PO_ORD_NUM ASC
+                ,PD.PO_ORD_DTL_LINE_NUM ASC
+            ) A
+    </statement>
+
+    <statement id="getRemovPpoRptWrkData" parameterClass="Map" resultClass="Map">
+        SELECT 
+            PRW.PO_RPT_WRK_PK
+        FROM
+            PO_RPT_WRK PRW
+        WHERE 
+            PRW.GLBL_CMPY_CD         = #glblCmpyCd#
+        AND PRW.EZINTIME             &lt; #purgeTs#
+        AND PRW.EZCANCELFLAG         = '0'
+    </statement>
+
+    <!-- START QC#30350 ADD -->
+    <statement id="getContactInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+                VD.VND_CD                     AS  VND_CD
+              , VD.TRSMT_METH_TP_CD           AS  TRSMT_METH_TP_CD
+              , CP.CTAC_PSN_PK                AS  CTAC_PSN_PK
+              , CP.CTAC_PSN_LAST_NM           AS  CTAC_PSN_LAST_NM
+              , CP.CTAC_PSN_FIRST_NM          AS  CTAC_PSN_FIRST_NM
+              , DCR.CTAC_TP_CD                AS  CTAC_TP_CD
+              , DECODE(DCR.EFF_THRU_DT
+                          , NULL, NULL
+                          , #defThruDt#, DCR.EFF_THRU_DT
+                          , TO_CHAR(TO_DATE(DCR.EFF_THRU_DT, 'yyyymmdd') + 1, 'yyyymmdd'))
+                                              AS INAC_DT
+              , CP.DS_CTAC_PSN_DEPT_CD        AS  DS_CTAC_PSN_DEPT_CD
+              , CP.DS_CTAC_PSN_TTL_CD         AS  DS_CTAC_PSN_TTL_CD
+              , P_T.DS_CTAC_PNT_PK            AS  DS_CTAC_PNT_PK_TEL
+              , P_T.DS_CTAC_PNT_VAL_TXT       AS  CTAC_PSN_TEL
+              , P_F.DS_CTAC_PNT_PK            AS  DS_CTAC_PNT_PK_FAX
+              , P_F.DS_CTAC_PNT_VAL_TXT       AS  CTAC_PSN_FAX
+              , P_E.DS_CTAC_PNT_PK            AS  DS_CTAC_PNT_PK_EML
+              , P_E.DS_CTAC_PNT_VAL_TXT       AS  CTAC_PSN_EML
+              , DCR.LOC_NUM                   AS  LOC_NUM
+          FROM
+                VND               VD
+              , DS_CTAC_PSN_RELN  DCR
+              , CTAC_PSN          CP
+              , DS_CTAC_PNT       P_T
+              , DS_CTAC_PNT       P_F
+              , DS_CTAC_PNT       P_E
+         WHERE
+            <!-- join condition. -->
+                VD.GLBL_CMPY_CD             =       DCR.GLBL_CMPY_CD
+            AND VD.LOC_NUM                  =       DCR.LOC_NUM
+            AND DCR.GLBL_CMPY_CD            =       CP.GLBL_CMPY_CD
+            AND DCR.CTAC_PSN_PK             =       CP.CTAC_PSN_PK
+            AND DCR.CTAC_TP_CD             !=       #ctacTpCdDI#
+            AND CP.GLBL_CMPY_CD             =       P_T.GLBL_CMPY_CD(+)
+            AND CP.CTAC_PSN_PK              =       P_T.CTAC_PSN_PK(+)
+            AND CP.GLBL_CMPY_CD             =       P_F.GLBL_CMPY_CD(+)
+            AND CP.CTAC_PSN_PK              =       P_F.CTAC_PSN_PK(+)
+            AND CP.GLBL_CMPY_CD             =       P_E.GLBL_CMPY_CD(+)
+            AND CP.CTAC_PSN_PK              =       P_E.CTAC_PSN_PK(+)
+            <!-- query condition. -->
+            AND VD.GLBL_CMPY_CD             =       #glblCmpyCd#
+            AND VD.VND_CD                   =       #vndCd#
+            AND CP.CTAC_PSN_ACTV_FLG        =       #ctacPsnActvFlg#
+            AND P_T.DS_CTAC_PNT_TP_CD(+)    =       #dsCtacPntTpCd_T#
+            AND P_F.DS_CTAC_PNT_TP_CD(+)    =       #dsCtacPntTpCd_F#
+            AND P_E.DS_CTAC_PNT_TP_CD(+)    =       #dsCtacPntTpCd_E#
+            AND VD.EZCANCELFLAG             =       '0'
+            AND DCR.EZCANCELFLAG            =       '0'
+            AND CP.EZCANCELFLAG             =       '0'
+            AND P_T.EZCANCELFLAG(+)         =       '0'
+            AND P_F.EZCANCELFLAG(+)         =       '0'
+            AND P_E.EZCANCELFLAG(+)         =       '0'
+       ORDER BY
+                VD.VND_CD
+              , CP.CTAC_PSN_LAST_NM
+              , CP.CTAC_PSN_FIRST_NM
+    </statement>
+    <!-- END QC#30350 ADD -->
+</sqlMap>

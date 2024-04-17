@@ -1,0 +1,363 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NWCL0110Query">
+
+    <typeAlias alias="NWCL0110_ASMsg"  type="business.blap.NWCL0110.NWCL0110_ASMsg"/>
+
+    <statement id="getInvPrtCtrl" parameterClass="Map" resultMap="result.getInvPrtCtrl">
+        SELECT * FROM (
+        SELECT DISTINCT
+             IPC.INV_PRT_CTRL_PK
+            ,IPC.CONSL_BILL_NUM
+            ,IPC.INV_NUM
+            ,IPC.REPR_RPT_BR_NUM
+            ,IPC.INV_PRT_RQST_SQ
+            ,IPC.CUPS_PRINT_RQST_ID
+            ,CASE
+                WHEN    IPC.INV_PRT_PROC_STS_CD = '2'
+                THEN 'Y'
+                ELSE '0'
+             END INV_PRT_PROC_STS_CD
+            ,CASE
+                WHEN    IPC.INV_EML_PROC_STS_CD = '2'
+                THEN 'Y'
+                ELSE '0'
+             END INV_EML_PROC_STS_CD
+            ,CASE
+                WHEN    IPC.INV_FTP_PROC_STS_CD = '2'
+                THEN 'Y'
+                ELSE '0'
+             END INV_FTP_PROC_STS_CD
+            ,CASE
+                WHEN    IPC.INV_EDI_PROC_STS_CD = '2'
+                THEN 'Y'
+                ELSE '0'
+            END INV_EDI_PROC_STS_CD
+            ,CASE
+                WHEN    IPC.INV_SPCL_BILL_PROC_STS_CD = '2'
+                THEN 'Y'
+                ELSE '0'
+            END INV_SPCL_BILL_PROC_STS_CD
+            ,IPC.INV_PRINT_RQST_NUM
+            ,IPC.INV_EML_RQST_NUM
+            ,IPC.INV_FTP_RQST_NUM
+            ,IPC.INV_PRT_BAT_TP_CD
+            ,(SELECT BT.INV_PRT_BAT_TP_DESC_TXT
+              FROM INV_PRT_BAT_TP BT
+              WHERE BT.GLBL_CMPY_CD      = IPC.GLBL_CMPY_CD
+                AND BT.INV_PRT_BAT_TP_CD = IPC.INV_PRT_BAT_TP_CD
+                AND BT.EZCANCELFLAG      = '0'
+              ) AS INV_PRT_BAT_TP_DESC_TXT
+            ,IPC.INV_PRT_BR_CD
+            ,(SELECT BR.INV_PRT_BR_DESC_TXT
+              FROM INV_PRT_BR BR
+              WHERE BR.GLBL_CMPY_CD      = IPC.GLBL_CMPY_CD
+                AND BR.INV_PRT_BR_CD     = IPC.INV_PRT_BR_CD
+                AND BR.EZCANCELFLAG      = '0'
+              ) AS INV_PRT_BR_DESC_TXT
+            ,IPC.ORIG_CONSL_BILL_NUM <!-- QC#53014 2019/09/17 Add -->
+        FROM
+            INV_PRT_CTRL    IPC
+        WHERE
+                IPC.GLBL_CMPY_CD             = #glblCmpyCd#
+            AND IPC.EZCANCELFLAG             = '0'
+            <isNotNull property="invPrtBatTpCd">
+                AND IPC.INV_PRT_BAT_TP_CD    = #invPrtBatTpCd#
+            </isNotNull>
+            <isNotNull property="invPrtBrCd">
+                AND IPC.INV_PRT_BR_CD        = #invPrtBrCd#
+            </isNotNull>
+            <isNotNull property="conslBillNum_FR">
+                AND IPC.CONSL_BILL_NUM   &gt;= #conslBillNum_FR#
+            </isNotNull>
+            <isNotNull property="conslBillNum_TO">
+                AND IPC.CONSL_BILL_NUM   &lt;= #conslBillNum_TO#
+            </isNotNull>
+            <isNotNull property="invNum_FR">
+                AND IPC.INV_NUM          &gt;= #invNum_FR#
+            </isNotNull>
+            <isNotNull property="invNum_TO">
+                AND IPC.INV_NUM          &lt;= #invNum_TO#
+            </isNotNull>
+            <isNotNull property="invPrtRqstSq_FR">
+                AND IPC.INV_PRT_RQST_SQ  &gt;= #invPrtRqstSq_FR#
+            </isNotNull>
+            <isNotNull property="invPrtRqstSq_TO">
+                AND IPC.INV_PRT_RQST_SQ  &lt;= #invPrtRqstSq_TO#
+            </isNotNull>
+            <isNotNull property="cupsPrintRqstId_FR">
+                AND IPC.CUPS_PRINT_RQST_ID  &gt;= #cupsPrintRqstId_FR#
+            </isNotNull>
+            <isNotNull property="cupsPrintRqstId_TO">
+                AND IPC.CUPS_PRINT_RQST_ID  &lt;= #cupsPrintRqstId_TO#
+            </isNotNull>
+            AND substr(IPC.INV_CRAT_TS, 1, 8) &gt;= #procDt_FR#
+            AND substr(IPC.INV_CRAT_TS, 1, 8) &lt;= #procDt_TO#
+            AND EXISTS (SELECT '1' FROM INV_PRT_HDR IPH 
+                WHERE IPH.GLBL_CMPY_CD = #glblCmpyCd# AND IPH.EZCANCELFLAG = '0' AND IPH.INV_PRT_CTRL_PK = IPC.INV_PRT_CTRL_PK
+                AND (IPH.ESPAC_FLG = 'N' OR IPH.ESPAC_FLG = 'Y' AND IPC.INV_PRT_CTRL_REC_CD = 'BILL'))
+            <!-- QC#53014 2019/09/17 Add Start-->
+            <isNotNull property="xxChkBoxSP">
+            AND EXISTS (SELECT '1' FROM INV_PRT_HDR IPH 
+                WHERE IPH.GLBL_CMPY_CD = #glblCmpyCd# AND IPH.EZCANCELFLAG = '0' AND IPH.INV_PRT_CTRL_PK = IPC.INV_PRT_CTRL_PK
+                AND (IPH.EXCL_BILL_TXT = #ExclBillTxtNo# OR IPH.EXCL_BILL_TXT IS NULL)
+            )
+            </isNotNull>
+            <!-- QC#53014 2019/09/17 Add End-->
+            AND (
+                <!-- ### Print ### -->
+                (
+                <isNotNull property="prtFlg">
+                    INV_PRT_PROC_STS_CD = '2'
+                    <isNotNull property="xxInvNum_FR">
+                        AND IPC.INV_PRINT_RQST_NUM &gt;= #xxInvNum_FR#
+                    </isNotNull>
+                    <isNotNull property="xxInvNum_TO">
+                        AND IPC.INV_PRINT_RQST_NUM &lt;= #xxInvNum_TO#
+                    </isNotNull>
+                    AND IPC.INV_PRINT_PROC_DT IS NOT NULL
+                    <!-- AND IPC.INV_PRINT_PROC_DT &gt;= #procDt_FR# -->
+                    <!-- AND IPC.INV_PRINT_PROC_DT &lt;= #procDt_TO# -->
+                </isNotNull>
+                <isNull property="prtFlg">
+                    1 = 0
+                </isNull>
+                )
+                <!-- ### EMail ### -->
+                OR (
+                <isNotNull property="emlFlg">
+                    IPC.INV_EML_PROC_STS_CD = '2'
+                    <isNotNull property="xxInvNum_FR">
+                        AND IPC.INV_EML_RQST_NUM &gt;= #xxInvNum_FR#
+                    </isNotNull>
+                    <isNotNull property="xxInvNum_TO">
+                        AND IPC.INV_EML_RQST_NUM &lt;= #xxInvNum_TO#
+                    </isNotNull>
+                    AND IPC.INV_EML_PROC_DT IS NOT NULL
+                    <!-- AND IPC.INV_EML_PROC_DT &gt;= #procDt_FR# -->
+                    <!-- AND IPC.INV_EML_PROC_DT &lt;= #procDt_TO# -->
+                </isNotNull>
+                <isNull property="emlFlg">
+                    1 = 0
+                </isNull>
+                )
+                <!-- ### PDF ### -->
+                OR (
+                <isNotNull property="pdfFlg">
+                    IPC.INV_FTP_PROC_STS_CD = '2'
+                    <isNotNull property="xxInvNum_FR">
+                        AND IPC.INV_FTP_RQST_NUM &gt;= #xxInvNum_FR#
+                    </isNotNull>
+                    <isNotNull property="xxInvNum_TO">
+                        AND IPC.INV_FTP_RQST_NUM &lt;= #xxInvNum_TO#
+                    </isNotNull>
+                    AND IPC.INV_FTP_PROC_DT IS NOT NULL
+                    <!-- AND IPC.INV_FTP_PROC_DT &gt;= #procDt_FR# -->
+                    <!-- AND IPC.INV_FTP_PROC_DT &lt;= #procDt_TO# -->
+                </isNotNull>
+                <isNull property="pdfFlg">
+                    1 = 0
+                </isNull>
+                )
+                <!-- ### EDI ### -->
+                OR (
+                <isNotNull property="ediFlg">
+                    <isNull property="xxInvNum_FR">
+                        <isNull property="xxInvNum_TO">
+                            IPC.INV_EDI_PROC_STS_CD = '2'
+                            AND IPC.INV_EDI_PROC_DT IS NOT NULL
+                            <!-- AND IPC.INV_EDI_PROC_DT &gt;= #procDt_FR# -->
+                            <!-- AND IPC.INV_EDI_PROC_DT &lt;= #procDt_TO# -->
+                        </isNull>
+                        <isNotNull property="xxInvNum_TO">
+                            1 = 0
+                        </isNotNull>
+                    </isNull>
+                    <isNotNull property="xxInvNum_FR">
+                        1 = 0
+                    </isNotNull>
+                </isNotNull>
+                <isNull property="ediFlg">
+                    1 = 0
+                </isNull>
+                )
+                <!-- ### Special Billing ### -->
+                OR (
+                <isNotNull property="sbFlg">
+                    <isNull property="xxInvNum_FR">
+                        <isNull property="xxInvNum_TO">
+                            IPC.INV_SPCL_BILL_PROC_STS_CD = '2'
+                            AND IPC.INV_SPCL_BILL_PROC_DT IS NOT NULL
+                            <!-- AND IPC.INV_SPCL_BILL_PROC_DT &gt;= #procDt_FR# -->
+                            <!-- AND IPC.INV_SPCL_BILL_PROC_DT &lt;= #procDt_TO# -->
+                        </isNull>
+                        <isNotNull property="xxInvNum_TO">
+                            1 = 0
+                        </isNotNull>
+                    </isNull>
+                    <isNotNull property="xxInvNum_FR">
+                        1 = 0
+                    </isNotNull>
+                </isNotNull>
+                <isNull property="sbFlg">
+                    1 = 0
+                </isNull>
+                )
+            )
+        ORDER BY
+                 IPC.CONSL_BILL_NUM NULLS FIRST
+                ,IPC.INV_NUM NULLS FIRST
+        ) TMP
+        WHERE ROWNUM &lt;= #rowNum#
+    </statement>
+
+    <resultMap id="result.getInvPrtCtrl" class="NWCL0110_ASMsg">
+        <result property="invPrtCtrlPk_A"         column="INV_PRT_CTRL_PK"           javaType="EZDSBigDecimalItem"/>
+        <result property="conslBillNum_A"         column="CONSL_BILL_NUM"            javaType="EZDSStringItem"/>
+        <result property="invNum_A"               column="INV_NUM"                   javaType="EZDSStringItem"/>
+        <!-- <result property="reprRptBrNum_A"         column="REPR_RPT_BR_NUM"           javaType="EZDSStringItem"/> -->
+        <result property="invPrtRqstSq_A"         column="INV_PRT_RQST_SQ"           javaType="EZDSBigDecimalItem"/>
+        <result property="cupsPrintRqstId_A"      column="CUPS_PRINT_RQST_ID"        javaType="EZDSStringItem"/>
+        <result property="invPrtProcStsCd_A"      column="INV_PRT_PROC_STS_CD"       javaType="EZDSStringItem"/>
+        <result property="invEmlProcStsCd_A"      column="INV_EML_PROC_STS_CD"       javaType="EZDSStringItem"/>
+        <result property="invFtpProcStsCd_A"      column="INV_FTP_PROC_STS_CD"       javaType="EZDSStringItem"/>
+        <result property="invEdiProcStsCd_A"      column="INV_EDI_PROC_STS_CD"       javaType="EZDSStringItem"/>
+        <!-- <result property="invSpclBillProcStsCd_A" column="INV_SPCL_BILL_PROC_STS_CD" javaType="EZDSStringItem"/> -->
+        <result property="invPrintRqstNum_A"      column="INV_PRINT_RQST_NUM"        javaType="EZDSStringItem"/>
+        <result property="invEmlRqstNum_A"        column="INV_EML_RQST_NUM"          javaType="EZDSStringItem"/>
+        <result property="invFtpRqstNum_A"        column="INV_FTP_RQST_NUM"          javaType="EZDSStringItem"/>
+        <result property="invPrtBatTpDescTxt_A"   column="INV_PRT_BAT_TP_DESC_TXT"   javaType="EZDSStringItem"/>
+        <result property="invPrtBrDescTxt_A"      column="INV_PRT_BR_DESC_TXT"       javaType="EZDSStringItem"/>
+        <result property="origConslBillNum_A"     column="ORIG_CONSL_BILL_NUM"       javaType="EZDSStringItem"/>
+        <result property="invPrtProcStsCd_B"      column="INV_PRT_PROC_STS_CD"       javaType="EZDSStringItem"/>
+        <result property="invEmlProcStsCd_B"      column="INV_EML_PROC_STS_CD"       javaType="EZDSStringItem"/>
+        <result property="invFtpProcStsCd_B"      column="INV_FTP_PROC_STS_CD"       javaType="EZDSStringItem"/>
+        <result property="invEdiProcStsCd_B"      column="INV_EDI_PROC_STS_CD"       javaType="EZDSStringItem"/>
+        <!-- <result property="invSpclBillProcStsCd_B" column="INV_SPCL_BILL_PROC_STS_CD" javaType="EZDSStringItem"/> -->
+    </resultMap>
+
+    <statement id="getEipRptCtrl" parameterClass="Map" resultClass="Map">
+        SELECT
+             ERC.RPT_BR_NUM
+            ,ERC.RPT_TTL_NM
+        FROM
+             EIP_RPT_CTRL ERC
+            ,EIP_RPT_DEST ERD
+        WHERE
+              ERC.GLBL_CMPY_CD  = #glblCmpyCd#
+          AND ERC.RPT_ID        = #rptId#
+          AND ERC.EZCANCELFLAG  = '0'
+          AND ERD.GLBL_CMPY_CD  = ERC.GLBL_CMPY_CD
+          AND ERD.RPT_DEST_ID   = ERC.RPT_DEST_ID
+          AND ERD.DEST_TP_CD    = '1'
+          AND ERD.EZCANCELFLAG  = '0'
+        ORDER BY
+            RPT_BR_NUM
+    </statement>
+
+    <statement id="getInvPrtCtrlForPrintMassRequest" parameterClass="Map" resultClass="Map">
+        SELECT DISTINCT
+             IPC.INV_PRT_CTRL_PK
+            ,IPC.CONSL_BILL_NUM
+            ,IPC.INV_NUM
+            ,IPC.REPR_RPT_BR_NUM
+            ,IPC.INV_PRT_RQST_SQ
+            ,IPC.CUPS_PRINT_RQST_ID
+            ,CASE
+                WHEN    IPC.INV_PRT_PROC_STS_CD = '2'
+                THEN 'Y'
+                ELSE '0'
+             END INV_PRT_PROC_STS_CD
+            ,CASE
+                WHEN    IPC.INV_EML_PROC_STS_CD = '2'
+                THEN 'Y'
+                ELSE '0'
+             END INV_EML_PROC_STS_CD
+            ,CASE
+                WHEN    IPC.INV_FTP_PROC_STS_CD = '2'
+                THEN 'Y'
+                ELSE '0'
+             END INV_FTP_PROC_STS_CD
+            ,CASE
+                WHEN    IPC.INV_EDI_PROC_STS_CD = '2'
+                THEN 'Y'
+                ELSE '0'
+            END INV_EDI_PROC_STS_CD
+            ,CASE
+                WHEN    IPC.INV_SPCL_BILL_PROC_STS_CD = '2'
+                THEN 'Y'
+                ELSE '0'
+            END INV_SPCL_BILL_PROC_STS_CD
+            ,IPC.INV_PRINT_RQST_NUM
+            ,IPC.INV_EML_RQST_NUM
+            ,IPC.INV_FTP_RQST_NUM
+            ,IPC.INV_PRT_BAT_TP_CD
+            ,(SELECT BT.INV_PRT_BAT_TP_DESC_TXT
+              FROM INV_PRT_BAT_TP BT
+              WHERE BT.GLBL_CMPY_CD      = IPC.GLBL_CMPY_CD
+                AND BT.INV_PRT_BAT_TP_CD = IPC.INV_PRT_BAT_TP_CD
+                AND BT.EZCANCELFLAG      = '0'
+              ) AS INV_PRT_BAT_TP_DESC_TXT
+            ,IPC.INV_PRT_BR_CD
+            ,(SELECT BR.INV_PRT_BR_DESC_TXT
+              FROM INV_PRT_BR BR
+              WHERE BR.GLBL_CMPY_CD      = IPC.GLBL_CMPY_CD
+                AND BR.INV_PRT_BR_CD     = IPC.INV_PRT_BR_CD
+                AND BR.EZCANCELFLAG      = '0'
+              ) AS INV_PRT_BR_DESC_TXT
+        FROM
+            INV_PRT_CTRL    IPC
+        WHERE
+                IPC.GLBL_CMPY_CD             = #glblCmpyCd#
+            AND IPC.EZCANCELFLAG             = '0'
+            <isNotNull property="invPrtBatTpCd">
+                AND IPC.INV_PRT_BAT_TP_CD    = #invPrtBatTpCd#
+            </isNotNull>
+            <isNotNull property="invPrtBrCd">
+                AND IPC.INV_PRT_BR_CD        = #invPrtBrCd#
+            </isNotNull>
+            <isNotNull property="conslBillNum_FR">
+                AND IPC.CONSL_BILL_NUM   &gt;= #conslBillNum_FR#
+            </isNotNull>
+            <isNotNull property="conslBillNum_TO">
+                AND IPC.CONSL_BILL_NUM   &lt;= #conslBillNum_TO#
+            </isNotNull>
+            <isNotNull property="invNum_FR">
+                AND IPC.INV_NUM          &gt;= #invNum_FR#
+            </isNotNull>
+            <isNotNull property="invNum_TO">
+                AND IPC.INV_NUM          &lt;= #invNum_TO#
+            </isNotNull>
+            <isNotNull property="invPrtRqstSq_FR">
+                AND IPC.INV_PRT_RQST_SQ  &gt;= #invPrtRqstSq_FR#
+            </isNotNull>
+            <isNotNull property="invPrtRqstSq_TO">
+                AND IPC.INV_PRT_RQST_SQ  &lt;= #invPrtRqstSq_TO#
+            </isNotNull>
+            <isNotNull property="cupsPrintRqstId_FR">
+                AND IPC.CUPS_PRINT_RQST_ID  &gt;= #cupsPrintRqstId_FR#
+            </isNotNull>
+            <isNotNull property="cupsPrintRqstId_TO">
+                AND IPC.CUPS_PRINT_RQST_ID  &lt;= #cupsPrintRqstId_TO#
+            </isNotNull>
+            AND substr(IPC.INV_CRAT_TS, 1, 8) &gt;= #procDt_FR#
+            AND substr(IPC.INV_CRAT_TS, 1, 8) &lt;= #procDt_TO#
+            AND (
+                (
+                    INV_PRT_PROC_STS_CD = '2'
+                    <isNotNull property="xxInvNum_FR">
+                        AND IPC.INV_PRINT_RQST_NUM &gt;= #xxInvNum_FR#
+                    </isNotNull>
+                    <isNotNull property="xxInvNum_TO">
+                        AND IPC.INV_PRINT_RQST_NUM &lt;= #xxInvNum_TO#
+                    </isNotNull>
+                    AND IPC.INV_PRINT_PROC_DT IS NOT NULL
+                    <!--  AND IPC.INV_PRINT_PROC_DT &gt;= #procDt_FR# -->
+                    <!--  AND IPC.INV_PRINT_PROC_DT &lt;= #procDt_TO# -->
+                )
+            )
+        ORDER BY
+                 IPC.CONSL_BILL_NUM NULLS FIRST
+                ,IPC.INV_NUM NULLS FIRST
+    </statement>
+
+</sqlMap>

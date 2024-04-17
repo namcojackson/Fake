@@ -1,0 +1,483 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NWZC180001">
+
+    <statement id="getMpngTmpl" parameterClass="Map" resultClass="Map">
+        SELECT
+          <isNull property="equipmentFlg">
+             CTX.FIRST_BIZ_CTX_ATTRB_TXT
+            ,CTX.SCD_BIZ_CTX_ATTRB_TXT
+          </isNull>
+          <isNotNull property="equipmentFlg">
+             COUNT(ORD_CATG_BIZ_CTX_PK) AS CNT
+          </isNotNull>
+        FROM
+             ORD_CATG_BIZ_CTX CTX
+        WHERE
+                 CTX.GLBL_CMPY_CD       = #glblCmpyCd#
+             AND CTX.ORD_CATG_CTX_TP_CD = #ordCatgCtxTpCd#
+             AND CTX.DS_ORD_CATG_CD     = #dsOrdCatgCd#
+             AND (
+                     CTX.DS_ORD_TP_CD   = #dsOrdTpCd#
+          <isNotNull property="equipmentFlg">
+                  OR CTX.DS_ORD_TP_CD  IS NULL
+          </isNotNull>
+                 )
+             AND CTX.EZCANCELFLAG       = '0'
+    </statement>
+
+    <statement id="getDefWh" parameterClass="Map" resultClass="Map">
+        SELECT
+             ODW.ON_HND_CHK_FLG
+            <!-- QC#19805(L3) DELL START -->
+            <!-- ,ODW.RMA_DEF_WH_CD -->
+            <!-- ,ODW.RMA_DEF_LINE_SRC_CD -->
+            <!-- QC#19805(L3) DELL END -->
+            ,ODW.OTBD_DEF_WH_CD
+            ,ODW.OTBD_DEF_SWH_CD
+            ,ODW.OTBD_DEF_LINE_SRC_CD
+            ,ODW.OTBD_PRIM_ON_HND_CHK_WH_CD
+            ,ODW.OTBD_PRIM_ON_HND_CHK_SWH_CD
+            ,ODW.OTBD_PRIM_ON_HND_LIN_SRC_CD
+            ,ODW.OTBD_SCD_ON_HND_CHK_WH_CD
+            ,ODW.OTBD_SCD_ON_HND_CHK_SWH_CD
+            ,ODW.OTBD_SCD_ON_HND_LINE_SRC_CD
+            ,ODW.MDSE_ITEM_CLS_TP_CD
+            ,CASE WHEN ODW.MDSE_ITEM_CLS_TP_CD = '*' THEN NULL ELSE ODW.MDSE_ITEM_CLS_TP_CD END AS MDSE_ITEM_CLS_TP_CD_FOR_SORT
+        FROM
+             ORD_DEF_WH ODW
+        WHERE
+                 ODW.GLBL_CMPY_CD          = #glblCmpyCd#
+             AND ODW.DEF_WH_MAP_TMPL_CD    = #defWhMappingTmlCd#
+           <isNotNull property="mdseCd">
+             AND ODW.MDSE_ITEM_CLS_TP_CD  IN (
+                                              (SELECT
+                                                   M.MDSE_ITEM_CLS_TP_CD
+                                               FROM
+                                                   (SELECT
+                                                        M.GLBL_CMPY_CD
+                                                       ,M.MDSE_CD
+                                                       ,M.EZCANCELFLAG
+                                                       ,M.MDSE_ITEM_CLS_TP_CD
+                                                    FROM
+                                                        MDSE M
+                                                    WHERE
+                                                        M.GLBL_CMPY_CD     = #glblCmpyCd#
+                                                        AND M.MDSE_CD      = #mdseCd#
+                                                        AND M.EZCANCELFLAG = '0'
+                                                    UNION ALL
+                                                    SELECT
+                                                        M.GLBL_CMPY_CD
+                                                       ,M.MDSE_CD
+                                                       ,M.EZCANCELFLAG
+                                                       ,M.MDSE_ITEM_CLS_TP_CD
+                                                    FROM
+                                                        ORD_TAKE_MDSE OTM
+                                                       ,MDSE M
+                                                    WHERE
+                                                        OTM.GLBL_CMPY_CD         = #glblCmpyCd#
+                                                        AND OTM.ORD_TAKE_MDSE_CD = #mdseCd#
+                                                        AND OTM.EZCANCELFLAG     = '0'
+                                                        AND OTM.GLBL_CMPY_CD     = M.GLBL_CMPY_CD
+                                                        AND OTM.MDSE_CD          = M.MDSE_CD
+                                                        AND M.EZCANCELFLAG       = '0'
+                                                   ) M
+                                               WHERE
+                                                   M.GLBL_CMPY_CD     = #glblCmpyCd#
+                                                   AND M.EZCANCELFLAG = '0'
+                                                   AND M.EZCANCELFLAG = '0'
+                                              )
+                                              , #mdseItemClsTpCd_All#)
+           </isNotNull>
+           <isNull property="mdseCd">
+             AND ODW.MDSE_ITEM_CLS_TP_CD   = #mdseItemClsTpCd_All#
+           </isNull>
+             AND ODW.FROM_POST_CD      &lt;= #postCd#
+             AND ODW.TO_POST_CD        &gt;= #postCd#
+             AND ODW.ACTV_FLG              = 'Y'
+             AND ODW.EZCANCELFLAG          = '0'
+           <isNotNull property="mdseCd">
+           <isNotNull property="thirdPtyItemFlg">
+             AND ODW.THIRD_PTY_ITEM_FLG    = #thirdPtyItemFlg#
+           </isNotNull>
+           </isNotNull>
+        ORDER BY MDSE_ITEM_CLS_TP_CD_FOR_SORT NULLS LAST
+    </statement>
+
+    <statement id="getRtlWh" parameterClass="Map" resultClass="Map">
+        SELECT
+             RTW.RTL_WH_CD
+            ,RTW.RTL_WH_CATG_CD
+            <!-- 2019/01/31 QC#30068 Add Start -->
+            ,RTW.EFF_FROM_DT
+            ,RTW.EFF_THRU_DT
+            <!-- 2019/01/31 QC#30068 Add End -->
+        FROM
+             RTL_WH RTW
+        WHERE
+                 RTW.GLBL_CMPY_CD    = #glblCmpyCd#
+             AND RTW.PHYS_WH_CD      = #physWhCd#
+             AND RTW.INVTY_OWNR_CD   = #invtyOwnrCd#
+             <!-- START 2017/10/19 H.Sugawara [QC#21751,DEL] -->
+             <!-- AND RTW.RTL_WH_CATG_CD  = (SELECT -->
+             <!--                                DWM.RTL_WH_CATG_CD -->
+             <!--                            FROM -->
+             <!--                               DEF_WH_MAP_TMPL DWM -->
+             <!--                            WHERE -->
+             <!--                                   DWM.GLBL_CMPY_CD       = RTW.GLBL_CMPY_CD -->
+             <!--                               AND DWM.DEF_WH_MAP_TMPL_CD = #defWhMapTmplCd# -->
+             <!--                               AND DWM.EZCANCELFLAG       = '0') -->
+             <!-- END 2017/10/19 H.Sugawara [QC#21751,DEL] -->
+             AND RTW.EZCANCELFLAG    = '0'
+    </statement>
+
+    <statement id="getItem" parameterClass="Map" resultClass="Map">
+        SELECT
+             DMI.MDSE_ITEM_CLS_TP_CD
+            ,DMI.DEF_SRC_WH_CD
+            ,DMI.DEF_SRC_SUB_WH_CD
+            ,DMI.THIRD_PTY_ITEM_FLG
+            <!-- QC#19805(L3) ADD START -->
+            ,DMI.DROP_RTRN_VND_CD
+            ,DMI.MDSE_CATG_CD
+            ,DMI.MDSE_ITEM_ACTV_DT
+            <!-- QC#19805(L3) ADD END -->
+            ,M.THIRD_PTY_VND_DROP_FLG
+        FROM
+            MDSE DMI
+           ,(SELECT
+                 M.GLBL_CMPY_CD
+                ,M.MDSE_CD
+                ,M.EZCANCELFLAG
+                ,M.THIRD_PTY_VND_DROP_FLG
+                ,M.DROP_RTRN_VND_CD
+                ,M.MDSE_CATG_CD
+                ,M.MDSE_ITEM_ACTV_DT
+             FROM
+                 MDSE M
+             WHERE
+                 M.GLBL_CMPY_CD     = #glblCmpyCd#
+                 AND M.MDSE_CD      = #mdseCd#
+                 AND M.EZCANCELFLAG = '0'
+             UNION ALL
+             SELECT
+                 M.GLBL_CMPY_CD
+                ,M.MDSE_CD
+                ,M.EZCANCELFLAG
+                ,M.THIRD_PTY_VND_DROP_FLG
+                ,M.DROP_RTRN_VND_CD
+                ,M.MDSE_CATG_CD
+                ,M.MDSE_ITEM_ACTV_DT
+             FROM
+                 ORD_TAKE_MDSE OTM
+                ,MDSE M
+             WHERE
+                 OTM.GLBL_CMPY_CD         = #glblCmpyCd#
+                 AND OTM.ORD_TAKE_MDSE_CD = #mdseCd#
+                 AND OTM.EZCANCELFLAG     = '0'
+                 AND OTM.GLBL_CMPY_CD     = M.GLBL_CMPY_CD
+                 AND OTM.MDSE_CD          = M.MDSE_CD
+                 AND M.EZCANCELFLAG       = '0'
+            ) M
+        WHERE
+            M.GLBL_CMPY_CD       = #glblCmpyCd#
+            AND M.EZCANCELFLAG   = '0'
+            AND M.GLBL_CMPY_CD   = DMI.GLBL_CMPY_CD
+            AND M.MDSE_CD        = DMI.MDSE_CD
+            AND DMI.EZCANCELFLAG = '0'
+    </statement>
+
+    <statement id="getRtlSubWh" parameterClass="Map" resultClass="String">
+        SELECT
+             RSW.RTL_SWH_CD
+        FROM
+             RTL_SWH RSW
+        WHERE
+                 RSW.GLBL_CMPY_CD    = #glblCmpyCd#
+             AND RSW.RTL_WH_CD       = #rtlWhCd#
+             AND RSW.PRTY_LOC_FLG    = 'Y'
+             AND RSW.EFF_FROM_DT &lt;= #slsDt#
+             AND NVL(RSW.EFF_THRU_DT, '99991231') &gt;= #slsDt#
+             AND RSW.EZCANCELFLAG    = '0'
+    </statement>
+
+    <statement id="isAvalDcStk" parameterClass="Map" resultClass="Integer">
+        SELECT
+             COUNT(*)
+        FROM
+             INVTY IVY
+        WHERE
+                 IVY.GLBL_CMPY_CD       = #glblCmpyCd#
+             AND IVY.MDSE_CD            LIKE #mdseCd#
+             AND IVY.LOC_STS_CD         = #locStsCd#
+             AND IVY.STK_STS_CD         = #stkStsCd#
+             AND IVY.INVTY_LOC_CD       = #invtyLocCd#
+             AND IVY.INVTY_AVAL_QTY &gt;= #ordQty#
+             AND IVY.EZCANCELFLAG       = '0'
+    </statement>
+
+    <statement id="getOrdLineSrc" parameterClass="Map" resultClass="String">
+        SELECT
+             LS.ORD_LINE_SRC_CD
+        FROM
+             VND          VD
+            ,PRNT_VND     PV
+            ,ORD_LINE_SRC LS
+        WHERE
+
+                 VD.GLBL_CMPY_CD    = #glblCmpyCd#
+             AND VD.VND_CD          = #vndCd#
+             AND VD.EZCANCELFLAG    = '0'
+             AND PV.GLBL_CMPY_CD    = VD.GLBL_CMPY_CD
+             AND PV.PRNT_VND_PK     = VD.PRNT_VND_PK
+             AND PV.EZCANCELFLAG    = '0'
+             AND LS.GLBL_CMPY_CD    = PV.GLBL_CMPY_CD
+             AND LS.SRC_PRNT_VND_CD = PV.PRNT_VND_CD
+             AND LS.EZCANCELFLAG    = '0'
+    </statement>
+
+    <!-- QC#19805(L3) ADD START -->
+    <statement id="getRmaDefWh" parameterClass="Map" resultClass="Map">
+        SELECT
+             ORDW.RMA_DEF_WH_CD
+            ,CASE WHEN ORDW.MDSE_ITEM_CLS_TP_CD = '*' THEN NULL ELSE ORDW.MDSE_ITEM_CLS_TP_CD END AS MDSE_ITEM_CLS_TP_CD_FOR_SORT
+        FROM
+             ORD_RMA_DEF_WH ORDW
+        WHERE
+                 ORDW.GLBL_CMPY_CD          = #glblCmpyCd#
+             AND ORDW.DEF_WH_MAP_TMPL_CD    = #defWhMapTmplCd#
+           <isNotNull property="mdseCd">
+             AND ORDW.MDSE_ITEM_CLS_TP_CD  IN (
+                                              (SELECT
+                                                   M.MDSE_ITEM_CLS_TP_CD
+                                               FROM
+                                                   (SELECT
+                                                        M.GLBL_CMPY_CD
+                                                       ,M.MDSE_CD
+                                                       ,M.EZCANCELFLAG
+                                                       ,M.MDSE_ITEM_CLS_TP_CD
+                                                    FROM
+                                                        MDSE M
+                                                    WHERE
+                                                        M.GLBL_CMPY_CD     = #glblCmpyCd#
+                                                        AND M.MDSE_CD      = #mdseCd#
+                                                        AND M.EZCANCELFLAG = '0'
+                                                    UNION ALL
+                                                    SELECT
+                                                        M.GLBL_CMPY_CD
+                                                       ,M.MDSE_CD
+                                                       ,M.EZCANCELFLAG
+                                                       ,M.MDSE_ITEM_CLS_TP_CD
+                                                    FROM
+                                                        ORD_TAKE_MDSE OTM
+                                                       ,MDSE M
+                                                    WHERE
+                                                        OTM.GLBL_CMPY_CD         = #glblCmpyCd#
+                                                        AND OTM.ORD_TAKE_MDSE_CD = #mdseCd#
+                                                        AND OTM.EZCANCELFLAG     = '0'
+                                                        AND OTM.GLBL_CMPY_CD     = M.GLBL_CMPY_CD
+                                                        AND OTM.MDSE_CD          = M.MDSE_CD
+                                                        AND M.EZCANCELFLAG       = '0'
+                                                   ) M
+                                               WHERE
+                                                   M.GLBL_CMPY_CD     = #glblCmpyCd#
+                                                   AND M.EZCANCELFLAG = '0'
+                                                   AND M.EZCANCELFLAG = '0'
+                                              )
+                                              , #mdseItemClsTpCd_All#)
+           </isNotNull>
+           <isNull property="mdseCd">
+             AND ORDW.MDSE_ITEM_CLS_TP_CD   = #mdseItemClsTpCd_All#
+           </isNull>
+             AND ORDW.FROM_POST_CD      &lt;= #postCd#
+             AND ORDW.TO_POST_CD        &gt;= #postCd#
+             AND ORDW.ACTV_FLG              = 'Y'
+             AND ORDW.EZCANCELFLAG          = '0'
+           <isNotNull property="mdseCd">
+           <isNotNull property="thirdPtyItemFlg">
+             AND ORDW.THIRD_PTY_ITEM_FLG    = #thirdPtyItemFlg#
+           </isNotNull>
+           </isNotNull>
+           <isNotNull property="dropRtrnVndCd">
+             AND ORDW.DROP_RTRN_VND_CD   = #dropRtrnVndCd#
+           </isNotNull>
+           <isNotNull property="thirdPtyDspTpCd">
+             AND ORDW.THIRD_PTY_DSP_TP_CD   = #thirdPtyDspTpCd#
+           </isNotNull>
+        ORDER BY MDSE_ITEM_CLS_TP_CD_FOR_SORT NULLS LAST
+    </statement>
+
+    <statement id="getMdlId" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            SCM.MDL_ID
+        FROM
+            SVC_MACH_MSTR   SMM
+           ,SVC_CONFIG_MSTR SCM
+        WHERE
+            SMM.GLBL_CMPY_CD           = #glblCmpyCd#
+            <isNotNull property="svcConfigMstrPk">
+            AND SMM.SVC_CONFIG_MSTR_PK = #svcConfigMstrPk#
+            AND SMM.SVC_MACH_TP_CD     = #svcMachTpCd#
+            </isNotNull>
+            <isNull property="svcConfigMstrPk">
+            AND SMM.SVC_MACH_MSTR_PK   = #svcMachMstrPk#
+            </isNull>
+            AND SMM.EZCANCELFLAG       = '0'
+            AND SMM.GLBL_CMPY_CD       = SCM.GLBL_CMPY_CD
+            AND SMM.SVC_MACH_MSTR_PK   = SCM.SVC_MACH_MSTR_PK
+            AND SCM.EZCANCELFLAG       = '0'
+            ORDER BY
+                SMM.SVC_MACH_SQ_NUM ASC
+    </statement>
+
+    <statement id="getMtrCntInfoList" parameterClass="Map" resultClass="BigDecimal">
+            SELECT
+                CASE WHEN EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        SVC_PHYS_MTR_READ MTR
+                        ,MTR_LB            MRL
+                    WHERE
+                        MTR.GLBL_CMPY_CD             = #glblCmpyCd#
+                    AND MTR.SVC_PHYS_MTR_READ_GRP_SQ = SPM.SVC_PHYS_MTR_READ_GRP_SQ
+                    AND MTR.GLBL_CMPY_CD             = MRL.GLBL_CMPY_CD
+                    AND MTR.MTR_LB_CD                = MRL.MTR_LB_CD
+                    AND MRL.TOT_MTR_FLG              = #flgY#
+                    AND MTR.EZCANCELFLAG             = '0'
+                    AND MRL.EZCANCELFLAG             = '0'
+                )
+                THEN
+                (
+                    SELECT
+                        SUM(MTR.READ_MTR_CNT)
+                    FROM
+                        SVC_PHYS_MTR_READ MTR
+                       ,MTR_LB            MRL
+                    WHERE
+                        MTR.GLBL_CMPY_CD             = #glblCmpyCd#
+                    AND MTR.SVC_PHYS_MTR_READ_GRP_SQ = SPM.SVC_PHYS_MTR_READ_GRP_SQ
+                    AND MTR.GLBL_CMPY_CD             = MRL.GLBL_CMPY_CD
+                    AND MTR.MTR_LB_CD                = MRL.MTR_LB_CD
+                    AND MRL.TOT_MTR_FLG              = #flgY#
+                    AND MTR.EZCANCELFLAG             = '0'
+                    AND MRL.EZCANCELFLAG             = '0'
+                )
+                ELSE
+                (
+                    SELECT
+                        SUM(MTR.READ_MTR_CNT)
+                    FROM
+                        SVC_PHYS_MTR_READ MTR
+                       ,MTR_LB            MRL
+                    WHERE
+                        MTR.GLBL_CMPY_CD             = #glblCmpyCd#
+                    AND MTR.SVC_PHYS_MTR_READ_GRP_SQ = SPM.SVC_PHYS_MTR_READ_GRP_SQ
+                    AND MTR.GLBL_CMPY_CD             = MRL.GLBL_CMPY_CD
+                    AND MTR.MTR_LB_CD                = MRL.MTR_LB_CD
+                    AND MRL.TOT_MTR_FLG              = #flgN#
+                    AND MTR.EZCANCELFLAG             = '0'
+                    AND MRL.EZCANCELFLAG             = '0'
+                )
+                END AS MTR_CNT
+            FROM
+                SVC_PHYS_MTR_READ SPM
+            WHERE
+                SPM.GLBL_CMPY_CD                     = #glblCmpyCd#
+            AND SPM.SVC_MACH_MSTR_PK                 = #svcMachMstrPk#
+            AND SPM.SVC_PHYS_MTR_READ_GRP_SQ IN (
+                SELECT
+                    MAX(SVC_PHYS_MTR_READ_GRP_SQ)
+                FROM
+                    SVC_PHYS_MTR_READ SPR
+                WHERE
+                    SPR.GLBL_CMPY_CD                 = #glblCmpyCd#
+                    AND SPR.SVC_MACH_MSTR_PK         = #svcMachMstrPk#
+                    AND SPR.VLD_MTR_FLG              = #flgY#
+                    AND SPR.EZCANCELFLAG             = '0'
+            )
+            AND SPM.EZCANCELFLAG                     = '0'
+            AND ROWNUM = 1
+    </statement>
+
+    <statement id="getThirdPtyDspTpCdByMtrCntOfMdl" parameterClass="Map" resultClass="Map">
+        SELECT
+            DSBM.SQ_ID
+           ,DSBM.THIRD_PTY_DSP_TP_CD
+        FROM
+            DEF_SWH_BY_MDL DSBM
+        WHERE
+            DSBM.GLBL_CMPY_CD           = #glblCmpyCd#
+        AND DSBM.MDL_ID                 = #mdlId#
+        AND DSBM.FROM_MTR_CNT       &lt;= #fromMtrCnt01#
+        AND DSBM.To_MTR_CNT         &gt;= #toMtrCnt01#
+        AND DSBM.EFF_FROM_DT        &lt;= #effFromDt#
+        AND NVL(DSBM.EFF_THRU_DT, '99991231') &gt;= #effThruDt#
+        <isNotNull property="invtyOwnrCd">
+        AND DSBM.INVTY_OWNR_CD          = #invtyOwnrCd#
+        </isNotNull>
+        <isNull property="invtyOwnrCd">
+        AND DSBM.INVTY_OWNR_CD         IS NULL
+        </isNull>
+        AND DSBM.EZCANCELFLAG           = '0'
+        ORDER BY
+            DSBM.SQ_ID ASC
+    </statement>
+
+    <statement id="getThirdPtyDspTpCdByElpsMthAotOfMdl" parameterClass="Map" resultClass="Map">
+        SELECT
+            DSBM.SQ_ID
+           ,DSBM.THIRD_PTY_DSP_TP_CD
+        FROM
+            DEF_SWH_BY_MDL DSBM
+        WHERE
+            DSBM.GLBL_CMPY_CD           = #glblCmpyCd#
+        AND DSBM.MDL_ID                 = #mdlId#
+        AND DSBM.FROM_ELPS_MTH_AOT  &lt;= #fromElpsMthAot#
+        AND DSBM.TO_ELPS_MTH_AOT    &gt;= #toElpsMthAot#
+        AND DSBM.EFF_FROM_DT        &lt;= #effFromDt#
+        AND NVL(DSBM.EFF_THRU_DT, '99991231') &gt;= #effThruDt#
+        <isNotNull property="invtyOwnrCd">
+        AND DSBM.INVTY_OWNR_CD          = #invtyOwnrCd#
+        </isNotNull>
+        <isNull property="invtyOwnrCd">
+        AND DSBM.INVTY_OWNR_CD         IS NULL
+        </isNull>
+        AND DSBM.EZCANCELFLAG           = '0'
+        ORDER BY
+            DSBM.SQ_ID ASC
+    </statement>
+
+    <!-- QC#19805(L3) ADD END -->
+    <!-- QC#19805(L3) ADD START -->
+    <statement id="rtlDropWhList" parameterClass="Map" resultClass="Map">
+        SELECT
+             RTW.RTL_WH_CD
+            ,RTW.RTL_WH_CATG_CD
+        FROM
+             RTL_WH RTW
+        WHERE
+                 RTW.GLBL_CMPY_CD    = #glblCmpyCd#
+             AND RTW.PHYS_WH_CD      = #physWhCd#
+             AND RTW.INVTY_OWNR_CD   = #invtyOwnrCd#
+             AND RTW.RTL_WH_CATG_CD  = #rtlWhCatgCd#
+             AND RTW.EZCANCELFLAG    = '0'
+    </statement>
+    <!-- QC#19805(L3) ADD END -->
+
+    <!-- 2022/02/17 QC#59693 Add Start -->
+    <statement id="getOrdLineSrcFromProcrTpCd" parameterClass="Map" resultClass="String">
+        SELECT
+             LS.ORD_LINE_SRC_CD
+        FROM
+             PROCR_TP     PT
+            ,ORD_LINE_SRC LS
+        WHERE
+                 PT.GLBL_CMPY_CD    = #glblCmpyCd#
+             AND PT.PROCR_TP_CD     = #procrTpCd#
+             AND PT.EZCANCELFLAG    = '0'
+             AND PT.GLBL_CMPY_CD    = LS.GLBL_CMPY_CD
+             AND PT.ORD_LINE_SRC_CD = LS.ORD_LINE_SRC_CD
+             AND LS.EZCANCELFLAG    = '0'
+    </statement>
+    <!-- 2022/02/17 QC#59693 Add End -->
+</sqlMap>

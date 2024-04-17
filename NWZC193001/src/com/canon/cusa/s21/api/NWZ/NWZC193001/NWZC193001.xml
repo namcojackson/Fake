@@ -1,0 +1,74 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<sqlMap namespace="NWZC193001">
+
+    <statement id="getContract" parameterClass="Map" resultClass="String">
+        SELECT DISTINCT
+              CD.DS_CONTR_NUM
+        FROM
+              CPO     C
+            , CPO_DTL CD
+        WHERE
+              C.GLBL_CMPY_CD     = #glblCmpyCd#
+          AND C.CPO_ORD_NUM      = #cpoOrdNum#
+          AND C.EZCANCELFLAG     = '0'
+          AND C.GLBL_CMPY_CD     = CD.GLBL_CMPY_CD
+          AND C.CPO_ORD_NUM      = CD.CPO_ORD_NUM
+          AND CD.EZCANCELFLAG    = '0'
+    </statement>
+
+    <statement id="countOnverdueContractInvoice" parameterClass="Map" resultClass="java.math.BigDecimal">
+        SELECT
+              COUNT(*)
+        FROM
+              INV               I
+            , INV_LINE          IL
+            , DS_ACCT_CR_PRFL   DACP
+            , CONTR_CR_RISK_CLS CRC_A
+          <isNotEqual property="acctLvlFlg" compareValue="Y">
+            , CUST_CR_PRFL      CCP
+            , CONTR_CR_RISK_CLS CRC_B
+          </isNotEqual>
+            , AR_TRX_BAL ATB
+        WHERE
+              I.GLBL_CMPY_CD            = #glblCmpyCd#
+          AND I.BILL_TO_CUST_ACCT_CD    = #billToCustAcctCd#
+          AND I.EZCANCELFLAG            = '0'
+          <isNotEqual property="acctLvlFlg" compareValue="Y">
+          AND I.BILL_TO_CUST_CD         = #billToCustCd#
+          </isNotEqual>
+          AND I.GLBL_CMPY_CD            = IL.GLBL_CMPY_CD
+          AND I.INV_NUM                 = IL.INV_NUM
+          AND IL.EZCANCELFLAG           = '0'
+          <iterate property="dsContrNumList" var="dsContrNumList[]" open="AND IL.DS_CONTR_NUM IN (" close=")" conjunction=",">
+              #dsContrNumList[]#
+          </iterate>
+          AND I.GLBL_CMPY_CD            = DACP.GLBL_CMPY_CD
+          AND I.BILL_TO_CUST_ACCT_CD    = DACP.DS_ACCT_NUM
+          AND DACP.EZCANCELFLAG         = '0'
+          AND DACP.GLBL_CMPY_CD         = CRC_A.GLBL_CMPY_CD
+          AND DACP.CONTR_CR_RISK_CLS_CD = CRC_A.CONTR_CR_RISK_CLS_CD
+          AND CRC_A.EZCANCELFLAG        = '0'
+          <isNotEqual property="acctLvlFlg" compareValue="Y">
+          AND I.GLBL_CMPY_CD            = CCP.GLBL_CMPY_CD(+)
+          AND I.BILL_TO_CUST_CD         = CCP.BILL_TO_CUST_CD(+)
+          AND CCP.EZCANCELFLAG       (+)= '0'
+          AND CCP.GLBL_CMPY_CD          = CRC_B.GLBL_CMPY_CD(+)
+          AND CCP.CONTR_CR_RISK_CLS_CD  = CRC_B.CONTR_CR_RISK_CLS_CD(+)
+          AND CRC_B.EZCANCELFLAG     (+)= '0'
+          </isNotEqual>
+          AND ATB.GLBL_CMPY_CD          = I.GLBL_CMPY_CD
+          AND ATB.BILL_TO_CUST_ACCT_CD  = I.BILL_TO_CUST_ACCT_CD
+          AND ATB.AR_TRX_NUM         LIKE IL.INV_NUM || '%'
+          AND ATB.AR_TRX_TP_CD          = #arTrxTpInvoice#
+          AND ATB.AR_CASH_APPLY_STS_CD IN (#arCashApplyStsUnapplied#, #arCashApplyStsPartial#)
+          AND ATB.EZCANCELFLAG          = '0'
+          <isEqual property="acctLvlFlg" compareValue="Y">
+          AND TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD') + CRC_A.CONTR_GRACE_PER_DAYS_AOT &lt; TO_DATE(#slsDt#, 'YYYYMMDD')
+          </isEqual>
+          <isNotEqual property="acctLvlFlg" compareValue="Y">
+          AND TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD') + NVL(CRC_B.CONTR_GRACE_PER_DAYS_AOT, CRC_A.CONTR_GRACE_PER_DAYS_AOT) &lt; TO_DATE(#slsDt#, 'YYYYMMDD')
+          </isNotEqual>
+    </statement>
+
+</sqlMap>

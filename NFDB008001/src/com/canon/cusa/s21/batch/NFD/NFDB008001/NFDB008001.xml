@@ -1,0 +1,579 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sqlMap namespace="NFDB008001">
+
+    <statement id="selectStrategyAssignList" parameterClass="Map" resultClass="Map">
+    SELECT
+         BTC.BILL_TO_CUST_CD      AS BILL_TO_CUST_CD
+        ,CCT.CLT_STRGY_CD         AS CLT_STRGY_CD
+        ,SBC.BILL_TO_CUST_ACCT_CD AS BILL_TO_CUST_ACCT_CD
+        ,CP.CLT_PSN_CD            AS CLT_PSN_CD
+    FROM
+        (
+            SELECT
+                   BILL_TO_CUST_ACCT_CD
+                 , BILL_TO_CUST_CD
+                 , SUM(DEAL_RMNG_BAL_GRS_AMT) - NVL(SUM(DEAL_CLT_DSPT_AMT),0) AS OVR_DUE_AMT
+              FROM
+            -- Regular Invoice
+            (SELECT
+                 ARB.BILL_TO_CUST_CD            AS BILL_TO_CUST_CD
+                ,ARB.BILL_TO_CUST_ACCT_CD       AS BILL_TO_CUST_ACCT_CD
+                ,ARB.DEAL_RMNG_BAL_GRS_AMT      AS DEAL_RMNG_BAL_GRS_AMT
+                ,(
+                    SELECT
+                        NVL(SUM(DPT.DEAL_CLT_DSPT_AMT), 0)
+                    FROM
+                        CLT_DSPT_TRX DPT
+                    WHERE
+                            DPT.GLBL_CMPY_CD    = ARB.GLBL_CMPY_CD
+                        AND DPT.AR_TRX_NUM      = ARB.AR_TRX_NUM
+                        AND DPT.CLT_DSPT_STS_CD = #cltDsptStsCdApproved#
+                        AND DPT.EZCANCELFLAG    = '0'
+                 )                              AS DEAL_CLT_DSPT_AMT
+            FROM
+                 AR_TRX_BAL         ARB
+                ,BILL_TO_CUST       BTC
+                ,CUST_CR_PRFL       CCP
+                ,CR_RISK_CLS        CRC
+                ,DS_ACCT_CR_PRFL    ACP
+                ,CR_RISK_CLS        CRC_ACCT
+            WHERE
+                    ARB.GLBL_CMPY_CD      = #glblCmpyCd#
+                AND ARB.EZCANCELFLAG      = '0'
+                AND BTC.GLBL_CMPY_CD      = #glblCmpyCd#
+                AND BTC.EZCANCELFLAG      = '0'
+                AND CCP.GLBL_CMPY_CD(+)   = #glblCmpyCd#
+                AND CCP.EZCANCELFLAG(+)   = '0'
+                AND CRC.GLBL_CMPY_CD(+)   = #glblCmpyCd#
+                AND CRC.EZCANCELFLAG(+)   = '0'
+                AND ACP.GLBL_CMPY_CD      = #glblCmpyCd#
+                AND ACP.EZCANCELFLAG      = '0'
+                AND CRC_ACCT.GLBL_CMPY_CD = #glblCmpyCd#
+                AND CRC_ACCT.EZCANCELFLAG = '0'
+                AND (
+                    ARB.AR_CASH_APPLY_STS_CD = #arCashApplyStsCdUnapplied#
+                OR  ARB.AR_CASH_APPLY_STS_CD = #arCashApplyStsCdPartial#
+                )
+
+                AND ARB.AR_TRX_TP_CD &lt;&gt; #arTrxTpRcp#
+
+                <!-- Start add 2016/01/11 -->
+                AND ARB.GRP_INV_NUM   IS NULL
+                <!-- end 2016/01/11 -->
+                
+                AND BTC.BILL_TO_CUST_CD = ARB.BILL_TO_CUST_CD
+                <!-- START 08/02/2021 G.Delgado [QC#59021, MOD] -->
+                <!-- AND NVL(BTC.CLT_CUST_TP_CD,' ')  &lt;&gt; #cltCustTpCdNoDngStrgy# -->
+                AND NVL(BTC.CLT_CUST_TP_CD, #cltCustTpCdNoDngStrgy#) &lt;&gt; #cltCustTpCdNoDngStrgy#
+                <!-- END 08/02/2021 G.Delgado [QC#59021, MOD] -->
+                AND BTC.BILL_TO_CUST_PK = CCP.BILL_TO_CUST_PK(+)
+                AND CCP.CR_RISK_CLS_CD  = CRC.CR_RISK_CLS_CD(+)
+                
+                AND ARB.BILL_TO_CUST_ACCT_CD = ACP.DS_ACCT_NUM
+                AND ACP.CR_RISK_CLS_CD       = CRC_ACCT.CR_RISK_CLS_CD
+                
+                AND TO_CHAR(TO_DATE(ARB.INV_DUE_DT,'yyyymmdd') + NVL(CRC.GRACE_PER_DAYS_AOT, CRC_ACCT.GRACE_PER_DAYS_AOT),'yyyymmdd') &lt;= #bpDt#
+
+<!-- 2016/01/11 del
+                AND NOT EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        CUST_CR_PRFL PRF
+                    WHERE
+                        PRF.GLBL_CMPY_CD    = #glblCmpyCd#
+                    AND PRF.EZCANCELFLAG    = '0'
+                    AND PRF.CLT_CUST_TP_CD  = #cltCustTpCdStrategyCompleted#
+                    AND PRF.BILL_TO_CUST_CD = ARB.BILL_TO_CUST_CD
+                )
+-->
+
+                AND NOT EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        CLT_STRGY_TRX STB
+                    WHERE
+                        STB.GLBL_CMPY_CD    = #glblCmpyCd#
+                    AND STB.EZCANCELFLAG    = '0'
+                    AND STB.CLT_STRGY_STS_CD  = #cltStrgyStsCdOpen#
+                    AND STB.CLT_STRGY_CUR_FLG = #cltStrgyTrxY#
+                    AND STB.BILL_TO_CUST_CD = ARB.BILL_TO_CUST_CD
+                )
+                   
+            <!-- Start add 2016/01/11 Consolidated Invoice -->
+            UNION ALL 
+            -- Consolidated Invoice
+            SELECT
+                 ARB.BILL_TO_CUST_CD            AS BILL_TO_CUST_CD
+                ,ARB.BILL_TO_CUST_ACCT_CD       AS BILL_TO_CUST_ACCT_CD
+                ,ARB.DEAL_RMNG_BAL_GRS_AMT      AS DEAL_RMNG_BAL_GRS_AMT
+                ,(
+                    SELECT
+                        NVL(SUM(DPT.DEAL_CLT_DSPT_AMT), 0)
+                    FROM
+                        CLT_DSPT_TRX DPT
+                    WHERE
+                            DPT.GLBL_CMPY_CD    = ARB.GLBL_CMPY_CD
+                        AND DPT.AR_TRX_NUM      = ARB.AR_TRX_NUM
+                        AND DPT.CLT_DSPT_STS_CD = #cltDsptStsCdApproved#
+                        AND DPT.EZCANCELFLAG    = '0'
+                 )                              AS DEAL_CLT_DSPT_AMT
+            FROM
+                 AR_TRX_BAL         ARB
+                <!-- START 2021/12/02 K.Suzuki [QC#59480, DEL] -->
+                <!-- ,AR_ACCT_DT         AAD -->
+                <!-- END   2021/12/02 K.Suzuki [QC#59480, DEL] -->
+                <!-- START 2021/12/02 K.Suzuki [QC#59480, ADD] -->
+                ,BILL_TO_CUST       BTC
+                ,CUST_CR_PRFL       CCP
+                ,CR_RISK_CLS        CRC
+                ,DS_ACCT_CR_PRFL    ACP
+                ,CR_RISK_CLS        CRC_ACCT
+                <!-- END   2021/12/02 K.Suzuki [QC#59480, ADD] -->
+            WHERE
+                    ARB.GLBL_CMPY_CD  = #glblCmpyCd#
+                AND ARB.EZCANCELFLAG  = '0'
+                <!-- START 2021/12/02 K.Suzuki [QC#59480, DEL] -->
+                <!-- AND ARB.GLBL_CMPY_CD  = AAD.GLBL_CMPY_CD -->
+                <!-- AND AAD.EZCANCELFLAG  = '0' -->
+                <!-- END   2021/12/02 K.Suzuki [QC#59480, DEL] -->
+                <!-- START 2021/12/02 K.Suzuki [QC#59480, ADD] -->
+                AND BTC.GLBL_CMPY_CD      = #glblCmpyCd#
+                AND BTC.EZCANCELFLAG      = '0'
+                AND CCP.GLBL_CMPY_CD(+)   = #glblCmpyCd#
+                AND CCP.EZCANCELFLAG(+)   = '0'
+                AND CRC.GLBL_CMPY_CD(+)   = #glblCmpyCd#
+                AND CRC.EZCANCELFLAG(+)   = '0'
+                AND ACP.GLBL_CMPY_CD      = #glblCmpyCd#
+                AND ACP.EZCANCELFLAG      = '0'
+                AND CRC_ACCT.GLBL_CMPY_CD = #glblCmpyCd#
+                AND CRC_ACCT.EZCANCELFLAG = '0'
+                <!-- END   2021/12/02 K.Suzuki [QC#59480, ADD] -->
+                AND (
+                    ARB.AR_CASH_APPLY_STS_CD = #arCashApplyStsCdUnapplied#
+                OR  ARB.AR_CASH_APPLY_STS_CD = #arCashApplyStsCdPartial#
+                )
+
+                AND ARB.AR_TRX_TP_CD &lt;&gt; #arTrxTpRcp#
+                AND ARB.GRP_INV_NUM   IS NOT NULL
+
+                <!-- START 2021/12/02 K.Suzuki [QC#59480, DEL] -->
+                <!-- AND AAD.SUB_SYS_CD      = #subSysCd# -->
+                <!-- AND AAD.ONL_BAT_TP_CD   = #batTpCd# -->
+                <!-- END   2021/12/02 K.Suzuki [QC#59480, DEL] -->
+
+                <!-- START 2021/12/02 K.Suzuki [QC#59480, MOD] -->
+                <!-- AND ARB.INV_DUE_DT &lt;= AAD.ACCT_DT -->
+                AND TO_CHAR(TO_DATE(ARB.INV_DUE_DT,'yyyymmdd') + NVL(CRC.GRACE_PER_DAYS_AOT, CRC_ACCT.GRACE_PER_DAYS_AOT),'yyyymmdd') &lt;= #bpDt#
+                AND BTC.BILL_TO_CUST_CD           = ARB.BILL_TO_CUST_CD
+                AND NVL(BTC.CLT_CUST_TP_CD, '00') &lt;&gt; '00'
+                AND BTC.BILL_TO_CUST_PK           = CCP.BILL_TO_CUST_PK(+)
+                AND CCP.CR_RISK_CLS_CD            = CRC.CR_RISK_CLS_CD(+)
+                AND ARB.BILL_TO_CUST_ACCT_CD      = ACP.DS_ACCT_NUM
+                AND ACP.CR_RISK_CLS_CD            = CRC_ACCT.CR_RISK_CLS_CD
+                <!-- END   2021/12/02 K.Suzuki [QC#59480, MOD] -->
+
+                AND NOT EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        CLT_STRGY_TRX STB
+                    WHERE
+                        STB.GLBL_CMPY_CD    = #glblCmpyCd#
+                    AND STB.EZCANCELFLAG    = '0'
+                    AND STB.CLT_STRGY_STS_CD  = #cltStrgyStsCdOpen#
+                    AND STB.CLT_STRGY_CUR_FLG = #cltStrgyTrxY#
+                    AND STB.BILL_TO_CUST_CD = ARB.BILL_TO_CUST_CD
+                )
+            )
+            GROUP BY
+                 BILL_TO_CUST_ACCT_CD
+                ,BILL_TO_CUST_CD
+            HAVING 
+                SUM(DEAL_RMNG_BAL_GRS_AMT) - NVL(SUM(DEAL_CLT_DSPT_AMT),0) > 0
+
+        ) SBC
+
+        ,BILL_TO_CUST           BTC
+        ,SELL_TO_CUST           STC
+        ,CLT_STRGY_RELN_CUST_TP CCT
+        ,CLT_PTFO               CP
+
+    WHERE
+            BTC.GLBL_CMPY_CD                     = #glblCmpyCd#
+        AND BTC.EZCANCELFLAG                     = '0'
+        AND STC.GLBL_CMPY_CD                     = #glblCmpyCd#
+        AND STC.EZCANCELFLAG                     = '0'
+        AND CCT.GLBL_CMPY_CD                     = #glblCmpyCd#
+        AND CCT.EZCANCELFLAG                     = '0'
+        AND CP.GLBL_CMPY_CD(+)                   = #glblCmpyCd#
+        AND CP.EZCANCELFLAG(+)                   = '0'
+        <!-- START 08/02/2021 G.Delgado [QC#59021, MOD] -->
+        <!-- AND NVL(BTC.CLT_CUST_TP_CD,' ')   &lt;&gt; #cltCustTpCdNoDngStrgy# -->
+        AND CCT.CLT_CUST_TP_CD            &lt;&gt; #cltCustTpCdNoDngStrgy#
+        <!-- END 08/02/2021 G.Delgado [QC#59021, MOD] -->
+        AND BTC.BILL_TO_CUST_CD                  = SBC.BILL_TO_CUST_CD
+
+        AND SBC.BILL_TO_CUST_ACCT_CD             = STC.SELL_TO_CUST_CD
+        <!-- START 08/02/2021 G.Delgado [QC#59021, MOD] -->
+        <!-- AND CCT.CLT_CUST_TP_CD                   =  NVL(BTC.CLT_CUST_TP_CD, STC.CLT_CUST_TP_CD) -->
+        AND CCT.CLT_CUST_TP_CD                   =  NVL(BTC.CLT_CUST_TP_CD,  #cltCustTpCdNoDngStrgy#)
+        <!-- END 08/02/2021 G.Delgado [QC#59021, MOD] -->
+        AND (CCT.CLT_OVER_DUE_RANGE_LOW_AMT  &lt;=  SBC.OVR_DUE_AMT
+        AND CCT.CLT_OVER_DUE_RANGE_HIGH_AMT  &gt;=  SBC.OVR_DUE_AMT)
+
+        AND CP.CLT_PTFO_PK(+) = CASE WHEN BTC.CLT_PTFO_PK IS NULL THEN STC.CLT_PTFO_PK ElSE BTC.CLT_PTFO_PK END
+
+    </statement>
+
+    <statement id="selectWorkItemList" parameterClass="Map" resultClass="Map">
+        SELECT
+             CWI.CLT_WRK_ITEM_CD            AS CLT_WRK_ITEM_CD
+            ,CWI.CLT_WRK_ITEM_NM            AS CLT_WRK_ITEM_NM
+            ,CWI.CLT_WRK_TP_CD              AS CLT_WRK_TP_CD
+            ,CLT.CLT_WRK_TP_NM              AS CLT_WRK_TP_NM
+            ,CWI.CLT_WRK_CATG_CD            AS CLT_WRK_CATG_CD
+            ,CWI.CLT_WRK_CATG_NM            AS CLT_WRK_CATG_NM
+            ,CWI.CLT_WRK_WAIT_DAYS_AOT      AS CLT_WRK_WAIT_DAYS_AOT
+            ,CWI.CLT_WRK_ESCL_WAIT_DAYS_AOT AS CLT_WRK_ESCL_WAIT_DAYS_AOT
+        FROM
+              CLT_STRGY_RELN_WRK_ITEM RWI
+             ,CLT_WRK_ITEM CWI
+             ,CLT_WRK_TP   CLT
+        WHERE
+                CWI.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND CWI.EZCANCELFLAG    = '0'
+            AND RWI.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND RWI.EZCANCELFLAG    = '0'
+            AND CLT.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND CLT.EZCANCELFLAG    = '0'
+            AND RWI.CLT_STRGY_CD    = #cltStrMstCd#
+            AND CWI.CLT_WRK_ITEM_CD = RWI.CLT_WRK_ITEM_CD
+            AND CWI.CLT_WRK_TP_CD   = CLT.CLT_WRK_TP_CD
+        ORDER BY
+            RWI.CLT_WRK_ITEM_SORT_NUM
+    </statement>
+
+    <statement id="getCloseStrategyPk1" parameterClass="Map" resultClass="Map">
+        SELECT
+            CST.CLT_STRGY_TRX_PK
+        FROM
+            CLT_STRGY_TRX CST
+        WHERE
+                CST.GLBL_CMPY_CD      = #glblCmpyCd#
+            AND CST.CLT_STRGY_STS_CD  = #cltStrgyStsCdOpen#
+            AND CST.CLT_STRGY_CUR_FLG = #flgY#
+            AND CST.EZCANCELFLAG      = '0'
+            AND NOT EXISTS(
+                SELECT
+                    1
+                FROM
+                    CLT_STRGY_WRK_ITEM_TRX CSWIT
+                WHERE
+                        CSWIT.GLBL_CMPY_CD = CST.GLBL_CMPY_CD
+                    AND CSWIT.CLT_STRGY_TRX_PK = CST.CLT_STRGY_TRX_PK
+                    <iterate property="cltWrkItemStsCdOpenList" var="cltWrkItemStsCdOpenList[]" open="AND CSWIT.CLT_WRK_ITEM_STS_CD IN(" close=")" conjunction=",">
+                        #cltWrkItemStsCdOpenList[]#
+                    </iterate>
+                    AND CSWIT.EZCANCELFLAG = '0'
+            )
+    </statement>
+
+    <statement id="getCloseStrategyPk2" parameterClass="Map" resultClass="Map">
+    WITH CLT_TRX AS (
+        SELECT
+             SUB.BILL_TO_CUST_ACCT_CD
+           , SUB.BILL_TO_CUST_CD
+        FROM
+             (
+                 SELECT
+                      ARB.BILL_TO_CUST_CD            AS BILL_TO_CUST_CD
+                     ,ARB.BILL_TO_CUST_ACCT_CD       AS BILL_TO_CUST_ACCT_CD
+                     ,ARB.DEAL_RMNG_BAL_GRS_AMT      AS DEAL_RMNG_BAL_GRS_AMT
+                     ,(
+                         SELECT
+                             NVL(SUM(DPT.DEAL_CLT_DSPT_AMT), 0)
+                         FROM
+                             CLT_DSPT_TRX DPT
+                         WHERE
+                                 DPT.GLBL_CMPY_CD    = ARB.GLBL_CMPY_CD
+                             AND DPT.AR_TRX_NUM      = ARB.AR_TRX_NUM
+                             AND DPT.CLT_DSPT_STS_CD = #cltDsptStsCdApproved#
+                             AND DPT.EZCANCELFLAG    = '0'
+                      )                              AS DEAL_CLT_DSPT_AMT
+                 FROM
+                      AR_TRX_BAL         ARB
+                     ,BILL_TO_CUST       BTC
+                     ,CUST_CR_PRFL       CCP
+                     ,CR_RISK_CLS        CRC
+                     ,DS_ACCT_CR_PRFL    ACP
+                     ,CR_RISK_CLS        CRC_ACCT
+                 WHERE
+                         ARB.GLBL_CMPY_CD         = #glblCmpyCd#
+                     AND ARB.GLBL_CMPY_CD         = BTC.GLBL_CMPY_CD
+                     AND ARB.BILL_TO_CUST_CD      = BTC.BILL_TO_CUST_CD
+                     AND BTC.GLBL_CMPY_CD         = CCP.GLBL_CMPY_CD(+)
+                     AND BTC.BILL_TO_CUST_PK      = CCP.BILL_TO_CUST_PK(+)
+                     AND CCP.GLBL_CMPY_CD         = CRC.GLBL_CMPY_CD(+)
+                     AND CCP.CR_RISK_CLS_CD       = CRC.CR_RISK_CLS_CD(+)
+                     AND ARB.GLBL_CMPY_CD         = ACP.GLBL_CMPY_CD
+                     AND ARB.BILL_TO_CUST_ACCT_CD = ACP.DS_ACCT_NUM
+                     AND ACP.GLBL_CMPY_CD         = CRC_ACCT.GLBL_CMPY_CD
+                     AND ACP.CR_RISK_CLS_CD       = CRC_ACCT.CR_RISK_CLS_CD
+                     AND (
+                            ARB.AR_CASH_APPLY_STS_CD = #arCashApplyStsCdUnapplied#
+                         OR ARB.AR_CASH_APPLY_STS_CD = #arCashApplyStsCdPartial#
+                     )
+                     AND ARB.AR_TRX_TP_CD &lt;&gt; #arTrxTpRcp#
+                     AND ARB.GRP_INV_NUM   IS NULL
+                     AND TO_CHAR(TO_DATE(ARB.INV_DUE_DT,'yyyymmdd') + NVL(CRC.GRACE_PER_DAYS_AOT, CRC_ACCT.GRACE_PER_DAYS_AOT),'yyyymmdd') &lt;= #bpDt#
+                     AND ARB.EZCANCELFLAG      = '0'
+                     AND BTC.EZCANCELFLAG      = '0'
+                     AND CCP.EZCANCELFLAG(+)   = '0'
+                     AND CRC.EZCANCELFLAG(+)   = '0'
+                     AND ACP.EZCANCELFLAG      = '0'
+                     AND CRC_ACCT.EZCANCELFLAG = '0'
+                     AND EXISTS (
+                         SELECT
+                             1
+                         FROM
+                             CLT_STRGY_TRX STB
+                         WHERE
+                             STB.GLBL_CMPY_CD      = ARB.GLBL_CMPY_CD
+                         AND STB.BILL_TO_CUST_CD   = ARB.BILL_TO_CUST_CD
+                         AND STB.CLT_STRGY_STS_CD  = #cltStrgyStsCdOpen#
+                         AND STB.CLT_STRGY_CUR_FLG = #cltStrgyTrxY#
+                         AND STB.EZCANCELFLAG      = '0'
+                     )
+
+                 UNION ALL 
+
+                 SELECT
+                      ARB.BILL_TO_CUST_CD            AS BILL_TO_CUST_CD
+                     ,ARB.BILL_TO_CUST_ACCT_CD       AS BILL_TO_CUST_ACCT_CD
+                     ,ARB.DEAL_RMNG_BAL_GRS_AMT      AS DEAL_RMNG_BAL_GRS_AMT
+                     ,(
+                         SELECT
+                             NVL(SUM(DPT.DEAL_CLT_DSPT_AMT), 0)
+                         FROM
+                             CLT_DSPT_TRX DPT
+                         WHERE
+                                 DPT.GLBL_CMPY_CD    = ARB.GLBL_CMPY_CD
+                             AND DPT.AR_TRX_NUM      = ARB.AR_TRX_NUM
+                             AND DPT.CLT_DSPT_STS_CD = #cltDsptStsCdApproved#
+                             AND DPT.EZCANCELFLAG    = '0'
+                      )                              AS DEAL_CLT_DSPT_AMT
+                 FROM
+                      AR_TRX_BAL         ARB
+                     <!-- START 2021/12/02 K.Suzuki [QC#59480, DEL] -->
+                     <!-- ,AR_ACCT_DT         AAD -->
+                     <!-- END   2021/12/02 K.Suzuki [QC#59480, DEL] -->
+                     <!-- START 2021/12/02 K.Suzuki [QC#59480, ADD] -->
+                     ,BILL_TO_CUST       BTC
+                     ,CUST_CR_PRFL       CCP
+                     ,CR_RISK_CLS        CRC
+                     ,DS_ACCT_CR_PRFL    ACP
+                     ,CR_RISK_CLS        CRC_ACCT
+                     <!-- END   2021/12/02 K.Suzuki [QC#59480, ADD] -->
+                 WHERE
+                         ARB.GLBL_CMPY_CD         = #glblCmpyCd#
+                     <!-- START 2021/12/02 K.Suzuki [QC#59480, DEL] -->
+                     <!-- AND ARB.GLBL_CMPY_CD         = AAD.GLBL_CMPY_CD -->
+                     <!-- END   2021/12/02 K.Suzuki [QC#59480, DEL] -->
+                     <!-- START 2021/12/02 K.Suzuki [QC#59480, ADD] -->
+                     AND BTC.GLBL_CMPY_CD         = CCP.GLBL_CMPY_CD(+)
+                     AND BTC.BILL_TO_CUST_PK      = CCP.BILL_TO_CUST_PK(+)
+                     AND CCP.GLBL_CMPY_CD         = CRC.GLBL_CMPY_CD(+)
+                     AND CCP.CR_RISK_CLS_CD       = CRC.CR_RISK_CLS_CD(+)
+                     AND ARB.GLBL_CMPY_CD         = ACP.GLBL_CMPY_CD
+                     AND ARB.BILL_TO_CUST_ACCT_CD = ACP.DS_ACCT_NUM
+                     AND ACP.GLBL_CMPY_CD         = CRC_ACCT.GLBL_CMPY_CD
+                     AND ACP.CR_RISK_CLS_CD       = CRC_ACCT.CR_RISK_CLS_CD
+                     <!-- END   2021/12/02 K.Suzuki [QC#59480, ADD] -->
+                     <!-- START 2021/12/02 K.Suzuki [QC#59480, MOD] -->
+                     <!-- AND ARB.INV_DUE_DT       &lt;= AAD.ACCT_DT -->
+                     AND TO_CHAR(TO_DATE(ARB.INV_DUE_DT,'yyyymmdd') + NVL(CRC.GRACE_PER_DAYS_AOT, CRC_ACCT.GRACE_PER_DAYS_AOT),'yyyymmdd') &lt;= #bpDt#
+                     <!-- END   2021/12/02 K.Suzuki [QC#59480, MOD] -->
+                     AND (
+                            ARB.AR_CASH_APPLY_STS_CD = #arCashApplyStsCdUnapplied#
+                         OR ARB.AR_CASH_APPLY_STS_CD = #arCashApplyStsCdPartial#
+                     )
+                     AND ARB.AR_TRX_TP_CD &lt;&gt; #arTrxTpRcp#
+                     AND ARB.GRP_INV_NUM   IS NOT NULL
+                     <!-- START 2021/12/02 K.Suzuki [QC#59480, DEL] -->
+                     <!-- AND AAD.SUB_SYS_CD    = #subSysCd# -->
+                     <!-- AND AAD.ONL_BAT_TP_CD = #batTpCd# -->
+                     <!-- END   2021/12/02 K.Suzuki [QC#59480, DEL] -->
+                     AND ARB.EZCANCELFLAG  = '0'
+                     <!-- START 2021/12/02 K.Suzuki [QC#59480, DEL] -->
+                     <!-- AND AAD.EZCANCELFLAG  = '0' -->
+                     <!-- END   2021/12/02 K.Suzuki [QC#59480, DEL] -->
+                     <!-- START 2021/12/02 K.Suzuki [QC#59480, ADD] -->
+                     AND BTC.EZCANCELFLAG      = '0'
+                     AND CCP.EZCANCELFLAG(+)   = '0'
+                     AND CRC.EZCANCELFLAG(+)   = '0'
+                     AND ACP.EZCANCELFLAG      = '0'
+                     AND CRC_ACCT.EZCANCELFLAG = '0'
+                     <!-- END   2021/12/02 K.Suzuki [QC#59480, ADD] -->
+                     AND EXISTS (
+                         SELECT
+                             1
+                         FROM
+                             CLT_STRGY_TRX STB
+                         WHERE
+                             STB.GLBL_CMPY_CD      = ARB.GLBL_CMPY_CD
+                         AND STB.BILL_TO_CUST_CD   = ARB.BILL_TO_CUST_CD
+                         AND STB.CLT_STRGY_STS_CD  = #cltStrgyStsCdOpen#
+                         AND STB.CLT_STRGY_CUR_FLG = #cltStrgyTrxY#
+                         AND STB.EZCANCELFLAG      = '0'
+                     )
+                     <!-- START 2022/02/01 K.Suzuki [QC#59672, ADD] -->
+                     AND ARB.GLBL_CMPY_CD          = BTC.GLBL_CMPY_CD
+                     AND ARB.BILL_TO_CUST_CD       = BTC.BILL_TO_CUST_CD
+                     <!-- END   2022/02/01 K.Suzuki [QC#59672, ADD] -->
+             ) SUB
+         GROUP BY
+              SUB.BILL_TO_CUST_ACCT_CD
+             ,SUB.BILL_TO_CUST_CD
+         HAVING 
+             SUM(SUB.DEAL_RMNG_BAL_GRS_AMT) - NVL(SUM(SUB.DEAL_CLT_DSPT_AMT),0) > 0
+    )
+        SELECT
+             CST.CLT_STRGY_TRX_PK
+            ,CST.BILL_TO_CUST_CD
+        FROM
+            CLT_STRGY_TRX CST
+           ,CLT_TRX       CT
+        WHERE
+                CST.GLBL_CMPY_CD      = #glblCmpyCd#
+            AND CST.CLT_STRGY_STS_CD  = #cltStrgyStsCdOpen#
+            AND CST.CLT_STRGY_CUR_FLG = #cltStrgyTrxY#
+            AND CST.EZCANCELFLAG      = '0'
+            AND CST.BILL_TO_CUST_CD   = CT.BILL_TO_CUST_CD(+)
+            AND CT.BILL_TO_CUST_CD    IS NULL
+
+    </statement>
+
+    <statement id="getCancelWrkItemPk" parameterClass="Map" resultClass="Map">
+        SELECT
+            CSWIT.CLT_STRGY_WRK_ITEM_TRX_PK
+        FROM
+            CLT_STRGY_WRK_ITEM_TRX CSWIT
+        WHERE
+                CSWIT.GLBL_CMPY_CD             = #glblCmpyCd#
+            AND CSWIT.CLT_STRGY_TRX_PK         = #cltStrgyTrxPk#
+            <iterate property="cltWrkItemStsCdOpenList" var="cltWrkItemStsCdOpenList[]" open="AND CSWIT.CLT_WRK_ITEM_STS_CD IN(" close=")" conjunction=",">
+                #cltWrkItemStsCdOpenList[]#
+            </iterate>
+            AND CSWIT.EZCANCELFLAG             = '0'
+        ORDER BY
+            CSWIT.CLT_STRGY_WRK_ITEM_TRX_PK
+    </statement>
+
+    <statement id="getOpenCltWrkItemPk" parameterClass="Map" resultClass="Map">
+        SELECT
+            TRX.CLT_STRGY_WRK_ITEM_TRX_PK
+        FROM
+            CLT_STRGY_WRK_ITEM_TRX TRX
+        WHERE 1=1
+           AND TRX.GLBL_CMPY_CD          = #glblCmpyCd#
+           <!-- 2018/06/12 J.Kim [QC#21426, DEL] -->
+           <!-- AND TRX.CLT_WRK_TP_CD    = #cltWrkTpCdIsManual# -->
+           AND TRX.CLT_WRK_ITEM_STS_CD   = #cltWrkItemStsCdIsPending#
+           AND TRX.CLT_WRK_ITEM_RWSD_DT  &lt;= #batProcDt#
+           AND TRX.EZCANCELFLAG          = '0'
+           AND NOT EXISTS (
+                              SELECT
+                                   PRE_TRX.CLT_STRGY_WRK_ITEM_TRX_PK
+                              FROM
+                                   CLT_STRGY_WRK_ITEM_TRX PRE_TRX
+                              WHERE
+                                   PRE_TRX.GLBL_CMPY_CD          = TRX.GLBL_CMPY_CD
+                              AND  PRE_TRX.EZCANCELFLAG          = '0'
+                              AND  PRE_TRX.CLT_STRGY_TRX_PK      = TRX.CLT_STRGY_TRX_PK
+                              AND  PRE_TRX.CLT_WRK_ITEM_RWSD_DT  &lt; TRX.CLT_WRK_ITEM_RWSD_DT
+                              <iterate property="cltWrkItemStsCdOpenList" var="cltWrkItemStsCdOpenList[]" open="AND PRE_TRX.CLT_WRK_ITEM_STS_CD IN(" close=")" conjunction=",">
+                                  #cltWrkItemStsCdOpenList[]#
+                              </iterate>
+                              <!-- AND  PRE_TRX.CLT_WRK_TP_CD    = #cltWrkTpCdIsManual# -->
+                          )
+    </statement>
+
+    <statement id="getCltWrkItemRwdDtPk" parameterClass="Map" resultClass="Map">
+        SELECT
+              CLT_TRX.CLT_STRGY_WRK_ITEM_TRX_PK
+            , CLT_TRX.CLT_STRGY_TRX_PK 
+            , CLT_TRX.CLT_WRK_ITEM_CD 
+        FROM (
+                SELECT TRX.CLT_STRGY_WRK_ITEM_TRX_PK
+                     , TRX.CLT_STRGY_TRX_PK
+                     , TRX.CLT_WRK_ITEM_RWSD_DT
+                     , TRX.CLT_WRK_ITEM_STS_CD
+                     , TRX.CLT_WRK_ITEM_CD
+                     , ROW_NUMBER() OVER ( PARTITION BY TRX.CLT_STRGY_TRX_PK ORDER BY TRX.CLT_STRGY_WRK_ITEM_TRX_PK ASC) AS IDX 
+                FROM
+                    CLT_STRGY_WRK_ITEM_TRX TRX 
+                WHERE 
+                     TRX.GLBL_CMPY_CD                            = #glblCmpyCd#
+                     AND TRX.EZCANCELFLAG                        = '0'
+                     <iterate property="cltWrkItemStsCdOpenList" var="cltWrkItemStsCdOpenList[]" open="AND TRX.CLT_WRK_ITEM_STS_CD IN(" close=")" conjunction=",">
+                       #cltWrkItemStsCdOpenList[]#
+                     </iterate>
+             ) CLT_TRX
+        WHERE    CLT_TRX.IDX = 1
+            AND NOT EXISTS (
+                              SELECT
+                                   DT_TRX.CLT_STRGY_WRK_ITEM_TRX_PK
+                              FROM
+                                   CLT_STRGY_WRK_ITEM_TRX DT_TRX
+                              WHERE
+                                   DT_TRX.GLBL_CMPY_CD           = #glblCmpyCd#
+                              AND  DT_TRX.EZCANCELFLAG           = '0'
+                              AND  DT_TRX.CLT_STRGY_TRX_PK       = CLT_TRX.CLT_STRGY_TRX_PK
+                              AND  DT_TRX.CLT_WRK_ITEM_STS_CD    = CLT_TRX.CLT_WRK_ITEM_STS_CD
+                              AND  DT_TRX.CLT_WRK_ITEM_RWSD_DT   IS NOT  NULL
+                          )
+    </statement>
+
+    <!-- START 2021/10/08 K.Suzuki [QC#59284, ADD] -->
+    <statement id="getCompleteLatestWrkItemCd" parameterClass="Map" resultClass="Map">
+        SELECT
+              CLT_TRX.CLT_STRGY_WRK_ITEM_TRX_PK
+            , CLT_TRX.CLT_STRGY_TRX_PK 
+            , CLT_TRX.CLT_WRK_ITEM_CD 
+        FROM (
+                SELECT TRX.CLT_STRGY_WRK_ITEM_TRX_PK
+                     , TRX.CLT_STRGY_TRX_PK
+                     , TRX.CLT_WRK_ITEM_RWSD_DT
+                     , TRX.CLT_WRK_ITEM_STS_CD
+                     , TRX.CLT_WRK_ITEM_CD
+                     , ROW_NUMBER() OVER ( PARTITION BY TRX.CLT_STRGY_TRX_PK ORDER BY TRX.CLT_WRK_ITEM_WERD_DT DESC,TRX.CLT_STRGY_WRK_ITEM_TRX_PK DESC) AS IDX
+                FROM
+                    CLT_STRGY_WRK_ITEM_TRX TRX 
+                WHERE 
+                     TRX.GLBL_CMPY_CD                            = #glblCmpyCd#
+                     AND TRX.EZCANCELFLAG                        = '0'
+                     AND TRX.CLT_STRGY_TRX_PK                    = #cltStrgyTrxPk#
+                     <iterate property="cltWrkItemStsCdCompleteList" var="cltWrkItemStsCdCompleteList[]" open="AND TRX.CLT_WRK_ITEM_STS_CD IN (" close=")" conjunction=",">
+                       #cltWrkItemStsCdCompleteList[]#
+                     </iterate>
+             ) CLT_TRX
+        WHERE    CLT_TRX.IDX = 1
+            AND EXISTS (
+                              SELECT
+                                   DT_TRX.CLT_STRGY_WRK_ITEM_TRX_PK
+                              FROM
+                                   CLT_STRGY_WRK_ITEM_TRX DT_TRX
+                              WHERE
+                                   DT_TRX.GLBL_CMPY_CD           = #glblCmpyCd#
+                              AND  DT_TRX.EZCANCELFLAG           = '0'
+                              AND  DT_TRX.CLT_STRGY_TRX_PK       = #cltStrgyTrxPk#
+                              <iterate property="cltWrkItemStsCdOpenList" var="cltWrkItemStsCdOpenList[]" open="AND DT_TRX.CLT_WRK_ITEM_STS_CD IN (" close=")" conjunction=",">
+                                #cltWrkItemStsCdOpenList[]#
+                              </iterate>
+                              AND  DT_TRX.CLT_WRK_ITEM_RWSD_DT   IS NULL
+                          )
+    </statement>
+    <!-- END   2021/10/08 K.Suzuki [QC#59284, ADD] -->
+</sqlMap>

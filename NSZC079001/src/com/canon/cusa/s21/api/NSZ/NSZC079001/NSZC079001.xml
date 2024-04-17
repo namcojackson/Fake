@@ -1,0 +1,428 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+
+<sqlMap namespace="NSZC079001">
+    <statement id="getMerchandise" parameterClass="Map" resultClass="Map">
+        SELECT
+            MDSE_CD
+            ,MDSE_NM
+            ,SITE_SRVY_REQ_FLG
+        FROM
+            (
+             SELECT
+                 MD.MDSE_CD
+                 ,MD.MDSE_NM
+                 ,SITE_SRVY_REQ_FLG
+             FROM
+                 MDSE            MD
+             WHERE
+                 MD.GLBL_CMPY_CD     = #glblCmpyCd#
+                 AND (MD.MDSE_CD   LIKE #mdseCd#
+                     OR MD.MDSE_NM LIKE #mdseCd#)
+                 AND MD.EZCANCELFLAG = '0'
+             ORDER BY
+                 MD.MDSE_CD
+            )
+        WHERE
+            ROWNUM &lt;= #rowNum#
+    </statement>
+
+    <statement id="getMerchandiseCnt" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            COUNT(*)
+        FROM
+            MDSE            MD
+        WHERE
+            MD.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND (MD.MDSE_CD   LIKE #mdseCd#
+                OR MD.MDSE_NM LIKE #mdseCd#)
+            AND MD.EZCANCELFLAG = '0'
+    </statement>
+
+    <statement id="getRetailWareHouseInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+             RW.DEF_SRC_RTL_WH_CD
+            ,RW.DEF_SRC_RTL_SWH_CD
+        <!-- START  2019/10/24 K.Fujimoto[QC#53410,ADD] -->
+            ,RW.RTL_WH_CD
+        <!-- END    2019/10/24 K.Fujimoto[QC#53410,ADD] -->
+        FROM
+            TECH_LOC TE
+            ,RTL_SWH RSW
+            ,RTL_WH  RW
+        WHERE
+            TE.GLBL_CMPY_CD           =  #glblCmpyCd#
+            AND TE.TECH_TOC_CD        =  #reqTechCd#
+            AND TE.GLBL_CMPY_CD       =  RSW.GLBL_CMPY_CD
+            AND TE.TECH_LOC_CD        =  RSW.INVTY_LOC_CD
+            AND RSW.GLBL_CMPY_CD      =  RW.GLBL_CMPY_CD
+            AND RSW.RTL_WH_CD         =  RW.RTL_WH_CD
+            AND TE.EZCANCELFLAG       =  '0'
+            AND RSW.EZCANCELFLAG      =  '0'
+            AND RW.EZCANCELFLAG       =  '0'
+
+    </statement>
+
+    <statement id="getCsaInventoryAvailabilityTech" parameterClass="Map" resultClass="Map">
+    WITH TECH_INVTY AS (
+        SELECT
+             CASE
+                WHEN RW.RTL_WH_CATG_CD = #rtlWhCatgCdTechCarStk#
+                    THEN (PN.PSN_LAST_NM || ', ' || PN.PSN_FIRST_NM || decode(PN.PSN_MID_NM, NULL, NULL, ' ' || PN.PSN_MID_NM))
+                WHEN RW.RTL_WH_CATG_CD = #rtlWhCatgCdCust#
+                    THEN RW.RTL_WH_NM
+                ELSE NULL
+             END AS SVC_MBL_WH_OWNR_TXT
+            ,IV.INVTY_AVAL_QTY
+            ,TE.TECH_TOC_CD    AS TECH_TOC_CD
+            ,RW.RTL_WH_CD      AS RTL_WH_CD
+            ,RW.RTL_WH_CATG_CD AS RTL_WH_CATG_CD
+        FROM
+            INVTY       IV
+            ,RTL_SWH    RSW
+            ,TECH_LOC   TE
+            ,S21_PSN    PN
+            ,RTL_WH     RW
+        WHERE
+            IV.GLBL_CMPY_CD         =  #glblCmpyCd#
+            AND IV.MDSE_CD          =  #mdseCd#
+            AND IV.LOC_STS_CD       =  #locStsCd#
+            AND IV.LOC_TP_CD        =  #tecLocTpCd#
+            <!-- START 2019/12/12 K.Kitachi [QC#55055, ADD] -->
+            AND IV.STK_STS_CD       =  #stkStsCd#
+            <!-- END 2019/12/12 K.Kitachi [QC#55055, ADD] -->
+            AND IV.INVTY_AVAL_QTY &gt; 0
+            AND IV.GLBL_CMPY_CD     =  RSW.GLBL_CMPY_CD
+            AND IV.INVTY_LOC_CD     =  RSW.INVTY_LOC_CD
+            <iterate property="tecRtlSwhCdList" var="tecRtlSwhCdList[]" open="AND RSW.RTL_SWH_CD     IN  (" close=")" conjunction=",">
+                #tecRtlSwhCdList[]#
+            </iterate>
+            AND IV.GLBL_CMPY_CD     =  TE.GLBL_CMPY_CD
+            AND IV.INVTY_LOC_CD     =  TE.TECH_LOC_CD
+            AND IV.INVTY_LOC_CD     =  RSW.INVTY_LOC_CD
+            <iterate property="techTocCdList" var="techTocCdList[]" open="AND TE.TECH_TOC_CD     IN  (" close=")" conjunction=",">
+                #techTocCdList[]#
+            </iterate>
+            AND TE.GLBL_CMPY_CD     =  PN.GLBL_CMPY_CD
+            AND TE.TECH_TOC_CD      =  PN.PSN_CD
+            AND PN.DEL_FLG          =  'N'
+            AND IV.EZCANCELFLAG     =  '0'
+            AND RSW.EZCANCELFLAG    =  '0'
+            AND TE.EZCANCELFLAG     =  '0'
+            AND PN.EZCANCELFLAG     =  '0'
+            AND RSW.GLBL_CMPY_CD    =  RW.GLBL_CMPY_CD
+            AND RSW.RTL_WH_CD       =  RW.RTL_WH_CD
+            AND RW.EZCANCELFLAG     =  '0'
+    )
+        SELECT
+            TI.SVC_MBL_WH_OWNR_TXT
+           ,SUM(TI.INVTY_AVAL_QTY) AS INVTY_AVAL_QTY
+           ,TI.TECH_TOC_CD
+           ,TI.RTL_WH_CD
+           ,TI.RTL_WH_CATG_CD
+        FROM
+            TECH_INVTY TI
+        GROUP BY
+            TI.SVC_MBL_WH_OWNR_TXT
+           ,TI.TECH_TOC_CD
+           ,TI.RTL_WH_CD
+           ,TI.RTL_WH_CATG_CD
+        <!-- START  2019/10/24 K.Fujimoto[QC#53410,ADD] -->
+        ORDER BY
+            SVC_MBL_WH_OWNR_TXT
+        <!-- END    2019/10/24 K.Fujimoto[QC#53410,ADD] -->
+    </statement>
+
+    <statement id="getCsaInventoryAvailabilityWh" parameterClass="Map" resultClass="Map">
+    WITH WH_INVTY AS (
+        SELECT
+            CASE 
+            <!-- START  2019/11/21 H.Umeda[QC#53410,MOD] -->
+            <!--WHEN RW.DEF_SRC_RTL_WH_CD         = #defSrcRtlWhCd# -->
+            <!--        AND RW.DEF_SRC_RTL_SWH_CD = #defSrcRtlSwhCd# -->
+                WHEN RW.RTL_WH_CD          = #defSrcRtlWhCd# 
+                        AND RSW.RTL_SWH_CD = #defSrcRtlSwhCd#
+            <!-- END    2019/11/21 H.Umeda[QC#53410,MOD] -->
+                    THEN #local#
+                ELSE WO.SVC_MBL_WH_OWNR_TXT
+            END AS SVC_MBL_WH_OWNR_TXT
+            ,IV.INVTY_AVAL_QTY
+            ,NULL      AS TECH_TOC_CD
+            ,NULL      AS RTL_WH_CD
+            ,NULL      AS RTL_WH_CATG_CD
+        FROM
+            INVTY       IV
+            ,RTL_SWH    RSW
+            ,RTL_WH     RW
+            ,WH_OWNR    WO
+        WHERE
+            IV.GLBL_CMPY_CD         =  #glblCmpyCd#
+            AND IV.MDSE_CD          =  #mdseCd#
+            AND IV.LOC_STS_CD       =  #locStsCd#
+            AND IV.LOC_TP_CD        =  #whLocTpCd#
+            <!-- START 2019/12/12 K.Kitachi [QC#55055, ADD] -->
+            AND IV.STK_STS_CD       =  #stkStsCd#
+            <!-- END 2019/12/12 K.Kitachi [QC#55055, ADD] -->
+            AND IV.INVTY_AVAL_QTY &gt; 0
+            AND IV.GLBL_CMPY_CD     =  RSW.GLBL_CMPY_CD
+            AND IV.INVTY_LOC_CD     =  RSW.INVTY_LOC_CD
+            <iterate property="whRtlSwhCdList" var="whRtlSwhCdList[]" open="AND RSW.RTL_SWH_CD     IN  (" close=")" conjunction=",">
+                #whRtlSwhCdList[]#
+            </iterate>
+            AND RSW.GLBL_CMPY_CD    =  RW.GLBL_CMPY_CD
+            AND RSW.RTL_WH_CD       =  RW.RTL_WH_CD
+            AND RW.GLBL_CMPY_CD     =  WO.GLBL_CMPY_CD(+)
+            AND RW.WH_OWNR_CD       =  WO.WH_OWNR_CD(+)
+            AND RW.INVTY_OWNR_CD    =  #invtyOwnrCd#
+            <!-- START  2019/11/21 H.Umeda[QC#53410,ADD] -->
+            AND RW.WH_OWNR_CD      &lt;&gt; #invtyOwnrCd#
+            <!-- END    2019/11/21 H.Umeda[QC#53410,ADD] -->
+            AND IV.EZCANCELFLAG     =  '0'
+            AND RSW.EZCANCELFLAG    =  '0'
+            AND RW.EZCANCELFLAG     =  '0'
+            AND WO.EZCANCELFLAG(+)  =  '0'
+
+    )
+        SELECT
+            SVC_MBL_WH_OWNR_TXT
+           ,SUM(INVTY_AVAL_QTY) AS INVTY_AVAL_QTY
+           ,WI.TECH_TOC_CD
+           ,WI.RTL_WH_CD
+           ,WI.RTL_WH_CATG_CD
+        FROM
+            WH_INVTY WI
+        GROUP BY
+            WI.SVC_MBL_WH_OWNR_TXT
+           ,WI.TECH_TOC_CD
+           ,WI.RTL_WH_CD
+           ,WI.RTL_WH_CATG_CD
+        <!-- START 2023/09/06 N.Takatsu[QC#61661,ADD] -->
+        ORDER BY
+            SVC_MBL_WH_OWNR_TXT DESC
+        <!-- END   2023/09/06 N.Takatsu[QC#61661,ADD] -->
+
+    </statement>
+
+    <statement id="getTrnsfToTech" parameterClass="Map" resultClass="Map">
+        SELECT DISTINCT
+             '0'            AS SORT_NUM
+            ,RW.RTL_WH_CD   AS RTL_WH_CD
+            ,RW.RTL_WH_NM   AS RTL_WH_NM
+        FROM
+             TECH_LOC    T
+            ,RTL_SWH     RSW
+            ,RTL_WH      RW
+        WHERE
+            T.GLBL_CMPY_CD    = #glblCmpyCd#
+        AND T.TECH_TOC_CD     = #reqTechCd#
+        AND T.EZCANCELFLAG    = '0'
+        AND T.GLBL_CMPY_CD    = RSW.GLBL_CMPY_CD
+        AND T.TECH_LOC_CD     = RSW.INVTY_LOC_CD
+        AND RSW.EZCANCELFLAG  = '0'
+        AND RSW.GLBL_CMPY_CD  = RW.GLBL_CMPY_CD
+        AND RSW.RTL_WH_CD     = RW.RTL_WH_CD
+        AND RW.RTL_WH_CATG_CD = #rtlWhCatgCd#
+        AND RW.EZCANCELFLAG   = '0'
+        AND RW.RTL_WH_CD      = #reqTechCd#
+        UNION
+        SELECT DISTINCT
+             '1'            AS SORT_NUM
+            ,RW.RTL_WH_CD   AS RTL_WH_CD
+            ,RW.RTL_WH_NM   AS RTL_WH_NM
+        FROM
+             TECH_LOC    T
+            ,RTL_SWH     RSW
+            ,RTL_WH      RW
+        WHERE
+            T.GLBL_CMPY_CD    = #glblCmpyCd#
+        AND T.TECH_TOC_CD     = #reqTechCd#
+        AND T.EZCANCELFLAG    = '0'
+        AND T.GLBL_CMPY_CD    = RSW.GLBL_CMPY_CD
+        AND T.TECH_LOC_CD     = RSW.INVTY_LOC_CD
+        AND RSW.EZCANCELFLAG  = '0'
+        AND RSW.GLBL_CMPY_CD  = RW.GLBL_CMPY_CD
+        AND RSW.RTL_WH_CD     = RW.RTL_WH_CD
+        AND RW.RTL_WH_CATG_CD = #rtlWhCatgCd#
+        AND RW.EZCANCELFLAG   = '0'
+        ORDER BY
+             SORT_NUM
+            ,RTL_WH_CD
+    </statement>
+
+    <statement id="getMyWhInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+             RW.RTL_WH_CD
+            ,RW.RTL_WH_NM
+            <!-- START 2019/11/21 K.Kitachi [QC#54768, ADD] -->
+            ,RW.RTL_WH_CATG_CD
+            <!-- END 2019/11/21 K.Kitachi [QC#54768, ADD] -->
+        FROM
+             TECH_LOC TE
+            ,RTL_SWH RSW
+            ,RTL_WH  RW
+        WHERE
+            TE.GLBL_CMPY_CD           =  #glblCmpyCd#
+            AND TE.TECH_TOC_CD        =  #reqTechCd#
+            AND TE.GLBL_CMPY_CD       =  RSW.GLBL_CMPY_CD
+            AND TE.TECH_LOC_CD        =  RSW.INVTY_LOC_CD
+            <iterate property="tecRtlSwhCdList" var="tecRtlSwhCdList[]" open="AND RSW.RTL_SWH_CD     IN  (" close=")" conjunction=",">
+                #tecRtlSwhCdList[]#
+            </iterate>
+            AND RSW.GLBL_CMPY_CD      =  RW.GLBL_CMPY_CD
+            AND RSW.RTL_WH_CD         =  RW.RTL_WH_CD
+            <isNotNull property="rtlWhCatgCdTechCarStk">
+            AND RW.RTL_WH_CATG_CD     =  #rtlWhCatgCdTechCarStk#
+            AND RW.RTL_WH_CD          =  #reqTechCd#
+            </isNotNull>
+            <isNotNull property="rtlWhCatgCdCust">
+            AND RW.RTL_WH_CATG_CD     =  #rtlWhCatgCdCust#
+            </isNotNull>
+            AND TE.EZCANCELFLAG       =  '0'
+            AND RSW.EZCANCELFLAG      =  '0'
+            AND RW.EZCANCELFLAG       =  '0'
+    </statement>
+    <!-- START  2019/10/24 K.Fujimoto[QC#53410,ADD] -->
+    <statement id="getSatellitesInventoryAvailabilityWh" parameterClass="Map" resultClass="Map">
+    SELECT
+         RW.RTL_WH_NM AS SVC_MBL_WH_OWNR_TXT
+        ,IV.INVTY_AVAL_QTY
+        ,NULL      AS TECH_TOC_CD
+        ,NULL      AS RTL_WH_CD
+        ,NULL      AS RTL_WH_CATG_CD
+    FROM
+        INVTY       IV
+        ,RTL_SWH    RSW
+        ,RTL_WH     RW
+        ,RTL_WH     TRW
+        ,WH_OWNR    WO
+    WHERE
+        IV.GLBL_CMPY_CD         =  #glblCmpyCd#
+        AND IV.MDSE_CD          =  #mdseCd#
+        AND IV.LOC_STS_CD       =  #locStsCd#
+        AND IV.LOC_TP_CD        =  #whLocTpCd#
+        <!-- START 2019/12/12 K.Kitachi [QC#55055, ADD] -->
+        AND IV.STK_STS_CD       =  #stkStsCd#
+        <!-- END 2019/12/12 K.Kitachi [QC#55055, ADD] -->
+        AND IV.INVTY_AVAL_QTY &gt; 0
+        AND IV.GLBL_CMPY_CD     =  RSW.GLBL_CMPY_CD
+        AND IV.INVTY_LOC_CD     =  RSW.INVTY_LOC_CD
+        <iterate property="whRtlSwhCdList" var="whRtlSwhCdList[]" open="AND RSW.RTL_SWH_CD     IN  (" close=")" conjunction=",">
+            #whRtlSwhCdList[]#
+        </iterate>
+        AND RSW.GLBL_CMPY_CD    =  RW.GLBL_CMPY_CD
+        AND RSW.RTL_WH_CD       =  RW.RTL_WH_CD
+        AND RW.GLBL_CMPY_CD     =  WO.GLBL_CMPY_CD
+        AND RW.WH_OWNR_CD       =  WO.WH_OWNR_CD
+        AND RW.INVTY_OWNR_CD    =  #invtyOwnrCd#
+        <!-- START 2021/01/06 [QC#58207, DEL] -->
+        <!--AND WO.WH_OWNR_CD       =  #whOwnrCd# -->
+        <!-- END 2021/01/06 [QC#58207, DEL] -->
+        AND RW.GLBL_CMPY_CD     =  TRW.GLBL_CMPY_CD
+        AND RW.RTL_WH_CD        = TRW.EMER_SRC_RTL_WH_CD
+        AND TRW.RTL_WH_CD       =  #rtlWhCd#
+        AND IV.EZCANCELFLAG     =  '0'
+        AND RSW.EZCANCELFLAG    =  '0'
+        AND RW.EZCANCELFLAG     =  '0'
+        AND WO.EZCANCELFLAG     =  '0'
+        AND TRW.EZCANCELFLAG    =  '0'
+    ORDER BY RW.RTL_WH_NM
+    </statement>
+    <!-- END    2019/10/24 K.Fujimoto[QC#53410,ADD] -->
+
+    <!-- START  2023/09/06 N.Takatsu[QC#61661,ADD] -->
+    <statement id="getCsaInventoryAvailabilityAllPartsCenters" parameterClass="Map" resultClass="Map">
+    WITH WH_INVTY AS (
+        SELECT
+             #allPartsCenters#       AS SVC_MBL_WH_OWNR_TXT
+            ,IV.INVTY_AVAL_QTY
+            ,NULL               AS TECH_TOC_CD
+            ,NULL               AS RTL_WH_CD
+            ,NULL               AS RTL_WH_CATG_CD
+        FROM
+            INVTY       IV
+            ,RTL_SWH    RSW
+            ,RTL_WH     RW
+        WHERE
+            IV.GLBL_CMPY_CD         =  #glblCmpyCd#
+            AND IV.MDSE_CD          =  #mdseCd#
+            AND IV.LOC_STS_CD       =  #locStsCd#
+            AND IV.LOC_TP_CD        =  #whLocTpCd#
+            AND IV.STK_STS_CD       =  #stkStsCd#
+            AND IV.INVTY_AVAL_QTY &gt; 0
+            AND IV.GLBL_CMPY_CD     =  RSW.GLBL_CMPY_CD
+            AND IV.INVTY_LOC_CD     =  RSW.INVTY_LOC_CD
+            <iterate property="whRtlSwhCdList" var="whRtlSwhCdList[]" open="AND RSW.RTL_SWH_CD     IN  (" close=")" conjunction=",">
+                #whRtlSwhCdList[]#
+            </iterate>
+            AND RSW.GLBL_CMPY_CD    =  RW.GLBL_CMPY_CD
+            AND RSW.RTL_WH_CD       =  RW.RTL_WH_CD
+            AND RW.RTL_WH_CATG_CD   =  #rtlWhCatgCd#
+            AND IV.EZCANCELFLAG     =  '0'
+            AND RSW.EZCANCELFLAG    =  '0'
+            AND RW.EZCANCELFLAG     =  '0'
+
+    )
+        SELECT
+            SVC_MBL_WH_OWNR_TXT
+           ,SUM(INVTY_AVAL_QTY) AS INVTY_AVAL_QTY
+           ,WI.TECH_TOC_CD
+           ,WI.RTL_WH_CD
+           ,WI.RTL_WH_CATG_CD
+        FROM
+            WH_INVTY WI
+        GROUP BY
+            WI.SVC_MBL_WH_OWNR_TXT
+           ,WI.TECH_TOC_CD
+           ,WI.RTL_WH_CD
+           ,WI.RTL_WH_CATG_CD
+    </statement>
+
+    <statement id="getCsaInventoryAvailabilityDefaultSourceWh" parameterClass="Map" resultClass="Map">
+    WITH WH_INVTY AS (
+        SELECT
+             RW.RTL_WH_NM       AS SVC_MBL_WH_OWNR_TXT
+            ,IV.INVTY_AVAL_QTY
+            ,NULL               AS TECH_TOC_CD
+            ,NULL               AS RTL_WH_CD
+            ,NULL               AS RTL_WH_CATG_CD
+        FROM
+            INVTY       IV
+            ,RTL_SWH    RSW
+            ,RTL_WH     RW
+        WHERE
+            IV.GLBL_CMPY_CD         =  #glblCmpyCd#
+            AND IV.MDSE_CD          =  #mdseCd#
+            AND IV.LOC_STS_CD       =  #locStsCd#
+            AND IV.LOC_TP_CD        =  #whLocTpCd#
+            AND IV.STK_STS_CD       =  #stkStsCd#
+            AND IV.INVTY_AVAL_QTY &gt; 0
+            AND IV.GLBL_CMPY_CD     =  RSW.GLBL_CMPY_CD
+            AND IV.INVTY_LOC_CD     =  RSW.INVTY_LOC_CD
+            <iterate property="whRtlSwhCdList" var="whRtlSwhCdList[]" open="AND RSW.RTL_SWH_CD     IN  (" close=")" conjunction=",">
+                #whRtlSwhCdList[]#
+            </iterate>
+            AND RSW.GLBL_CMPY_CD    =  RW.GLBL_CMPY_CD
+            AND RSW.RTL_WH_CD       =  RW.RTL_WH_CD
+            AND IV.EZCANCELFLAG     =  '0'
+            AND RW.WH_OWNR_CD &lt;&gt; #whOwnr#
+            AND RW.RTL_WH_CD        = #defSrcRtlWhCd#
+            AND RSW.RTL_SWH_CD      = #defSrcRtlSwhCd#
+            AND RSW.EZCANCELFLAG    =  '0'
+            AND RW.EZCANCELFLAG     =  '0'
+
+    )
+        SELECT
+            SVC_MBL_WH_OWNR_TXT
+           ,SUM(INVTY_AVAL_QTY) AS INVTY_AVAL_QTY
+           ,WI.TECH_TOC_CD
+           ,WI.RTL_WH_CD
+           ,WI.RTL_WH_CATG_CD
+        FROM
+            WH_INVTY WI
+        GROUP BY
+            WI.SVC_MBL_WH_OWNR_TXT
+           ,WI.TECH_TOC_CD
+           ,WI.RTL_WH_CD
+           ,WI.RTL_WH_CATG_CD
+    </statement>
+    <!-- END    2023/09/06 N.Takatsu[QC#61661,ADD] -->
+</sqlMap>

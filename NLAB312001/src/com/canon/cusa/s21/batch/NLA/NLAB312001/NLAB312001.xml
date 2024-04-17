@@ -1,0 +1,641 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<sqlMap namespace="NLAB312001">
+
+     <statement id="getItemPartsList" parameterClass="Map" resultClass="Map"> 
+        WITH
+            IV_PRT_INFO AS(
+                 SELECT
+                     PURW.GLBL_CMPY_CD                AS    GLBL_CMPY_CD
+                    ,PURW.TECH_TOC_CD                 AS    TECH_TOC_CD
+                    ,PURW.MDSE_CD                     AS    MDSE_CD
+                    ,PURW.MDSE_NM                     AS    MDSE_NM
+                    ,PURW.AVG_USG_NUM                 AS    AVG_USG_QTY
+                    ,0                                AS    PRCH_REQ_QTY
+                 FROM
+                     PRT_USG_RPT_WRK PURW
+                    ,TECH_LOC        TL
+                    ,TECH_MSTR       TM
+                    ,ALL_MDSE_V      MDS
+                 WHERE
+                        PURW.GLBL_CMPY_CD                   = #glblCmpyCd#
+                    AND PURW.PRT_USG_RPT_WRK_DT             = #processDate#
+                    AND PURW.EZCANCELFLAG                   = '0'
+                    AND PURW.GLBL_CMPY_CD                   = TL.GLBL_CMPY_CD
+                    AND PURW.TECH_TOC_CD                    = TL.TECH_TOC_CD
+                    AND TL.EFF_FROM_DT                  &lt;= #processDate#
+                    AND NVL(TL.EFF_THRU_DT, '99991231') &gt;= #processDate#
+                    AND TL.EZCANCELFLAG                     = '0'
+                    AND TL.GLBL_CMPY_CD                     = TM.GLBL_CMPY_CD
+                    AND TL.TECH_TOC_CD                      = TM.TECH_TOC_CD
+                    AND TM.EZCANCELFLAG                     = '0'
+                    AND PURW.GLBL_CMPY_CD                   = MDS.GLBL_CMPY_CD
+                    AND PURW.MDSE_CD                        = MDS.MDSE_CD
+                    AND MDS.MDSE_ITEM_STS_CD        &lt;&gt;  #inActive#
+                    AND MDS.EZCANCELFLAG                    = '0'
+                 GROUP BY
+                   PURW.GLBL_CMPY_CD
+                  ,PURW.TECH_TOC_CD
+                  ,PURW.MDSE_CD
+                  ,PURW.MDSE_NM
+                  ,PURW.AVG_USG_NUM
+            UNION ALL
+                 SELECT
+                     PR.GLBL_CMPY_CD                  AS    GLBL_CMPY_CD
+                    ,PR.RQST_TECH_TOC_CD              AS    TECH_TOC_CD
+                    ,PRD.MDSE_CD                      AS    MDSE_CD
+                    ,MDS.MDSE_NM                      AS    MDSE_NM
+                    ,0                                AS    AVG_USG_QTY
+                    ,SUM(PRD.PRCH_REQ_QTY)            AS    PRCH_REQ_QTY
+                 FROM 
+                     PRCH_REQ     PR
+                    ,PRCH_REQ_DTL PRD
+                    ,TECH_LOC     TL
+                    ,TECH_MSTR    TM
+                    ,ALL_MDSE_V   MDS
+                 WHERE
+                        PR.GLBL_CMPY_CD                     = #glblCmpyCd#
+                    AND PR.EZCANCELFLAG                     = '0'
+                    AND PR.GLBL_CMPY_CD                     = PRD.GLBL_CMPY_CD
+                    AND PR.PRCH_REQ_NUM                     = PRD.PRCH_REQ_NUM
+                    AND PRD.PRCH_REQ_CRAT_DT            &gt;  TO_CHAR(ADD_MONTHS(TO_DATE(#processDate#,'YYYYMMDD'), -6), 'YYYYMMDD')
+                    AND PRD.EZCANCELFLAG                    = '0'
+                    AND PR.GLBL_CMPY_CD                     = TL.GLBL_CMPY_CD
+                    AND PRD.DEST_INVTY_LOC_CD               = TL.TECH_LOC_CD
+                    AND PR.RQST_TECH_TOC_CD                 = TL.TECH_TOC_CD
+                    AND TL.EFF_FROM_DT                  &lt;= #processDate#
+                    AND NVL(TL.EFF_THRU_DT, '99991231') &gt;= #processDate#
+                    AND TL.EZCANCELFLAG                     = '0'
+                    AND TL.GLBL_CMPY_CD                     = TM.GLBL_CMPY_CD
+                    AND TL.TECH_TOC_CD                      = TM.TECH_TOC_CD
+                    AND TM.EZCANCELFLAG                     = '0'
+                    AND PRD.GLBL_CMPY_CD                    = MDS.GLBL_CMPY_CD
+                    AND PRD.MDSE_CD                         = MDS.MDSE_CD
+                    AND MDS.MDSE_ITEM_STS_CD        &lt;&gt;  #inActive#
+                    AND MDS.EZCANCELFLAG                    = '0'
+                GROUP BY 
+                   PR.GLBL_CMPY_CD
+                  ,PR.RQST_TECH_TOC_CD
+                  ,PRD.MDSE_CD
+                  ,MDS.MDSE_NM
+            ORDER BY 
+                TECH_TOC_CD
+               ,MDSE_CD
+            )
+            ,IV_SUM_PRT_INFO AS(
+                SELECT
+                    PRT_INFO.GLBL_CMPY_CD                                   AS    GLBL_CMPY_CD
+                   ,PRT_INFO.TECH_TOC_CD                                    AS    TECH_TOC_CD
+                   ,PRT_INFO.MDSE_CD                                        AS    MDSE_CD
+                   ,PRT_INFO.MDSE_NM                                        AS    MDSE_NM
+                   ,SUM(PRT_INFO.AVG_USG_QTY)                               AS    AVG_USG_QTY
+                   ,SUM(PRT_INFO.PRCH_REQ_QTY)                              AS    PRCH_REQ_QTY
+                   <!-- START 2022/02/14 K.Kitachi [QC#59695, MOD] -->
+                   <!-- ,ROW_NUMBER() OVER (PARTITION BY PRT_INFO.TECH_TOC_CD ORDER BY SUM(PRT_INFO.AVG_USG_QTY) DESC, SUM(PRT_INFO.PRCH_REQ_QTY) DESC, SUM(PRT_INFO.AVG_USG_QTY) + SUM(PRT_INFO.PRCH_REQ_QTY) DESC) ROW_NUM -->
+                   ,ROW_NUMBER() OVER (
+                       PARTITION BY
+                           PRT_INFO.TECH_TOC_CD
+                       ORDER BY
+                            SUM(PRT_INFO.AVG_USG_QTY) DESC
+                           ,SUM(PRT_INFO.PRCH_REQ_QTY) DESC
+                           ,SUM(PRT_INFO.AVG_USG_QTY) + SUM(PRT_INFO.PRCH_REQ_QTY) DESC
+                           ,PRT_INFO.MDSE_CD
+                           ,PRT_INFO.MDSE_NM
+                   ) ROW_NUM
+                   <!-- END 2022/02/14 K.Kitachi [QC#59695, MOD] -->
+                FROM
+                    IV_PRT_INFO PRT_INFO
+                GROUP BY
+                    PRT_INFO.GLBL_CMPY_CD
+                   ,PRT_INFO.TECH_TOC_CD
+                   ,PRT_INFO.MDSE_CD
+                   ,PRT_INFO.MDSE_NM
+            )
+            SELECT
+                PRT.TECH_TOC_CD               AS   TECH_TOC_CD
+               ,PRT.MDSE_CD                   AS   MDSE_CD
+               ,PRT.MDSE_NM                   AS   MDSE_NM
+               ,SR.SUPD_TO_MDSE_CD            AS   SUPD_TO_MDSE_CD
+               ,PRT.AVG_USG_QTY               AS   AVG_USG_QTY
+               ,PRT.PRCH_REQ_QTY              AS   PRCH_REQ_QTY
+               ,PRT.ROW_NUM                   AS   TTC_ROW_NUM
+             FROM
+                IV_SUM_PRT_INFO  PRT
+               ,SUPD             SUPD
+               ,SUPD_RELN        SR
+             WHERE
+                    PRT.GLBL_CMPY_CD      = SUPD.GLBL_CMPY_CD(+)
+               AND PRT.MDSE_CD            = SUPD.MDSE_CD(+)
+               AND SUPD.INCG_FLG(+)       = #incgFlg#
+               AND SUPD.EZCANCELFLAG(+)   = '0'
+               AND PRT.GLBL_CMPY_CD       = SR.GLBL_CMPY_CD(+)
+               AND PRT.MDSE_CD            = SR.SUPD_FROM_MDSE_CD(+)
+               AND SR.EZCANCELFLAG(+)     = '0'
+               AND PRT.ROW_NUM &lt;= #rowNum#
+           ORDER BY 
+               PRT.TECH_TOC_CD
+              ,PRT.ROW_NUM
+    </statement>
+
+     <statement id="getItemPartsUsageList" parameterClass="Map" resultClass="Map"> 
+        SELECT
+             WK.TECH_TOC_CD                   AS   TECH_TOC_CD
+            ,WK.MDSE_CD                       AS   MDSE_CD
+            ,WK.MDSE_NM                       AS   MDSE_NM
+            ,WK.SUPD_TO_MDSE_CD               AS   SUPD_TO_MDSE_CD
+            ,WK.AVG_USG_NUM                   AS   AVG_USG_NUM
+            ,WK.TECH_TOC_COUNT                AS   TECH_TOC_COUNT
+            ,WK.ROW_NUM                       AS   TTC_ROW_NUM
+        FROM
+        (
+         SELECT
+            TM.TECH_TOC_CD
+            ,PURW.MDSE_CD
+            ,PURW.MDSE_NM
+            ,SR.SUPD_TO_MDSE_CD
+            ,PURW.AVG_USG_NUM
+            ,COUNT(*) OVER(PARTITION BY TM.TECH_TOC_CD) TECH_TOC_COUNT
+            ,ROW_NUMBER() OVER (PARTITION BY TM.TECH_TOC_CD ORDER BY TM.TECH_TOC_CD, PURW.AVG_USG_NUM DESC) ROW_NUM
+         FROM
+             TECH_LOC        TL
+            ,TECH_MSTR       TM
+            ,PRT_USG_RPT_WRK PURW
+            ,SUPD            S
+            ,SUPD_RELN       SR
+            ,ALL_MDSE_V      MDS
+         WHERE
+            TL.GLBL_CMPY_CD                         =    #glblCmpyCd#
+            AND TL.EFF_FROM_DT                  &lt;=    #processDate#
+            AND NVL(TL.EFF_THRU_DT, '99991231') &gt;=    #processDate#
+            AND TL.EZCANCELFLAG                     =    '0'
+            AND TL.GLBL_CMPY_CD                     =    TM.GLBL_CMPY_CD
+            AND TL.TECH_TOC_CD                      =    TM.TECH_TOC_CD
+            AND TM.EZCANCELFLAG                     =    '0'
+            AND TL.GLBL_CMPY_CD                     =    PURW.GLBL_CMPY_CD
+            AND TL.TECH_TOC_CD                      =    PURW.TECH_TOC_CD
+            AND PURW.PRT_USG_RPT_WRK_DT             =    #processDate#
+            AND PURW.EZCANCELFLAG                   =    '0'
+            AND PURW.GLBL_CMPY_CD                   =    S.GLBL_CMPY_CD(+)
+            AND PURW.MDSE_CD                        =    S.MDSE_CD(+)
+            AND S.INCG_FLG                      (+) =    #incgFlg#
+            AND S.EZCANCELFLAG                  (+) =    '0'
+            AND PURW.GLBL_CMPY_CD                   =    SR.GLBL_CMPY_CD(+)
+            AND PURW.MDSE_CD                        =    SR.SUPD_FROM_MDSE_CD(+)
+            AND SR.EZCANCELFLAG                 (+) =    '0'
+            AND PURW.GLBL_CMPY_CD                   =    MDS.GLBL_CMPY_CD
+            AND PURW.MDSE_CD                        =    MDS.MDSE_CD
+            AND MDS.MDSE_ITEM_STS_CD            &lt;&gt; #inActive#
+            AND MDS.EZCANCELFLAG                    =    '0'
+           GROUP BY
+            TM.TECH_TOC_CD
+            ,PURW.MDSE_CD
+            ,PURW.MDSE_NM
+            ,SR.SUPD_TO_MDSE_CD
+            ,PURW.AVG_USG_NUM
+           ORDER BY 
+            TM.TECH_TOC_CD,
+            PURW.AVG_USG_NUM DESC
+         ) WK WHERE ROW_NUM &lt;= #rowNum#
+    </statement>
+
+     <statement id="getItemPartsOrderList" parameterClass="Map" resultClass="Map"> 
+        SELECT
+            PO.RQST_TECH_TOC_CD               AS   RQST_TECH_TOC_CD
+           ,PO.MDSE_CD                        AS   MDSE_CD
+           ,PO.PRCH_REQ_QTY                   AS   PRCH_REQ_QTY
+           ,PO.MDSE_NM                        AS   MDSE_NM
+           ,PO.SUPD_TO_MDSE_CD                AS   SUPD_TO_MDSE_CD
+           ,PO.TECH_TOC_COUNT                 AS   TECH_TOC_COUNT
+           ,PO.ROW_NUM                        AS   TTC_ROW_NUM
+        FROM
+        (
+         SELECT
+            PR.RQST_TECH_TOC_CD
+            ,PRD.MDSE_CD
+            ,SUM(PRD.PRCH_REQ_QTY)              AS   PRCH_REQ_QTY
+            ,MDS.MDSE_NM
+            ,SR.SUPD_TO_MDSE_CD
+            ,COUNT(*) OVER(PARTITION BY PR.RQST_TECH_TOC_CD) TECH_TOC_COUNT
+            ,ROW_NUMBER() OVER (PARTITION BY PR.RQST_TECH_TOC_CD ORDER BY PR.RQST_TECH_TOC_CD, SUM(PRD.PRCH_REQ_QTY) DESC) ROW_NUM
+         FROM 
+             PRCH_REQ     PR
+            ,PRCH_REQ_DTL PRD
+            ,SUPD         SUPD
+            ,SUPD_RELN    SR
+            ,ALL_MDSE_V   MDS
+         WHERE
+            PR.GLBL_CMPY_CD                  =    #glblCmpyCd#
+            <iterate property="techTocCdList" var="techTocCdList[]" open="AND PR.RQST_TECH_TOC_CD IN (" close=")" conjunction=",">
+                #techTocCdList[]#
+            </iterate>
+            AND PR.EZCANCELFLAG              =    '0'
+            AND PR.GLBL_CMPY_CD              =    PRD.GLBL_CMPY_CD
+            AND PR.PRCH_REQ_NUM              =    PRD.PRCH_REQ_NUM
+            <iterate property="mdseDcList" var="mdseDcList[]" open="AND PRD.MDSE_CD NOT IN (" close=")" conjunction=",">
+                #mdseDcList[]#
+            </iterate>
+            AND PRD.PRCH_REQ_CRAT_DT      &gt;    TO_CHAR(ADD_MONTHS(TO_DATE(#processDate#,'YYYYMMDD'), -6), 'YYYYMMDD')
+            AND PRD.EZCANCELFLAG             =    '0'
+            AND SUPD.GLBL_CMPY_CD        (+) =    PRD.GLBL_CMPY_CD
+            AND SUPD.MDSE_CD             (+) =    PRD.MDSE_CD
+            AND SUPD.INCG_FLG            (+) =    #incgFlg#
+            AND SUPD.EZCANCELFLAG        (+) =    '0'
+            AND SR.GLBL_CMPY_CD          (+) =    PRD.GLBL_CMPY_CD
+            AND SR.SUPD_FROM_MDSE_CD     (+) =    PRD.MDSE_CD
+            AND SR.EZCANCELFLAG          (+) =    '0'
+            AND MDS.GLBL_CMPY_CD             =    PRD.GLBL_CMPY_CD
+            AND MDS.MDSE_CD                  =    PRD.MDSE_CD
+            AND MDS.MDSE_ITEM_STS_CD        !=    #inActive#
+            AND MDS.EZCANCELFLAG             =    '0'
+            GROUP BY 
+               PR.RQST_TECH_TOC_CD
+              ,PRD.MDSE_CD
+              ,MDS.MDSE_NM
+              ,SR.SUPD_TO_MDSE_CD
+             ORDER BY 
+              PR.RQST_TECH_TOC_CD
+              ,SUM(PRD.PRCH_REQ_QTY) DESC
+        ) PO WHERE ROW_NUM &lt;= #rowNum#
+    </statement>
+
+<!-- START 2017/06/05 K.Kitachi [QC#18374, DEL] -->
+<!--<statement id="getTechMdseListWrkDt" parameterClass="Map" resultClass="Map"> -->
+<!-- SELECT  -->
+<!--     TECH_MDSE_LIST_WRK_DT -->
+<!--    ,TECH_MDSE_LIST_WRK_NUM -->
+<!-- FROM  -->
+<!-- ( -->
+<!--    SELECT -->
+<!--         TMLW.TECH_MDSE_LIST_WRK_DT      AS TECH_MDSE_LIST_WRK_DT -->
+<!--        ,TMLW.TECH_MDSE_LIST_WRK_NUM     AS TECH_MDSE_LIST_WRK_NUM -->
+<!--    FROM -->
+<!--        TECH_MDSE_LIST_WRK TMLW -->
+<!--    WHERE -->
+<!--        TMLW.GLBL_CMPY_CD                =    #glblCmpyCd# -->
+<!--        AND TMLW.TECH_PROC_STS_CD        =    #processed# -->
+<!--        AND TMLW.EZCANCELFLAG            =    '0' -->
+<!--    ORDER BY  -->
+<!--        TMLW.TECH_MDSE_LIST_WRK_DT DESC -->
+<!--       ,TMLW.TECH_MDSE_LIST_WRK_NUM DESC -->
+<!-- ) WHERE ROWNUM = 1 -->
+<!--</statement> -->
+<!-- END 2017/06/05 K.Kitachi [QC#18374, DEL] -->
+
+     <statement id="getMaxTechMdseListWrkNum" parameterClass="Map" resultClass="BigDecimal">
+     SELECT * FROM
+     (
+        SELECT
+             TMLW.TECH_MDSE_LIST_WRK_NUM AS TECH_MDSE_LIST_WRK_NUM
+
+        FROM
+            TECH_MDSE_LIST_WRK TMLW
+        WHERE
+            TMLW.GLBL_CMPY_CD                =    #glblCmpyCd#
+            AND TMLW.TECH_MDSE_LIST_WRK_DT   =    #techMdseListWrkDt#
+            AND TMLW.EZCANCELFLAG            =    '0'
+        ORDER BY TMLW.TECH_MDSE_LIST_WRK_NUM DESC
+     ) WHERE ROWNUM = 1
+    </statement>
+
+    <statement id="getDifferenceTmlwInfo" parameterClass="Map" resultClass="Map">
+<!-- START 2022/02/14 K.Kitachi [QC#59695, DEL] -->
+<!--WITH TML_WRK_BEF AS ( -->
+<!-- START 2017/06/05 K.Kitachi [QC#18374, MOD] -->
+<!--  SELECT -->
+<!--        TMLW_P.GLBL_CMPY_CD -->
+<!--        ,TMLW_P.TECH_TOC_CD -->
+<!--        ,TMLW_P.MDSE_CD -->
+<!--        ,TMLW_P.MDSE_NM -->
+<!--        ,TMLW_P.SUPD_TO_MDSE_CD -->
+<!--        ,TMLW_P.AVG_USG_NUM -->
+<!--        ,TMLW_P.SITE_SRVY_REQ_FLG -->
+<!-- FROM -->
+<!--        TECH_MDSE_LIST_WRK TMLW_P -->
+<!-- WHERE -->
+<!--        TMLW_P.GLBL_CMPY_CD                            =    #glblCmpyCd# -->
+<!--        AND TMLW_P.TECH_MDSE_LIST_WRK_DT               =    #techMdseListWrkDtP# -->
+<!--        AND TMLW_P.TECH_MDSE_LIST_WRK_NUM              =    #techMdseListWrkNumP# -->
+<!--        AND TMLW_P.TECH_PROC_STS_CD                   IN    (#techProStsCdP#, #techProStsCdS#) -->
+<!--        AND TMLW_P.EZCANCELFLAG                        =    '0' -->
+<!--    SELECT -->
+<!--          GLBL_CMPY_CD -->
+<!--         ,TECH_TOC_CD -->
+<!--         ,MDSE_CD -->
+<!--         ,MDSE_NM -->
+<!--         ,SUPD_TO_MDSE_CD -->
+<!--         ,AVG_USG_NUM -->
+<!--         ,SITE_SRVY_REQ_FLG -->
+<!--    FROM -->
+<!--        ( -->
+<!--            SELECT -->
+<!--                 TMLW_P.GLBL_CMPY_CD -->
+<!--                ,TMLW_P.TECH_TOC_CD -->
+<!--                ,TMLW_P.MDSE_CD -->
+<!--                ,TMLW_P.MDSE_NM -->
+<!--                ,TMLW_P.SUPD_TO_MDSE_CD -->
+<!--                ,TMLW_P.AVG_USG_NUM -->
+<!--                ,TMLW_P.SITE_SRVY_REQ_FLG -->
+<!--                ,RANK() OVER( -->
+<!--                    PARTITION BY -->
+<!--                         TMLW_P.TECH_TOC_CD -->
+<!--                        ,TMLW_P.MDSE_CD -->
+<!--                    ORDER BY -->
+<!--                         TMLW_P.TECH_MDSE_LIST_WRK_DT  DESC -->
+<!--                        ,TMLW_P.TECH_MDSE_LIST_WRK_NUM DESC -->
+<!--                 ) RANK_NUM -->
+<!--            FROM -->
+<!--                TECH_MDSE_LIST_WRK TMLW_P -->
+<!--            WHERE -->
+<!--                    TMLW_P.GLBL_CMPY_CD                    =    #glblCmpyCd# -->
+<!--                AND TMLW_P.TECH_PROC_STS_CD               IN    (#techProStsCdP#, #techProStsCdS#) -->
+<!--                AND TMLW_P.EZCANCELFLAG                    =    '0' -->
+<!--                AND NOT EXISTS ( -->
+<!--                    SELECT -->
+<!--                        1 -->
+<!--                    FROM -->
+<!--                        TECH_MDSE_LIST_WRK A -->
+<!--                    WHERE -->
+<!--                            A.GLBL_CMPY_CD           = TMLW_P.GLBL_CMPY_CD -->
+<!--                        AND A.TECH_MDSE_LIST_WRK_PK  = TMLW_P.TECH_MDSE_LIST_WRK_PK -->
+<!--                        AND A.TECH_MDSE_LIST_WRK_DT  = #techMdseListWrkDtS# -->
+<!--                        AND A.TECH_MDSE_LIST_WRK_NUM = #techMdseListWrkNumS# -->
+<!--                        AND A.TECH_PROC_STS_CD       = #techProStsCdS# -->
+<!--                        AND A.EZCANCELFLAG           = '0' -->
+<!--                ) -->
+<!--        ) -->
+<!--    WHERE -->
+<!--        RANK_NUM = 1 -->
+<!-- END 2017/06/05 K.Kitachi [QC#18374, MOD] -->
+<!--), -->
+<!--TML_WRK_THIS AS ( -->
+<!--  SELECT -->
+<!--        TMLW_S.GLBL_CMPY_CD -->
+<!--        ,TMLW_S.TECH_TOC_CD -->
+<!--        ,TMLW_S.MDSE_CD -->
+<!--        ,TMLW_S.MDSE_NM -->
+<!--        ,TMLW_S.SUPD_TO_MDSE_CD -->
+<!--        ,TMLW_S.AVG_USG_NUM -->
+<!--        ,TMLW_S.SITE_SRVY_REQ_FLG -->
+<!--  FROM -->
+<!--        TECH_MDSE_LIST_WRK TMLW_S -->
+<!--  WHERE -->
+<!--        TMLW_S.GLBL_CMPY_CD                            =    #glblCmpyCd# -->
+<!--        AND TMLW_S.TECH_MDSE_LIST_WRK_DT               =    #techMdseListWrkDtS# -->
+<!--        AND TMLW_S.TECH_MDSE_LIST_WRK_NUM              =    #techMdseListWrkNumS# -->
+<!--        AND TMLW_S.TECH_PROC_STS_CD                    =    #techProStsCdS# -->
+<!--        AND TMLW_S.EZCANCELFLAG                        =    '0' -->
+<!--) -->
+<!--SELECT -->
+<!--         TMLW.GLBL_CMPY_CD                             AS GLBL_CMPY_CD -->
+<!--        ,TMLW.TECH_MDSE_LIST_WRK_PK                    AS TECH_MDSE_LIST_WRK_PK -->
+<!--        ,TMLW.TECH_MDSE_LIST_WRK_DT                    AS TECH_MDSE_LIST_WRK_DT -->
+<!--        ,TMLW.TECH_MDSE_LIST_WRK_NUM                   AS TECH_MDSE_LIST_WRK_NUM -->
+<!--        ,TMLW.TECH_TOC_CD                              AS TECH_TOC_CD -->
+<!--        ,TMLW.MDSE_CD                                  AS MDSE_CD -->
+<!--        ,TMLW.MDSE_NM AS MDSE_NM -->
+<!--        ,TMLW.SUPD_TO_MDSE_CD                          AS SUPD_TO_MDSE_CD -->
+<!--        ,TMLW.AVG_USG_NUM                              AS AVG_USG_NUM -->
+<!--        ,TMLW.SITE_SRVY_REQ_FLG                        AS SITE_SRVY_REQ_FLG -->
+<!--        ,TMLW.TECH_PROC_STS_CD                         AS TECH_PROC_STS_CD -->
+<!--FROM -->
+<!--        TECH_MDSE_LIST_WRK TMLW -->
+<!--WHERE -->
+<!--        TMLW.GLBL_CMPY_CD                              =    #glblCmpyCd# -->
+<!--        AND TMLW.TECH_MDSE_LIST_WRK_DT                 =    #techMdseListWrkDtS# -->
+<!--        AND TMLW.TECH_MDSE_LIST_WRK_NUM                =    #techMdseListWrkNumS# -->
+<!--        AND TMLW.TECH_PROC_STS_CD                      =    #techProStsCdS# -->
+<!--        AND TMLW.EZCANCELFLAG                          =    '0' -->
+<!--        AND EXISTS( -->
+<!--                   SELECT * -->
+<!--                   FROM ( -->
+<!--                        SELECT -->
+<!--                             GLBL_CMPY_CD -->
+<!--                            ,TECH_TOC_CD -->
+<!--                            ,MDSE_CD -->
+<!--                        FROM -->
+<!--                         (SELECT * FROM TML_WRK_BEF -->
+<!--                          MINUS -->
+<!--                          SELECT * FROM TML_WRK_THIS) -->
+<!--                         GROUP BY -->
+<!--                                GLBL_CMPY_CD -->
+<!--                                ,TECH_TOC_CD -->
+<!--                                ,MDSE_CD -->
+<!--                        UNION ALL -->
+<!--                        SELECT -->
+<!--                             GLBL_CMPY_CD -->
+<!--                            ,TECH_TOC_CD -->
+<!--                            ,MDSE_CD -->
+<!--                         FROM -->
+<!--                          (SELECT * FROM TML_WRK_THIS -->
+<!--                           MINUS -->
+<!--                           SELECT * FROM TML_WRK_BEF) -->
+<!--                         GROUP BY -->
+<!--                            GLBL_CMPY_CD -->
+<!--                            ,TECH_TOC_CD -->
+<!--                            ,MDSE_CD -->
+<!--                      ) TMLW_DIFF -->
+<!--                        WHERE -->
+<!--                        TMLW.GLBL_CMPY_CD              =  TMLW_DIFF.GLBL_CMPY_CD -->
+<!--                        AND TMLW.TECH_TOC_CD           =  TMLW_DIFF.TECH_TOC_CD -->
+<!-- START 2017/06/05 K.Kitachi [QC#18374, DEL] -->
+<!--                        AND TMLW.MDSE_CD               =  TMLW_DIFF.MDSE_CD -->
+<!-- END 2017/06/05 K.Kitachi [QC#18374, DEL] -->
+<!--        ) -->
+<!--       ORDER BY -->
+<!--               TMLW.TECH_TOC_CD -->
+<!--               ,TMLW.MDSE_CD -->
+<!-- END 2022/02/14 K.Kitachi [QC#59695, DEL] -->
+<!-- START 2022/02/14 K.Kitachi [QC#59695, ADD] -->
+        WITH TML_WRK_THIS AS (
+            SELECT
+                 TMLW_S.TECH_MDSE_LIST_WRK_PK
+                ,TMLW_S.TECH_TOC_CD
+                ,TMLW_S.MDSE_CD
+                ,TMLW_S.MDSE_NM
+            FROM
+                TECH_MDSE_LIST_WRK TMLW_S
+            WHERE
+                    TMLW_S.GLBL_CMPY_CD           = #glblCmpyCd#
+                AND TMLW_S.TECH_MDSE_LIST_WRK_DT  = #techMdseListWrkDtS#
+                AND TMLW_S.TECH_MDSE_LIST_WRK_NUM = #techMdseListWrkNumS#
+                AND TMLW_S.TECH_PROC_STS_CD       = #techProStsCdS#
+                AND TMLW_S.EZCANCELFLAG           = '0'
+        )
+        <isNotEqual property="allSendFlg" compareValue="Y">
+        ,TML_WRK_BEF AS (
+            SELECT
+                 TECH_MDSE_LIST_WRK_PK
+                ,TECH_TOC_CD
+                ,MDSE_CD
+                ,MDSE_NM
+            FROM
+                (
+                    SELECT
+                         TMLW_P.TECH_MDSE_LIST_WRK_PK
+                        ,TMLW_P.TECH_TOC_CD
+                        ,TMLW_P.MDSE_CD
+                        ,TMLW_P.MDSE_NM
+                        ,RANK() OVER(
+                            PARTITION BY
+                                 TMLW_P.TECH_TOC_CD
+                                ,TMLW_P.MDSE_CD
+                            ORDER BY
+                                 TMLW_P.TECH_MDSE_LIST_WRK_DT  DESC
+                                ,TMLW_P.TECH_MDSE_LIST_WRK_NUM DESC
+                         ) RANK_NUM
+                    FROM
+                        TECH_MDSE_LIST_WRK TMLW_P
+                    WHERE
+                            TMLW_P.GLBL_CMPY_CD     = #glblCmpyCd#
+                        AND TMLW_P.TECH_PROC_STS_CD IN (#techProStsCdP#, #techProStsCdS#)
+                        AND TMLW_P.DEL_FLG          = 'N'
+                        AND TMLW_P.EZCANCELFLAG     = '0'
+                        AND NOT EXISTS (
+                            SELECT
+                                1
+                            FROM
+                                TML_WRK_THIS A
+                            WHERE
+                                A.TECH_MDSE_LIST_WRK_PK = TMLW_P.TECH_MDSE_LIST_WRK_PK
+                        )
+                )
+            WHERE
+                RANK_NUM = 1
+        )
+        </isNotEqual>
+        SELECT
+             A.TECH_MDSE_LIST_WRK_PK
+            ,'N' DEL_FLG
+        FROM
+            TML_WRK_THIS A
+        <isNotEqual property="allSendFlg" compareValue="Y">
+        WHERE
+            NOT EXISTS (
+                SELECT
+                    1
+                FROM
+                    TML_WRK_BEF X
+                WHERE
+                        X.TECH_TOC_CD = A.TECH_TOC_CD
+                    AND X.MDSE_CD     = A.MDSE_CD
+                    AND X.MDSE_NM     = A.MDSE_NM
+            )
+        UNION ALL
+        SELECT
+             A.TECH_MDSE_LIST_WRK_PK
+            ,'Y' DEL_FLG
+        FROM
+            TML_WRK_BEF A
+        WHERE
+            NOT EXISTS (
+                SELECT
+                    1
+                FROM
+                    TML_WRK_THIS X
+                WHERE
+                        X.TECH_TOC_CD = A.TECH_TOC_CD
+                    AND X.MDSE_CD     = A.MDSE_CD
+                    AND X.MDSE_NM     = A.MDSE_NM
+            )
+        </isNotEqual>
+        ORDER BY
+            TECH_MDSE_LIST_WRK_PK
+<!-- END 2022/02/14 K.Kitachi [QC#59695, ADD] -->
+    </statement>
+<!-- START 2017/05/23 K.Kitachi [QC#18374, DEL] -->
+<!-- START 2017/01/05 K.Ochiai [QC#16459, ADD] -->
+<!--<statement id="getDeleteProcPK" parameterClass="Map" resultClass="Map"> -->
+<!--    SELECT -->
+<!--        A.TECH_MDSE_LIST_WRK_PK -->
+<!--    FROM -->
+<!--        TECH_MDSE_LIST_WRK    A -->
+<!--    WHERE -->
+<!--            A.GLBL_CMPY_CD      = #glblCmpyCd# -->
+<!--        AND A.EZCANCELFLAG      = '0' -->
+<!--        AND (A.TECH_MDSE_LIST_WRK_DT &lt; #maxDate# -->
+<!--             OR (A.TECH_MDSE_LIST_WRK_DT = #maxDate# -->
+<!--                 AND A.TECH_MDSE_LIST_WRK_NUM &lt; #maxWorkNum#)) -->
+<!--        AND A.TECH_PROC_STS_CD  = #techProcStsCd_P# -->
+<!--</statement> -->
+
+<!--<statement id="getDeleteSkipPK" parameterClass="Map" resultClass="Map"> -->
+<!--    SELECT -->
+<!--        A.TECH_MDSE_LIST_WRK_PK -->
+<!--    FROM -->
+<!--        TECH_MDSE_LIST_WRK    A -->
+<!--    WHERE -->
+<!--            A.GLBL_CMPY_CD      = #glblCmpyCd# -->
+<!--        AND A.EZCANCELFLAG      = '0' -->
+<!--        AND A.TECH_PROC_STS_CD  = #techProcStsCd_S# -->
+<!--</statement> -->
+<!-- END 2017/01/05 K.Ochiai [QC#16459, ADD] -->
+<!-- END 2017/05/23 K.Kitachi [QC#18374, DEL] -->
+
+<!-- START 2017/05/23 K.Kitachi [QC#18374, ADD] -->
+    <statement id="getDeletePK" parameterClass="Map" resultClass="Map">
+        SELECT
+            C.TECH_MDSE_LIST_WRK_PK
+        FROM
+            (
+                SELECT
+                     B.TECH_MDSE_LIST_WRK_PK
+                    ,RANK() OVER(
+                        PARTITION BY
+                             B.TECH_TOC_CD
+                            <!-- START 2017/07/11 K.Kojima [QC#25752, DEL] -->
+                            <!-- ,B.MDSE_CD -->
+                            <!-- END 2017/07/11 K.Kojima [QC#25752, DEL] -->
+                        ORDER BY
+                            <!-- START 2022/02/14 K.Kitachi [QC#59695, MOD] -->
+                            <!--  B.PRTY_NUM -->
+                            <!-- ,B.TECH_MDSE_LIST_WRK_DT  DESC -->
+                             B.TECH_MDSE_LIST_WRK_DT  DESC
+                            <!-- END 2022/02/14 K.Kitachi [QC#59695, MOD] -->
+                            ,B.TECH_MDSE_LIST_WRK_NUM DESC
+                     ) RANK_NUM
+                FROM
+                <!-- START 2022/02/14 K.Kitachi [QC#59695, MOD] -->
+                <!--( -->
+                <!--    SELECT -->
+                <!--         A.TECH_MDSE_LIST_WRK_PK -->
+                <!--        ,A.TECH_TOC_CD -->
+                <!--        ,A.MDSE_CD -->
+                <!--        ,A.TECH_MDSE_LIST_WRK_DT -->
+                <!--        ,A.TECH_MDSE_LIST_WRK_NUM -->
+                <!--        ,CASE A.TECH_PROC_STS_CD -->
+                <!--            WHEN #techProcStsCdW# THEN #sortNum1# -->
+                <!--            WHEN #techProcStsCdP# THEN #sortNum2# -->
+                <!--            WHEN #techProcStsCdS# THEN #sortNum3# -->
+                <!--            ELSE                       #sortNum4# -->
+                <!--         END AS PRTY_NUM -->
+                <!--    FROM -->
+                <!--        TECH_MDSE_LIST_WRK A -->
+                <!--    WHERE -->
+                <!--            A.GLBL_CMPY_CD = #glblCmpyCd# -->
+                <!--        AND A.EZCANCELFLAG = '0' -->
+                <!--) B -->
+                    TECH_MDSE_LIST_WRK B
+                WHERE
+                        B.GLBL_CMPY_CD = #glblCmpyCd#
+                    AND B.EZCANCELFLAG = '0'
+                <!-- END 2022/02/14 K.Kitachi [QC#59695, MOD] -->
+            ) C
+        WHERE
+            C.RANK_NUM &gt; 1
+        ORDER BY
+            C.TECH_MDSE_LIST_WRK_PK
+    </statement>
+<!-- END 2017/05/23 K.Kitachi [QC#18374, ADD] -->
+
+<!-- START 2022/03/09 K.Kitachi [QC#59695, ADD] -->
+    <statement id="getMaxPrtUsgRptWrkDt" parameterClass="Map" resultClass="String">
+        SELECT
+            MAX(A.PRT_USG_RPT_WRK_DT)
+        FROM
+            PRT_USG_RPT_WRK A
+        WHERE
+                A.GLBL_CMPY_CD = #glblCmpyCd#
+            AND A.EZCANCELFLAG = '0'
+    </statement>
+<!-- END 2022/03/09 K.Kitachi [QC#59695, ADD] -->
+</sqlMap>

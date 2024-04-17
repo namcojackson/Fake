@@ -1,0 +1,161 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NSBB053001">
+    <statement id="getTaskInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+             FSR.SER_NUM              AS SER_NUM
+            ,FSR.SVC_CALL_INCDT_DT    AS SVC_CALL_INCDT_DT
+            ,FSR.SVC_CALL_INCDT_TM    AS SVC_CALL_INCDT_TM
+            ,FSR.SVC_MACH_MSTR_PK     AS SVC_MACH_MSTR_PK
+            ,STA.SVC_TASK_NUM         AS SVC_TASK_NUM 
+            ,STA.DS_SVC_CALL_TP_CD    AS DS_SVC_CALL_TP_CD
+            ,FVI.FSR_VISIT_ARV_TM     AS FSR_VISIT_ARV_TM
+            ,FVI.FSR_VISIT_CLO_TM     AS FSR_VISIT_CLO_TM
+            ,FVI.FSR_VISIT_DISPT_DT   AS FSR_VISIT_DISPT_DT
+            ,FVI.FSR_VISIT_DISPT_TM   AS FSR_VISIT_DISPT_TM
+            ,FVI.FSR_VISIT_CLO_DT     AS FSR_VISIT_CLO_DT
+            ,FVI.TECH_CD              AS TECH_CD
+            ,FVI.FSR_NUM              AS FSR_NUM
+            ,FVI.FSR_VISIT_NUM        AS FSR_VISIT_NUM
+            ,FVT.SVC_LBOR_TM_NUM      AS SVC_LBOR_TM_NUM
+            ,FVT.SVC_PBLM_TP_CD       AS SVC_PBLM_TP_CD
+            ,FVT.SVC_PBLM_LOC_TP_CD   AS SVC_PBLM_LOC_TP_CD
+            ,FVT.SVC_PBLM_RSN_TP_CD   AS SVC_PBLM_RSN_TP_CD
+            ,FVT.SVC_PBLM_CRCT_TP_CD  AS SVC_PBLM_CRCT_TP_CD
+            ,MDS.MDSE_DESC_SHORT_TXT  AS MDSE_DESC_SHORT_TXT
+            ,STC.LOC_NUM              AS LOC_NUM
+        FROM
+             FSR              FSR
+            ,SVC_TASK         STA
+            ,FSR_VISIT        FVI
+            ,FSR_VISIT_TASK   FVT
+            ,SVC_MACH_MSTR    SMM
+            ,MDSE             MDS
+            ,SHIP_TO_CUST     STC
+            ,S21_PSN          PSN
+        WHERE
+                FSR.GLBL_CMPY_CD       = #glblCmpyCd#
+            AND FSR.FSR_STS_CD         = #fsrStsCd#
+            <isNotNull property="cloDt">
+            AND FSR.FSR_CLO_DT      &gt; #cloDt#
+            </isNotNull>
+            <isNotNull property="curDt">
+            AND FSR.FSR_CLO_DT     &lt;= #curDt#
+            </isNotNull>
+            AND FSR.GLBL_CMPY_CD       = STA.GLBL_CMPY_CD
+            AND FSR.FSR_NUM            = STA.FSR_NUM
+            AND STA.GLBL_CMPY_CD       = FVI.GLBL_CMPY_CD
+            AND STA.SVC_TASK_NUM       = FVI.SVC_TASK_NUM
+            AND FVI.GLBL_CMPY_CD       = FVT.GLBL_CMPY_CD
+            AND FVI.FSR_NUM            = FVT.FSR_NUM
+            AND FVI.FSR_VISIT_NUM      = FVT.FSR_VISIT_NUM
+            AND FSR.GLBL_CMPY_CD       = SMM.GLBL_CMPY_CD
+            AND FSR.SER_NUM            = SMM.SER_NUM
+            AND SMM.GLBL_CMPY_CD       = MDS.GLBL_CMPY_CD(+)
+            AND SMM.MDSE_CD            = MDS.MDSE_CD(+)
+            AND SMM.GLBL_CMPY_CD       = STC.GLBL_CMPY_CD(+)
+            AND SMM.CUR_LOC_NUM        = STC.SHIP_TO_CUST_CD(+)
+            AND FVI.GLBL_CMPY_CD       = PSN.GLBL_CMPY_CD
+            AND FVI.TECH_CD            = PSN.PSN_CD
+            <isNotNull property="psnTpCdList">
+            <iterate property ="psnTpCdList" var="psnTpCd[]" open=" AND PSN.PSN_TP_CD IN  (" close=")" conjunction=",">
+            #psnTpCd[]#
+            </iterate>
+            </isNotNull>
+            AND FSR.EZCANCELFLAG       = '0'
+            AND STA.EZCANCELFLAG       = '0'
+            AND FVI.EZCANCELFLAG       = '0'
+            AND FVT.EZCANCELFLAG       = '0'
+            AND SMM.EZCANCELFLAG       = '0'
+            AND MDS.EZCANCELFLAG(+)    = '0'
+            AND STC.EZCANCELFLAG(+)    = '0'
+            AND PSN.EZCANCELFLAG       = '0'
+        ORDER BY
+             STA.FSR_NUM               ASC
+            ,STA.SVC_TASK_NUM          ASC
+    </statement>
+    <statement id="getSumCnt" parameterClass="Map" resultClass="Integer">
+        SELECT
+            SUM_CNT
+        FROM
+           (SELECT 
+                SUM_CNT
+               ,NUM 
+            FROM
+               (SELECT
+                    SUM(SPM.READ_MTR_CNT)    AS SUM_CNT
+                   ,2                        AS NUM
+                FROM
+                     SVC_PHYS_MTR_READ         SPM
+                    ,MTR_LB                    MLB
+                    , ( SELECT 
+                            SVC_PHYS_MTR_READ_GRP_SQ 
+                        FROM (SELECT 
+                                   SPMR.SVC_PHYS_MTR_READ_GRP_SQ
+                              FROM
+                                   SVC_PHYS_MTR_READ         SPMR
+                              WHERE
+                                      SPMR.GLBL_CMPY_CD      = #glblCmpyCd#
+                                  AND SPMR.SVC_MACH_MSTR_PK  = #svcMachMstrPk#
+                                  AND SPMR.FSR_NUM           = #fsrNum#
+                                  AND SPMR.FSR_VISIT_NUM     = #fsrVisitNum#
+                                  AND SPMR.VLD_MTR_FLG       = 'Y'
+                                  AND SPMR.EZCANCELFLAG      = '0'
+                              ORDER BY 
+                                   SPMR.MTR_READ_DT               DESC
+                                  ,SPMR.SVC_PHYS_MTR_READ_GRP_SQ  DESC)
+                        WHERE 
+                            ROWNUM = 1) AAA
+                WHERE
+                        SPM.GLBL_CMPY_CD              = #glblCmpyCd#
+                    AND SPM.SVC_MACH_MSTR_PK          = #svcMachMstrPk#
+                    AND SPM.FSR_NUM                   = #fsrNum#
+                    AND SPM.FSR_VISIT_NUM             = #fsrVisitNum#
+                    AND SPM.VLD_MTR_FLG               = 'Y'
+                    AND SPM.GLBL_CMPY_CD              = MLB.GLBL_CMPY_CD
+                    AND SPM.MTR_LB_CD                 = MLB.MTR_LB_CD
+                    AND MLB.TOT_MTR_FLG               = 'N'
+                    AND SPM.SVC_PHYS_MTR_READ_GRP_SQ  = AAA.SVC_PHYS_MTR_READ_GRP_SQ
+                    AND SPM.EZCANCELFLAG              = '0'
+                    AND MLB.EZCANCELFLAG              = '0'
+                UNION
+                SELECT
+                    SPM.READ_MTR_CNT    AS SUM_CNT
+                    ,1                        AS NUM
+                FROM
+                     SVC_PHYS_MTR_READ         SPM
+                    ,MTR_LB                    MLB
+                    , ( SELECT 
+                            SVC_PHYS_MTR_READ_GRP_SQ 
+                        FROM (SELECT 
+                                   SPMR.SVC_PHYS_MTR_READ_GRP_SQ
+                              FROM
+                                   SVC_PHYS_MTR_READ         SPMR
+                              WHERE
+                                      SPMR.GLBL_CMPY_CD      = #glblCmpyCd#
+                                  AND SPMR.SVC_MACH_MSTR_PK  = #svcMachMstrPk#
+                                  AND SPMR.FSR_NUM           = #fsrNum#
+                                  AND SPMR.FSR_VISIT_NUM     = #fsrVisitNum#
+                                  AND SPMR.VLD_MTR_FLG       = 'Y'
+                                  AND SPMR.EZCANCELFLAG      = '0'
+                              ORDER BY 
+                                   SPMR.MTR_READ_DT               DESC
+                                  ,SPMR.SVC_PHYS_MTR_READ_GRP_SQ  DESC)
+                        WHERE 
+                            ROWNUM = 1) AAA
+                WHERE
+                        SPM.GLBL_CMPY_CD              = #glblCmpyCd#
+                    AND SPM.SVC_MACH_MSTR_PK          = #svcMachMstrPk#
+                    AND SPM.FSR_NUM                   = #fsrNum#
+                    AND SPM.FSR_VISIT_NUM             = #fsrVisitNum#
+                    AND SPM.VLD_MTR_FLG               = 'Y'
+                    AND SPM.GLBL_CMPY_CD              = MLB.GLBL_CMPY_CD
+                    AND SPM.MTR_LB_CD                 = MLB.MTR_LB_CD
+                    AND MLB.TOT_MTR_FLG               = 'Y'
+                    AND SPM.SVC_PHYS_MTR_READ_GRP_SQ  = AAA.SVC_PHYS_MTR_READ_GRP_SQ
+                    AND SPM.EZCANCELFLAG              = '0'
+                    AND MLB.EZCANCELFLAG              = '0')
+             ORDER BY NUM)
+         WHERE 
+             ROWNUM = 1
+    </statement>
+</sqlMap>

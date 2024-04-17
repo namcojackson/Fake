@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NLZC062001">
+    <statement id="adjustmentPiCount" parameterClass="Map" resultClass="Map">
+         SELECT
+             PICH.PHYS_INVTY_CTRL_PK
+             ,PICH.MDSE_CD
+             ,PICH.RTL_WH_CD
+             ,PICH.WH_CD
+             ,PICH.PHYS_INVTY_CNT_HDR_PK
+             ,PICH.STK_STS_CD
+             ,PIC.PHYS_INVTY_STS_CD
+             ,PIC.PHYS_INVTY_STS_NM
+             ,PICD.PHYS_INVTY_CNT_DTL_PK
+             ,PICD.SER_NUM
+             ,PICD.ADJ_VAR_QTY
+             ,PICD.ADJ_VAR_AMT
+             ,PICD.SVC_CONFIG_MSTR_PK
+             ,M.MDSE_CD AS MSTR_MDSE_CD
+             ,M.RCV_SER_TAKE_FLG
+         FROM
+             PHYS_INVTY_CTRL      PIC
+             ,PHYS_INVTY_CNT_HDR  PICH
+             ,PHYS_INVTY_CNT_DTL  PICD
+             ,INVTY               I
+             ,MDSE                M
+         WHERE
+         -- JOIN TO PHYS_INVTY_CTRL
+             PIC.GLBL_CMPY_CD             = #glblCmpyCd#
+         AND PIC.PHYS_INVTY_NUM           = #physInvtyNum#
+         -- JOIN TO PHYS_INVTY_CNT_HDR
+         AND PIC.GLBL_CMPY_CD             = PICH.GLBL_CMPY_CD
+         AND PIC.PHYS_INVTY_CTRL_PK       = PICH.PHYS_INVTY_CTRL_PK
+         -- JOIN TO PHYS_INVTY_CNT_DTL
+         AND PICH.GLBL_CMPY_CD            = PICD.GLBL_CMPY_CD
+         AND PICH.PHYS_INVTY_CNT_HDR_PK   = PICD.PHYS_INVTY_CNT_HDR_PK
+         AND PICD.ADJ_VAR_FLG             = #adjVarFlg#
+         <isNotNull property="physInvtyAdjNm">
+         AND PICH.PHYS_INVTY_ADJ_NM       = #physInvtyAdjNm#
+        </isNotNull>
+         -- JOIN TO INVTY
+         AND PIC.GLBL_CMPY_CD             = I.GLBL_CMPY_CD(+)
+         AND PIC.WH_CD                    = I.INVTY_LOC_CD(+)
+         AND PICH.MDSE_CD                 = I.MDSE_CD(+)
+         AND PICH.STK_STS_CD              = I.STK_STS_CD(+)
+         AND I.LOC_STS_CD(+)              = #locStsCd#
+         -- JOIN TO MDSE
+         AND PICH.GLBL_CMPY_CD            = M.GLBL_CMPY_CD(+)
+         AND PICH.MDSE_CD                 = M.MDSE_CD(+)
+         AND PIC.EZCANCELFLAG             = '0'
+         AND PICH.EZCANCELFLAG            = '0'
+         AND PICD.EZCANCELFLAG            = '0'
+         AND I.EZCANCELFLAG(+)            = '0'
+         AND M.EZCANCELFLAG(+)            = '0'
+         ORDER BY
+             PICD.ADJ_VAR_QTY ASC
+             ,PICD.SER_NUM ASC
+             ,PICH.WH_CD ASC
+             ,PICH.MDSE_CD ASC
+             ,PICH.STK_STS_CD ASC
+    </statement>
+    <statement id="summaryPICountHeader" parameterClass="Map" resultClass="Map">
+         SELECT
+             PICH.PHYS_INVTY_CNT_HDR_PK
+             ,NVL(PICD.SUB_TOT_ADJ_VAR_QTY, 0) AS SUB_TOT_ADJ_VAR_QTY
+             ,NVL(PICD.SUB_TOT_ADJ_VAR_AMT, 0) AS SUB_TOT_ADJ_VAR_AMT
+         FROM
+             PHYS_INVTY_CTRL      PIC
+             ,PHYS_INVTY_CNT_HDR  PICH
+             ,(
+                 SELECT
+                     D.PHYS_INVTY_CNT_HDR_PK
+                     ,SUM(NVL(D.ADJ_VAR_QTY,0)) AS SUB_TOT_ADJ_VAR_QTY
+                     ,SUM(NVL(D.ADJ_VAR_AMT,0)) AS SUB_TOT_ADJ_VAR_AMT
+                 FROM
+                     PHYS_INVTY_CNT_DTL  D
+                 WHERE
+                         D.GLBL_CMPY_CD                   = #glblCmpyCd#
+                     AND D.PHYS_INVTY_ADJ_STS_CD   &lt;&gt; #physInvtyAdjStsCd#
+                     AND D.EZCANCELFLAG                   = '0'
+                 GROUP BY
+                     D.PHYS_INVTY_CNT_HDR_PK
+               ) PICD
+         WHERE
+         -- JOIN TO PHYS_INVTY_CTRL
+             PIC.GLBL_CMPY_CD                    = #glblCmpyCd#
+         AND PIC.PHYS_INVTY_NUM                  = #physInvtyNum#
+         -- JOIN TO PHYS_INVTY_CNT_HDR
+         AND PIC.GLBL_CMPY_CD                    = PICH.GLBL_CMPY_CD
+         AND PIC.PHYS_INVTY_CTRL_PK              = PICH.PHYS_INVTY_CTRL_PK
+         -- JOIN TO PHYS_INVTY_CNT_DTL
+         AND PICH.PHYS_INVTY_CNT_HDR_PK          = PICD.PHYS_INVTY_CNT_HDR_PK(+)
+         AND PIC.EZCANCELFLAG                    = '0'
+         AND PICH.EZCANCELFLAG                   = '0'
+    </statement>
+    <statement id="summaryPIControl" parameterClass="Map" resultClass="Map">
+    <!-- QC#15058 -->
+         SELECT
+             PIC.PHYS_INVTY_CTRL_PK
+             ,SUM(NVL(ABS(PICD.ADJ_VAR_AMT),0)) AS TOT_ADJ_VAR_GRS_AMT
+             ,SUM(NVL(PICD.ADJ_VAR_AMT,0)) AS TOT_ADJ_VAR_NET_AMT
+         FROM
+             PHYS_INVTY_CTRL PIC
+             ,PHYS_INVTY_CNT_DTL PICD
+         WHERE
+         -- JOIN TO PHYS_INVTY_CTRL
+             PIC.GLBL_CMPY_CD       = #glblCmpyCd#
+         AND PIC.PHYS_INVTY_NUM     = #physInvtyNum#
+         -- JOIN TO PHYS_INVTY_CNT_HDR
+         AND PIC.GLBL_CMPY_CD       = PICD.GLBL_CMPY_CD(+)
+         AND PIC.PHYS_INVTY_CTRL_PK = PICD.PHYS_INVTY_CTRL_PK(+)
+         AND PICD.PHYS_INVTY_ADJ_STS_CD   &lt;&gt; #physInvtyAdjStsCd#
+         AND PIC.EZCANCELFLAG       = '0'
+         AND PICD.EZCANCELFLAG(+)   = '0'
+         GROUP BY
+            PIC.PHYS_INVTY_CTRL_PK
+    </statement>
+    <statement id ="getPIMode" parameterClass="Map" resultClass="String">
+         SELECT
+             PIC.LOC_TP_CD
+         FROM
+             PHYS_INVTY_CTRL PIC
+         WHERE
+             PIC.PHYS_INVTY_NUM = #physInvtyNum#
+         AND ROWNUM             = 1
+         AND PIC.GLBL_CMPY_CD   = #glblCmpyCd#
+         AND PIC.EZCANCELFLAG   = '0'
+    </statement>
+    <statement id ="getPhysInvtyCtrlPk" parameterClass="Map" resultClass="BigDecimal">
+         SELECT
+             PIC.PHYS_INVTY_CTRL_PK
+         FROM
+             PHYS_INVTY_CTRL PIC
+         WHERE
+             PIC.PHYS_INVTY_NUM = #physInvtyNum#
+         AND PIC.GLBL_CMPY_CD   = #glblCmpyCd#
+         AND PIC.EZCANCELFLAG   = '0'
+    </statement>
+    <statement id ="getInvtyQty" parameterClass="Map" resultClass="BigDecimal">
+         SELECT
+             NVL(INV.INVTY_QTY, 0) AS INVTY_QTY
+         FROM
+             INVTY INV
+         WHERE
+             INV.GLBL_CMPY_CD   = #glblCmpyCd#
+         AND INV.MDSE_CD        = #mdseCd#
+         AND INV.INVTY_LOC_CD   = #invtyLocCd#
+         AND INV.STK_STS_CD     = #stkStsCd#
+         AND INV.EZCANCELFLAG   = '0'
+    </statement>
+    <statement id ="getPhysInvtyHdrPk" parameterClass="Map" resultClass="BigDecimal">
+         SELECT
+             PICH.PHYS_INVTY_CNT_HDR_PK
+         FROM
+             PHYS_INVTY_CNT_HDR PICH
+         WHERE
+             PICH.PHYS_INVTY_CTRL_PK = #physInvtyCtrlPk#
+         AND PICH.GLBL_CMPY_CD       = #glblCmpyCd#
+         AND PICH.EZCANCELFLAG       = '0'
+    </statement>
+    <statement id ="getPhysInvtyDtlPk" parameterClass="Map" resultClass="BigDecimal">
+         SELECT
+             PICD.PHYS_INVTY_CNT_DTL_PK
+         FROM
+             PHYS_INVTY_CNT_DTL PICD
+         WHERE
+             PICD.PHYS_INVTY_CTRL_PK = #physInvtyCtrlPk#
+         AND PICD.GLBL_CMPY_CD = #glblCmpyCd#
+         AND PICD.EZCANCELFLAG='0'
+    </statement>
+</sqlMap>

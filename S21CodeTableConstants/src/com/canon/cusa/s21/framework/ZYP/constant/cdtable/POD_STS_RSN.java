@@ -1,0 +1,59 @@
+/*
+* Copyright (c) 2009 Canon USA Inc. All rights reserved.
+* Original Author: AUTO generated File : S21 CodeTable Generator Tool
+* Company: Canon USA Inc.
+* Date Generated:1/12/2011 1:08:26 PM
+*/
+package com.canon.cusa.s21.framework.ZYP.constant.cdtable;
+
+/**
+ * <p>
+ * This interface provides the logical code names as constants for POD_STS_RSN table.
+ * </p>
+ *
+ * @author $Author$
+ * @version $Revision$
+ */
+public interface POD_STS_RSN {
+
+String MISSED_DELIVERY = "A1";
+String INCORRECT_ADDRESS = "A2";
+String INDIRECT_DELIVERY = "A3";
+String UNABLE_TO_LOCATE = "A5";
+String ADDRESS_CORRECTED_DELIVERY_ATTEMPTED = "A6";
+String MIS_SORT = "AA";
+String CUSTOMER_REQUESTED_FUTURE_DELIVERY = "AD";
+String RESTRICTED_ARTICLES_UNACCEPTABLE = "AE";
+String ACCIDENT = "AF";
+String MECHANICAL_BREAKDOWN = "AI";
+String DAMAGED_REWRAPPED_IN_HUB = "AK";
+String HOLIDAY_CLOSED = "AN";
+String WEATHER_OR_NATURAL_DISASTER_RELATED = "AO";
+String RECIPIENT_UNAVAILABLE_DELIVERY_DELAYED = "AQ";
+String IMPROPER_INTERNATIONAL_PAPERWORK = "AR";
+String HOLD_DUE_TO_CUSTOMS_DOCUMENTATION_PROBLEMS = "AS";
+String UNABLE_TO_CONTACT_RECIPIENT_FOR_BROKER_INFORMATION = "AT";
+String EXCEEDS_SERVICE_LIMITATIONS = "AV";
+String PAST_CUT_OFF_TIME = "AW";
+String INSUFFICIENT_PICK_UP_TIME = "AX";
+String MISSED_PICK_UP = "AY";
+String ALTERNATE_CARRIER_DELIVERED = "AZ";
+String HELD_FOR_PAYMENT = "B4";
+String OTHER = "BG";
+String REFUSED_BY_CUSTOMER = "BS";
+String RETURNED_TO_SHIPPER = "BT";
+String WAITING_FOR_CUSTOMER_PICK_UP = "C1";
+String CREDIT_HOLD = "C2";
+String SUSPENDED_AT_CUSTOMER_REQUEST = "C3";
+String CUSTOMER_VACATION = "C4";
+String CUSTOMER_STRIKE = "C5";
+String WAITING_SHIPPING_INSTRUCTIONS = "C6";
+String WAITING_FOR_CUSTOMER_SPECIFIED_CARRIER = "C7";
+String COLLECT_ON_DELIVERY_REQUIRED = "C8";
+String CASH_NOT_AVAILABLE_FROM_CONSIGNEE = "C9";
+String NORMAL_APPOINTMENT = "NA";
+String NORMAL_STATUS = "NS";
+String WAITING_INSPECTION = "P2";
+String HELD_FOR_FULL_CARRIER_LOAD = "P4";
+
+}

@@ -1,0 +1,484 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NSAB074001">
+
+    <statement id="getTrgtDtRec" parameterClass="Map" resultClass="BigDecimal">
+        SELECT COUNT(1)
+        FROM
+            FCT_MLY_CONTR_SPLY_PROJ CSP
+        WHERE 
+            CSP.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND CSP.FCT_CRAT_DT         = #trgtDt#
+        AND CSP.EZCANCELFLAG        = '0'
+    </statement>
+
+    <statement id="getTrgtQtrNum" parameterClass="Map" resultClass="Map">
+        SELECT 
+            TRGT.DWH_TRGT_DT
+           ,SUBSTR(TRGT.DWH_TRGT_DT, 0, 6) AS DWH_TRGT_YR_MTH
+           ,SUBSTR(TRGT.DWH_TRGT_DT, 0, 4) AS DWH_TRGT_YR
+           ,DRC.DWH_TRGT_QTR_NUM           AS DWH_TRGT_QTR_NUM
+        FROM
+           (
+            SELECT
+                TO_CHAR(ADD_MONTHS(TO_DATE(#trgtDt#, 'YYYYMMDD'), - #cnt#), 'YYYYMMDD') DWH_TRGT_DT
+            FROM
+                DUAL
+           ) TRGT
+          ,(
+            SELECT
+                DRC.DWH_TRGT_DT         AS DWH_TRGT_DT
+               ,DRC.DWH_TRGT_QTR_NUM    AS DWH_TRGT_QTR_NUM
+            FROM
+                DMN_RPT_CAL             DRC
+            WHERE 
+                DRC.GLBL_CMPY_CD        = #glblCmpyCd#
+            AND DRC.DWH_TRGT_DT         = TO_CHAR(ADD_MONTHS(TO_DATE(#trgtDt#, 'YYYYMMDD'), - #cnt#), 'YYYYMMDD')
+            AND DRC.EZCANCELFLAG        = '0'
+           ) DRC
+        WHERE 
+            TRGT.DWH_TRGT_DT = DRC.DWH_TRGT_DT(+)
+    </statement>
+
+    <statement id="getMainData" parameterClass="Map" resultClass="Map">
+        SELECT
+             SI.GLBL_CMPY_CD                   AS GLBL_CMPY_CD
+            ,SI.INV_DT                         AS DWH_TRGT_DT
+            ,DCD.DS_CONTR_PK                   AS DS_CONTR_PK
+            ,DC.DS_CONTR_NUM                   AS DS_CONTR_NUM
+            ,DCD.DS_CONTR_DTL_PK               AS DS_CONTR_DTL_PK
+            ,DCD.DS_CONTR_DTL_TP_CD            AS DS_CONTR_DTL_TP_CD
+            ,DCDT.DS_CONTR_DTL_TP_DESC_TXT     AS DS_CONTR_DTL_TP_DESC_TXT
+            ,DC.SVC_CONTR_BR_CD                AS SVC_CONTR_BR_CD
+            ,DC.DS_CONTR_CATG_CD               AS DS_CONTR_CATG_CD
+            ,DCC.DS_CONTR_CATG_DESC_TXT        AS DS_CONTR_CATG_DESC_TXT
+            ,DC.SVC_LINE_BIZ_CD                AS SVC_LINE_BIZ_CD
+            ,SI.BILL_TO_CUST_ACCT_CD           AS DS_ACCT_NUM
+            ,STCB.DS_ACCT_NM                   AS DS_ACCT_NM
+            ,SI.BILL_TO_CUST_CD                AS ALT_PAYER_CUST_CD
+            ,SMM.CUR_LOC_ACCT_NUM              AS CUR_LOC_ACCT_NUM
+            ,STCL.DS_ACCT_NM                   AS CUR_LOC_ACCT_NM
+            ,SMM.CUR_LOC_NUM                   AS CUR_LOC_NUM
+            ,SMM.IND_CUR_LOC_NUM               AS IND_CUR_LOC_NUM
+            ,DCD.SVC_MACH_MSTR_PK              AS SVC_MACH_MSTR_PK
+            ,NVL(SMM.SER_NUM, #serNum#)        AS SER_NUM
+            ,SCM.MDL_ID                        AS MDL_ID
+            ,NVL(MN.T_MDL_NM, #mdlNm#)         AS T_MDL_NM
+            ,DM.SVC_SEG_CD                     AS SVC_SEG_CD
+            ,NVL(SS.SVC_SEG_DESC_TXT, #segDescTxt#)
+                                               AS SVC_SEG_DESC_TXT
+            ,CASE
+                WHEN DMSR.ORD_TAKE_MDSE_FLG = 'N' THEN M.COA_PROD_CD
+                WHEN DMSR.ORD_TAKE_MDSE_FLG = 'Y' THEN MO.COA_PROD_CD
+             END                               AS COA_PROD_CD
+            ,CASE
+                WHEN DMSR.ORD_TAKE_MDSE_FLG = 'N' THEN DMSR.MDSE_CD
+                WHEN DMSR.ORD_TAKE_MDSE_FLG = 'Y' THEN DMSR.ORD_TAKE_MDSE_CD
+             END                               AS MDSE_CD
+            ,CASE
+                WHEN DMSR.ORD_TAKE_MDSE_FLG = 'N' THEN M.MDSE_DESC_SHORT_TXT
+                WHEN DMSR.ORD_TAKE_MDSE_FLG = 'Y' THEN MO.MDSE_DESC_SHORT_TXT
+             END                               AS MDSE_DESC_SHORT_TXT
+            ,CASE
+                WHEN DMSR.ORD_TAKE_MDSE_FLG = 'N' THEN M.THIS_MTH_TOT_STD_COST_AMT
+                WHEN DMSR.ORD_TAKE_MDSE_FLG = 'Y' THEN MO.THIS_MTH_TOT_STD_COST_AMT
+             END                               AS UNIT_COST_AMT
+            ,SI.SVC_INV_NUM                    AS INV_NUM
+            ,NULL                              AS SVC_INV_LINE_PK
+            ,SI.INV_DT                         AS INV_DT
+            -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+            ,ROUND((MRBE.READ_MTR_CNT - MRBS.READ_MTR_CNT) * #aveMth# / NULLIF((TO_DATE(SI.BLLG_PER_TO_DT, 'YYYYMMDD') - TO_DATE(SI.BLLG_PER_FROM_DT, 'YYYYMMDD') + 1),0), 2)
+             AS BW_COPY_QTY
+            ,CASE
+                WHEN DMSR.ORD_TAKE_MDSE_FLG = 'N' AND (ISCT.BLACK_COLOR_FLG  = 'N' OR ISCT.BLACK_COLOR_FLG  IS NULL) THEN 0
+                WHEN DMSR.ORD_TAKE_MDSE_FLG = 'Y' AND (ISCTO.BLACK_COLOR_FLG = 'N' OR ISCTO.BLACK_COLOR_FLG IS NULL) THEN 0
+                ELSE
+                    ROUND(NVL((MRTE.READ_MTR_CNT - MRTS.READ_MTR_CNT) * #aveMth# / NULLIF((TO_DATE(SI.BLLG_PER_TO_DT, 'YYYYMMDD') - TO_DATE(SI.BLLG_PER_FROM_DT, 'YYYYMMDD') + 1),0),
+                         (NVL((MRBE.READ_MTR_CNT - MRBS.READ_MTR_CNT) * #aveMth# / NULLIF((TO_DATE(SI.BLLG_PER_TO_DT, 'YYYYMMDD') - TO_DATE(SI.BLLG_PER_FROM_DT, 'YYYYMMDD') + 1),0), 0)
+                        + NVL((MRCE.READ_MTR_CNT - MRCS.READ_MTR_CNT) * #aveMth# / NULLIF((TO_DATE(SI.BLLG_PER_TO_DT, 'YYYYMMDD') - TO_DATE(SI.BLLG_PER_FROM_DT, 'YYYYMMDD') + 1),0), 0)
+                        )) / NULLIF((DMSR.STD_YIELD_CNT - (DMSR.STD_YIELD_CNT * (NVL(DMSR.SPLY_TOL_PCT, 5) / 100))),0), 20)
+                END
+                AS BW_PROJ_SPLY_QTY
+            ,CASE
+                WHEN DMSR.ORD_TAKE_MDSE_FLG = 'N' AND (ISCT.BLACK_COLOR_FLG  = 'N' OR ISCT.BLACK_COLOR_FLG  IS NULL) THEN 0
+                WHEN DMSR.ORD_TAKE_MDSE_FLG = 'Y' AND (ISCTO.BLACK_COLOR_FLG = 'N' OR ISCTO.BLACK_COLOR_FLG IS NULL) THEN 0
+                WHEN DMSR.ORD_TAKE_MDSE_FLG = 'N' THEN
+                    ROUND(NVL((MRTE.READ_MTR_CNT - MRTS.READ_MTR_CNT) * #aveMth# / NULLIF((TO_DATE(SI.BLLG_PER_TO_DT, 'YYYYMMDD') - TO_DATE(SI.BLLG_PER_FROM_DT, 'YYYYMMDD') + 1),0),
+                         (NVL((MRBE.READ_MTR_CNT - MRBS.READ_MTR_CNT) * #aveMth# / NULLIF((TO_DATE(SI.BLLG_PER_TO_DT, 'YYYYMMDD') - TO_DATE(SI.BLLG_PER_FROM_DT, 'YYYYMMDD') + 1),0), 0)
+                        + NVL((MRCE.READ_MTR_CNT - MRCS.READ_MTR_CNT) * #aveMth# / NULLIF((TO_DATE(SI.BLLG_PER_TO_DT, 'YYYYMMDD') - TO_DATE(SI.BLLG_PER_FROM_DT, 'YYYYMMDD') + 1),0), 0)
+                        )) / NULLIF((DMSR.STD_YIELD_CNT - (DMSR.STD_YIELD_CNT * (NVL(DMSR.SPLY_TOL_PCT, 5) / 100))),0) * M.THIS_MTH_TOT_STD_COST_AMT, 20)
+                WHEN DMSR.ORD_TAKE_MDSE_FLG = 'Y' THEN
+                    ROUND(NVL((MRTE.READ_MTR_CNT - MRTS.READ_MTR_CNT) * #aveMth# / NULLIF((TO_DATE(SI.BLLG_PER_TO_DT, 'YYYYMMDD') - TO_DATE(SI.BLLG_PER_FROM_DT, 'YYYYMMDD') + 1),0),
+                         (NVL((MRBE.READ_MTR_CNT - MRBS.READ_MTR_CNT) * #aveMth# / NULLIF((TO_DATE(SI.BLLG_PER_TO_DT, 'YYYYMMDD') - TO_DATE(SI.BLLG_PER_FROM_DT, 'YYYYMMDD') + 1),0), 0)
+                        + NVL((MRCE.READ_MTR_CNT - MRCS.READ_MTR_CNT) * #aveMth# / NULLIF((TO_DATE(SI.BLLG_PER_TO_DT, 'YYYYMMDD') - TO_DATE(SI.BLLG_PER_FROM_DT, 'YYYYMMDD') + 1),0), 0)
+                         )) / NULLIF((DMSR.STD_YIELD_CNT - (DMSR.STD_YIELD_CNT * (NVL(DMSR.SPLY_TOL_PCT, 5) / 100))),0) * MO.THIS_MTH_TOT_STD_COST_AMT, 20)
+                END
+                AS BW_COST_RATE
+            ,ROUND((MRCE.READ_MTR_CNT - MRCS.READ_MTR_CNT) * #aveMth# / NULLIF((TO_DATE(SI.BLLG_PER_TO_DT, 'YYYYMMDD') - TO_DATE(SI.BLLG_PER_FROM_DT, 'YYYYMMDD') + 1),0), 2)
+             AS CLR_COPY_QTY
+            ,CASE
+                WHEN DMSR.ORD_TAKE_MDSE_FLG = 'N' AND ISCT.BLACK_COLOR_FLG  = 'Y' THEN 0
+                WHEN DMSR.ORD_TAKE_MDSE_FLG = 'Y' AND ISCTO.BLACK_COLOR_FLG = 'Y' THEN 0
+                ELSE
+                    ROUND(NVL((MRCE.READ_MTR_CNT - MRCS.READ_MTR_CNT) * #aveMth# / NULLIF((TO_DATE(SI.BLLG_PER_TO_DT, 'YYYYMMDD') - TO_DATE(SI.BLLG_PER_FROM_DT, 'YYYYMMDD') + 1),0), 0)
+                    / NULLIF((DMSR.STD_YIELD_CNT - (DMSR.STD_YIELD_CNT * (NVL(DMSR.SPLY_TOL_PCT, 5) / 100))),0), 20)
+                END
+                AS CLR_PROJ_SPLY_QTY
+            ,CASE
+                WHEN DMSR.ORD_TAKE_MDSE_FLG = 'N' AND ISCT.BLACK_COLOR_FLG  = 'Y' THEN 0
+                WHEN DMSR.ORD_TAKE_MDSE_FLG = 'Y' AND ISCTO.BLACK_COLOR_FLG = 'Y' THEN 0
+                WHEN DMSR.ORD_TAKE_MDSE_FLG = 'N' THEN
+                    ROUND(NVL((MRCE.READ_MTR_CNT - MRCS.READ_MTR_CNT) * #aveMth# / NULLIF((TO_DATE(SI.BLLG_PER_TO_DT, 'YYYYMMDD') - TO_DATE(SI.BLLG_PER_FROM_DT, 'YYYYMMDD') + 1),0), 0)
+                        / NULLIF((DMSR.STD_YIELD_CNT - (DMSR.STD_YIELD_CNT * (NVL(DMSR.SPLY_TOL_PCT, 5) / 100))),0) * M.THIS_MTH_TOT_STD_COST_AMT, 20)
+                WHEN DMSR.ORD_TAKE_MDSE_FLG = 'Y' THEN
+                    ROUND(NVL((MRCE.READ_MTR_CNT - MRCS.READ_MTR_CNT) * #aveMth# / NULLIF((TO_DATE(SI.BLLG_PER_TO_DT, 'YYYYMMDD') - TO_DATE(SI.BLLG_PER_FROM_DT, 'YYYYMMDD') + 1),0), 0)
+                        / NULLIF((DMSR.STD_YIELD_CNT - (DMSR.STD_YIELD_CNT * (NVL(DMSR.SPLY_TOL_PCT, 5) / 100))),0) * MO.THIS_MTH_TOT_STD_COST_AMT, 20)
+                END
+                AS CLR_COST_RATE
+            ,ROUND((MRTE.READ_MTR_CNT - MRTS.READ_MTR_CNT) * #aveMth# / NULLIF((TO_DATE(SI.BLLG_PER_TO_DT, 'YYYYMMDD') - TO_DATE(SI.BLLG_PER_FROM_DT, 'YYYYMMDD') + 1),0), 2)
+             AS TOT_MTR_COPY_QTY
+            -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+            ,SI.BLLG_PER_FROM_DT               AS BLLG_PER_FROM_DT
+            ,SI.BLLG_PER_TO_DT                 AS BLLG_PER_THRU_DT
+            ,CASE
+                WHEN DMSR.ORD_TAKE_MDSE_FLG = 'N' THEN M.IMG_SPLY_YIELD_CNT
+                WHEN DMSR.ORD_TAKE_MDSE_FLG = 'Y' THEN MO.IMG_SPLY_YIELD_CNT
+             END                               AS IMG_SPLY_YIELD_CNT
+            ,DCD.SVC_PGM_MDSE_CD               AS SVC_PGM_MDSE_CD
+            ,CASE
+                WHEN DMSR.ORD_TAKE_MDSE_FLG = 'N' THEN M.IMG_SPLY_TP_CD
+                WHEN DMSR.ORD_TAKE_MDSE_FLG = 'Y' THEN MO.IMG_SPLY_TP_CD
+             END                               AS IMG_SPLY_TP_CD
+            ,CASE
+                WHEN DMSR.ORD_TAKE_MDSE_FLG = 'N' THEN IST.IMG_SPLY_TP_DESC_TXT
+                WHEN DMSR.ORD_TAKE_MDSE_FLG = 'Y' THEN ISTO.IMG_SPLY_TP_DESC_TXT
+             END                               AS IMG_SPLY_TP_DESC_TXT
+            ,CASE
+                WHEN DMSR.ORD_TAKE_MDSE_FLG = 'N' THEN M.IMG_SPLY_COLOR_TP_CD
+                WHEN DMSR.ORD_TAKE_MDSE_FLG = 'Y' THEN MO.IMG_SPLY_COLOR_TP_CD
+             END                               AS IMG_SPLY_COLOR_TP_CD
+            ,CASE
+                WHEN DMSR.ORD_TAKE_MDSE_FLG = 'N' THEN ISCT.IMG_SPLY_COLOR_TP_DESC_TXT
+                WHEN DMSR.ORD_TAKE_MDSE_FLG = 'Y' THEN ISCTO.IMG_SPLY_COLOR_TP_DESC_TXT
+             END                               AS IMG_SPLY_COLOR_TP_DESC_TXT
+            ,NVL( CASE WHEN SUBSTR(SI.BLLG_PER_FROM_DT, 7, 2) = '01'
+                  THEN CEIL(MONTHS_BETWEEN(
+                       CASE WHEN SUBSTR(SI.BLLG_PER_TO_DT, 7, 2) = '01' THEN TO_DATE(SI.BLLG_PER_TO_DT, 'YYYYMMDD') + 1
+                       ELSE TO_DATE(SI.BLLG_PER_TO_DT, 'YYYYMMDD') END
+                      ,     TO_DATE(SI.BLLG_PER_FROM_DT, 'YYYYMMDD')))
+                  ELSE CEIL(MONTHS_BETWEEN(
+                       CASE WHEN SUBSTR(SI.BLLG_PER_TO_DT, 7, 2) = '01' THEN TO_DATE(SI.BLLG_PER_TO_DT, 'YYYYMMDD') + 1
+                       ELSE TO_DATE(SI.BLLG_PER_TO_DT, 'YYYYMMDD') END
+                      ,CASE WHEN FST_INV.EXIST_FLG > 0 THEN TO_DATE(SUBSTR(SI.BLLG_PER_FROM_DT, 0, 6), 'YYYYMM')
+                       ELSE                      ADD_MONTHS(TO_DATE(SUBSTR(SI.BLLG_PER_FROM_DT, 0, 6), 'YYYYMM'), + 1) END))
+                  END, 1) AS BLLG_CYCLE_MTH_AOT
+            ,COA.COA_CMPY_DESC_TXT             AS COA_CMPY_DESC_TXT
+        FROM
+             SVC_INV              SI
+            ,RPT_COND_CONST       RCCD
+            ,DS_CONTR             DC
+            ,DS_CONTR_DTL         DCD
+            ,DS_CONTR_DTL_TP      DCDT
+            ,BLLG_CYCLE           BC
+            ,DS_CONTR_CATG        DCC
+            ,SELL_TO_CUST         STCB
+            ,SVC_CONFIG_MSTR      SCM
+            ,DS_MDL               DM
+            ,MDL_NM               MN
+            ,SVC_SEG              SS
+            ,SVC_MACH_MSTR        SMM
+            ,SELL_TO_CUST         STCL
+            ,DS_MDL_SPLY_RELN     DMSR
+            ,IMG_SPLY_TP          IST
+            ,IMG_SPLY_TP          ISTO
+            ,IMG_SPLY_COLOR_TP    ISCT
+            ,IMG_SPLY_COLOR_TP    ISCTO
+            ,MDSE                 M
+            ,MDSE                 MO
+            ,COA_CMPY             COA
+            -- BW Start Read
+            ,(
+                SELECT
+                     SILM.SVC_INV_NUM
+                    ,SPMR.SVC_MACH_MSTR_PK
+                    ,SUM(SPMR.READ_MTR_CNT) AS READ_MTR_CNT
+                FROM
+                     SVC_INV_LINE_MTR          SILM
+                    ,CONTR_PHYS_BLLG_MTR_RELN  BMR
+                    ,SVC_PHYS_MTR_READ         SPMR
+                    ,MTR_LB                    ML
+                WHERE
+                    SILM.GLBL_CMPY_CD                  = #glblCmpyCd#
+                AND SILM.GLBL_CMPY_CD                  = BMR.GLBL_CMPY_CD
+                AND SILM.DS_CONTR_BLLG_MTR_PK          = BMR.DS_CONTR_BLLG_MTR_PK
+                AND BMR.SVC_PHYS_MTR_PK                = SPMR.SVC_PHYS_MTR_PK
+                AND SILM.GLBL_CMPY_CD                  = SPMR.GLBL_CMPY_CD
+                AND SILM.PREV_PHYS_MTR_READ_GRP_SQ     = SPMR.SVC_PHYS_MTR_READ_GRP_SQ
+                AND SPMR.GLBL_CMPY_CD                  = ML.GLBL_CMPY_CD
+                AND SPMR.MTR_LB_CD                     = ML.MTR_LB_CD
+                AND ML.BW_MTR_FLG                      = 'Y'
+                AND SILM.EZCANCELFLAG                  = '0'
+                AND BMR.EZCANCELFLAG                   = '0'
+                AND SPMR.EZCANCELFLAG                  = '0'
+                AND ML.EZCANCELFLAG                    = '0'
+                GROUP BY
+                     SILM.SVC_INV_NUM
+                    ,SPMR.SVC_MACH_MSTR_PK
+             ) MRBS
+             -- BW End Read
+            ,(
+                SELECT
+                     SILM.SVC_INV_NUM
+                    ,SPMR.SVC_MACH_MSTR_PK
+                    ,SUM(SPMR.READ_MTR_CNT) AS READ_MTR_CNT
+                FROM
+                     SVC_INV_LINE_MTR          SILM
+                    ,CONTR_PHYS_BLLG_MTR_RELN  BMR
+                    ,SVC_PHYS_MTR_READ         SPMR
+                    ,MTR_LB                    ML
+                WHERE
+                    SILM.GLBL_CMPY_CD                  = #glblCmpyCd#
+                AND SILM.GLBL_CMPY_CD                  = BMR.GLBL_CMPY_CD
+                AND SILM.DS_CONTR_BLLG_MTR_PK          = BMR.DS_CONTR_BLLG_MTR_PK
+                AND BMR.SVC_PHYS_MTR_PK                = SPMR.SVC_PHYS_MTR_PK
+                AND SILM.GLBL_CMPY_CD                  = SPMR.GLBL_CMPY_CD
+                AND SILM.SVC_PHYS_MTR_READ_GRP_SQ      = SPMR.SVC_PHYS_MTR_READ_GRP_SQ
+                AND SPMR.GLBL_CMPY_CD                  = ML.GLBL_CMPY_CD
+                AND SPMR.MTR_LB_CD                     = ML.MTR_LB_CD
+                AND ML.BW_MTR_FLG                      = 'Y'
+                AND SILM.EZCANCELFLAG                  = '0'
+                AND BMR.EZCANCELFLAG                   = '0'
+                AND SPMR.EZCANCELFLAG                  = '0'
+                AND ML.EZCANCELFLAG                    = '0'
+                GROUP BY
+                     SILM.SVC_INV_NUM
+                    ,SPMR.SVC_MACH_MSTR_PK
+             ) MRBE
+            -- Color Start Read
+            ,(
+                SELECT
+                     SILM.SVC_INV_NUM
+                    ,SPMR.SVC_MACH_MSTR_PK
+                    ,SUM(SPMR.READ_MTR_CNT) AS READ_MTR_CNT
+                FROM
+                     SVC_INV_LINE_MTR          SILM
+                    ,CONTR_PHYS_BLLG_MTR_RELN  BMR
+                    ,SVC_PHYS_MTR_READ         SPMR
+                    ,MTR_LB                    ML
+                WHERE
+                    SILM.GLBL_CMPY_CD                  = #glblCmpyCd#
+                AND SILM.GLBL_CMPY_CD                  = BMR.GLBL_CMPY_CD
+                AND SILM.DS_CONTR_BLLG_MTR_PK          = BMR.DS_CONTR_BLLG_MTR_PK
+                AND BMR.SVC_PHYS_MTR_PK                = SPMR.SVC_PHYS_MTR_PK
+                AND SILM.GLBL_CMPY_CD                  = SPMR.GLBL_CMPY_CD
+                AND SILM.PREV_PHYS_MTR_READ_GRP_SQ     = SPMR.SVC_PHYS_MTR_READ_GRP_SQ
+                AND SPMR.GLBL_CMPY_CD                  = ML.GLBL_CMPY_CD
+                AND SPMR.MTR_LB_CD                     = ML.MTR_LB_CD
+                AND ML.COLOR_MTR_FLG                   = 'Y'
+                AND SILM.EZCANCELFLAG                  = '0'
+                AND BMR.EZCANCELFLAG                   = '0'
+                AND SPMR.EZCANCELFLAG                  = '0'
+                AND ML.EZCANCELFLAG                    = '0'
+                GROUP BY
+                     SILM.SVC_INV_NUM
+                    ,SPMR.SVC_MACH_MSTR_PK
+             ) MRCS
+             -- Color End Read
+            ,(
+                SELECT
+                     SILM.SVC_INV_NUM
+                    ,SPMR.SVC_MACH_MSTR_PK
+                    ,SUM(SPMR.READ_MTR_CNT) AS READ_MTR_CNT
+                FROM
+                     SVC_INV_LINE_MTR          SILM
+                    ,CONTR_PHYS_BLLG_MTR_RELN  BMR
+                    ,SVC_PHYS_MTR_READ         SPMR
+                    ,MTR_LB                    ML
+                WHERE
+                    SILM.GLBL_CMPY_CD                  = #glblCmpyCd#
+                AND SILM.GLBL_CMPY_CD                  = BMR.GLBL_CMPY_CD
+                AND SILM.DS_CONTR_BLLG_MTR_PK          = BMR.DS_CONTR_BLLG_MTR_PK
+                AND BMR.SVC_PHYS_MTR_PK                = SPMR.SVC_PHYS_MTR_PK
+                AND SILM.GLBL_CMPY_CD                  = SPMR.GLBL_CMPY_CD
+                AND SILM.SVC_PHYS_MTR_READ_GRP_SQ      = SPMR.SVC_PHYS_MTR_READ_GRP_SQ
+                AND SPMR.GLBL_CMPY_CD                  = ML.GLBL_CMPY_CD
+                AND SPMR.MTR_LB_CD                     = ML.MTR_LB_CD
+                AND ML.COLOR_MTR_FLG                   = 'Y'
+                AND SILM.EZCANCELFLAG                  = '0'
+                AND BMR.EZCANCELFLAG                   = '0'
+                AND SPMR.EZCANCELFLAG                  = '0'
+                AND ML.EZCANCELFLAG                    = '0'
+                GROUP BY
+                     SILM.SVC_INV_NUM
+                    ,SPMR.SVC_MACH_MSTR_PK
+             ) MRCE
+            -- Total Start Read
+            ,(
+                SELECT
+                     SILM.SVC_INV_NUM
+                    ,SPMR.SVC_MACH_MSTR_PK
+                    ,SUM(SPMR.READ_MTR_CNT) AS READ_MTR_CNT
+                FROM
+                     SVC_INV_LINE_MTR          SILM
+                    ,CONTR_PHYS_BLLG_MTR_RELN  BMR
+                    ,SVC_PHYS_MTR_READ         SPMR
+                    ,MTR_LB                    ML
+                WHERE
+                    SILM.GLBL_CMPY_CD                  = #glblCmpyCd#
+                AND SILM.GLBL_CMPY_CD                  = BMR.GLBL_CMPY_CD
+                AND SILM.DS_CONTR_BLLG_MTR_PK          = BMR.DS_CONTR_BLLG_MTR_PK
+                AND BMR.SVC_PHYS_MTR_PK                = SPMR.SVC_PHYS_MTR_PK
+                AND SILM.GLBL_CMPY_CD                  = SPMR.GLBL_CMPY_CD
+                AND SILM.PREV_PHYS_MTR_READ_GRP_SQ     = SPMR.SVC_PHYS_MTR_READ_GRP_SQ
+                AND SPMR.GLBL_CMPY_CD                  = ML.GLBL_CMPY_CD
+                AND SPMR.MTR_LB_CD                     = ML.MTR_LB_CD
+                AND ML.TOT_MTR_FLG                     = 'Y'
+                AND SILM.EZCANCELFLAG                  = '0'
+                AND BMR.EZCANCELFLAG                   = '0'
+                AND SPMR.EZCANCELFLAG                  = '0'
+                AND ML.EZCANCELFLAG                    = '0'
+                GROUP BY
+                     SILM.SVC_INV_NUM
+                    ,SPMR.SVC_MACH_MSTR_PK
+             ) MRTS
+             -- Total End Read
+            ,(
+                SELECT
+                     SILM.SVC_INV_NUM
+                    ,SPMR.SVC_MACH_MSTR_PK
+                    ,SUM(SPMR.READ_MTR_CNT) AS READ_MTR_CNT
+                FROM
+                     SVC_INV_LINE_MTR          SILM
+                    ,CONTR_PHYS_BLLG_MTR_RELN  BMR
+                    ,SVC_PHYS_MTR_READ         SPMR
+                    ,MTR_LB                    ML
+                WHERE
+                    SILM.GLBL_CMPY_CD                  = #glblCmpyCd#
+                AND SILM.GLBL_CMPY_CD                  = BMR.GLBL_CMPY_CD
+                AND SILM.DS_CONTR_BLLG_MTR_PK          = BMR.DS_CONTR_BLLG_MTR_PK
+                AND BMR.SVC_PHYS_MTR_PK                = SPMR.SVC_PHYS_MTR_PK
+                AND SILM.GLBL_CMPY_CD                  = SPMR.GLBL_CMPY_CD
+                AND SILM.SVC_PHYS_MTR_READ_GRP_SQ      = SPMR.SVC_PHYS_MTR_READ_GRP_SQ
+                AND SPMR.GLBL_CMPY_CD                  = ML.GLBL_CMPY_CD
+                AND SPMR.MTR_LB_CD                     = ML.MTR_LB_CD
+                AND ML.TOT_MTR_FLG                     = 'Y'
+                AND SILM.EZCANCELFLAG                  = '0'
+                AND BMR.EZCANCELFLAG                   = '0'
+                AND SPMR.EZCANCELFLAG                  = '0'
+                AND ML.EZCANCELFLAG                    = '0'
+                GROUP BY
+                     SILM.SVC_INV_NUM
+                    ,SPMR.SVC_MACH_MSTR_PK
+            ) MRTE
+           ,(
+                SELECT
+                     SL.SVC_INV_NUM
+                    ,SL.SVC_MACH_MSTR_PK
+                    ,SL.BLLG_PER_FROM_DT
+                    ,SUM(CASE WHEN SL.SVC_INV_LINE_PK IS NULL THEN 0 ELSE 1 END) EXIST_FLG
+                FROM SVC_INV_LINE SL
+                WHERE
+                    SL.GLBL_CMPY_CD       = #glblCmpyCd#
+                AND SL.SVC_INV_CHRG_TP_CD = #invChrgTpMC#
+                AND SL.EZCANCELFLAG       = '0'
+                GROUP BY
+                    SL.SVC_INV_NUM
+                   ,SL.SVC_MACH_MSTR_PK
+                   ,SL.BLLG_PER_FROM_DT
+            ) FST_INV
+        WHERE
+            SI.GLBL_CMPY_CD                  = #glblCmpyCd#
+        AND SI.GLBL_CMPY_CD                  = RCCD.GLBL_CMPY_CD
+        AND RCCD.RPT_COND_CONST_GRP_ID       = #cratDays#  --NSAB0740_CRAT_DAYS
+        AND SI.INV_DT                        = TO_CHAR(TO_DATE(#trgtDt#, 'YYYYMMDD') - RCCD.RPT_COND_CONST_VAL_NUM_01, 'YYYYMMDD')
+        AND SI.GLBL_CMPY_CD                  = DC.GLBL_CMPY_CD
+        AND SI.DS_CONTR_PK                   = DC.DS_CONTR_PK
+        AND DC.GLBL_CMPY_CD                  = DCD.GLBL_CMPY_CD
+        AND DC.DS_CONTR_PK                   = DCD.DS_CONTR_PK
+        AND DCD.GLBL_CMPY_CD                 = DCDT.GLBL_CMPY_CD
+        AND DCD.DS_CONTR_DTL_TP_CD           = DCDT.DS_CONTR_DTL_TP_CD
+        AND DCDT.MAIN_UNIT_LINE_FLG          = 'Y'
+        AND DCD.GLBL_CMPY_CD                 = BC.GLBL_CMPY_CD
+        AND DCD.MTR_BLLG_CYCLE_CD            = BC.BLLG_CYCLE_CD
+        AND DC.GLBL_CMPY_CD                  = DCC.GLBL_CMPY_CD
+        AND DC.DS_CONTR_CATG_CD              = DCC.DS_CONTR_CATG_CD
+        AND DC.GLBL_CMPY_CD                  = STCB.GLBL_CMPY_CD
+        AND DC.DS_ACCT_NUM                   = STCB.SELL_TO_CUST_CD
+        AND DCD.GLBL_CMPY_CD                 = SCM.GLBL_CMPY_CD
+        AND DCD.SVC_CONFIG_MSTR_PK           = SCM.SVC_CONFIG_MSTR_PK
+        AND SCM.GLBL_CMPY_CD                 = DM.GLBL_CMPY_CD
+        AND SCM.MDL_ID                       = DM.MDL_ID
+        AND SCM.GLBL_CMPY_CD                 = MN.T_GLBL_CMPY_CD
+        AND SCM.MDL_ID                       = MN.T_MDL_ID
+        AND DM.GLBL_CMPY_CD                  = SS.GLBL_CMPY_CD
+        AND DM.SVC_SEG_CD                    = SS.SVC_SEG_CD
+        AND SCM.GLBL_CMPY_CD                 = SMM.GLBL_CMPY_CD
+        AND SCM.SVC_MACH_MSTR_PK             = SMM.SVC_MACH_MSTR_PK
+        AND SMM.GLBL_CMPY_CD                 = STCL.GLBL_CMPY_CD
+        AND SMM.CUR_LOC_ACCT_NUM             = STCL.SELL_TO_CUST_CD
+        AND SCM.GLBL_CMPY_CD                 = DMSR.GLBL_CMPY_CD
+        AND SCM.MDL_ID                       = DMSR.MDL_ID
+        AND DMSR.GLBL_CMPY_CD                = M.GLBL_CMPY_CD(+)
+        AND DMSR.MDSE_CD                     = M.MDSE_CD(+)
+        AND DMSR.GLBL_CMPY_CD                = MO.GLBL_CMPY_CD(+)
+        AND DMSR.ORD_TAKE_MDSE_CD            = MO.MDSE_CD(+)
+        AND M.GLBL_CMPY_CD                 = IST.GLBL_CMPY_CD(+)
+        AND M.IMG_SPLY_TP_CD               = IST.IMG_SPLY_TP_CD(+)
+        AND MO.GLBL_CMPY_CD                = ISTO.GLBL_CMPY_CD(+)
+        AND MO.IMG_SPLY_TP_CD              = ISTO.IMG_SPLY_TP_CD(+)
+        AND M.GLBL_CMPY_CD                 = ISCT.GLBL_CMPY_CD(+)
+        AND M.IMG_SPLY_COLOR_TP_CD         = ISCT.IMG_SPLY_COLOR_TP_CD(+)
+        AND MO.GLBL_CMPY_CD                = ISCTO.GLBL_CMPY_CD(+)
+        AND MO.IMG_SPLY_COLOR_TP_CD        = ISCTO.IMG_SPLY_COLOR_TP_CD(+)
+        AND EXISTS
+            (
+                SELECT
+                     1
+                FROM
+                     SVC_INV_LINE  SIL
+                WHERE
+                    SIL.GLBL_CMPY_CD         = SI.GLBL_CMPY_CD
+                AND SIL.SVC_INV_NUM          = SI.SVC_INV_NUM
+                AND SIL.SVC_INV_CHRG_TP_CD   = #invChrgTpMC#
+                AND SIL.EZCANCELFLAG         = '0'
+            )
+        AND SI.SVC_INV_NUM                   = MRBS.SVC_INV_NUM(+)
+        AND SMM.SVC_MACH_MSTR_PK             = MRBS.SVC_MACH_MSTR_PK(+)
+        AND SI.SVC_INV_NUM                   = MRBE.SVC_INV_NUM(+)
+        AND SMM.SVC_MACH_MSTR_PK             = MRBE.SVC_MACH_MSTR_PK(+)
+        AND SI.SVC_INV_NUM                   = MRCS.SVC_INV_NUM(+)
+        AND SMM.SVC_MACH_MSTR_PK             = MRCS.SVC_MACH_MSTR_PK(+)
+        AND SI.SVC_INV_NUM                   = MRCE.SVC_INV_NUM(+)
+        AND SMM.SVC_MACH_MSTR_PK             = MRCE.SVC_MACH_MSTR_PK(+)
+        AND SI.SVC_INV_NUM                   = MRTS.SVC_INV_NUM(+)
+        AND SMM.SVC_MACH_MSTR_PK             = MRTS.SVC_MACH_MSTR_PK(+)
+        AND SI.SVC_INV_NUM                   = MRTE.SVC_INV_NUM(+)
+        AND SMM.SVC_MACH_MSTR_PK             = MRTE.SVC_MACH_MSTR_PK(+)
+        AND SI.SVC_INV_NUM                   = FST_INV.SVC_INV_NUM(+)
+        AND DCD.SVC_MACH_MSTR_PK             = FST_INV.SVC_MACH_MSTR_PK(+)
+        AND DCD.CONTR_EFF_FROM_DT            = FST_INV.BLLG_PER_FROM_DT(+)
+        AND SI.GLBL_CMPY_CD                  = COA.COA_CMPY_CD
+        AND SI.EZCANCELFLAG                  = '0'
+        AND RCCD.EZCANCELFLAG                = '0'
+        AND DC.EZCANCELFLAG                  = '0'
+        AND DCD.EZCANCELFLAG                 = '0'
+        AND DCDT.EZCANCELFLAG                = '0'
+        AND BC.EZCANCELFLAG                  = '0'
+        AND DCC.EZCANCELFLAG                 = '0'
+        AND STCB.EZCANCELFLAG                = '0'
+        AND SCM.EZCANCELFLAG                 = '0'
+        AND DM.EZCANCELFLAG                  = '0'
+        AND MN.EZCANCELFLAG                  = '0'
+        AND SS.EZCANCELFLAG                  = '0'
+        AND SMM.EZCANCELFLAG                 = '0'
+        AND STCL.EZCANCELFLAG                = '0'
+        AND DMSR.EZCANCELFLAG                = '0'
+        AND IST.EZCANCELFLAG(+)              = '0'
+        AND ISTO.EZCANCELFLAG(+)             = '0'
+        AND ISCT.EZCANCELFLAG(+)             = '0'
+        AND ISCTO.EZCANCELFLAG(+)            = '0'
+        AND M.EZCANCELFLAG(+)                = '0'
+        AND MO.EZCANCELFLAG(+)               = '0'
+        AND COA.EZCANCELFLAG                 = '0'
+    </statement>
+
+</sqlMap>

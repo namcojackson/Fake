@@ -1,0 +1,1105 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NFDL0030Query">
+
+    <!-- *********************************************************** -->
+    <!-- ********** Bean Definition ******************************** -->
+    <!-- *********************************************************** -->
+
+    <statement id="getArTrxBal" parameterClass="Map" resultClass="Map">
+        SELECT
+               TRX.AR_TRX_NUM                   AR_TRX_NUM
+              ,TRX.DEAL_RMNG_BAL_GRS_AMT        DEAL_RMNG_BAL_GRS_AMT
+              ,TRX.DEAL_APPLY_ADJ_RSVD_AMT      DEAL_APPLY_ADJ_RSVD_AMT
+              ,TRX.EZUPTIME                     EZUPTIME
+              ,TRX.EZUPTIMEZONE                 EZUPTIMEZONE
+              ,TRX.AR_TRX_BAL_PK                AR_TRX_BAL_PK
+              <!-- START 2018/06/15 [QC#26239, ADD] -->
+              ,TRX.AR_TRX_TP_CD                 AR_TRX_TP_CD
+              <!-- END   2018/06/15 [QC#26239, ADD] -->
+        FROM
+              AR_TRX_BAL TRX
+        WHERE
+              TRX.GLBL_CMPY_CD = #glblCmpyCd#
+        <isNotNull property="invNumList">
+        AND   TRX.AR_TRX_NUM IN (
+          <iterate property="invNumList" var="invNum[]" open="" close="" conjunction=",">
+              #invNum[]#
+          </iterate>
+        )
+        </isNotNull>
+        <isNotNull property="dsAcctNum">
+        AND   TRX.BILL_TO_CUST_ACCT_CD = #dsAcctNum#
+        </isNotNull>
+        <isNotNull property="arCashApplyStsCdList">
+        AND   TRX.AR_CASH_APPLY_STS_CD IN (
+          <iterate property="arCashApplyStsCdList" var="arCashApplyStsCd[]" open="" close="" conjunction=",">
+              #arCashApplyStsCd[]#
+          </iterate>
+        )
+        </isNotNull>
+        <!-- START 2018/06/15 [QC#26239, ADD] -->
+        <isNotNull property="arTrxTpCdList">
+        AND   TRX.AR_TRX_TP_CD IN (
+          <iterate property="arTrxTpCdList" var="arTrxTpCd[]" open="" close="" conjunction=",">
+              #arTrxTpCd[]#
+          </iterate>
+        )
+        </isNotNull>
+        <!-- END   2018/06/15 [QC#26239, ADD] -->
+    </statement>
+
+    <statement id="getCreditCardInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+                 DCC.CR_CARD_LAST_DIGIT_NUM    CR_CARD_LAST_DIGIT_NUM
+               , DCC.CR_CARD_EXPR_YR_MTH       CR_CARD_EXPR_YR_MTH
+               , DCC.CR_CARD_HLD_NM            CR_CARD_HLD_NM
+               , DCC.FIRST_LINE_ADDR           FIRST_LINE_ADDR
+               , DCC.SCD_LINE_ADDR             SCD_LINE_ADDR
+               , DCC.CTY_ADDR                  CTY_ADDR
+               , DCC.ST_CD                     ST_CD
+               , DCC.POST_CD                   POST_CD
+               , DCC.CTRY_CD                   CTRY_CD
+               , DCC.FIRST_LINE_ADDR
+                   || CASE WHEN TRIM(DCC.SCD_LINE_ADDR) IS NOT NULL THEN ', '   || TRIM(DCC.SCD_LINE_ADDR) END
+                   || TRIM(DCC.CTY_ADDR) || ', ' || TRIM(DCC.CTY_ADDR)   || ' ' || DCC.POST_CD
+                                               XX_ALL_LINE_ADDR
+               , DCC.CR_CARD_CUST_REF_NUM      CR_CARD_CUST_REF_NUM
+               , TP.CR_CARD_TP_NM              CR_CARD_TP_NM
+
+        FROM
+                DS_CR_CARD  DCC
+        <!--START 2016/06/14 T.Tsuchida [QC#9829,MOD] -->
+        <!--       ,CR_CARD_TRX CCT -->
+        <!--END 2016/06/14 T.Tsuchida [QC#9829,MOD] -->
+               ,CR_CARD_TP  TP
+        <!--START 2016/06/14 T.Tsuchida [QC#9829,MOD] -->
+        <!--WHERE   CCT.GLBL_CMPY_CD         = #glblCmpyCd# -->
+        <!--AND     CCT.FIRST_TRX_INFO_TXT   = #firstTrxInfoTxt# -->
+        <!--AND     CCT.SCD_TRX_INFO_TXT     = #scdTrxInfoTxt# -->
+        <!--AND     CCT.THIRD_TRX_INFO_TXT   = #thirdTrxInfoTxt# -->
+        <!--AND     DCC.GLBL_CMPY_CD         = CCT.GLBL_CMPY_CD -->
+        <!--AND     DCC.CR_CARD_CUST_REF_NUM = CCT.CR_CARD_CUST_REF_NUM -->
+        <!--END 2016/06/14 T.Tsuchida [QC#9829,MOD] -->
+        WHERE   DCC.GLBL_CMPY_CD         = #glblCmpyCd#
+        AND     DCC.DS_CR_CARD_PK        = #dsCrCardPk#
+        AND     DCC.EZCANCELFLAG         = '0'
+        AND     DCC.GLBL_CMPY_CD         = TP.GLBL_CMPY_CD (+)
+        AND     DCC.CR_CARD_TP_CD        = TP.CR_CARD_TP_CD (+)
+        AND     TP.EZCANCELFLAG (+)      = '0'
+        AND     ROWNUM                   &lt;= 1
+    </statement>
+
+    <!-- START 2018/05/23 [QC#24882, ADD] -->
+    <!-- START 2018/05/29 [QC#24882, MOD] -->
+    <statement id="getCltPsnCd" parameterClass="Map" resultClass="String">
+        SELECT 
+            CP.CLT_PSN_CD
+        FROM
+            AR_TRX_BAL             ARB
+           ,BILL_TO_CUST           BTC
+           ,SELL_TO_CUST           STC
+           ,CLT_PTFO               CP
+        WHERE
+            ARB.GLBL_CMPY_CD         = #glblCmpyCd#
+        AND ARB.AR_TRX_NUM           = #arTrxNum#
+        AND ARB.EZCANCELFLAG         = '0'
+        AND ARB.GLBL_CMPY_CD         = BTC.GLBL_CMPY_CD(+)
+        AND ARB.BILL_TO_CUST_CD      = BTC.BILL_TO_CUST_CD(+)
+        AND BTC.EZCANCELFLAG(+)      = '0'
+        AND ARB.GLBL_CMPY_CD         = STC.GLBL_CMPY_CD(+)
+        AND ARB.BILL_TO_CUST_ACCT_CD = STC.SELL_TO_CUST_CD(+)
+        AND STC.EZCANCELFLAG(+)      = '0'
+        AND CP.GLBL_CMPY_CD(+)       = 'ADB'
+        AND CP.EZCANCELFLAG(+)       = '0'
+        <!-- START 2019/07/29 [QC#52112, MOD] -->
+        <!-- AND CP.CLT_PTFO_PK(+)        = CASE WHEN BTC.CLT_PTFO_PK IS NULL THEN STC.CLT_PTFO_PK ELSE BTC.CLT_PTFO_PK END -->
+        AND CP.CLT_PTFO_PK(+)        = STC.CLT_PTFO_PK
+        <!-- END   2019/07/29 [QC#52112, MOD] -->
+    </statement>
+    <!-- END   2018/05/29 [QC#24882, MOD] -->
+
+    <statement id="getCltPsnCdOnAcct" parameterClass="Map" resultClass="String">
+        SELECT 
+            CP.CLT_PSN_CD
+        FROM
+            SELL_TO_CUST           STC
+           ,CLT_PTFO               CP
+        WHERE
+            STC.GLBL_CMPY_CD    = #glblCmpyCd#
+        AND STC.SELL_TO_CUST_CD = #sellToCustCd#
+        AND STC.EZCANCELFLAG    = '0'
+        AND CP.GLBL_CMPY_CD(+)  = 'ADB'
+        AND CP.EZCANCELFLAG(+)  = '0'
+        AND CP.CLT_PTFO_PK(+)   = STC.CLT_PTFO_PK
+    </statement>
+
+    <statement id="getCtacPsnMailAddr" parameterClass="Map" resultClass="String">
+        SELECT
+               NVL2(CTAC_PSN_PK_BC, DS_CTAC_PNT_VAL_TXT_BC, DS_CTAC_PNT_VAL_TXT_AC) DS_CTAC_PNT_VAL_TXT
+        FROM
+               AR_TRX_BAL    TRX
+              ,(
+                SELECT
+                     BC.BILL_TO_CUST_CD
+                    ,BC.CTAC_PSN_PK AS CTAC_PSN_PK_BC
+                    ,BC.CTAC_PSN_FIRST_NM AS CTAC_PSN_FIRST_NM_BC
+                    ,BC.CTAC_PSN_MID_NM AS CTAC_PSN_MID_NM_BC
+                    ,BC.CTAC_PSN_LAST_NM AS CTAC_PSN_LAST_NM_BC
+                    ,BC.DS_CTAC_PNT_VAL_TXT AS DS_CTAC_PNT_VAL_TXT_BC
+                FROM
+                    (
+                        SELECT
+                             B.BILL_TO_CUST_CD
+                            ,E.CTAC_PSN_PK
+                            ,E.CTAC_PSN_FIRST_NM
+                            ,E.CTAC_PSN_MID_NM
+                            ,E.CTAC_PSN_LAST_NM
+                            ,G.DS_CTAC_PNT_VAL_TXT
+                            ,ROW_NUMBER() OVER(PARTITION BY B.BILL_TO_CUST_CD, C.LOC_NUM ORDER BY C.DS_PRIM_LOC_FLG DESC, E.CTAC_PSN_PK ASC) RANK_SORT
+                        FROM
+                             BILL_TO_CUST       B
+                            ,DS_CTAC_PSN_RELN   C
+                            ,CTAC_PSN           E
+                            ,DS_CTAC_PNT        G
+                        WHERE
+                                B.GLBL_CMPY_CD             = 'ADB'
+                            AND B.EZCANCELFLAG             = '0'
+                            AND C.GLBL_CMPY_CD         (+) = B.GLBL_CMPY_CD
+                            AND C.LOC_NUM              (+) = B.LOC_NUM
+                            AND C.CTAC_TP_CD           (+) = 'CR_CLT'
+                            AND C.EZCANCELFLAG         (+) = '0'
+                            AND C.GLBL_CMPY_CD             = E.GLBL_CMPY_CD 
+                            AND C.CTAC_PSN_PK              = E.CTAC_PSN_PK
+                            AND E.EZCANCELFLAG             = '0'
+                            AND E.CTAC_PSN_ACTV_FLG        = 'Y'
+                            AND E.GLBL_CMPY_CD             = G.GLBL_CMPY_CD
+                            AND E.CTAC_PSN_PK              = G.CTAC_PSN_PK
+                            AND G.DS_CTAC_PNT_TP_CD        = '04'
+                            AND G.DS_CTAC_PNT_ACTV_FLG     = 'Y'
+                            AND G.EZCANCELFLAG             = '0'
+                    ) BC
+                WHERE BC.RANK_SORT = 1
+              ) BCT
+             ,(
+                SELECT
+                     AC.SELL_TO_CUST_CD
+                    ,AC.CTAC_PSN_PK AS CTAC_PSN_PK_AC
+                    ,AC.CTAC_PSN_FIRST_NM AS CTAC_PSN_FIRST_NM_AC
+                    ,AC.CTAC_PSN_MID_NM AS CTAC_PSN_MID_NM_AC
+                    ,AC.CTAC_PSN_LAST_NM AS CTAC_PSN_LAST_NM_AC
+                    ,AC.DS_CTAC_PNT_VAL_TXT AS DS_CTAC_PNT_VAL_TXT_AC
+                FROM
+                    (
+                        SELECT
+                             B.SELL_TO_CUST_CD
+                            ,E.CTAC_PSN_PK
+                            ,E.CTAC_PSN_FIRST_NM
+                            ,E.CTAC_PSN_MID_NM
+                            ,E.CTAC_PSN_LAST_NM
+                            ,G.DS_CTAC_PNT_VAL_TXT
+                            ,ROW_NUMBER() OVER(PARTITION BY B.SELL_TO_CUST_CD, C.DS_ACCT_NUM ORDER BY C.DS_PRIM_LOC_FLG DESC, E.CTAC_PSN_PK ASC) RANK_SORT
+                        FROM
+                             SELL_TO_CUST       B
+                            ,DS_CTAC_PSN_RELN   C
+                            ,CTAC_PSN           E
+                            ,DS_CTAC_PNT        G
+                        WHERE
+                                B.GLBL_CMPY_CD             = 'ADB'
+                            AND B.EZCANCELFLAG             = '0'
+                            AND C.GLBL_CMPY_CD         (+) = B.GLBL_CMPY_CD
+                            AND C.DS_ACCT_NUM          (+) = B.SELL_TO_CUST_CD
+                            AND C.CTAC_TP_CD           (+) = 'CR_CLT'
+                            AND C.EZCANCELFLAG         (+) = '0'
+                            AND C.GLBL_CMPY_CD             = E.GLBL_CMPY_CD
+                            AND C.CTAC_PSN_PK              = E.CTAC_PSN_PK
+                            AND E.EZCANCELFLAG             = '0'
+                            AND E.CTAC_PSN_ACTV_FLG        = 'Y'
+                            AND E.GLBL_CMPY_CD             = G.GLBL_CMPY_CD
+                            AND E.CTAC_PSN_PK              = G.CTAC_PSN_PK
+                            AND G.DS_CTAC_PNT_TP_CD        = '04'
+                            AND G.DS_CTAC_PNT_ACTV_FLG     = 'Y'
+                            AND G.EZCANCELFLAG             = '0'
+                    ) AC
+                WHERE AC.RANK_SORT = 1
+             ) SCT
+        WHERE
+              TRX.GLBL_CMPY_CD = #glblCmpyCd#
+        AND   TRX.AR_TRX_NUM   = #arTrxNum#
+        AND   TRX.EZCANCELFLAG = '0'
+        AND   TRX.BILL_TO_CUST_CD = BCT.BILL_TO_CUST_CD(+)
+        AND   TRX.BILL_TO_CUST_ACCT_CD = SCT.SELL_TO_CUST_CD(+)
+    </statement>
+
+    <statement id="getCtacPsnMailAddrOnAcct" parameterClass="Map" resultClass="String">
+        SELECT
+               DS_CTAC_PNT_VAL_TXT_AC DS_CTAC_PNT_VAL_TXT
+        FROM
+               SELL_TO_CUST    STC
+             ,(
+                SELECT
+                     AC.SELL_TO_CUST_CD
+                    ,AC.CTAC_PSN_PK AS CTAC_PSN_PK_AC
+                    ,AC.CTAC_PSN_FIRST_NM AS CTAC_PSN_FIRST_NM_AC
+                    ,AC.CTAC_PSN_MID_NM AS CTAC_PSN_MID_NM_AC
+                    ,AC.CTAC_PSN_LAST_NM AS CTAC_PSN_LAST_NM_AC
+                    ,AC.DS_CTAC_PNT_VAL_TXT AS DS_CTAC_PNT_VAL_TXT_AC
+                FROM
+                    (
+                        SELECT
+                             B.SELL_TO_CUST_CD
+                            ,E.CTAC_PSN_PK
+                            ,E.CTAC_PSN_FIRST_NM
+                            ,E.CTAC_PSN_MID_NM
+                            ,E.CTAC_PSN_LAST_NM
+                            ,G.DS_CTAC_PNT_VAL_TXT
+                            ,ROW_NUMBER() OVER(PARTITION BY B.SELL_TO_CUST_CD, C.DS_ACCT_NUM ORDER BY C.DS_PRIM_LOC_FLG DESC, E.CTAC_PSN_PK ASC) RANK_SORT
+                        FROM
+                             SELL_TO_CUST       B
+                            ,DS_CTAC_PSN_RELN   C
+                            ,CTAC_PSN           E
+                            ,DS_CTAC_PNT        G
+                        WHERE
+                                B.GLBL_CMPY_CD             = 'ADB'
+                            AND B.EZCANCELFLAG             = '0'
+                            AND C.GLBL_CMPY_CD         (+) = B.GLBL_CMPY_CD
+                            AND C.DS_ACCT_NUM          (+) = B.SELL_TO_CUST_CD
+                            AND C.CTAC_TP_CD           (+) = 'CR_CLT'
+                            AND C.EZCANCELFLAG         (+) = '0'
+                            AND C.GLBL_CMPY_CD             = E.GLBL_CMPY_CD
+                            AND C.CTAC_PSN_PK              = E.CTAC_PSN_PK
+                            AND E.EZCANCELFLAG             = '0'
+                            AND E.CTAC_PSN_ACTV_FLG        = 'Y'
+                            AND E.GLBL_CMPY_CD             = G.GLBL_CMPY_CD
+                            AND E.CTAC_PSN_PK              = G.CTAC_PSN_PK
+                            AND G.DS_CTAC_PNT_TP_CD        = '04'
+                            AND G.DS_CTAC_PNT_ACTV_FLG     = 'Y'
+                            AND G.EZCANCELFLAG             = '0'
+                    ) AC
+                WHERE AC.RANK_SORT = 1
+             ) SCT
+        WHERE
+              STC.GLBL_CMPY_CD    = #glblCmpyCd#
+        AND   STC.SELL_TO_CUST_CD = #sellToCustCd#
+        AND   STC.SELL_TO_CUST_CD = SCT.SELL_TO_CUST_CD(+)
+        AND   STC.EZCANCELFLAG    = '0'
+    </statement>
+
+    <statement id="getCltInfoMap" parameterClass="Map" resultClass="Map">
+        SELECT 
+            CP.CLT_PSN_CD
+           ,PSN.PSN_FIRST_NM
+           ,PSN.PSN_MID_NM
+           ,PSN.PSN_LAST_NM
+           ,PSN.HR_TTL_NM
+           ,PSN.EML_ADDR
+           ,PSN.FAX_NUM
+           ,PSN.WORK_TEL_NUM
+           ,PSN.FIRST_LINE_ADDR
+           ,PSN.SCD_LINE_ADDR
+           ,PSN.THIRD_LINE_ADDR
+           ,PSN.FRTH_LINE_ADDR
+           ,PSN.CTY_ADDR
+           ,PSN.PROV_NM
+           ,PSN.ST_CD
+           ,PSN.POST_CD
+        FROM
+            AR_TRX_BAL      ARB
+           ,BILL_TO_CUST    BTC
+           ,SELL_TO_CUST    STC
+           ,CLT_PTFO        CP
+           ,S21_PSN         PSN
+        WHERE
+            ARB.GLBL_CMPY_CD            = #glblCmpyCd#
+        AND ARB.AR_TRX_NUM              = #arTrxNum#
+        AND ARB.EZCANCELFLAG            = '0'
+        AND ARB.GLBL_CMPY_CD            = BTC.GLBL_CMPY_CD(+)
+        AND ARB.BILL_TO_CUST_CD         = BTC.BILL_TO_CUST_CD(+)
+        AND BTC.EZCANCELFLAG(+)         = '0'
+        AND ARB.GLBL_CMPY_CD            = STC.GLBL_CMPY_CD
+        AND ARB.BILL_TO_CUST_ACCT_CD    = STC.SELL_TO_CUST_CD
+        AND STC.EZCANCELFLAG            = '0'
+        AND CP.GLBL_CMPY_CD(+)          = #glblCmpyCd#
+        AND CP.EZCANCELFLAG(+)          = '0'
+        <!-- START 2019/07/29 [QC#52112, MOD] -->
+        <!-- AND CP.CLT_PTFO_PK(+)           = CASE WHEN BTC.CLT_PTFO_PK IS NULL THEN STC.CLT_PTFO_PK ELSE BTC.CLT_PTFO_PK END -->
+        AND CP.CLT_PTFO_PK(+)           = STC.CLT_PTFO_PK
+        <!-- END   2019/07/29 [QC#52112, MOD] -->
+        AND CP.GLBL_CMPY_CD             = PSN.GLBL_CMPY_CD(+)
+        <!-- START 2022/09/01 S.Naya [QC#58101,MOD] -->
+        <!-- AND CP.CLT_PSN_CD               = PSN.PSN_CD(+) -->
+        AND PSN.PSN_CD(+)               = #userId#
+        <!-- END   2022/09/01 S.Naya [QC#58101,MOD] -->
+        AND PSN.EZCANCELFLAG(+)         = '0'
+    </statement>
+
+    <statement id="getConfLtrData" parameterClass="Map" resultClass="Map">
+        SELECT
+               RCP.RCPT_CHK_NUM
+              ,RCP.RCPT_NUM
+              <!-- START 2023/04/25 R.Takau [QC#55998,ADD] -->
+              ,RCP.DEAL_RCPT_AMT
+              <!-- END 2023/04/25 R.Takau [QC#55998,ADD] -->
+              ,RCD.DEAL_RCPT_DTL_AMT
+              ,TRX.AR_TRX_NUM
+              ,TRX.AR_CUST_REF_NUM
+              ,TRX.GRP_INV_NUM
+              ,TRX.BILL_TO_CUST_CD
+              <!-- START 2024/03/01 M.Okamura [QC63456,MOD] -->
+              <!-- ,TRX.BILL_TO_CUST_ACCT_CD -->
+              ,RCP.PAYER_CUST_CD AS BILL_TO_CUST_ACCT_CD
+              <!-- END 2024/03/01 M.Okamura [QC63456,MOD] -->
+              ,NVL2(CTAC_PSN_PK_BC, CTAC_PSN_FIRST_NM_BC, CTAC_PSN_FIRST_NM_AC) CTAC_PSN_FIRST_NM
+              ,NVL2(CTAC_PSN_PK_BC, CTAC_PSN_MID_NM_BC, CTAC_PSN_MID_NM_AC)     CTAC_PSN_MID_NM
+              ,NVL2(CTAC_PSN_PK_BC, CTAC_PSN_LAST_NM_BC, CTAC_PSN_LAST_NM_AC)   CTAC_PSN_LAST_NM
+              ,STC.DS_ACCT_NM
+              ,CCT.CR_CARD_TP_DESC_TXT
+              ,CCY.CCY_SGN_TXT
+        FROM
+               AR_RCPT       RCP
+              ,AR_RCPT_DTL   RCD
+              ,AR_TRX_BAL    TRX
+              ,SELL_TO_CUST  STC
+              ,CCY           CCY
+              ,DS_CR_CARD    DCC
+              ,CR_CARD_TP    CCT
+              ,(
+                SELECT
+                     BC.BILL_TO_CUST_CD
+                    ,BC.CTAC_PSN_PK AS CTAC_PSN_PK_BC
+                    ,BC.CTAC_PSN_FIRST_NM AS CTAC_PSN_FIRST_NM_BC
+                    ,BC.CTAC_PSN_MID_NM AS CTAC_PSN_MID_NM_BC
+                    ,BC.CTAC_PSN_LAST_NM AS CTAC_PSN_LAST_NM_BC
+                    ,BC.DS_CTAC_PNT_VAL_TXT AS DS_CTAC_PNT_VAL_TXT_BC
+                FROM
+                    (
+                        SELECT
+                             B.BILL_TO_CUST_CD
+                            ,E.CTAC_PSN_PK
+                            ,E.CTAC_PSN_FIRST_NM
+                            ,E.CTAC_PSN_MID_NM
+                            ,E.CTAC_PSN_LAST_NM
+                            ,G.DS_CTAC_PNT_VAL_TXT
+                            ,ROW_NUMBER() OVER(PARTITION BY B.BILL_TO_CUST_CD, C.LOC_NUM ORDER BY C.DS_PRIM_LOC_FLG DESC, E.CTAC_PSN_PK ASC) RANK_SORT
+                        FROM
+                             BILL_TO_CUST       B
+                            ,DS_CTAC_PSN_RELN   C
+                            ,CTAC_PSN           E
+                            ,DS_CTAC_PNT        G
+                        WHERE
+                                B.GLBL_CMPY_CD             = #glblCmpyCd#
+                            AND B.EZCANCELFLAG             = '0'
+                            AND C.GLBL_CMPY_CD         (+) = B.GLBL_CMPY_CD
+                            AND C.LOC_NUM              (+) = B.LOC_NUM
+                            AND C.CTAC_TP_CD           (+) = #ctacTpCd#
+                            AND C.EZCANCELFLAG         (+) = '0'
+                            AND C.GLBL_CMPY_CD             = E.GLBL_CMPY_CD 
+                            AND C.CTAC_PSN_PK              = E.CTAC_PSN_PK
+                            AND E.EZCANCELFLAG             = '0'
+                            AND E.CTAC_PSN_ACTV_FLG        = #flgY#
+                            AND E.GLBL_CMPY_CD             = G.GLBL_CMPY_CD (+)
+                            AND E.CTAC_PSN_PK              = G.CTAC_PSN_PK (+)
+                            AND G.DS_CTAC_PNT_TP_CD    (+) = #dsCtacPntTpCd#
+                            AND G.DS_CTAC_PNT_ACTV_FLG (+) = #flgY#
+                            AND G.EZCANCELFLAG         (+) = '0'
+                    ) BC
+                WHERE BC.RANK_SORT = 1
+              ) BCT
+             ,(
+                SELECT
+                     AC.SELL_TO_CUST_CD
+                    ,AC.CTAC_PSN_PK AS CTAC_PSN_PK_AC
+                    ,AC.CTAC_PSN_FIRST_NM AS CTAC_PSN_FIRST_NM_AC
+                    ,AC.CTAC_PSN_MID_NM AS CTAC_PSN_MID_NM_AC
+                    ,AC.CTAC_PSN_LAST_NM AS CTAC_PSN_LAST_NM_AC
+                    ,AC.DS_CTAC_PNT_VAL_TXT AS DS_CTAC_PNT_VAL_TXT_AC
+                FROM
+                    (
+                        SELECT
+                             B.SELL_TO_CUST_CD
+                            ,E.CTAC_PSN_PK
+                            ,E.CTAC_PSN_FIRST_NM
+                            ,E.CTAC_PSN_MID_NM
+                            ,E.CTAC_PSN_LAST_NM
+                            ,G.DS_CTAC_PNT_VAL_TXT
+                            ,ROW_NUMBER() OVER(PARTITION BY B.SELL_TO_CUST_CD, C.DS_ACCT_NUM ORDER BY C.DS_PRIM_LOC_FLG DESC, E.CTAC_PSN_PK ASC) RANK_SORT
+                        FROM
+                             SELL_TO_CUST       B
+                            ,DS_CTAC_PSN_RELN   C
+                            ,CTAC_PSN           E
+                            ,DS_CTAC_PNT        G
+                        WHERE
+                                B.GLBL_CMPY_CD             = #glblCmpyCd#
+                            AND B.EZCANCELFLAG             = '0'
+                            AND C.GLBL_CMPY_CD         (+) = B.GLBL_CMPY_CD
+                            AND C.DS_ACCT_NUM          (+) = B.SELL_TO_CUST_CD
+                            AND C.CTAC_TP_CD           (+) = #ctacTpCd#
+                            AND C.EZCANCELFLAG         (+) = '0'
+                            AND C.GLBL_CMPY_CD             = E.GLBL_CMPY_CD
+                            AND C.CTAC_PSN_PK              = E.CTAC_PSN_PK
+                            AND E.EZCANCELFLAG             = '0'
+                            AND E.CTAC_PSN_ACTV_FLG        = #flgY#
+                            AND E.GLBL_CMPY_CD             = G.GLBL_CMPY_CD (+)
+                            AND E.CTAC_PSN_PK              = G.CTAC_PSN_PK (+)
+                            AND G.DS_CTAC_PNT_TP_CD    (+) = #dsCtacPntTpCd#
+                            AND G.DS_CTAC_PNT_ACTV_FLG (+) = #flgY#
+                            AND G.EZCANCELFLAG         (+) = '0'
+                    ) AC
+                WHERE AC.RANK_SORT = 1
+             ) SCT
+        WHERE
+              RCP.GLBL_CMPY_CD             = #glblCmpyCd#
+        AND   RCP.RCPT_NUM                 = #rcptNum#
+        AND   RCP.EZCANCELFLAG             = '0'
+        AND   RCP.GLBL_CMPY_CD             = RCD.GLBL_CMPY_CD
+        AND   RCP.RCPT_NUM                 = RCD.RCPT_NUM
+        AND   RCD.EZCANCELFLAG             = '0'
+        <!-- Start 2023/3/10 S.Nakatani [QC#55645, MOD]-->
+--        AND   RCD.GLBL_CMPY_CD             = TRX.GLBL_CMPY_CD
+--        AND   RCD.INV_NUM                  = TRX.AR_TRX_NUM
+--        AND   TRX.AR_TRX_NUM IN (
+--          <iterate property="arTrxNumList" var="arTrxNum[]" open="" close="" conjunction=",">
+--              #arTrxNum[]#
+--          </iterate>
+--        )
+--        AND   TRX.EZCANCELFLAG             = '0'
+        AND   RCD.GLBL_CMPY_CD             = TRX.GLBL_CMPY_CD(+)
+        AND   RCD.INV_NUM                  = TRX.AR_TRX_NUM(+)
+        AND   TRX.EZCANCELFLAG(+)          = '0'
+        <!-- End 2023/3/10 S.Nakatani [QC#55645, MOD]-->
+        AND   RCP.GLBL_CMPY_CD             = CCY.GLBL_CMPY_CD
+        AND   RCP.DEAL_CCY_CD              = CCY.CCY_CD
+        AND   CCY.EZCANCELFLAG             = '0'
+        <!-- START 2024/03/01 M.Okamura [QC63456,MOD] -->
+        <!-- AND   TRX.GLBL_CMPY_CD             = STC.GLBL_CMPY_CD(+) -->
+        <!-- AND   TRX.BILL_TO_CUST_ACCT_CD     = STC.SELL_TO_CUST_CD(+) -->
+        AND   RCP.GLBL_CMPY_CD             = STC.GLBL_CMPY_CD(+)
+        AND   RCP.PAYER_CUST_CD            = STC.SELL_TO_CUST_CD(+)
+        <!-- END 2024/03/01 M.Okamura [QC63456,MOD] -->
+        AND   STC.EZCANCELFLAG(+)          = '0'
+        AND   TRX.BILL_TO_CUST_CD          = BCT.BILL_TO_CUST_CD(+)
+        AND   TRX.BILL_TO_CUST_ACCT_CD     = SCT.SELL_TO_CUST_CD(+)
+        AND   DCC.GLBL_CMPY_CD(+)          = #glblCmpyCd#
+        AND   DCC.CR_CARD_CUST_REF_NUM(+)  = #crCardCustRefNum#
+        AND   DCC.EZCANCELFLAG(+)          = '0'
+        AND   DCC.GLBL_CMPY_CD             = CCT.GLBL_CMPY_CD(+)
+        AND   DCC.CR_CARD_TP_CD            = CCT.CR_CARD_TP_CD(+)
+        AND   CCT.EZCANCELFLAG(+)          = '0'
+        ORDER BY
+            TRX.BILL_TO_CUST_CD ASC
+           ,TRX.GRP_INV_NUM ASC NULLS LAST
+           ,TRX.AR_CUST_REF_NUM
+    </statement>
+
+    <statement id="getConfLtrDataOnAcct" parameterClass="Map" resultClass="Map">
+        SELECT
+               RCP.RCPT_CHK_NUM
+              ,RCP.RCPT_NUM
+              <!-- START 2023/04/25 R.Takau [QC#55998,ADD] -->
+              ,RCP.DEAL_RCPT_AMT
+              <!-- END 2023/04/25 R.Takau [QC#55998,ADD] -->   
+              ,RCD.DEAL_RCPT_DTL_AMT
+              ,NULL AS AR_TRX_NUM
+              ,NULL AS AR_CUST_REF_NUM
+              ,NULL AS GRP_INV_NUM
+              ,NULL AS BILL_TO_CUST_CD
+              ,RCP.PAYER_CUST_CD    BILL_TO_CUST_ACCT_CD
+              ,CTAC_PSN_FIRST_NM_AC CTAC_PSN_FIRST_NM
+              ,CTAC_PSN_MID_NM_AC   CTAC_PSN_MID_NM
+              ,CTAC_PSN_LAST_NM_AC  CTAC_PSN_LAST_NM
+              ,STC.DS_ACCT_NM
+              ,CCT.CR_CARD_TP_DESC_TXT
+              ,CCY.CCY_SGN_TXT
+        FROM
+               AR_RCPT       RCP
+              ,AR_RCPT_DTL   RCD
+              ,SELL_TO_CUST  STC
+              ,CCY           CCY
+              ,DS_CR_CARD    DCC
+              ,CR_CARD_TP    CCT
+             ,(
+                SELECT
+                     AC.SELL_TO_CUST_CD
+                    ,AC.CTAC_PSN_PK AS CTAC_PSN_PK_AC
+                    ,AC.CTAC_PSN_FIRST_NM AS CTAC_PSN_FIRST_NM_AC
+                    ,AC.CTAC_PSN_MID_NM AS CTAC_PSN_MID_NM_AC
+                    ,AC.CTAC_PSN_LAST_NM AS CTAC_PSN_LAST_NM_AC
+                    ,AC.DS_CTAC_PNT_VAL_TXT AS DS_CTAC_PNT_VAL_TXT_AC
+                FROM
+                    (
+                        SELECT
+                             B.SELL_TO_CUST_CD
+                            ,E.CTAC_PSN_PK
+                            ,E.CTAC_PSN_FIRST_NM
+                            ,E.CTAC_PSN_MID_NM
+                            ,E.CTAC_PSN_LAST_NM
+                            ,G.DS_CTAC_PNT_VAL_TXT
+                            ,ROW_NUMBER() OVER(PARTITION BY B.SELL_TO_CUST_CD, C.DS_ACCT_NUM ORDER BY C.DS_PRIM_LOC_FLG DESC, E.CTAC_PSN_PK ASC) RANK_SORT
+                        FROM
+                             SELL_TO_CUST       B
+                            ,DS_CTAC_PSN_RELN   C
+                            ,CTAC_PSN           E
+                            ,DS_CTAC_PNT        G
+                        WHERE
+                                B.GLBL_CMPY_CD             = #glblCmpyCd#
+                            AND B.EZCANCELFLAG             = '0'
+                            AND C.GLBL_CMPY_CD         (+) = B.GLBL_CMPY_CD
+                            AND C.DS_ACCT_NUM          (+) = B.SELL_TO_CUST_CD
+                            AND C.CTAC_TP_CD           (+) = #ctacTpCd#
+                            AND C.EZCANCELFLAG         (+) = '0'
+                            AND C.GLBL_CMPY_CD             = E.GLBL_CMPY_CD
+                            AND C.CTAC_PSN_PK              = E.CTAC_PSN_PK
+                            AND E.EZCANCELFLAG             = '0'
+                            AND E.CTAC_PSN_ACTV_FLG        = #flgY#
+                            AND E.GLBL_CMPY_CD             = G.GLBL_CMPY_CD (+)
+                            AND E.CTAC_PSN_PK              = G.CTAC_PSN_PK (+)
+                            AND G.DS_CTAC_PNT_TP_CD    (+) = #dsCtacPntTpCd#
+                            AND G.DS_CTAC_PNT_ACTV_FLG (+) = #flgY#
+                            AND G.EZCANCELFLAG         (+) = '0'
+                    ) AC
+                WHERE AC.RANK_SORT = 1
+             ) SCT
+        WHERE
+              RCP.GLBL_CMPY_CD             = #glblCmpyCd#
+        AND   RCP.RCPT_NUM                 = #rcptNum#
+        AND   RCP.EZCANCELFLAG             = '0'
+        AND   RCP.GLBL_CMPY_CD             = RCD.GLBL_CMPY_CD
+        AND   RCP.RCPT_NUM                 = RCD.RCPT_NUM
+        AND   RCD.EZCANCELFLAG             = '0'
+        AND   RCP.GLBL_CMPY_CD             = CCY.GLBL_CMPY_CD
+        AND   RCP.DEAL_CCY_CD              = CCY.CCY_CD
+        AND   CCY.EZCANCELFLAG             = '0'
+        AND   RCP.GLBL_CMPY_CD             = STC.GLBL_CMPY_CD(+)
+        AND   RCP.PAYER_CUST_CD            = STC.SELL_TO_CUST_CD(+)
+        AND   STC.EZCANCELFLAG(+)          = '0'
+        AND   RCP.PAYER_CUST_CD            = SCT.SELL_TO_CUST_CD(+)
+        AND   DCC.GLBL_CMPY_CD(+)          = #glblCmpyCd#
+        AND   DCC.CR_CARD_CUST_REF_NUM(+)  = #crCardCustRefNum#
+        AND   DCC.EZCANCELFLAG(+)          = '0'
+        AND   DCC.GLBL_CMPY_CD             = CCT.GLBL_CMPY_CD(+)
+        AND   DCC.CR_CARD_TP_CD            = CCT.CR_CARD_TP_CD(+)
+        AND   CCT.EZCANCELFLAG(+)          = '0'
+    </statement>
+
+    <statement id="getConfLtrWrk" parameterClass="Map" resultClass="Map">
+        SELECT
+             WRK.CLT_PMT_CONF_LTR_RQST_NUM
+            ,WRK.CTAC_PSN_FIRST_NM
+            ,WRK.CTAC_PSN_LAST_NM
+            ,NVL2(BCT.CTAC_PSN_PK_BC, BCT.DS_CTAC_PNT_VAL_TXT_BC, SCT.DS_CTAC_PNT_VAL_TXT_AC) CTAC_PSN_EML_ADDR
+            ,WRK.CR_CARD_TP_DESC_TXT
+            ,WRK.CLTR_PSN_FIRST_NM
+            ,WRK.CLTR_PSN_MID_NM
+            ,WRK.CLTR_PSN_LAST_NM
+            ,WRK.CLTR_HR_TTL_NM
+            ,WRK.CLTR_CMPY_NM
+            ,WRK.CLTR_FIRST_LINE_ADDR
+            ,WRK.CLTR_SCD_LINE_ADDR
+            ,WRK.CLTR_THIRD_LINE_ADDR
+            ,WRK.CLTR_FRTH_LINE_ADDR
+            ,WRK.CLTR_CTY_ADDR
+            ,WRK.CLTR_PROV_NM
+            ,WRK.CLTR_ST_CD
+            ,WRK.CLTR_POST_CD
+            ,WRK.CLTR_HDR_CMPY_URL
+            ,WRK.CLTR_TEL_NUM
+            ,WRK.CLTR_FAX_NUM
+            ,WRK.DTL_BILL_TO_CUST_CD
+            <!-- START 2018/05/29 [QC#24882, MOD] -->
+            ,WRK.DTL_BILL_TO_CUST_ACCT_CD
+            <!-- END   2018/05/29 [QC#24882, MOD] -->
+            ,WRK.DTL_AR_TRX_NUM
+        FROM
+               CLT_PMT_CONF_LTR_WRK    WRK
+              ,(
+                SELECT
+                     BC.BILL_TO_CUST_CD
+                    ,BC.CTAC_PSN_PK AS CTAC_PSN_PK_BC
+                    ,BC.CTAC_PSN_FIRST_NM AS CTAC_PSN_FIRST_NM_BC
+                    ,BC.CTAC_PSN_MID_NM AS CTAC_PSN_MID_NM_BC
+                    ,BC.CTAC_PSN_LAST_NM AS CTAC_PSN_LAST_NM_BC
+                    ,BC.DS_CTAC_PNT_VAL_TXT AS DS_CTAC_PNT_VAL_TXT_BC
+                FROM
+                    (
+                        SELECT
+                             B.BILL_TO_CUST_CD
+                            ,E.CTAC_PSN_PK
+                            ,E.CTAC_PSN_FIRST_NM
+                            ,E.CTAC_PSN_MID_NM
+                            ,E.CTAC_PSN_LAST_NM
+                            ,G.DS_CTAC_PNT_VAL_TXT
+                            ,ROW_NUMBER() OVER(PARTITION BY B.BILL_TO_CUST_CD, C.LOC_NUM ORDER BY C.DS_PRIM_LOC_FLG DESC, E.CTAC_PSN_PK ASC) RANK_SORT
+                        FROM
+                             BILL_TO_CUST       B
+                            ,DS_CTAC_PSN_RELN   C
+                            ,CTAC_PSN           E
+                            ,DS_CTAC_PNT        G
+                        WHERE
+                                B.GLBL_CMPY_CD             = #glblCmpyCd#
+                            AND B.EZCANCELFLAG             = '0'
+                            AND C.GLBL_CMPY_CD         (+) = B.GLBL_CMPY_CD
+                            AND C.LOC_NUM              (+) = B.LOC_NUM
+                            AND C.CTAC_TP_CD           (+) = #ctacTpCd#
+                            AND C.EZCANCELFLAG         (+) = '0'
+                            AND C.GLBL_CMPY_CD             = E.GLBL_CMPY_CD 
+                            AND C.CTAC_PSN_PK              = E.CTAC_PSN_PK
+                            AND E.EZCANCELFLAG             = '0'
+                            AND E.CTAC_PSN_ACTV_FLG        = #flgY#
+                            AND E.GLBL_CMPY_CD             = G.GLBL_CMPY_CD (+)
+                            AND E.CTAC_PSN_PK              = G.CTAC_PSN_PK (+)
+                            AND G.DS_CTAC_PNT_TP_CD    (+) = #dsCtacPntTpCd#
+                            AND G.DS_CTAC_PNT_ACTV_FLG (+) = #flgY#
+                            AND G.EZCANCELFLAG         (+) = '0'
+                    ) BC
+                WHERE BC.RANK_SORT = 1
+              ) BCT
+             ,(
+                SELECT
+                     AC.SELL_TO_CUST_CD
+                    ,AC.CTAC_PSN_PK AS CTAC_PSN_PK_AC
+                    ,AC.CTAC_PSN_FIRST_NM AS CTAC_PSN_FIRST_NM_AC
+                    ,AC.CTAC_PSN_MID_NM AS CTAC_PSN_MID_NM_AC
+                    ,AC.CTAC_PSN_LAST_NM AS CTAC_PSN_LAST_NM_AC
+                    ,AC.DS_CTAC_PNT_VAL_TXT AS DS_CTAC_PNT_VAL_TXT_AC
+                FROM
+                    (
+                        SELECT
+                             B.SELL_TO_CUST_CD
+                            ,E.CTAC_PSN_PK
+                            ,E.CTAC_PSN_FIRST_NM
+                            ,E.CTAC_PSN_MID_NM
+                            ,E.CTAC_PSN_LAST_NM
+                            ,G.DS_CTAC_PNT_VAL_TXT
+                            ,ROW_NUMBER() OVER(PARTITION BY B.SELL_TO_CUST_CD, C.DS_ACCT_NUM ORDER BY C.DS_PRIM_LOC_FLG DESC, E.CTAC_PSN_PK ASC) RANK_SORT
+                        FROM
+                             SELL_TO_CUST       B
+                            ,DS_CTAC_PSN_RELN   C
+                            ,CTAC_PSN           E
+                            ,DS_CTAC_PNT        G
+                        WHERE
+                                B.GLBL_CMPY_CD             = #glblCmpyCd#
+                            AND B.EZCANCELFLAG             = '0'
+                            AND C.GLBL_CMPY_CD         (+) = B.GLBL_CMPY_CD
+                            AND C.DS_ACCT_NUM          (+) = B.SELL_TO_CUST_CD
+                            AND C.CTAC_TP_CD           (+) = #ctacTpCd#
+                            AND C.EZCANCELFLAG         (+) = '0'
+                            AND C.GLBL_CMPY_CD             = E.GLBL_CMPY_CD
+                            AND C.CTAC_PSN_PK              = E.CTAC_PSN_PK
+                            AND E.EZCANCELFLAG             = '0'
+                            AND E.CTAC_PSN_ACTV_FLG        = #flgY#
+                            AND E.GLBL_CMPY_CD             = G.GLBL_CMPY_CD (+)
+                            AND E.CTAC_PSN_PK              = G.CTAC_PSN_PK (+)
+                            AND G.DS_CTAC_PNT_TP_CD    (+) = #dsCtacPntTpCd#
+                            AND G.DS_CTAC_PNT_ACTV_FLG (+) = #flgY#
+                            AND G.EZCANCELFLAG         (+) = '0'
+                    ) AC
+                WHERE AC.RANK_SORT = 1
+             ) SCT
+        WHERE
+                WRK.GLBL_CMPY_CD                = #glblCmpyCd#
+        AND     WRK.CLT_PMT_CONF_LTR_RQST_NUM   = #rqstNum#
+        AND     WRK.EZCANCELFLAG                = '0'
+        AND     WRK.DTL_BILL_TO_CUST_CD         = BCT.BILL_TO_CUST_CD(+)
+        AND     WRK.DTL_BILL_TO_CUST_ACCT_CD    = SCT.SELL_TO_CUST_CD(+)
+        AND     ROWNUM                          = 1
+    </statement>
+    <!-- END   2018/05/23 [QC#24882, ADD] -->
+
+    <!-- START 2020/05/25 [QC#56866, ADD] -->
+    <statement id="getInvInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+             COUNT(A.SHIP_TO_POST_CD) OVER() CNT
+            ,A.SHIP_TO_POST_CD
+            ,A.ADDR
+            ,A.SHIP_TO_CTY_ADDR
+            ,A.SHIP_TO_ST_CD
+            ,A.INV_TOT_DEAL_FRT_AMT
+            ,A.SHIP_TO_CTRY_CD
+            ,A.INV_TOT_DEAL_DISC_AMT
+            ,A.MDSE_NM
+            ,A.UPC_CD
+            ,A.ORD_QTY
+            ,A.INV_LINE_DEAL_TAX_AMT
+            ,A.TAX_PCT
+            ,A.INV_LINE_DEAL_NET_AMT
+            ,A.DEAL_NET_UNIT_PRC_AMT
+            ,A.POST_CD
+            ,A.INV_TOT_DEAL_TAX_AMT
+            <!-- QC#56866 ADD -->
+            ,A.INV_NUM
+        FROM
+            (
+             SELECT
+                  IB.SHIP_TO_POST_CD
+                 ,IB.ADDR
+                 ,IB.SHIP_TO_CTY_ADDR
+                 ,IB.SHIP_TO_ST_CD
+                 ,I.INV_TOT_DEAL_FRT_AMT
+                 ,IB.SHIP_TO_CTRY_CD
+                 ,I.INV_TOT_DEAL_DISC_AMT
+                 ,IL.MDSE_NM
+                 ,NVL(M.UPC_CD, SUBSTR(IL.MDSE_NM, 0, 12)) UPC_CD
+                 ,NVL(IL.ORD_QTY, IL.SHIP_QTY) ORD_QTY
+                 ,IL.INV_LINE_DEAL_TAX_AMT
+                 ,IL.TAX_PCT
+                 ,IL.INV_LINE_DEAL_NET_AMT
+                 ,IL.DEAL_NET_UNIT_PRC_AMT
+                 ,STC.POST_CD
+                 ,I.INV_TOT_DEAL_TAX_AMT
+                 <!-- QC#56866 ADD -->
+                 ,I.INV_NUM
+             FROM
+                  INV          I
+                 ,INV_LINE     IL
+                 ,MDSE         M
+                 ,SHIP_TO_CUST STC
+                 ,(
+                   SELECT
+                        IBN.INV_NUM
+                       ,IBN.SHIP_TO_POST_CD
+                       ,IBN.ADDR
+                       ,IBN.SHIP_TO_CTY_ADDR
+                       ,IBN.SHIP_TO_ST_CD
+                       ,IBN.SHIP_TO_CTRY_CD
+                       ,IBN.SHIP_FROM_INVTY_LOC_CD
+                   FROM
+                       (
+                        SELECT 
+                             IB.INV_NUM
+                            ,IB.SHIP_TO_POST_CD
+                            ,SUBSTR((IB.SHIP_TO_FIRST_LINE_ADDR || ' ' ||IB.SHIP_TO_SCD_LINE_ADDR || ' ' || IB.SHIP_TO_THIRD_LINE_ADDR || ' ' || IB.SHIP_TO_FRTH_LINE_ADDR), 0, 28) ADDR
+                            ,IB.SHIP_TO_CTY_ADDR
+                            ,IB.SHIP_TO_ST_CD
+                            ,IB.SHIP_TO_CTRY_CD
+                            ,IB.SHIP_FROM_INVTY_LOC_CD
+                            <!-- QC#56866 ADD -->
+                            ,ROW_NUMBER() OVER(PARTITION BY IB.INV_NUM ORDER BY IB.INV_BOL_LINE_NUM DESC) CNT
+                        FROM
+                             INV_BOL IB 
+                        WHERE
+                             IB.GLBL_CMPY_CD = #glblCmpyCd# 
+                        AND  IB.EZCANCELFLAG = '0' 
+                        <iterate property="arTrxNumList" var="arTrxNumList[]" open="AND IB.INV_NUM IN (" conjunction= ", " close=")">
+                        #arTrxNumList[]#
+                        </iterate> 
+                        ORDER BY IB.INV_BOL_LINE_NUM DESC
+                        ) IBN
+                   WHERE
+                       1=1
+                   <!-- QC#56866 MOD -->
+                   AND  CNT = 1 
+                  )            IB
+             WHERE
+                  I.GLBL_CMPY_CD             = #glblCmpyCd#
+             <iterate property="arTrxNumList" var="arTrxNumList[]" open="AND IB.INV_NUM IN (" conjunction= ", " close=")">
+             #arTrxNumList[]#
+             </iterate>
+             AND  I.EZCANCELFLAG             = '0'
+             AND  IL.GLBL_CMPY_CD            = I.GLBL_CMPY_CD
+             AND  IL.INV_NUM                 = I.INV_NUM
+             AND  IL.EZCANCELFLAG            = '0'
+             AND  IB.INV_NUM                 = I.INV_NUM
+             AND  M.GLBL_CMPY_CD             = IL.GLBL_CMPY_CD
+             AND  M.MDSE_CD                  = IL.MDSE_CD
+             AND  M.EZCANCELFLAG             = '0'
+             AND  I.GLBL_CMPY_CD             = STC.GLBL_CMPY_CD(+)
+             AND  STC.EZCANCELFLAG(+)        = '0'
+             AND  IB.SHIP_FROM_INVTY_LOC_CD  = STC.SHIP_TO_CUST_CD(+)
+             <!-- QC#56866 ADD -->
+             ORDER BY
+                  INV_LINE_DEAL_NET_AMT DESC
+            ) A
+            <!-- QC#56866 ADD -->
+            <isNotNull property="constNum">
+            WHERE ROWNUM &lt;= #constNum#
+            </isNotNull>
+    </statement>
+
+    <statement id="getDsCardInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+             SUBSTR(DCC.CR_CARD_HLD_NM, 0, 27) CR_CARD_HLD_NM
+        FROM
+             DS_CR_CARD DCC
+        WHERE
+                  DCC.GLBL_CMPY_CD         = #glblCmpyCd#
+             AND  DCC.CR_CARD_CUST_REF_NUM = #crCardCustRefNum#
+             AND  DCC.EZCANCELFLAG         = '0'
+    </statement>
+    <!-- END   2020/05/25 [QC#56866, ADD] -->
+    <!-- Start 2023/3/10 S.Nakatani [QC#55645, ADD]-->
+    <statement id="getBankInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+             B.DS_CUST_BANK_ACCT_RELN_PK
+            ,A.DS_BANK_ACCT_PK
+            ,NVL(A.BANK_RTE_NUM, '*') AS BANK_RTE_NUM
+            ,A.DS_BANK_ACCT_NUM
+            ,CASE
+                WHEN
+                    LENGTH(A.DS_BANK_ACCT_NUM) &lt;= 4
+                THEN
+                    REGEXP_REPLACE(A.DS_BANK_ACCT_NUM,'.','*')
+                ELSE
+                    REGEXP_REPLACE(SUBSTR(A.DS_BANK_ACCT_NUM, 1, LENGTH(A.DS_BANK_ACCT_NUM) - 4),'.','*')
+                ||
+                    SUBSTR(A.DS_BANK_ACCT_NUM, LENGTH(A.DS_BANK_ACCT_NUM) - 4 + 1)
+                END AS MASK_BANK_ACCT_NUM
+        FROM
+             DS_BANK_ACCT A
+            ,DS_CUST_BANK_ACCT_RELN B
+        WHERE
+                A.GLBL_CMPY_CD               = #glblCmpyCd#
+            AND A.EZCANCELFLAG               = '0'
+            AND A.GLBL_CMPY_CD               = B.GLBL_CMPY_CD
+            AND A.DS_BANK_ACCT_PK            = B.DS_BANK_ACCT_PK
+            AND B.DS_CUST_BANK_ACCT_RELN_PK  = #dsCustBankAcctRelnPk#
+            AND B.EZCANCELFLAG               = '0'
+    </statement>
+    <statement id="getBankAcctPk" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+             A.DS_BANK_ACCT_PK
+        FROM
+             DS_CUST_BANK_ACCT_RELN A
+        WHERE
+                A.GLBL_CMPY_CD               = #glblCmpyCd#
+            AND A.DS_CUST_BANK_ACCT_RELN_PK  = #dsCustBankAcctRelnPk#
+            AND A.EZCANCELFLAG               = '0'
+    </statement>
+    <statement id="getPmtMethList" parameterClass="Map" resultClass="Map">
+        SELECT
+             A.DS_PMT_METH_CD
+            ,A.DS_PMT_METH_DESC_TXT
+        FROM
+            DS_PMT_METH A
+        WHERE
+                A.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND A.PMT_SCR_DPLY_FLG = #dispFlg#
+            AND A.EZCANCELFLAG     = '0'
+        ORDER BY
+            A.DS_PMT_METH_SORT_NUM
+    </statement>
+    <statement id="getPayerName" parameterClass="Map" resultClass="String">
+        SELECT
+             A.LOC_NM
+        FROM
+            SELL_TO_CUST A
+        WHERE
+                A.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND A.SELL_TO_CUST_CD  = #dsAcctNum#
+            AND A.EZCANCELFLAG     = '0'
+    </statement>
+    <statement id="getConfLtrDataForECheck" parameterClass="Map" resultClass="Map">
+        SELECT
+               RCP.RCPT_CHK_NUM
+              ,RCP.RCPT_NUM    
+              <!-- START 2023/04/25 R.Takau [QC#55998,ADD] -->
+              ,RCP.DEAL_RCPT_AMT
+              <!-- END 2023/04/25 R.Takau [QC#55998,ADD] --> 
+              ,RCD.DEAL_RCPT_DTL_AMT
+              ,TRX.AR_TRX_NUM
+              ,TRX.AR_CUST_REF_NUM
+              ,TRX.GRP_INV_NUM
+              ,TRX.BILL_TO_CUST_CD
+              ,RCP.PAYER_CUST_CD AS BILL_TO_CUST_ACCT_CD
+              ,NVL2(CTAC_PSN_PK_BC, CTAC_PSN_FIRST_NM_BC, CTAC_PSN_FIRST_NM_AC) CTAC_PSN_FIRST_NM
+              ,NVL2(CTAC_PSN_PK_BC, CTAC_PSN_MID_NM_BC, CTAC_PSN_MID_NM_AC)     CTAC_PSN_MID_NM
+              ,NVL2(CTAC_PSN_PK_BC, CTAC_PSN_LAST_NM_BC, CTAC_PSN_LAST_NM_AC)   CTAC_PSN_LAST_NM
+              ,STC.DS_ACCT_NM
+              ,'' AS CR_CARD_TP_DESC_TXT
+              ,CCY.CCY_SGN_TXT
+        FROM
+               AR_RCPT       RCP
+              ,AR_RCPT_DTL   RCD
+              ,AR_TRX_BAL    TRX
+              ,SELL_TO_CUST  STC
+              ,CCY           CCY
+              ,(
+                SELECT
+                     BC.BILL_TO_CUST_CD
+                    ,BC.CTAC_PSN_PK AS CTAC_PSN_PK_BC
+                    ,BC.CTAC_PSN_FIRST_NM AS CTAC_PSN_FIRST_NM_BC
+                    ,BC.CTAC_PSN_MID_NM AS CTAC_PSN_MID_NM_BC
+                    ,BC.CTAC_PSN_LAST_NM AS CTAC_PSN_LAST_NM_BC
+                    ,BC.DS_CTAC_PNT_VAL_TXT AS DS_CTAC_PNT_VAL_TXT_BC
+                FROM
+                    (
+                        SELECT
+                             B.BILL_TO_CUST_CD
+                            ,E.CTAC_PSN_PK
+                            ,E.CTAC_PSN_FIRST_NM
+                            ,E.CTAC_PSN_MID_NM
+                            ,E.CTAC_PSN_LAST_NM
+                            ,G.DS_CTAC_PNT_VAL_TXT
+                            ,ROW_NUMBER() OVER(PARTITION BY B.BILL_TO_CUST_CD, C.LOC_NUM ORDER BY C.DS_PRIM_LOC_FLG DESC, E.CTAC_PSN_PK ASC) RANK_SORT
+                        FROM
+                             BILL_TO_CUST       B
+                            ,DS_CTAC_PSN_RELN   C
+                            ,CTAC_PSN           E
+                            ,DS_CTAC_PNT        G
+                        WHERE
+                                B.GLBL_CMPY_CD             = #glblCmpyCd#
+                            AND B.EZCANCELFLAG             = '0'
+                            AND C.GLBL_CMPY_CD         (+) = B.GLBL_CMPY_CD
+                            AND C.LOC_NUM              (+) = B.LOC_NUM
+                            AND C.CTAC_TP_CD           (+) = #ctacTpCd#
+                            AND C.EZCANCELFLAG         (+) = '0'
+                            AND C.GLBL_CMPY_CD             = E.GLBL_CMPY_CD 
+                            AND C.CTAC_PSN_PK              = E.CTAC_PSN_PK
+                            AND E.EZCANCELFLAG             = '0'
+                            AND E.CTAC_PSN_ACTV_FLG        = #flgY#
+                            AND E.GLBL_CMPY_CD             = G.GLBL_CMPY_CD (+)
+                            AND E.CTAC_PSN_PK              = G.CTAC_PSN_PK (+)
+                            AND G.DS_CTAC_PNT_TP_CD    (+) = #dsCtacPntTpCd#
+                            AND G.DS_CTAC_PNT_ACTV_FLG (+) = #flgY#
+                            AND G.EZCANCELFLAG         (+) = '0'
+                    ) BC
+                WHERE BC.RANK_SORT = 1
+              ) BCT
+             ,(
+                SELECT
+                     AC.SELL_TO_CUST_CD
+                    ,AC.CTAC_PSN_PK AS CTAC_PSN_PK_AC
+                    ,AC.CTAC_PSN_FIRST_NM AS CTAC_PSN_FIRST_NM_AC
+                    ,AC.CTAC_PSN_MID_NM AS CTAC_PSN_MID_NM_AC
+                    ,AC.CTAC_PSN_LAST_NM AS CTAC_PSN_LAST_NM_AC
+                    ,AC.DS_CTAC_PNT_VAL_TXT AS DS_CTAC_PNT_VAL_TXT_AC
+                FROM
+                    (
+                        SELECT
+                             B.SELL_TO_CUST_CD
+                            ,E.CTAC_PSN_PK
+                            ,E.CTAC_PSN_FIRST_NM
+                            ,E.CTAC_PSN_MID_NM
+                            ,E.CTAC_PSN_LAST_NM
+                            ,G.DS_CTAC_PNT_VAL_TXT
+                            ,ROW_NUMBER() OVER(PARTITION BY B.SELL_TO_CUST_CD, C.DS_ACCT_NUM ORDER BY C.DS_PRIM_LOC_FLG DESC, E.CTAC_PSN_PK ASC) RANK_SORT
+                        FROM
+                             SELL_TO_CUST       B
+                            ,DS_CTAC_PSN_RELN   C
+                            ,CTAC_PSN           E
+                            ,DS_CTAC_PNT        G
+                        WHERE
+                                B.GLBL_CMPY_CD             = #glblCmpyCd#
+                            AND B.EZCANCELFLAG             = '0'
+                            AND C.GLBL_CMPY_CD         (+) = B.GLBL_CMPY_CD
+                            AND C.DS_ACCT_NUM          (+) = B.SELL_TO_CUST_CD
+                            AND C.CTAC_TP_CD           (+) = #ctacTpCd#
+                            AND C.EZCANCELFLAG         (+) = '0'
+                            AND C.GLBL_CMPY_CD             = E.GLBL_CMPY_CD
+                            AND C.CTAC_PSN_PK              = E.CTAC_PSN_PK
+                            AND E.EZCANCELFLAG             = '0'
+                            AND E.CTAC_PSN_ACTV_FLG        = #flgY#
+                            AND E.GLBL_CMPY_CD             = G.GLBL_CMPY_CD (+)
+                            AND E.CTAC_PSN_PK              = G.CTAC_PSN_PK (+)
+                            AND G.DS_CTAC_PNT_TP_CD    (+) = #dsCtacPntTpCd#
+                            AND G.DS_CTAC_PNT_ACTV_FLG (+) = #flgY#
+                            AND G.EZCANCELFLAG         (+) = '0'
+                    ) AC
+                WHERE AC.RANK_SORT = 1
+             ) SCT
+        WHERE
+              RCP.GLBL_CMPY_CD             = #glblCmpyCd#
+        AND   RCP.RCPT_NUM                 = #rcptNum#
+        AND   RCP.EZCANCELFLAG             = '0'
+        AND   RCP.GLBL_CMPY_CD             = RCD.GLBL_CMPY_CD
+        AND   RCP.RCPT_NUM                 = RCD.RCPT_NUM
+        AND   RCD.EZCANCELFLAG             = '0'
+        AND   RCD.GLBL_CMPY_CD             = TRX.GLBL_CMPY_CD(+)
+        AND   RCD.INV_NUM                  = TRX.AR_TRX_NUM(+)
+        AND   TRX.EZCANCELFLAG(+)          = '0'
+        AND   RCP.GLBL_CMPY_CD             = CCY.GLBL_CMPY_CD
+        AND   RCP.DEAL_CCY_CD              = CCY.CCY_CD
+        AND   CCY.EZCANCELFLAG             = '0'
+        AND   RCP.GLBL_CMPY_CD             = STC.GLBL_CMPY_CD(+)
+        AND   RCP.PAYER_CUST_CD            = STC.SELL_TO_CUST_CD(+)
+        AND   STC.EZCANCELFLAG(+)          = '0'
+        AND   TRX.BILL_TO_CUST_CD          = BCT.BILL_TO_CUST_CD(+)
+        AND   RCP.PAYER_CUST_CD            = SCT.SELL_TO_CUST_CD(+)
+        ORDER BY
+            RCP.PAYER_CUST_CD ASC
+           ,TRX.GRP_INV_NUM ASC NULLS LAST
+           ,TRX.AR_CUST_REF_NUM
+    </statement>
+    <statement id="getConfLtrDataOnAcctForECheck" parameterClass="Map" resultClass="Map">
+            SELECT
+               RCP.RCPT_CHK_NUM
+              ,RCP.RCPT_NUM     
+              <!-- START 2023/04/25 R.Takau [QC#55998,ADD] -->
+              ,RCP.DEAL_RCPT_AMT
+              <!-- END 2023/04/25 R.Takau [QC#55998,ADD] -->
+              ,RCD.DEAL_RCPT_DTL_AMT
+              ,NULL AS AR_TRX_NUM
+              ,NULL AS AR_CUST_REF_NUM
+              ,NULL AS GRP_INV_NUM
+              ,NULL AS BILL_TO_CUST_CD
+              ,RCP.PAYER_CUST_CD    BILL_TO_CUST_ACCT_CD
+              ,CTAC_PSN_FIRST_NM_AC CTAC_PSN_FIRST_NM
+              ,CTAC_PSN_MID_NM_AC   CTAC_PSN_MID_NM
+              ,CTAC_PSN_LAST_NM_AC  CTAC_PSN_LAST_NM
+              ,STC.DS_ACCT_NM
+              ,''  AS CR_CARD_TP_DESC_TXT
+              ,CCY.CCY_SGN_TXT
+        FROM
+               AR_RCPT       RCP
+              ,AR_RCPT_DTL   RCD
+              ,SELL_TO_CUST  STC
+              ,CCY           CCY
+             ,(
+                SELECT
+                     AC.SELL_TO_CUST_CD
+                    ,AC.CTAC_PSN_PK AS CTAC_PSN_PK_AC
+                    ,AC.CTAC_PSN_FIRST_NM AS CTAC_PSN_FIRST_NM_AC
+                    ,AC.CTAC_PSN_MID_NM AS CTAC_PSN_MID_NM_AC
+                    ,AC.CTAC_PSN_LAST_NM AS CTAC_PSN_LAST_NM_AC
+                    ,AC.DS_CTAC_PNT_VAL_TXT AS DS_CTAC_PNT_VAL_TXT_AC
+                FROM
+                    (
+                        SELECT
+                             B.SELL_TO_CUST_CD
+                            ,E.CTAC_PSN_PK
+                            ,E.CTAC_PSN_FIRST_NM
+                            ,E.CTAC_PSN_MID_NM
+                            ,E.CTAC_PSN_LAST_NM
+                            ,G.DS_CTAC_PNT_VAL_TXT
+                            ,ROW_NUMBER() OVER(PARTITION BY B.SELL_TO_CUST_CD, C.DS_ACCT_NUM ORDER BY C.DS_PRIM_LOC_FLG DESC, E.CTAC_PSN_PK ASC) RANK_SORT
+                        FROM
+                             SELL_TO_CUST       B
+                            ,DS_CTAC_PSN_RELN   C
+                            ,CTAC_PSN           E
+                            ,DS_CTAC_PNT        G
+                        WHERE
+                                B.GLBL_CMPY_CD             = #glblCmpyCd#
+                            AND B.EZCANCELFLAG             = '0'
+                            AND C.GLBL_CMPY_CD         (+) = B.GLBL_CMPY_CD
+                            AND C.DS_ACCT_NUM          (+) = B.SELL_TO_CUST_CD
+                            AND C.CTAC_TP_CD           (+) = #ctacTpCd#
+                            AND C.EZCANCELFLAG         (+) = '0'
+                            AND C.GLBL_CMPY_CD             = E.GLBL_CMPY_CD
+                            AND C.CTAC_PSN_PK              = E.CTAC_PSN_PK
+                            AND E.EZCANCELFLAG             = '0'
+                            AND E.CTAC_PSN_ACTV_FLG        = #flgY#
+                            AND E.GLBL_CMPY_CD             = G.GLBL_CMPY_CD (+)
+                            AND E.CTAC_PSN_PK              = G.CTAC_PSN_PK (+)
+                            AND G.DS_CTAC_PNT_TP_CD    (+) = #dsCtacPntTpCd#
+                            AND G.DS_CTAC_PNT_ACTV_FLG (+) = #flgY#
+                            AND G.EZCANCELFLAG         (+) = '0'
+                    ) AC
+                WHERE AC.RANK_SORT = 1
+             ) SCT
+        WHERE
+              RCP.GLBL_CMPY_CD             = #glblCmpyCd#
+        AND   RCP.RCPT_NUM                 = #rcptNum#
+        AND   RCP.EZCANCELFLAG             = '0'
+        AND   RCP.GLBL_CMPY_CD             = RCD.GLBL_CMPY_CD
+        AND   RCP.RCPT_NUM                 = RCD.RCPT_NUM
+        AND   RCD.EZCANCELFLAG             = '0'
+        AND   RCP.GLBL_CMPY_CD             = CCY.GLBL_CMPY_CD
+        AND   RCP.DEAL_CCY_CD              = CCY.CCY_CD
+        AND   CCY.EZCANCELFLAG             = '0'
+        AND   RCP.GLBL_CMPY_CD             = STC.GLBL_CMPY_CD(+)
+        AND   RCP.PAYER_CUST_CD            = STC.SELL_TO_CUST_CD(+)
+        AND   STC.EZCANCELFLAG(+)          = '0'
+        AND   RCP.PAYER_CUST_CD            = SCT.SELL_TO_CUST_CD(+)
+    
+    </statement>
+    <!-- End 2023/3/10 S.Nakatani [QC#55645, ADD]-->
+</sqlMap>

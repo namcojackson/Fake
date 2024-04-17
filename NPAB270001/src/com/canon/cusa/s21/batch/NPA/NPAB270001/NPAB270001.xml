@@ -1,0 +1,170 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NPAB270001">
+
+    <typeAlias alias="ASL_DTLTMsg"      type="business.db.ASL_DTLTMsg" />
+
+    <statement id="getCostUpdateTarget" parameterClass="Map">
+        SELECT
+            MAIN.CD_PARTS
+           ,MAIN.PR_SALES_PARTS1_TR
+           ,MAIN.ASL_NM
+           ,MAIN.ASL_DESC_TXT
+           ,MAIN.ASL_START_DT
+           ,MAIN.ASL_END_DT
+           ,MAIN.ASL_DTL_PK
+           ,MAIN.ASL_HDR_PK
+           ,MAIN.PRNT_VND_CD
+           ,MAIN.VND_CD
+           ,MAIN.UNIT_PRC_AMT
+           ,MAIN.THIS_MTH_TOT_STD_COST_AMT
+        FROM (
+            SELECT
+                CUSA_PRT_COST.CD_PARTS
+               ,CUSA_PRT_COST.PR_SALES_PARTS1_TR
+               ,CUSA_PRT_COST.DT_CNT
+               ,NVL(AH.ASL_HDR_PK, #aslHdrPk#) AS ASL_HDR_PK
+               ,NVL(AH.PRNT_VND_CD, #prntVndCd#) AS PRNT_VND_CD
+               ,NVL(AH.ASL_NM, #aslNm#) AS ASL_NM
+               ,AH.ASL_DESC_TXT
+               ,NVL(AH.ASL_START_DT, #aslStartDt#) AS ASL_START_DT
+               ,NVL(AH.ASL_END_DT, '99991231') AS ASL_END_DT
+               ,AD.ASL_DTL_PK
+               ,NVL(AD.VND_CD, #vndCd#) AS VND_CD
+               ,AD.UNIT_PRC_AMT
+               ,MDSE.THIS_MTH_TOT_STD_COST_AMT
+            FROM
+                (
+                    SELECT
+                        CUSA_PRT_COST.CD_PARTS
+                       ,CUSA_PRT_COST.PR_SALES_PARTS1_TR
+                       ,ROW_NUMBER() OVER(PARTITION BY CUSA_PRT_COST.CD_PARTS ORDER BY CUSA_PRT_COST.TRANSACTION_ID DESC, CUSA_PRT_COST.UNIT_ID DESC) AS DT_CNT
+                    FROM
+                        CSA_PRT_COST_V CUSA_PRT_COST
+                    WHERE
+                        CUSA_PRT_COST.DT_PROCESS_TR  = #targetDate#
+                    AND CUSA_PRT_COST.CD_PR_SYSTEM_PARTS = #partsCd#
+                ) CUSA_PRT_COST
+               ,MDSE MDSE
+               ,ASL_HDR AH
+               ,ASL_DTL AD
+            WHERE 1 = 1
+            AND CUSA_PRT_COST.CD_PARTS                 = MDSE.MDSE_CD
+            AND MDSE.GLBL_CMPY_CD                      = #glblCmpyCd#
+            AND CUSA_PRT_COST.PR_SALES_PARTS1_TR      != MDSE.THIS_MTH_TOT_STD_COST_AMT
+            AND MDSE.GLBL_CMPY_CD                      = AD.GLBL_CMPY_CD(+)
+            <iterate property="updateVndCdList" var="vndCd[]" open="AND AD.VND_CD(+) IN (" close=")" conjunction=",">
+                #vndCd[]#
+            </iterate>
+            AND NVL(AD.EFF_FROM_DT(+),  '19000101' )  &lt;= #aslEffFromDt#
+            AND NVL(AD.EFF_THRU_DT(+),  '99991231' )  &gt;= #aslEffThruDt#
+            AND CUSA_PRT_COST.CD_PARTS                 = AD.SPLY_ITEM_NUM(+)
+            AND AD.ASL_HDR_PK                          = AH.ASL_HDR_PK(+)
+            AND AD.GLBL_CMPY_CD                        = AH.GLBL_CMPY_CD(+)
+            AND NVL(AH.ASL_START_DT(+), '19000101' )  &lt;= #aslEffFromDt#
+            AND NVL(AH.ASL_END_DT(+),   '99991231' )  &gt;= #aslEffThruDt#
+            AND MDSE.EZCANCELFLAG                      = '0'
+            AND AH.EZCANCELFLAG(+)                     = '0'
+            AND AD.EZCANCELFLAG(+)                     = '0'
+        ) MAIN
+        WHERE MAIN.DT_CNT = 1
+        ORDER BY ASL_HDR_PK
+    </statement>
+
+    <statement id="getAssetRecovCostUpdateTarget" parameterClass="Map">
+        SELECT
+            MAIN.CD_PARTS
+           ,MAIN.PR_SALES_PARTS1_TR
+           ,MAIN.ASSET_RECOV_COST_AMT
+        FROM (
+            SELECT
+                CUSA_PRT_COST.CD_PARTS
+               ,CUSA_PRT_COST.PR_SALES_PARTS1_TR
+               ,CUSA_PRT_COST.DT_CNT
+               ,MDSE.ASSET_RECOV_COST_AMT
+            FROM
+                (
+                    SELECT
+                        CUSA_PRT_COST.CD_PARTS
+                       ,CUSA_PRT_COST.PR_SALES_PARTS1_TR
+                       ,ROW_NUMBER() OVER(PARTITION BY CUSA_PRT_COST.CD_PARTS ORDER BY CUSA_PRT_COST.TRANSACTION_ID DESC, CUSA_PRT_COST.UNIT_ID DESC) AS DT_CNT
+                    FROM
+                        CSA_PRT_COST_V CUSA_PRT_COST
+                    WHERE
+                        CUSA_PRT_COST.DT_PROCESS_TR  = #targetDate#
+                    AND CUSA_PRT_COST.CD_PR_SYSTEM_PARTS = #partsCd#
+                ) CUSA_PRT_COST
+               ,MDSE MDSE
+               ,ASL_HDR AH
+               ,ASL_DTL AD
+            WHERE 1 = 1
+            AND CUSA_PRT_COST.CD_PARTS                 = MDSE.MDSE_CD
+            AND MDSE.GLBL_CMPY_CD                      = #glblCmpyCd#
+            AND CUSA_PRT_COST.PR_SALES_PARTS1_TR      != MDSE.ASSET_RECOV_COST_AMT
+            AND MDSE.GLBL_CMPY_CD                      = AD.GLBL_CMPY_CD
+            <iterate property="updateVndCdList" var="vndCd[]" open="AND AD.VND_CD IN (" close=")" conjunction=",">
+                #vndCd[]#
+            </iterate>
+            AND NVL(AD.EFF_FROM_DT,  '19000101' )  &lt;= #aslEffFromDt#
+            AND NVL(AD.EFF_THRU_DT,  '99991231' )  &gt;= #aslEffThruDt#
+            AND CUSA_PRT_COST.CD_PARTS                 = AD.SPLY_ITEM_NUM
+            AND AD.ASL_HDR_PK                          = AH.ASL_HDR_PK
+            AND AD.GLBL_CMPY_CD                        = AH.GLBL_CMPY_CD
+            AND NVL(AH.ASL_START_DT, '19000101' )  &lt;= #aslEffFromDt#
+            AND NVL(AH.ASL_END_DT,   '99991231' )  &gt;= #aslEffThruDt#
+            AND MDSE.EZCANCELFLAG                      = '0'
+            AND AH.EZCANCELFLAG                        = '0'
+            AND AD.EZCANCELFLAG                        = '0'
+            AND MDSE.EZCANCELFLAG                      = '0'
+        ) MAIN
+        WHERE MAIN.DT_CNT = 1
+        ORDER BY CD_PARTS
+    </statement>
+
+    <statement id="findAslHdrPk" parameterClass="Map" resultClass="Map">
+        SELECT
+             AH.ASL_HDR_PK
+            ,AH.PRNT_VND_CD
+            ,V.VND_CD
+            ,AH.ASL_START_DT
+        FROM
+            ASL_HDR  AH
+           ,PRNT_VND PV
+           ,VND      V
+        WHERE 1=1
+        AND AH.GLBL_CMPY_CD                           = #glblCmpyCd#
+        AND AH.ASL_NM                                 = #aslNm#
+        AND AH.ASL_START_DT                      &lt; = #aslEffFromDt#
+        AND NVL(AH.ASL_END_DT   , '99991231'   ) &gt; = #aslEffThruDt#
+        AND AH.GLBL_CMPY_CD                           = PV.GLBL_CMPY_CD
+        AND AH.PRNT_VND_CD                            = PV.PRNT_VND_CD
+        AND PV.GLBL_CMPY_CD                           = V.GLBL_CMPY_CD
+        AND PV.PRNT_VND_PK                            = V.PRNT_VND_PK
+        AND V.LOC_NM                                  = #vndNm#
+        AND AH.EZCANCELFLAG                           = '0'
+    </statement>
+
+    <statement id="getPrimSplyFlg" parameterClass="Map" resultMap="result.ASL_DTLTMsg">
+        SELECT
+             AD.GLBL_CMPY_CD
+            ,AD.ASL_DTL_PK
+            ,AD.MDSE_CD
+            ,AD.PRIM_SPLY_FLG
+        FROM
+             ASL_DTL            AD
+        WHERE
+                AD.GLBL_CMPY_CD         = #glblCmpyCd#
+            AND AD.MDSE_CD              = #mdseCd#
+            AND AD.PRIM_SPLY_FLG        = #flgY#
+            AND AD.EZCANCELFLAG         = '0'
+        ORDER BY
+            AD.EFF_FROM_DT
+    </statement>
+
+    <resultMap id="result.ASL_DTLTMsg" class="ASL_DTLTMsg">
+        <result property="glblCmpyCd"                column="GLBL_CMPY_CD"              javaType="EZDSStringItem"/>
+        <result property="aslDtlPk"                  column="ASL_DTL_PK"                javaType="EZDSBigDecimalItem"/>
+        <result property="mdseCd"                    column="MDSE_CD"                   javaType="EZDSStringItem"/>
+        <result property="primSplyFlg"               column="PRIM_SPLY_FLG"             javaType="EZDSStringItem"/>
+    </resultMap>
+
+</sqlMap>

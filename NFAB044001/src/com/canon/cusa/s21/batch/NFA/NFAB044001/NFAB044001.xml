@@ -1,0 +1,175 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sqlMap namespace="NFAB044001">
+
+    <statement id="getRecordForDailyExchRates" parameterClass="Map">
+     SELECT 
+         IFW.FROM_CCY_CD                          TO_CCY_CD,
+         IFW.ACTL_EXCH_RATE_ENT_DT,
+         (CASE WHEN IFW.ACCT_ARTH_TP_CD = '*' THEN IFW.ACTL_EXCH_RATE
+               ELSE ROUND(1/IFW.ACTL_EXCH_RATE, 5) END) ACTL_EXCH_RATE,
+         NVL(DR.ACTL_EXCH_RATE_ENT_DT, 'NONE')  IS_EXISTS
+      FROM
+         (SELECT CCY_FROM.GLBL_CMPY_CD  GLBL_CMPY_CD,
+                 CCY_FROM.EZCANCELFLAG  EZCANCELFLAG,
+                 CCY_FROM.CCY_CD    FROM_CCY_CD,
+                 CCY_FROM.ACCT_ARTH_TP_CD ACCT_ARTH_TP_CD,
+                 CCY_TO.CCY_CD      TO_CCY_CD,
+                 IF.ACTL_EXCH_RATE_ENT_DT,
+                 IF.ACTL_EXCH_RATE
+            FROM NFAI0050_01 IF
+                ,CCY         CCY_FROM
+                ,CCY         CCY_TO
+                ,GLBL_CMPY   GC
+           WHERE CCY_FROM.EZCANCELFLAG       = '0'
+             AND CCY_FROM.GLBL_CMPY_CD       = #glblCmpyCd#
+             AND CCY_TO.EZCANCELFLAG         = '0'
+             AND CCY_TO.GLBL_CMPY_CD         = #glblCmpyCd#
+             AND GC.EZCANCELFLAG             = '0'
+             AND GC.GLBL_CMPY_CD             = #glblCmpyCd#
+             AND IF.TRANSACTION_ID           = #transactionId#
+             AND IF.ACTL_EXCH_RATE_ENT_DT    > #procDate#
+             AND CCY_FROM.ORCL_CCY_CD        = IF.FROM_CCY_CD
+             AND CCY_TO.ORCL_CCY_CD          = IF.TO_CCY_CD
+             AND CCY_TO.CCY_CD               = GC.STD_CCY_CD
+         ) IFW
+        ,ACCT_DLY_ACTL_EXCH_RATES  DR
+    WHERE
+            (DR.EZCANCELFLAG = '0'           OR DR.EZCANCELFLAG IS NULL) 
+        AND (DR.GLBL_CMPY_CD =  #glblCmpyCd# OR DR.GLBL_CMPY_CD IS NULL) 
+        AND IFW.ACTL_EXCH_RATE_ENT_DT   = DR.ACTL_EXCH_RATE_ENT_DT(+)
+        AND IFW.TO_CCY_CD               = DR.CCY_CD(+)
+    UNION
+      SELECT IFW2.*,
+             NVL(DRW.ACTL_EXCH_RATE_ENT_DT, 'NONE') IS_EXISTS
+        FROM
+        (SELECT 
+             IFW.FROM_CCY_CD           TO_CCY_CD,
+             IFW.ACTL_EXCH_RATE_ENT_DT ACTL_EXCH_RATE_ENT_DT,
+             1                         ACTL_EXCH_RATE
+          FROM
+             (SELECT CCY.CCY_CD             FROM_CCY_CD,
+                     IF.ACTL_EXCH_RATE_ENT_DT,
+                     IF.ACTL_EXCH_RATE
+                FROM NFAI0050_01  IF
+                    ,CCY          CCY
+               WHERE
+                     IF.TRANSACTION_ID          = #transactionId#
+                 AND IF.ACTL_EXCH_RATE_ENT_DT   > #procDate#
+                 AND CCY.EZCANCELFLAG           = '0'
+                 AND CCY.GLBL_CMPY_CD           = #glblCmpyCd#
+                 AND IF.FROM_CCY_CD             = CCY.ORCL_CCY_CD
+             ) IFW
+            ,GLBL_CMPY GC
+        WHERE
+              GC.EZCANCELFLAG                     = '0'
+          AND GC.GLBL_CMPY_CD                     = #glblCmpyCd#
+          AND IFW.FROM_CCY_CD                     = GC.STD_CCY_CD
+        GROUP BY IFW.FROM_CCY_CD, IFW.ACTL_EXCH_RATE_ENT_DT
+       ) IFW2
+     , ( SELECT
+             DR.CCY_CD,
+             DR.ACTL_EXCH_RATE_ENT_DT
+           FROM
+              ACCT_DLY_ACTL_EXCH_RATES DR
+             ,GLBL_CMPY                GC
+          WHERE 1=1
+                -- DR.EZCANCELFLAG           = '0'  if the data is logically removed, this condition will be problem
+            AND DR.GLBL_CMPY_CD           = #glblCmpyCd#
+            AND GC.EZCANCELFLAG           = '0'
+            AND DR.GLBL_CMPY_CD           = GC.GLBL_CMPY_CD
+            AND DR.CCY_CD                 = GC.STD_CCY_CD
+            AND DR.ACTL_EXCH_RATE_ENT_DT  > #procDate#
+       )  DRW
+      WHERE 
+            IFW2.TO_CCY_CD             = DRW.CCY_CD(+)
+        AND IFW2.ACTL_EXCH_RATE_ENT_DT = DRW.ACTL_EXCH_RATE_ENT_DT(+)
+    </statement>
+
+    <statement id="getRecordForMonthlyExchRates" parameterClass="Map">
+       SELECT 
+           IFW.FROM_CCY_CD                         TO_CCY_CD,
+           SUBSTR(IFW.ACTL_EXCH_RATE_ENT_DT,1,6) APPL_YR_MTH,
+           (CASE WHEN MAX(IFW.ACCT_ARTH_TP_CD) = '*' THEN MAX(IFW.AVG_EXCH_RATE)
+                 ELSE ROUND(1/MAX(IFW.AVG_EXCH_RATE), 5) END)  AVG_EXCH_RATE,
+           (CASE WHEN MAX(IFW.ACCT_ARTH_TP_CD) = '*' THEN MAX(IFW.STD_EXCH_RATE)
+                 ELSE ROUND(1/MAX(IFW.STD_EXCH_RATE), 5) END)     STD_EXCH_RATE,
+           NVL(MAX(MR.APPL_YR_MTH), 'NONE')      IS_EXISTS
+        FROM
+           (SELECT CCY_FROM.CCY_CD          FROM_CCY_CD,
+                   CCY_FROM.ACCT_ARTH_TP_CD ACCT_ARTH_TP_CD,
+                   CCY_TO.CCY_CD            TO_CCY_CD,
+                   IF.ACTL_EXCH_RATE_ENT_DT,
+                   IF.AVG_EXCH_RATE,
+                   IF.STD_EXCH_RATE
+              FROM NFAI0050_01 IF
+                  ,CCY         CCY_FROM
+                  ,CCY         CCY_TO
+                  ,GLBL_CMPY   GC
+             WHERE
+                   CCY_FROM.EZCANCELFLAG    = '0'
+               AND CCY_FROM.GLBL_CMPY_CD    = #glblCmpyCd#
+               AND CCY_TO.EZCANCELFLAG      = '0'
+               AND CCY_TO.GLBL_CMPY_CD      = #glblCmpyCd#
+               AND GC.EZCANCELFLAG          = '0'
+               AND GC.GLBL_CMPY_CD          = #glblCmpyCd#
+               AND CCY_FROM.ORCL_CCY_CD     = IF.FROM_CCY_CD
+               AND CCY_TO.ORCL_CCY_CD       = IF.TO_CCY_CD 
+               AND IF.TRANSACTION_ID        = #transactionId#
+               AND IF.ACTL_EXCH_RATE_ENT_DT > #procDate#
+               AND CCY_TO.CCY_CD          = GC.STD_CCY_CD
+           ) IFW
+          ,ACCT_EXCH_RATES            MR
+      WHERE
+              (MR.EZCANCELFLAG  = '0' OR MR.EZCANCELFLAG IS NULL)
+          AND (MR.GLBL_CMPY_CD  = #glblCmpyCd# OR MR.GLBL_CMPY_CD IS NULL)
+          AND SUBSTR(IFW.ACTL_EXCH_RATE_ENT_DT,1,6)    = MR.APPL_YR_MTH(+)
+          AND IFW.TO_CCY_CD                            = MR.CCY_CD(+)
+        GROUP BY IFW.FROM_CCY_CD, SUBSTR(IFW.ACTL_EXCH_RATE_ENT_DT,1,6)
+    UNION
+      SELECT IFW2.*,
+             NVL(MRW.APPL_YR_MTH, 'NONE')  IS_EXISTS
+        FROM
+          (SELECT
+               IFW.FROM_CCY_CD                       TO_CCY_CD,
+               SUBSTR(IFW.ACTL_EXCH_RATE_ENT_DT,1,6) APPL_YR_MTH,
+               1                                     AVG_EXCH_RATE,
+               1                                     STD_EXCH_RATE
+             FROM
+               (SELECT CCY.CCY_CD   FROM_CCY_CD
+                      ,IF.ACTL_EXCH_RATE_ENT_DT
+                      ,IF.AVG_EXCH_RATE
+                      ,IF.STD_EXCH_RATE
+                  FROM NFAI0050_01  IF
+                      ,CCY          CCY
+                 WHERE IF.TRANSACTION_ID                    = #transactionId#
+                   AND IF.ACTL_EXCH_RATE_ENT_DT             > #procDate#
+                   AND CCY.EZCANCELFLAG                     = '0'
+                   AND CCY.GLBL_CMPY_CD                     = #glblCmpyCd#
+                   AND IF.FROM_CCY_CD                       = CCY.ORCL_CCY_CD
+               ) IFW
+              ,GLBL_CMPY  GC
+           WHERE
+                GC.EZCANCELFLAG                     = '0'
+            AND GC.GLBL_CMPY_CD                     = #glblCmpyCd#
+            AND IFW.FROM_CCY_CD                     = GC.STD_CCY_CD
+          GROUP BY IFW.FROM_CCY_CD, SUBSTR(IFW.ACTL_EXCH_RATE_ENT_DT,1,6)
+          ) IFW2
+        , ( SELECT
+              MR.CCY_CD,
+              MR.APPL_YR_MTH
+           FROM
+              ACCT_EXCH_RATES     MR
+             ,GLBL_CMPY           GC
+          WHERE 1=1
+                -- MR.EZCANCELFLAG           = '0'  if the data is logically removed, this condition will be problem
+            AND MR.GLBL_CMPY_CD           = #glblCmpyCd#
+            AND GC.EZCANCELFLAG           = '0'
+            AND MR.GLBL_CMPY_CD           = GC.GLBL_CMPY_CD
+            AND MR.CCY_CD                 = GC.STD_CCY_CD
+            AND MR.APPL_YR_MTH           >= SUBSTR(#procDate#, 1, 6)
+         )  MRW
+       WHERE IFW2.TO_CCY_CD    = MRW.CCY_CD(+)
+         AND IFW2.APPL_YR_MTH  = MRW.APPL_YR_MTH(+)
+    </statement>
+    
+</sqlMap>

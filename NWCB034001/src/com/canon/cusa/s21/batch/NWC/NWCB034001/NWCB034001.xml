@@ -1,0 +1,1010 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NWCB034001">
+
+    <statement id="findCfsInv" parameterClass="Map" resultClass="Map">
+        SELECT
+            I.CPO_ORD_NUM
+           ,I.INV_NUM
+           ,I.INV_DT
+           ,I.BILL_TO_CUST_CD
+           ,I.INV_TOT_DEAL_NET_AMT
+           ,I.INV_TOT_DEAL_SLS_AMT
+           ,I.INV_TOT_DEAL_TAX_AMT
+           ,I.INV_TOT_DEAL_DISC_AMT
+           ,I.INV_TOT_DEAL_FRT_AMT
+           ,I.SLS_ADMIN_PSN_CD
+           ,I.ACCT_DT
+           ,I.INV_TP_CD
+           ,I.BILL_TO_CUST_ACCT_CD
+           ,C.SHIP_TO_CUST_ACCT_CD  <!-- 2018/01/22 S21_NA#23439 Add -->
+           ,I.NEGO_DEAL_AMT
+           ,I.SLS_REP_TOC_NM
+           ,I.SLS_REP_TOC_CD
+           ,I.CR_REBIL_RSN_CATG_CD
+           ,ATB.AR_TRX_BAL_PK
+           <isNull property="modeCd">
+           ,C.COA_BR_CD
+           ,C.CPO_TOT_DEAL_NET_AMT
+           </isNull>
+           <isNotNull property="modeCd">
+               ,CLPI.CFS_LEASE_PO_INFO_PK
+               ,CLPI.CFS_APP_NUM
+               ,CLPI.DS_ACCT_NM           AS CFS_DS_ACCT_NM
+               ,CLPI.CFS_PO_NUM
+               ,CLPI.CFS_PO_AMT
+               ,CLPI.CFS_CR_AMT
+               ,CLPI.LEASE_CMPY_USR_ID
+               ,CLPI.LEASE_CMPY_USR_NM
+               ,TOC.COA_BR_CD
+           </isNotNull>
+           ,P.PSN_FIRST_NM
+           ,P.PSN_LAST_NM
+           ,STC.DS_ACCT_NM
+        FROM
+            INV             I
+           ,AR_TRX_BAL      ATB
+           ,CPO             C
+           ,S21_PSN         P
+           ,SELL_TO_CUST    STC
+           <isNotNull property="modeCd">
+               ,(SELECT
+                    PI2.GLBL_CMPY_CD
+                    ,PI2.EZCANCELFLAG
+                    ,PI2.CFS_LEASE_PO_INFO_PK
+                    ,PI2.CFS_APP_NUM
+                    ,PI2.DS_ACCT_NM
+                    ,PI2.CFS_PO_NUM
+                    ,PI2.CFS_PO_AMT
+                    ,PI2.CFS_CR_AMT
+                    ,PI2.PO_INFO_PROC_FLG
+                    ,PI2.LEASE_CMPY_USR_ID
+                    ,PI2.LEASE_CMPY_USR_NM
+                FROM
+                    (SELECT
+                        MAX(PI1.CFS_LEASE_PO_INFO_PK) AS CFS_LEASE_PO_INFO_PK
+                    FROM
+                        CFS_LEASE_PO_INFO PI1
+                    WHERE
+                        1 = 1
+                        AND PI1.GLBL_CMPY_CD = #glblCmpyCd#
+                        AND PI1.EZCANCELFLAG = '0'
+                    GROUP BY
+                        <!-- 2019/04/04 QC#30756 Mod Start -->
+                        <!-- PI1.CFS_APP_NUM -->
+                        <!-- ,PI1.CFS_PO_NUM -->
+                         UPPER(PI1.CFS_APP_NUM)
+                        ,UPPER(PI1.CFS_PO_NUM)
+                        <!-- 2019/04/04 QC#30756 Mod Start -->
+                    HAVING
+                        MAX(PI1.PO_INFO_PROC_FLG) != 'Y') PI_PK
+                    ,CFS_LEASE_PO_INFO PI2
+                WHERE
+                    PI2.CFS_LEASE_PO_INFO_PK = PI_PK.CFS_LEASE_PO_INFO_PK) CLPI
+               ,TOC               TOC
+           </isNotNull>
+        WHERE 
+            1 = 1
+            AND I.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND I.FNLZ_INV_FLG          = 'Y'
+            AND I.GLBL_CMPY_CD          = ATB.GLBL_CMPY_CD
+            AND I.INV_NUM               = ATB.AR_TRX_NUM
+            AND I.GLBL_CMPY_CD          = C.GLBL_CMPY_CD
+            AND I.CPO_ORD_NUM           = C.CPO_ORD_NUM
+            <isNotNull property="modeCd">
+                AND C.GLBL_CMPY_CD        = CLPI.GLBL_CMPY_CD
+                <!-- 2019/04/04 QC#30756 Mod Start -->
+                <!-- AND C.LEASE_CMPY_PO_NUM   = CLPI.CFS_APP_NUM || '/' || CLPI.CFS_PO_NUM -->
+                AND UPPER(C.LEASE_CMPY_PO_NUM) = CLPI.CFS_APP_NUM || '/' || CLPI.CFS_PO_NUM
+                <!-- 2019/04/04 QC#30756 Mod End -->
+                AND CLPI.PO_INFO_PROC_FLG = 'N'
+                AND C.GLBL_CMPY_CD        = TOC.GLBL_CMPY_CD
+                AND C.SLS_REP_TOC_CD      = TOC.TOC_CD
+            </isNotNull>
+            AND I.GLBL_CMPY_CD          = P.GLBL_CMPY_CD(+)
+            AND I.SLS_ADMIN_PSN_CD      = P.PSN_CD(+)
+            AND I.GLBL_CMPY_CD          = STC.GLBL_CMPY_CD
+            <!-- AND I.BILL_TO_CUST_ACCT_CD  = STC.SELL_TO_CUST_CD  2018/01/22 S21_NA#23439 Del -->
+            AND C.SHIP_TO_CUST_ACCT_CD  = STC.SELL_TO_CUST_CD <!-- 2018/01/22 S21_NA#23439 Add -->
+            AND EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        CFS_LEASE_ELIG_ACCT CLEA
+                    WHERE
+                        1 = 1
+                        AND CLEA.GLBL_CMPY_CD   = I.GLBL_CMPY_CD
+                        AND (
+                                (       CLEA.BILL_TO_CUST_ACCT_CD   = I.BILL_TO_CUST_ACCT_CD
+                                    AND CLEA.BILL_TO_CUST_CD        = I.BILL_TO_CUST_CD
+                                )
+                                OR
+                                (       CLEA.BILL_TO_CUST_ACCT_CD   = I.BILL_TO_CUST_ACCT_CD
+                                    AND CLEA.BILL_TO_CUST_CD        IS NULL
+                                )
+                        )
+                        AND CLEA.EZCANCELFLAG = '0'
+            )
+            AND EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        CFS_LEASE_ELIG_ORD_CATG CLEOC
+                    WHERE
+                        1 = 1
+                        AND CLEOC.GLBL_CMPY_CD      = I.GLBL_CMPY_CD
+                        AND CLEOC.DS_ORD_CATG_CD    = I.DS_ORD_CATG_CD
+                        AND CLEOC.DS_ORD_TP_CD      = I.DS_ORD_TP_CD
+                        AND CLEOC.ORD_CATG_INCL_FLG = 'Y'
+                        AND CLEOC.EZCANCELFLAG      = '0'
+            )
+            AND NOT EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        CFS_LEASE_PKG_PO_HDR CLPPH
+                    WHERE
+                        1 = 1
+                        AND CLPPH.GLBL_CMPY_CD     = I.GLBL_CMPY_CD
+                        AND CLPPH.CPO_ORD_NUM      = I.CPO_ORD_NUM
+                        AND (
+                                    CLPPH.LEASE_PKG_CRAT_FLG    = 'Y'
+                                OR  CLPPH.THRHD_HLD_FLG         = 'N'
+                        ) 
+                        AND CLPPH.EZCANCELFLAG     = '0'
+            )
+            AND NOT EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        CFS_LEASE_PKG_PO_DTL CLPPD
+                    WHERE
+                        1 = 1
+                        AND CLPPD.GLBL_CMPY_CD  = I.GLBL_CMPY_CD
+                        AND CLPPD.INV_NUM       = I.INV_NUM
+                        AND CLPPD.EZCANCELFLAG  = '0'
+            )
+            AND I.EZCANCELFLAG          = '0'
+            AND ATB.EZCANCELFLAG        = '0'
+            AND C.EZCANCELFLAG          = '0'
+            AND P.EZCANCELFLAG(+)       = '0'
+            AND STC.EZCANCELFLAG        = '0'
+            <isNotNull property="modeCd">
+                AND CLPI.EZCANCELFLAG   = '0'
+                AND TOC.EZCANCELFLAG    = '0'
+            </isNotNull>
+        ORDER BY
+           <isNull property="modeCd">
+                I.CPO_ORD_NUM   ASC
+           </isNull>
+           <isNotNull property="modeCd">
+                CLPI.CFS_PO_NUM   ASC
+           </isNotNull>
+           ,I.INV_DT        ASC
+           ,I.INV_NUM       ASC
+    </statement>
+
+    <statement id="getAttrbValNum" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            CLA.ATTRB_VAL_NUM
+        FROM
+            CFS_LEASE_ATTRB CLA
+        WHERE 
+            1 = 1
+        AND CLA.GLBL_CMPY_CD     = #glblCmpyCd#
+        AND CLA.ATTRB_KEY_NM     = #attrbKeyNm#
+        AND CLA.EZCANCELFLAG     = '0'
+    </statement>
+
+    <statement id="getCfsLeasePkgPoHdr" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            CPH.CFS_LEASE_PKG_PO_HDR_PK
+        FROM
+            CFS_LEASE_PKG_PO_HDR CPH
+        WHERE 
+            1 = 1
+        AND CPH.GLBL_CMPY_CD              = #glblCmpyCd#
+        <isNotNull property="cpoOrdNum">
+            AND CPH.CFS_LEASE_PKG_HLD_FLG = 'Y'
+            AND CPH.THRHD_HLD_FLG         = 'Y'
+            AND CPH.CPO_ORD_NUM           = #cpoOrdNum#
+        </isNotNull>
+        <isNotNull property="cfsPoNum">
+            <!-- 2019/04/04 QC#30756 Mod Start -->
+            <!-- AND CPH.CFS_PO_NUM          = #cfsPoNum# -->
+            <!-- AND CPH.CFS_APP_NUM         = #cfsAppNum# -->
+            AND UPPER(CPH.CFS_PO_NUM)     = UPPER(#cfsPoNum#)
+            AND UPPER(CPH.CFS_APP_NUM)    = UPPER(#cfsAppNum#)
+            <!-- 2019/04/04 QC#30756 Mod End -->
+        </isNotNull>
+        AND CPH.EZCANCELFLAG            = '0'
+    </statement>
+
+    <!-- 2018/05/24 QC#24431 H.Kumagai Add Start -->
+    <statement id="findCfsHdr" parameterClass="Map" resultClass="Map">
+        SELECT
+            C.CPO_ORD_NUM
+           <!-- 2020/01/17 S21_NA#54948 Mod Start -->
+           ,C.ORD_TOT_DEAL_SUB_TOT_AMT AS ENT_CPO_TOT_DEAL_NET_AMT
+<!--            ,C.ENT_CPO_TOT_DEAL_NET_AMT -->
+           <!-- 2020/01/17 S21_NA#54948 Mod End -->
+           ,CLPI.CFS_LEASE_PO_INFO_PK
+           ,CLPI.CFS_APP_NUM
+           ,CLPI.DS_ACCT_NM           AS CFS_DS_ACCT_NM
+           ,CLPI.CFS_PO_NUM
+           ,CLPI.CFS_PO_AMT
+           ,CLPI.CFS_CR_AMT
+           ,CLPI.LEASE_CMPY_USR_ID
+           ,CLPI.LEASE_CMPY_USR_NM
+           ,C.SHIP_TO_CUST_ACCT_CD
+           ,STC.DS_ACCT_NM
+           ,C.SLS_REP_TOC_CD
+           ,NULL                      AS CFS_LEASE_PKG_PO_HDR_PK
+        FROM
+           <!-- 2020/01/17 S21_NA#54948 Mod Start -->
+<!--            CPO             C -->
+           CPO_V           C
+           <!-- 2020/01/17 S21_NA#54948 Mod End -->
+           ,SELL_TO_CUST          STC
+           ,(SELECT
+                PI2.GLBL_CMPY_CD
+                ,PI2.EZCANCELFLAG
+                ,PI2.CFS_LEASE_PO_INFO_PK
+                ,PI2.CFS_APP_NUM
+                ,PI2.DS_ACCT_NM
+                ,PI2.CFS_PO_NUM
+                ,PI2.CFS_PO_AMT
+                ,PI2.CFS_CR_AMT
+                ,PI2.PO_INFO_PROC_FLG
+                ,PI2.LEASE_CMPY_USR_ID
+                ,PI2.LEASE_CMPY_USR_NM
+            FROM
+                (SELECT
+                    MAX(PI1.CFS_LEASE_PO_INFO_PK) AS CFS_LEASE_PO_INFO_PK
+                FROM
+                    CFS_LEASE_PO_INFO PI1
+                WHERE
+                    1 = 1
+                    AND PI1.GLBL_CMPY_CD = #glblCmpyCd#
+                    AND PI1.EZCANCELFLAG = '0'
+                GROUP BY
+                    <!-- 2019/04/04 QC#30756 Mod Start -->
+                    <!-- PI1.CFS_APP_NUM -->
+                    <!-- ,PI1.CFS_PO_NUM -->
+                     UPPER(PI1.CFS_APP_NUM)
+                    ,UPPER(PI1.CFS_PO_NUM)
+                    <!-- 2019/04/04 QC#30756 Mod End -->
+                HAVING
+                    MAX(PI1.PO_INFO_PROC_FLG) != 'Y') PI_PK
+                ,CFS_LEASE_PO_INFO PI2
+            WHERE
+                PI2.CFS_LEASE_PO_INFO_PK = PI_PK.CFS_LEASE_PO_INFO_PK) CLPI
+        WHERE 
+            1 = 1
+            AND C.GLBL_CMPY_CD            = #glblCmpyCd#
+            AND C.ORD_HDR_STS_CD          != #ordHdrStsCdCancel#
+            AND C.GLBL_CMPY_CD            = CLPI.GLBL_CMPY_CD
+            <!-- 2019/04/04 QC#30756 Mod Start -->
+            <!-- AND C.LEASE_CMPY_PO_NUM       = CLPI.CFS_APP_NUM || '/' || CLPI.CFS_PO_NUM -->
+            AND UPPER(C.LEASE_CMPY_PO_NUM)     = UPPER(CLPI.CFS_APP_NUM) || '/' || UPPER(CLPI.CFS_PO_NUM)
+            <!-- 2019/04/04 QC#30756 Mod End -->
+            AND CLPI.PO_INFO_PROC_FLG     = 'N'
+            AND C.SHIP_TO_CUST_ACCT_CD    = STC.SELL_TO_CUST_CD
+            AND C.GLBL_CMPY_CD            = STC.GLBL_CMPY_CD
+            AND NOT EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        CFS_LEASE_PKG_PO_HDR PPH
+                    WHERE
+                        PPH.GLBL_CMPY_CD         = CLPI.GLBL_CMPY_CD
+                    AND PPH.CFS_LEASE_PO_INFO_PK = CLPI.CFS_LEASE_PO_INFO_PK
+                    AND PPH.EZCANCELFLAG         = '0'
+            )
+            AND EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        CFS_LEASE_ELIG_ACCT CLEA
+                    WHERE
+                        1 = 1
+                        AND CLEA.GLBL_CMPY_CD   = C.GLBL_CMPY_CD
+                        AND (
+                                (       CLEA.BILL_TO_CUST_ACCT_CD   = C.BILL_TO_CUST_ACCT_CD
+                                    AND CLEA.BILL_TO_CUST_CD        = C.BILL_TO_CUST_CD
+                                )
+                                OR
+                                (       CLEA.BILL_TO_CUST_ACCT_CD   = C.BILL_TO_CUST_ACCT_CD
+                                    AND CLEA.BILL_TO_CUST_CD        IS NULL
+                                )
+                        )
+                        AND CLEA.EZCANCELFLAG = '0'
+            )
+            AND EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        CFS_LEASE_ELIG_ORD_CATG CLEOC
+                    WHERE
+                        1 = 1
+                        AND CLEOC.GLBL_CMPY_CD      = C.GLBL_CMPY_CD
+                        AND CLEOC.DS_ORD_CATG_CD    = C.DS_ORD_CATG_CD
+                        AND CLEOC.DS_ORD_TP_CD      = C.DS_ORD_TP_CD
+                        AND CLEOC.ORD_CATG_INCL_FLG = 'Y'
+                        AND CLEOC.EZCANCELFLAG      = '0'
+            )
+            AND C.EZCANCELFLAG            = '0'
+            AND STC.EZCANCELFLAG          = '0'
+            AND CLPI.EZCANCELFLAG         = '0'
+        UNION
+        SELECT
+            C.CPO_ORD_NUM
+           <!-- 2020/01/17 S21_NA#54948 Mod Start -->
+           ,C.ORD_TOT_DEAL_SUB_TOT_AMT AS ENT_CPO_TOT_DEAL_NET_AMT
+<!--            ,C.ENT_CPO_TOT_DEAL_NET_AMT -->
+           <!-- 2020/01/17 S21_NA#54948 Mod End -->
+           ,CLPI.CFS_LEASE_PO_INFO_PK
+           ,CLPI.CFS_APP_NUM
+           ,CLPI.DS_ACCT_NM           AS CFS_DS_ACCT_NM
+           ,CLPI.CFS_PO_NUM
+           ,CLPI.CFS_PO_AMT
+           ,CLPI.CFS_CR_AMT
+           ,CLPI.LEASE_CMPY_USR_ID
+           ,CLPI.LEASE_CMPY_USR_NM
+           ,C.SHIP_TO_CUST_ACCT_CD
+           ,STC.DS_ACCT_NM
+           ,C.SLS_REP_TOC_CD
+           ,CLPPOH.CFS_LEASE_PKG_PO_HDR_PK
+        FROM
+           <!-- 2020/01/17 S21_NA#54948 Mod Start -->
+<!--            CPO             C -->
+           CPO_V           C
+           <!-- 2020/01/17 S21_NA#54948 Mod End -->
+           ,SELL_TO_CUST          STC
+           ,(SELECT
+                PI2.GLBL_CMPY_CD
+                ,PI2.EZCANCELFLAG
+                ,PI2.CFS_LEASE_PO_INFO_PK
+                ,PI2.CFS_APP_NUM
+                ,PI2.DS_ACCT_NM
+                ,PI2.CFS_PO_NUM
+                ,PI2.CFS_PO_AMT
+                ,PI2.CFS_CR_AMT
+                ,PI2.PO_INFO_PROC_FLG
+                ,PI2.LEASE_CMPY_USR_ID
+                ,PI2.LEASE_CMPY_USR_NM
+            FROM
+                (SELECT
+                    MAX(PI1.CFS_LEASE_PO_INFO_PK) AS CFS_LEASE_PO_INFO_PK
+                FROM
+                    CFS_LEASE_PO_INFO PI1
+                WHERE
+                    1 = 1
+                    AND PI1.GLBL_CMPY_CD = #glblCmpyCd#
+                    AND PI1.EZCANCELFLAG = '0'
+                GROUP BY
+                    <!-- 2019/04/04 QC#30756 Mod Start -->
+                    <!-- PI1.CFS_APP_NUM -->
+                    <!-- ,PI1.CFS_PO_NUM -->
+                     UPPER(PI1.CFS_APP_NUM)
+                    ,UPPER(PI1.CFS_PO_NUM)
+                    <!-- 2019/04/04 QC#30756 Mod End -->
+                HAVING
+                    MAX(PI1.PO_INFO_PROC_FLG) != 'Y') PI_PK
+                ,CFS_LEASE_PO_INFO PI2
+            WHERE
+                PI2.CFS_LEASE_PO_INFO_PK = PI_PK.CFS_LEASE_PO_INFO_PK) CLPI
+            ,CFS_LEASE_PKG_PO_HDR CLPPOH
+        WHERE 
+            1 = 1
+            AND C.GLBL_CMPY_CD            = #glblCmpyCd#
+            AND C.ORD_HDR_STS_CD          != #ordHdrStsCdCancel#
+            AND C.GLBL_CMPY_CD            = CLPI.GLBL_CMPY_CD
+            <!-- 2019/04/04 QC#30756 Mod Start -->
+            <!-- AND C.LEASE_CMPY_PO_NUM       = CLPI.CFS_APP_NUM || '/' || CLPI.CFS_PO_NUM -->
+            AND UPPER(C.LEASE_CMPY_PO_NUM)     = UPPER(CLPI.CFS_APP_NUM) || '/' || UPPER(CLPI.CFS_PO_NUM)
+            <!-- 2019/04/04 QC#30756 Mod End -->
+            AND CLPI.PO_INFO_PROC_FLG     = 'N'
+            AND C.SHIP_TO_CUST_ACCT_CD    = STC.SELL_TO_CUST_CD
+            AND C.GLBL_CMPY_CD            = STC.GLBL_CMPY_CD
+            AND CLPI.GLBL_CMPY_CD         = CLPPOH.GLBL_CMPY_CD
+            AND CLPI.CFS_LEASE_PO_INFO_PK = CLPPOH.CFS_LEASE_PO_INFO_PK
+            AND CLPPOH.LEASE_PKG_CRAT_FLG  = 'N'
+            AND CLPPOH.THRHD_HLD_FLG       = 'Y'
+            AND EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        CFS_LEASE_ELIG_ACCT CLEA
+                    WHERE
+                        1 = 1
+                        AND CLEA.GLBL_CMPY_CD   = C.GLBL_CMPY_CD
+                        AND (
+                                (       CLEA.BILL_TO_CUST_ACCT_CD   = C.BILL_TO_CUST_ACCT_CD
+                                    AND CLEA.BILL_TO_CUST_CD        = C.BILL_TO_CUST_CD
+                                )
+                                OR
+                                (       CLEA.BILL_TO_CUST_ACCT_CD   = C.BILL_TO_CUST_ACCT_CD
+                                    AND CLEA.BILL_TO_CUST_CD        IS NULL
+                                )
+                        )
+                        AND CLEA.EZCANCELFLAG = '0'
+            )
+            AND EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        CFS_LEASE_ELIG_ORD_CATG CLEOC
+                    WHERE
+                        1 = 1
+                        AND CLEOC.GLBL_CMPY_CD      = C.GLBL_CMPY_CD
+                        AND CLEOC.DS_ORD_CATG_CD    = C.DS_ORD_CATG_CD
+                        AND CLEOC.DS_ORD_TP_CD      = C.DS_ORD_TP_CD
+                        AND CLEOC.ORD_CATG_INCL_FLG = 'Y'
+                        AND CLEOC.EZCANCELFLAG      = '0'
+            )
+            AND C.EZCANCELFLAG            = '0'
+            AND STC.EZCANCELFLAG          = '0'
+            AND CLPI.EZCANCELFLAG         = '0'
+            AND CLPPOH.EZCANCELFLAG       = '0'
+    <!-- START Add QC#60253 -->            
+    UNION
+        SELECT
+            C.CPO_ORD_NUM
+           ,C.ORD_TOT_DEAL_SUB_TOT_AMT AS ENT_CPO_TOT_DEAL_NET_AMT
+           ,CLPI.CFS_LEASE_PO_INFO_PK
+           ,CASE WHEN INSTR(C.LEASE_CMPY_PO_NUM, '/', 1, 1) = 0
+                THEN NULL
+                ELSE SUBSTR(C.LEASE_CMPY_PO_NUM, 1, INSTR(C.LEASE_CMPY_PO_NUM, '/', 1, 1) -1)
+            END AS CFS_APP_NUM
+           ,CLPI.DS_ACCT_NM           AS CFS_DS_ACCT_NM
+           ,CASE WHEN INSTR(C.LEASE_CMPY_PO_NUM, '/', 1, 1) = 0
+                THEN C.LEASE_CMPY_PO_NUM
+                ELSE SUBSTR(C.LEASE_CMPY_PO_NUM, INSTR(C.LEASE_CMPY_PO_NUM, '/', 1, 1) +1)
+            END AS CFS_PO_NUM
+           ,CLPI.CFS_PO_AMT
+           ,CLPI.CFS_CR_AMT
+           ,CLPI.LEASE_CMPY_USR_ID
+           ,CLPI.LEASE_CMPY_USR_NM
+           ,C.SHIP_TO_CUST_ACCT_CD
+           ,STC.DS_ACCT_NM
+           ,C.SLS_REP_TOC_CD
+           ,NULL                      AS CFS_LEASE_PKG_PO_HDR_PK
+        FROM
+           CPO_V           C
+           ,SELL_TO_CUST   STC
+           ,(SELECT
+                #glblCmpyCd# AS  GLBL_CMPY_CD
+                ,'0'  AS  EZCANCELFLAG
+                ,NULL AS CFS_LEASE_PO_INFO_PK
+                ,NULL AS CFS_APP_NUM
+                ,NULL AS DS_ACCT_NM
+                ,NULL AS CFS_PO_NUM
+                ,NULL AS CFS_PO_AMT
+                ,NULL AS CFS_CR_AMT
+                ,NULL AS PO_INFO_PROC_FLG
+                ,NULL AS LEASE_CMPY_USR_ID
+                ,NULL AS LEASE_CMPY_USR_NM
+            FROM
+                DUAL) CLPI
+        WHERE 
+                C.GLBL_CMPY_CD            = #glblCmpyCd#
+            AND C.ORD_HDR_STS_CD          != #ordHdrStsCd#
+            AND C.GLBL_CMPY_CD            = CLPI.GLBL_CMPY_CD
+            AND C.LEASE_CMPY_PO_NUM       IS NOT NULL
+            AND NOT EXISTS (
+                SELECT
+                    *
+                FROM
+                    CFS_LEASE_PO_INFO      A
+                WHERE
+                        A.GLBL_CMPY_CD      = #glblCmpyCd#
+                    AND A.EZCANCELFLAG      = '0'
+                    AND A.CFS_APP_NUM       = SUBSTR(C.LEASE_CMPY_PO_NUM, 1, INSTR(C.LEASE_CMPY_PO_NUM, '/', 1, 1) -1)
+                    AND A.CFS_PO_NUM        = SUBSTR(C.LEASE_CMPY_PO_NUM, INSTR(C.LEASE_CMPY_PO_NUM, '/', 1, 1) +1)
+            )
+            <!-- 2022/11/02 START DEL QC#60253 N.Takatsu -->
+            <!--AND C.ORD_HDR_STS_CD = '90'-->
+            <!-- 2022/11/02 END DEL QC#60253 N.Takatsu -->
+            AND C.SHIP_TO_CUST_ACCT_CD    = STC.SELL_TO_CUST_CD
+            AND C.GLBL_CMPY_CD            = STC.GLBL_CMPY_CD
+            AND NOT EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        CFS_LEASE_PKG_PO_HDR PPH
+                    WHERE
+                        PPH.GLBL_CMPY_CD         = CLPI.GLBL_CMPY_CD
+                    AND PPH.CFS_LEASE_PO_INFO_PK = CLPI.CFS_LEASE_PO_INFO_PK
+                    AND PPH.EZCANCELFLAG         = '0'
+            )
+            AND EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        CFS_LEASE_ELIG_ACCT CLEA
+                    WHERE
+                             CLEA.GLBL_CMPY_CD   = C.GLBL_CMPY_CD
+                        AND (
+                                (       CLEA.BILL_TO_CUST_ACCT_CD   = C.BILL_TO_CUST_ACCT_CD
+                                    AND CLEA.BILL_TO_CUST_CD        = C.BILL_TO_CUST_CD
+                                )
+                                OR
+                                (       CLEA.BILL_TO_CUST_ACCT_CD   = C.BILL_TO_CUST_ACCT_CD
+                                    AND CLEA.BILL_TO_CUST_CD        IS NULL
+                                )
+                        )
+                        AND CLEA.EZCANCELFLAG = '0'
+            )
+            AND EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        CFS_LEASE_ELIG_ORD_CATG CLEOC
+                    WHERE
+                            CLEOC.GLBL_CMPY_CD      = C.GLBL_CMPY_CD
+                        AND CLEOC.DS_ORD_CATG_CD    = C.DS_ORD_CATG_CD
+                        AND CLEOC.DS_ORD_TP_CD      = C.DS_ORD_TP_CD
+                        AND CLEOC.ORD_CATG_INCL_FLG = 'Y'
+                        AND CLEOC.EZCANCELFLAG      = '0'
+            )
+            AND NOT EXISTS (
+                SELECT
+                    *
+                FROM
+                    CFS_LEASE_PKG_PO_HDR CLPPOH
+                
+                WHERE
+                        CLPPOH.GLBL_CMPY_CD      = #glblCmpyCd#
+                    AND CLPPOH.EZCANCELFLAG      = '0'
+                    AND (
+                                CLPPOH.CFS_PO_NUM        = C.LEASE_CMPY_PO_NUM
+                            OR
+                                (
+                                        CLPPOH.CFS_APP_NUM       = SUBSTR(C.LEASE_CMPY_PO_NUM, 1, INSTR(C.LEASE_CMPY_PO_NUM, '/', 1, 1) -1)
+                                    AND CLPPOH.CFS_PO_NUM        = SUBSTR(C.LEASE_CMPY_PO_NUM, INSTR(C.LEASE_CMPY_PO_NUM, '/', 1, 1) +1)
+                                )
+                            OR
+                                (
+                                        CLPPOH.CFS_APP_NUM       IS NULL
+                                    AND CLPPOH.CFS_PO_NUM        = SUBSTR(C.LEASE_CMPY_PO_NUM, INSTR(C.LEASE_CMPY_PO_NUM, '/', 1, 1) +1)
+                                )
+                        )
+            )
+            AND C.EZCANCELFLAG            = '0'
+            AND STC.EZCANCELFLAG          = '0'
+            AND CLPI.EZCANCELFLAG         = '0'
+
+    UNION
+        SELECT
+            C.CPO_ORD_NUM
+           ,C.ORD_TOT_DEAL_SUB_TOT_AMT AS ENT_CPO_TOT_DEAL_NET_AMT
+           ,CLPI.CFS_LEASE_PO_INFO_PK
+           ,CASE WHEN INSTR(C.LEASE_CMPY_PO_NUM, '/', 1, 1) = 0
+                THEN NULL
+                ELSE SUBSTR(C.LEASE_CMPY_PO_NUM, 1, INSTR(C.LEASE_CMPY_PO_NUM, '/', 1, 1) -1)
+            END AS CFS_APP_NUM
+           ,CLPI.DS_ACCT_NM           AS CFS_DS_ACCT_NM
+           ,CASE WHEN INSTR(C.LEASE_CMPY_PO_NUM, '/', 1, 1) = 0
+                THEN C.LEASE_CMPY_PO_NUM
+                ELSE SUBSTR(C.LEASE_CMPY_PO_NUM, INSTR(C.LEASE_CMPY_PO_NUM, '/', 1, 1) +1)
+            END AS CFS_PO_NUM
+           ,CLPI.CFS_PO_AMT
+           ,CLPI.CFS_CR_AMT
+           ,CLPI.LEASE_CMPY_USR_ID
+           ,CLPI.LEASE_CMPY_USR_NM
+           ,C.SHIP_TO_CUST_ACCT_CD
+           ,STC.DS_ACCT_NM
+           ,C.SLS_REP_TOC_CD
+           ,CLPPOH.CFS_LEASE_PKG_PO_HDR_PK
+        FROM
+           CPO_V           C
+           ,SELL_TO_CUST          STC
+           ,(SELECT
+                #glblCmpyCd# AS  GLBL_CMPY_CD
+                ,'0'  AS  EZCANCELFLAG
+                ,NULL AS CFS_LEASE_PO_INFO_PK
+                ,NULL AS CFS_APP_NUM
+                ,NULL AS DS_ACCT_NM
+                ,NULL AS CFS_PO_NUM
+                ,NULL AS CFS_PO_AMT
+                ,NULL AS CFS_CR_AMT
+                ,NULL AS PO_INFO_PROC_FLG
+                ,NULL AS LEASE_CMPY_USR_ID
+                ,NULL AS LEASE_CMPY_USR_NM
+            FROM
+                DUAL) CLPI
+            ,CFS_LEASE_PKG_PO_HDR CLPPOH
+        WHERE 
+                C.GLBL_CMPY_CD            = #glblCmpyCd#
+            AND C.EZCANCELFLAG            = '0'
+            AND C.ORD_HDR_STS_CD          != #ordHdrStsCd#
+            AND C.GLBL_CMPY_CD            = CLPI.GLBL_CMPY_CD
+            AND C.LEASE_CMPY_PO_NUM       IS NOT NULL
+            AND NOT EXISTS (
+                SELECT
+                    *
+                FROM
+                    CFS_LEASE_PO_INFO      A
+                WHERE
+                        A.GLBL_CMPY_CD      = #glblCmpyCd#
+                    AND A.EZCANCELFLAG      = '0'
+                    AND A.CFS_APP_NUM       = SUBSTR(C.LEASE_CMPY_PO_NUM, 1, INSTR(C.LEASE_CMPY_PO_NUM, '/', 1, 1) -1)
+                    AND A.CFS_PO_NUM        = SUBSTR(C.LEASE_CMPY_PO_NUM, INSTR(C.LEASE_CMPY_PO_NUM, '/', 1, 1) +1)
+            )
+            <!-- 2022/11/02 START DEL QC#60253 N.Takatsu -->
+            <!--AND C.ORD_HDR_STS_CD = '90'-->
+            <!-- 2022/11/02 END DEL QC#60253 N.Takatsu -->
+            AND C.SHIP_TO_CUST_ACCT_CD    = STC.SELL_TO_CUST_CD
+            AND C.GLBL_CMPY_CD            = STC.GLBL_CMPY_CD
+            AND CLPI.GLBL_CMPY_CD         = CLPPOH.GLBL_CMPY_CD
+            AND (
+                        CLPPOH.CFS_PO_NUM        = C.LEASE_CMPY_PO_NUM
+                    OR
+                        (
+                                CLPPOH.CFS_APP_NUM       = SUBSTR(C.LEASE_CMPY_PO_NUM, 1, INSTR(C.LEASE_CMPY_PO_NUM, '/', 1, 1) -1)
+                            AND CLPPOH.CFS_PO_NUM        = SUBSTR(C.LEASE_CMPY_PO_NUM, INSTR(C.LEASE_CMPY_PO_NUM, '/', 1, 1) +1)
+                        )
+                    OR
+                        (
+                                CLPPOH.CFS_APP_NUM       IS NULL
+                            AND CLPPOH.CFS_PO_NUM        = SUBSTR(C.LEASE_CMPY_PO_NUM, INSTR(C.LEASE_CMPY_PO_NUM, '/', 1, 1) +1)
+                        )
+                )
+            AND CLPPOH.LEASE_PKG_CRAT_FLG  = 'N'
+            AND CLPPOH.THRHD_HLD_FLG       = 'Y'
+            AND CLPPOH.EZCANCELFLAG        = '0'
+            AND NOT EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        CFS_LEASE_PKG_PO_HDR PPH
+                    WHERE
+                        PPH.GLBL_CMPY_CD         = CLPI.GLBL_CMPY_CD
+                    AND PPH.CFS_LEASE_PO_INFO_PK = CLPI.CFS_LEASE_PO_INFO_PK
+                    AND PPH.EZCANCELFLAG         = '0'
+            )
+            AND EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        CFS_LEASE_ELIG_ACCT CLEA
+                    WHERE
+                        CLEA.GLBL_CMPY_CD   = C.GLBL_CMPY_CD
+                        AND (
+                                (       CLEA.BILL_TO_CUST_ACCT_CD   = C.BILL_TO_CUST_ACCT_CD
+                                    AND CLEA.BILL_TO_CUST_CD        = C.BILL_TO_CUST_CD
+                                )
+                                OR
+                                (       CLEA.BILL_TO_CUST_ACCT_CD   = C.BILL_TO_CUST_ACCT_CD
+                                    AND CLEA.BILL_TO_CUST_CD        IS NULL
+                                )
+                        )
+                        AND CLEA.EZCANCELFLAG = '0'
+            )
+            AND EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        CFS_LEASE_ELIG_ORD_CATG CLEOC
+                    WHERE
+                        CLEOC.GLBL_CMPY_CD      = C.GLBL_CMPY_CD
+                        AND CLEOC.DS_ORD_CATG_CD    = C.DS_ORD_CATG_CD
+                        AND CLEOC.DS_ORD_TP_CD      = C.DS_ORD_TP_CD
+                        AND CLEOC.ORD_CATG_INCL_FLG = 'Y'
+                        AND CLEOC.EZCANCELFLAG      = '0'
+            )
+            AND C.EZCANCELFLAG            = '0'
+            AND STC.EZCANCELFLAG          = '0'
+            AND CLPI.EZCANCELFLAG         = '0'
+<!-- END   Add QC#60253 -->     
+        ORDER BY
+            CFS_PO_NUM   ASC
+    </statement>
+
+    <statement id="getCfsDtl" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            I.CPO_ORD_NUM
+           ,I.INV_NUM
+           ,I.INV_DT
+           ,I.BILL_TO_CUST_CD
+           ,I.INV_TOT_DEAL_NET_AMT
+           ,I.INV_TOT_DEAL_SLS_AMT
+           ,I.INV_TOT_DEAL_TAX_AMT
+           ,I.INV_TOT_DEAL_DISC_AMT
+           ,I.INV_TOT_DEAL_FRT_AMT
+           ,C.ORD_BOOK_REQ_USR_ID <!-- QC#30523 Mod I.SLS_ADMIN_PSN_CD -->
+           ,I.ACCT_DT
+           ,I.INV_TP_CD
+           ,I.BILL_TO_CUST_ACCT_CD
+           ,C.SHIP_TO_CUST_ACCT_CD
+           ,I.NEGO_DEAL_AMT
+           ,I.SLS_REP_TOC_NM
+           ,I.SLS_REP_TOC_CD
+           ,I.CR_REBIL_RSN_CATG_CD
+           ,ATB.AR_TRX_BAL_PK
+           ,CLPI.CFS_LEASE_PO_INFO_PK
+           ,CLPI.CFS_APP_NUM
+           ,CLPI.DS_ACCT_NM           AS CFS_DS_ACCT_NM
+           ,CLPI.CFS_PO_NUM
+           ,CLPI.CFS_PO_AMT
+           ,CLPI.CFS_CR_AMT
+           ,CLPI.LEASE_CMPY_USR_ID
+           ,CLPI.LEASE_CMPY_USR_NM
+           ,TOC.COA_BR_CD
+           <!-- QC#30753 Mod Start -->
+           ,P.FIRST_NM AS PSN_FIRST_NM
+           ,P.LAST_NM AS PSN_LAST_NM
+           <!-- ,P.PSN_FIRST_NM -->
+           <!-- ,P.PSN_LAST_NM -->
+           <!-- QC#30753 Mod End -->
+           ,STC.DS_ACCT_NM
+           ,PPH.CFS_LEASE_PKG_PO_HDR_PK
+        FROM
+            INV               I
+           ,AR_TRX_BAL        ATB
+           ,CPO               C
+           <!-- QC#30753 Mod Start -->
+           ,AUTH_PSN          P
+           <!--,S21_PSN           P -->
+           <!-- QC#30753 Mod End -->
+           ,SELL_TO_CUST      STC
+           ,(SELECT
+                PI2.GLBL_CMPY_CD
+                ,PI2.EZCANCELFLAG
+                ,PI2.CFS_LEASE_PO_INFO_PK
+                ,PI2.CFS_APP_NUM
+                ,PI2.DS_ACCT_NM
+                ,PI2.CFS_PO_NUM
+                ,PI2.CFS_PO_AMT
+                ,PI2.CFS_CR_AMT
+                ,PI2.PO_INFO_PROC_FLG
+                ,PI2.LEASE_CMPY_USR_ID
+                ,PI2.LEASE_CMPY_USR_NM
+            FROM
+                (SELECT
+                    MAX(PI1.CFS_LEASE_PO_INFO_PK) AS CFS_LEASE_PO_INFO_PK
+                FROM
+                    CFS_LEASE_PO_INFO PI1
+                WHERE
+                    1 = 1
+                    AND PI1.GLBL_CMPY_CD = #glblCmpyCd#
+                    AND PI1.EZCANCELFLAG = '0'
+                GROUP BY
+                    <!-- 2019/04/04 QC#30756 Mod Start -->
+                    <!-- PI1.CFS_APP_NUM -->
+                    <!-- ,PI1.CFS_PO_NUM -->
+                     UPPER(PI1.CFS_APP_NUM)
+                    ,UPPER(PI1.CFS_PO_NUM)
+                    <!-- 2019/04/04 QC#30756 Mod End -->
+                HAVING
+                    MAX(PI1.PO_INFO_PROC_FLG) != 'Y') PI_PK
+                ,CFS_LEASE_PO_INFO PI2
+            WHERE
+                PI2.CFS_LEASE_PO_INFO_PK = PI_PK.CFS_LEASE_PO_INFO_PK) CLPI
+           ,TOC                  TOC
+           ,CFS_LEASE_PKG_PO_HDR PPH
+        WHERE 
+            1 = 1
+            AND I.GLBL_CMPY_CD            = #glblCmpyCd#
+            AND I.FNLZ_INV_FLG            = 'Y'
+            AND I.GLBL_CMPY_CD            = ATB.GLBL_CMPY_CD
+            AND I.INV_NUM                 = ATB.AR_TRX_NUM
+            AND I.GLBL_CMPY_CD            = C.GLBL_CMPY_CD
+            AND I.CPO_ORD_NUM             = C.CPO_ORD_NUM
+            AND C.ORD_HDR_STS_CD          != #ordHdrStsCdCancel#
+            AND C.GLBL_CMPY_CD            = CLPI.GLBL_CMPY_CD
+            <!-- 2019/04/04 QC#30756 Mod Start -->
+            <!-- AND C.LEASE_CMPY_PO_NUM       = CLPI.CFS_APP_NUM || '/' || CLPI.CFS_PO_NUM -->
+            AND UPPER(C.LEASE_CMPY_PO_NUM)     = UPPER(CLPI.CFS_APP_NUM) || '/' || UPPER(CLPI.CFS_PO_NUM)
+            <!-- 2019/04/04 QC#30756 Mod End -->
+            AND CLPI.PO_INFO_PROC_FLG     = 'N'
+            AND C.GLBL_CMPY_CD            = TOC.GLBL_CMPY_CD
+            AND C.SLS_REP_TOC_CD          = TOC.TOC_CD
+            <!-- QC#30523 Mod Start -->
+            <!-- AND I.GLBL_CMPY_CD          = P.GLBL_CMPY_CD(+)  -->
+            <!-- AND I.SLS_ADMIN_PSN_CD      = P.PSN_CD(+)  -->
+            AND C.GLBL_CMPY_CD          = P.GLBL_CMPY_CD(+)
+            <!-- QC#30753 Mod Start -->
+            AND C.ORD_BOOK_REQ_USR_ID   = P.USR_NM(+)
+            <!-- AND C.ORD_BOOK_REQ_USR_ID   = P.PSN_CD(+) -->
+            <!-- QC#30753 Mod End -->
+            <!-- QC#30523 Mod End -->
+            AND I.GLBL_CMPY_CD            = STC.GLBL_CMPY_CD
+            AND C.SHIP_TO_CUST_ACCT_CD    = STC.SELL_TO_CUST_CD
+            AND CLPI.GLBL_CMPY_CD         = PPH.GLBL_CMPY_CD
+            AND CLPI.CFS_LEASE_PO_INFO_PK = PPH.CFS_LEASE_PO_INFO_PK
+            AND PPH.LEASE_PKG_CRAT_FLG    = 'N'
+            AND PPH.THRHD_HLD_FLG         = 'Y'
+            AND EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        CFS_LEASE_ELIG_ACCT CLEA
+                    WHERE
+                        1 = 1
+                        AND CLEA.GLBL_CMPY_CD   = I.GLBL_CMPY_CD
+                        AND (
+                                (       CLEA.BILL_TO_CUST_ACCT_CD   = I.BILL_TO_CUST_ACCT_CD
+                                    AND CLEA.BILL_TO_CUST_CD        = I.BILL_TO_CUST_CD
+                                )
+                                OR
+                                (       CLEA.BILL_TO_CUST_ACCT_CD   = I.BILL_TO_CUST_ACCT_CD
+                                    AND CLEA.BILL_TO_CUST_CD        IS NULL
+                                )
+                        )
+                        AND CLEA.EZCANCELFLAG = '0'
+            )
+            AND EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        CFS_LEASE_ELIG_ORD_CATG CLEOC
+                    WHERE
+                        1 = 1
+                        AND CLEOC.GLBL_CMPY_CD      = I.GLBL_CMPY_CD
+                        AND CLEOC.DS_ORD_CATG_CD    = I.DS_ORD_CATG_CD
+                        AND CLEOC.DS_ORD_TP_CD      = I.DS_ORD_TP_CD
+                        AND CLEOC.ORD_CATG_INCL_FLG = 'Y'
+                        AND CLEOC.EZCANCELFLAG      = '0'
+            )
+            AND NOT EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        CFS_LEASE_PKG_PO_DTL CLPPD
+                    WHERE
+                        1 = 1
+                        AND CLPPD.GLBL_CMPY_CD  = I.GLBL_CMPY_CD
+                        AND CLPPD.INV_NUM       = I.INV_NUM
+                        AND CLPPD.EZCANCELFLAG  = '0'
+            )
+            AND I.EZCANCELFLAG          = '0'
+            AND ATB.EZCANCELFLAG        = '0'
+            AND C.EZCANCELFLAG          = '0'
+            AND P.EZCANCELFLAG(+)       = '0'
+            AND STC.EZCANCELFLAG        = '0'
+            AND CLPI.EZCANCELFLAG       = '0'
+            AND TOC.EZCANCELFLAG        = '0'
+            AND PPH.EZCANCELFLAG        = '0'
+<!-- START  QC#60253 -->
+UNION
+       SELECT
+            I.CPO_ORD_NUM
+           ,I.INV_NUM
+           ,I.INV_DT
+           ,I.BILL_TO_CUST_CD
+           ,I.INV_TOT_DEAL_NET_AMT
+           ,I.INV_TOT_DEAL_SLS_AMT
+           ,I.INV_TOT_DEAL_TAX_AMT
+           ,I.INV_TOT_DEAL_DISC_AMT
+           ,I.INV_TOT_DEAL_FRT_AMT
+           ,C.ORD_BOOK_REQ_USR_ID
+           ,I.ACCT_DT
+           ,I.INV_TP_CD
+           ,I.BILL_TO_CUST_ACCT_CD
+           ,C.SHIP_TO_CUST_ACCT_CD
+           ,I.NEGO_DEAL_AMT
+           ,I.SLS_REP_TOC_NM
+           ,I.SLS_REP_TOC_CD
+           ,I.CR_REBIL_RSN_CATG_CD
+           ,ATB.AR_TRX_BAL_PK
+           ,CLPI.CFS_LEASE_PO_INFO_PK
+           ,PPH.CFS_APP_NUM
+           ,CLPI.DS_ACCT_NM           AS CFS_DS_ACCT_NM
+           ,PPH.CFS_PO_NUM
+           ,CLPI.CFS_PO_AMT
+           ,CLPI.CFS_CR_AMT
+           ,CLPI.LEASE_CMPY_USR_ID
+           ,CLPI.LEASE_CMPY_USR_NM
+           ,TOC.COA_BR_CD
+           ,P.FIRST_NM AS PSN_FIRST_NM
+           ,P.LAST_NM AS PSN_LAST_NM
+           ,STC.DS_ACCT_NM
+           ,PPH.CFS_LEASE_PKG_PO_HDR_PK
+        FROM
+            INV               I
+           ,AR_TRX_BAL        ATB
+           ,CPO               C
+           ,AUTH_PSN          P
+           ,SELL_TO_CUST      STC
+           ,(SELECT
+                #glblCmpyCd# AS  GLBL_CMPY_CD
+                ,'0'  AS  EZCANCELFLAG
+                ,NULL AS CFS_LEASE_PO_INFO_PK
+                ,NULL AS CFS_APP_NUM
+                ,NULL AS DS_ACCT_NM
+                ,NULL AS CFS_PO_NUM
+                ,NULL AS CFS_PO_AMT
+                ,NULL AS CFS_CR_AMT
+                ,NULL AS PO_INFO_PROC_FLG
+                ,NULL AS LEASE_CMPY_USR_ID
+                ,NULL AS LEASE_CMPY_USR_NM
+            FROM
+                dual) CLPI
+           ,TOC                  TOC
+           ,CFS_LEASE_PKG_PO_HDR PPH
+        WHERE 
+            1 = 1
+            AND I.GLBL_CMPY_CD            = #glblCmpyCd#
+            AND I.FNLZ_INV_FLG            = 'Y'
+            AND I.GLBL_CMPY_CD            = ATB.GLBL_CMPY_CD
+            AND I.INV_NUM                 = ATB.AR_TRX_NUM
+            AND I.GLBL_CMPY_CD            = C.GLBL_CMPY_CD
+            AND I.CPO_ORD_NUM             = C.CPO_ORD_NUM
+            AND C.ORD_HDR_STS_CD          != #ordHdrStsCdCancel#
+            AND C.GLBL_CMPY_CD            = TOC.GLBL_CMPY_CD
+            AND C.SLS_REP_TOC_CD          = TOC.TOC_CD
+            AND C.GLBL_CMPY_CD            = P.GLBL_CMPY_CD(+)
+            AND C.ORD_BOOK_REQ_USR_ID     = P.USR_NM(+)
+            AND I.GLBL_CMPY_CD            = STC.GLBL_CMPY_CD
+            AND C.SHIP_TO_CUST_ACCT_CD    = STC.SELL_TO_CUST_CD
+            AND C.GLBL_CMPY_CD            = PPH.GLBL_CMPY_CD
+            AND C.CPO_ORD_NUM             = PPH.CPO_ORD_NUM
+            AND PPH.CFS_LEASE_PO_INFO_PK  IS NULL
+            AND PPH.LEASE_PKG_CRAT_FLG    = 'N'
+            AND PPH.THRHD_HLD_FLG         = 'Y'
+            AND PPH.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        CFS_LEASE_ELIG_ACCT CLEA
+                    WHERE
+                        1 = 1
+                        AND CLEA.GLBL_CMPY_CD   = I.GLBL_CMPY_CD
+                        AND (
+                                (       CLEA.BILL_TO_CUST_ACCT_CD   = I.BILL_TO_CUST_ACCT_CD
+                                    AND CLEA.BILL_TO_CUST_CD        = I.BILL_TO_CUST_CD
+                                )
+                                OR
+                                (       CLEA.BILL_TO_CUST_ACCT_CD   = I.BILL_TO_CUST_ACCT_CD
+                                    AND CLEA.BILL_TO_CUST_CD        IS NULL
+                                )
+                        )
+                        AND CLEA.EZCANCELFLAG = '0'
+            )
+            AND EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        CFS_LEASE_ELIG_ORD_CATG CLEOC
+                    WHERE
+                        1 = 1
+                        AND CLEOC.GLBL_CMPY_CD      = I.GLBL_CMPY_CD
+                        AND CLEOC.DS_ORD_CATG_CD    = I.DS_ORD_CATG_CD
+                        AND CLEOC.DS_ORD_TP_CD      = I.DS_ORD_TP_CD
+                        AND CLEOC.ORD_CATG_INCL_FLG = 'Y'
+                        AND CLEOC.EZCANCELFLAG      = '0'
+            )
+            AND NOT EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        CFS_LEASE_PKG_PO_DTL CLPPD
+                    WHERE
+                        1 = 1
+                        AND CLPPD.GLBL_CMPY_CD  = I.GLBL_CMPY_CD
+                        AND CLPPD.INV_NUM       = I.INV_NUM
+                        AND CLPPD.EZCANCELFLAG  = '0'
+            )
+            AND I.EZCANCELFLAG          = '0'
+            AND ATB.EZCANCELFLAG        = '0'
+            AND C.EZCANCELFLAG          = '0'
+            AND P.EZCANCELFLAG(+)       = '0'
+            AND STC.EZCANCELFLAG        = '0'
+            AND CLPI.EZCANCELFLAG       = '0'
+            AND TOC.EZCANCELFLAG        = '0'
+            AND PPH.EZCANCELFLAG        = '0'
+<!-- END  QC#60253 -->
+        ORDER BY
+            <!-- Start QC#60253 Mod -->
+            <!-- CLPI.CFS_PO_NUM ASC -->
+            <!-- ,I.INV_DT       ASC -->
+            <!-- ,I.INV_NUM      ASC -->
+            CFS_PO_NUM    ASC
+           ,INV_DT        ASC
+           ,INV_NUM       ASC
+           <!-- End QC#60253 Mod -->
+    </statement>
+    <!-- 2018/05/24 QC#24431 H.Kumagai Add Start -->
+</sqlMap>

@@ -1,0 +1,205 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<sqlMap namespace="NMAL0200Query">
+
+    <statement id="findMdseStruElmntTp" parameterClass="Map" resultClass="Map">
+        SELECT
+            MAIN.MDSE_STRU_ELMNT_TP_CD
+            ,MAIN.MDSE_STRU_ELMNT_TP_DESC_TXT
+        FROM(
+            SELECT
+                MSET.MDSE_STRU_ELMNT_TP_CD
+                ,MSET.MDSE_STRU_ELMNT_TP_DESC_TXT
+            FROM
+                MDSE_STRU_ELMNT_TP MSET
+            WHERE
+                1 = 1
+            AND MSET.GLBL_CMPY_CD           = #glblCmpyCd#
+            AND MSET.MDSE_STRU_ELMNT_TP_CD != #mdseStruElmntTpCd#
+            AND MSET.EZCANCELFLAG           = '0'
+            ORDER BY
+                MSET.MDSE_STRU_ELMNT_TP_SORT_NUM ASC
+        ) MAIN
+        WHERE ROWNUM &lt;= #rowNum#
+    </statement>
+
+    <statement id="findProdCtrlList" parameterClass="Map" resultClass="Map">
+        SELECT
+            MAIN.PROD_CTRL_CD
+            ,MAIN.PROD_CTRL_NM
+            ,MAIN.MDSE_STRU_ELMNT_TP_CD
+            ,MAIN.SCD_PROD_HRCH_CD
+            ,MAIN.SCD_PROD_HRCH_NM
+            ,MAIN.MDSE_CD
+            ,MAIN.EZUPTIME
+            ,MAIN.EZUPTIMEZONE
+        FROM(
+            SELECT
+                PC.PROD_CTRL_CD
+                ,PC.PROD_CTRL_NM
+                ,PC.MDSE_STRU_ELMNT_TP_CD
+                <isNotNull property="prodLine">
+                ,PH.SCD_PROD_HRCH_CD
+                ,PH.SCD_PROD_HRCH_NM
+                ,PH.MDSE_CD
+                </isNotNull>
+                <isNull property="prodLine">
+                ,'' AS SCD_PROD_HRCH_CD
+                ,'' AS SCD_PROD_HRCH_NM
+                ,'' AS MDSE_CD
+                </isNull>
+                ,PC.EZUPTIME
+                ,PC.EZUPTIMEZONE
+            FROM
+                PROD_CTRL PC
+                ,MDSE_STRU_ELMNT_TP MSET
+                <isNotNull property="prodLine" >
+                ,(
+                    -- SELECT PL3 QUERY
+                    SELECT
+                        SPH.PROD_CTRL_CD  AS SCD_PROD_HRCH_CD
+                        ,SPH.PROD_CTRL_NM AS SCD_PROD_HRCH_NM
+                        ,PC.PROD_CTRL_CD  AS THIRD_PROD_HRCH_CD
+                        ,(
+                            SELECT
+                                M.MDSE_CD
+                            FROM
+                                MDSE M
+                            WHERE
+                                1 = 1
+                            AND M.RGTN_STS_CD          = #rgtnStsCd#
+                            AND M.GLBL_CMPY_CD         = PC.GLBL_CMPY_CD
+                            AND M.THIRD_PROD_CTRL_CD   = PC.PROD_CTRL_CD
+                            AND M.EZCANCELFLAG         = '0' 
+                            AND ROWNUM                 = #mdseRowNum#
+                        ) AS MDSE_CD
+                    FROM
+                        PROD_CTRL PC
+                        ,PROD_CTRL SPH
+                    WHERE
+                        1 = 1
+                    AND PC.GLBL_CMPY_CD          = #glblCmpyCd#
+                    AND PC.MDSE_STRU_ELMNT_TP_CD = #prodLine#
+                    <isNotNull property="scdProdHrchCd">
+                    AND PC.SCD_PROD_HRCH_CD     LIKE #scdProdHrchCd#
+                    </isNotNull>
+                    AND PC.GLBL_CMPY_CD         = SPH.GLBL_CMPY_CD
+                    AND PC.SCD_PROD_HRCH_CD     = SPH.PROD_CTRL_CD
+                    AND SPH.MDSE_STRU_ELMNT_TP_CD = #prodLine2#
+                    AND PC.EZCANCELFLAG          = '0'
+                    AND SPH.EZCANCELFLAG         = '0'
+                ) PH
+                </isNotNull>
+            WHERE
+                1 = 1
+            AND PC.GLBL_CMPY_CD          = #glblCmpyCd#
+            <iterate property="mdseStruElmntTpCdList" var="mdseStruElmntTpCd[]" open="AND PC.MDSE_STRU_ELMNT_TP_CD IN (" conjunction= ", " close=")">
+                #mdseStruElmntTpCd[]#
+            </iterate>
+            <isNotNull property="prodCtrlCd">
+            AND PC.PROD_CTRL_CD          LIKE #prodCtrlCd#
+            </isNotNull>
+            <isNotNull property="prodCtrlNm">
+            AND UPPER(PC.PROD_CTRL_NM)   LIKE #prodCtrlNm#
+            </isNotNull>
+            AND PC.GLBL_CMPY_CD          = MSET.GLBL_CMPY_CD
+            AND PC.MDSE_STRU_ELMNT_TP_CD = MSET.MDSE_STRU_ELMNT_TP_CD
+            <isNotNull property="prodLine">
+                <isNotNull property="scdProdHrchCd">
+                AND PC.PROD_CTRL_CD          = PH.THIRD_PROD_HRCH_CD
+                </isNotNull>
+                <isNull property="scdProdHrchCd">
+                AND PC.PROD_CTRL_CD          = PH.THIRD_PROD_HRCH_CD(+)
+                </isNull>
+            </isNotNull>
+            AND PC.EZCANCELFLAG          = '0'
+            AND MSET.EZCANCELFLAG        = '0'
+            ORDER BY
+                MSET.MDSE_STRU_ELMNT_TP_SORT_NUM ASC
+                ,PC.PROD_CTRL_CD ASC
+        ) MAIN
+        WHERE ROWNUM &lt;= #rowNum#
+    </statement>
+
+    <statement id="findtThirdProdHrch" parameterClass="Map" resultClass="String">
+        SELECT
+            PC.PROD_CTRL_CD
+        FROM
+            PROD_CTRL PC
+        WHERE
+            1 = 1
+        AND PC.GLBL_CMPY_CD            = #glblCmpyCd#
+        AND PC.SCD_PROD_HRCH_CD        = #scdProdCtrlCd#
+        AND PC.MDSE_STRU_ELMNT_TP_CD   = #prodLine#
+        AND PC.EZCANCELFLAG            = '0'
+        AND ROWNUM                     = #rowNum#
+    </statement>
+
+    <statement id="findMdseProdCtrl" parameterClass="Map" resultClass="String">
+        SELECT
+            M.MDSE_CD
+        FROM
+            MDSE M
+        WHERE
+            1 = 1
+        AND M.GLBL_CMPY_CD           = #glblCmpyCd#
+        AND M.RGTN_STS_CD            = #rgtnStsCd#
+        <isNotNull property="zerothProdCtrlCd">
+        AND M.ZEROTH_PROD_CTRL_CD    = #zerothProdCtrlCd#
+        </isNotNull>
+        <isNotNull property="firstProdCtrlCd">
+        AND M.FIRST_PROD_CTRL_CD     = #firstProdCtrlCd#
+        </isNotNull>
+        <isNotNull property="scdProdCtrlCd">
+        AND M.SCD_PROD_CTRL_CD       = #scdProdCtrlCd#
+        </isNotNull>
+        <isNotNull property="thirdProdCtrlCd">
+        AND M.THIRD_PROD_CTRL_CD     = #thirdProdCtrlCd#
+        </isNotNull>
+        <isNotNull property="frthProdCtrlCd">
+        AND M.FRTH_PROD_CTRL_CD      = #frthProdCtrlCd#
+        </isNotNull>
+        AND M.EZCANCELFLAG           = '0'
+        <isNotNull property="rowNum">
+        AND ROWNUM                   = #rowNum#
+        </isNotNull>
+    </statement>
+
+    <statement id="chkProdCtrlRelationship" parameterClass="Map" resultClass="String">
+        SELECT
+            PC.PROD_CTRL_CD
+        FROM
+            PROD_CTRL PC
+        WHERE
+            1 = 1
+        AND PC.GLBL_CMPY_CD           = #glblCmpyCd#
+        AND PC.MDSE_STRU_ELMNT_TP_CD  = #mdseStruElmntTpCd#
+        AND PC.PROD_CTRL_CD           = #prodCtrlCd#
+        AND PC.EZCANCELFLAG           = '0'
+        AND ROWNUM                    = #rowNum#
+    </statement>
+
+    <statement id="getMaxHrchSortNum" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            NVL(MAX(PC.PROD_CTRL_SORT_NUM),0) AS CNT
+        FROM
+            PROD_CTRL PC
+        WHERE
+            1 = 1
+        AND PC.GLBL_CMPY_CD           = #glblCmpyCd#
+        AND PC.MDSE_STRU_ELMNT_TP_CD  = #mdseStruElmntTpCd#
+    </statement>
+
+    <statement id="countProdCtrl" parameterClass="Map" resultClass="String">
+        SELECT
+           PC.PROD_CTRL_CD
+        FROM
+            PROD_CTRL PC
+        WHERE 
+            1 = 1
+        AND PC.GLBL_CMPY_CD      = #glblCmpyCd#
+        AND PC.PROD_CTRL_CD      = #prodCtrlCd#
+        AND PC.EZCANCELFLAG      = '0'
+    </statement>
+
+</sqlMap>

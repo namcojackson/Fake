@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NMAB491001">
+
+	<statement id="getLocation"  parameterClass="Map" resultClass="Map">
+    WITH PLW_TBL AS  
+        ( 
+    SELECT
+             PLW.LOC_NM              AS LOC_NM
+            ,PLW.DS_LOC_NM           AS ADDL_LOC_NM
+            ,SHIP.SHIP_TO_CUST_CD    AS PTY_CD
+            ,PLW.FIRST_LINE_ADDR     AS FIRST_LINE_ADDR
+            ,PLW.SCD_LINE_ADDR       AS SCD_LINE_ADDR
+            ,PLW.THIRD_LINE_ADDR     AS THIRD_LINE_ADDR
+            ,PLW.FRTH_LINE_ADDR      AS FRTH_LINE_ADDR
+            ,PLW.CTY_ADDR            AS CTY_ADDR
+            ,PLW.CTRY_CD             AS CTRY_CD
+            ,PLW.POST_CD             AS POST_CD
+     FROM
+             PTY_LOC_WRK     PLW
+            ,SHIP_TO_CUST    SHIP
+
+     WHERE  
+            PLW.GLBL_CMPY_CD        = #glblCmpyCd#
+       AND  PLW.RGTN_STS_CD         = 'P20'
+      <isNotNull property="lastCompletedRequestTime">
+       AND  PLW.EZUPTIME            &gt;= #lastCompletedRequestTime#
+      </isNotNull>
+      <isNotNull property="ezupaplid">
+       AND  PLW.EZUPAPLID           &lt;&gt; #ezupaplid#
+      </isNotNull>
+       AND  PLW.EZCANCELFLAG        = '0'
+
+       AND  PLW.GLBL_CMPY_CD        = SHIP.GLBL_CMPY_CD
+       AND  PLW.PTY_LOC_PK          = SHIP.PTY_LOC_PK
+       AND  SHIP.LOC_GRP_CD         = '3'
+       AND  SHIP.EZCANCELFLAG       = '0'
+          )
+
+    , PLW_HIST_MAX_UPTIME_TBL AS  (              
+        SELECT
+                 SHIP.SHIP_TO_CUST_CD         AS PTY_CD
+                ,MAX(PLW_HIST.EZUPTIME )      AS EZUPTIME
+        FROM
+                 PTY_LOC_WRK_HIST    PLW_HIST
+                ,SHIP_TO_CUST        SHIP
+        WHERE  
+                PLW_HIST.GLBL_CMPY_CD        = #glblCmpyCd#
+           AND  PLW_HIST.RGTN_STS_CD         = 'P20'
+	      <isNotNull property="lastCompletedRequestTime">
+	       AND  PLW_HIST.EZUPTIME            &lt; #lastCompletedRequestTime#
+	      </isNotNull>
+           AND  PLW_HIST.EZUPAPLID           &lt;&gt; #ezupaplid#
+           AND  PLW_HIST.EZCANCELFLAG        = '0'
+
+           AND  PLW_HIST.GLBL_CMPY_CD        = SHIP.GLBL_CMPY_CD
+           AND  PLW_HIST.PTY_LOC_PK          = SHIP.PTY_LOC_PK
+           AND  SHIP.LOC_GRP_CD              = '3'
+           AND  SHIP.EZCANCELFLAG            = '0'
+           AND  SHIP.SHIP_TO_CUST_CD         IN (SELECT PTY_CD FROM PLW_TBL)
+        GROUP BY
+                SHIP.SHIP_TO_CUST_CD
+         )
+
+        SELECT 
+                 PLW_TBL.LOC_NM              AS LOC_NM
+                ,PLW_TBL.ADDL_LOC_NM         AS ADDL_LOC_NM
+                ,PLW_TBL.PTY_CD              AS PTY_CD
+                ,PLW_TBL.FIRST_LINE_ADDR     AS FIRST_LINE_ADDR
+                ,PLW_TBL.SCD_LINE_ADDR       AS SCD_LINE_ADDR
+                ,PLW_TBL.THIRD_LINE_ADDR     AS THIRD_LINE_ADDR
+                ,PLW_TBL.FRTH_LINE_ADDR      AS FRTH_LINE_ADDR
+                ,PLW_TBL.CTY_ADDR            AS CTY_ADDR
+                ,PLW_TBL.CTRY_CD             AS CTRY_CD
+                ,PLW_TBL.POST_CD             AS POST_CD 
+         FROM 
+                PLW_TBL   PLW_TBL 
+         MINUS         
+         SELECT     
+                 PLW_HIST.LOC_NM             AS LOC_NM
+                ,PLW_HIST.ADDL_LOC_NM        AS ADDL_LOC_NM
+                ,SHIP.SHIP_TO_CUST_CD        AS PTY_CD
+                ,PLW_HIST.FIRST_LINE_ADDR    AS FIRST_LINE_ADDR
+                ,PLW_HIST.SCD_LINE_ADDR      AS SCD_LINE_ADDR
+                ,PLW_HIST.THIRD_LINE_ADDR    AS THIRD_LINE_ADDR
+                ,PLW_HIST.FRTH_LINE_ADDR     AS FRTH_LINE_ADDR
+                ,PLW_HIST.CTY_ADDR           AS CTY_ADDR
+                ,PLW_HIST.CTRY_CD            AS CTRY_CD
+                ,PLW_HIST.POST_CD            AS POST_CD 
+          FROM           
+                 PTY_LOC_WRK_HIST         PLW_HIST
+                ,SHIP_TO_CUST             SHIP
+                ,PLW_HIST_MAX_UPTIME_TBL  MAX_TIME   
+         WHERE 
+                 PLW_HIST.PTY_LOC_PK   = SHIP.PTY_LOC_PK
+             AND SHIP.SHIP_TO_CUST_CD  = MAX_TIME.PTY_CD
+             AND PLW_HIST.EZUPTIME     = MAX_TIME.EZUPTIME            
+    </statement>
+
+    <statement id="getLastCompletedRequestTime"  parameterClass="Map" resultClass="Map">
+    SELECT
+            <!--MAX(IT.EZUPTIME)       AS EZUPTIME 20110810-->
+            MAX(IT.EZINTIME)       AS EZINTIME
+      FROM
+            INTERFACE_TRANSACTION IT
+     WHERE  
+            IT.INTERFACE_ID        = #interfaceId#
+       AND  IT.PROCESSED_FLAG      = '1'
+       AND  IT.EZCANCELFLAG        = '0'
+    </statement>
+    
+
+</sqlMap>

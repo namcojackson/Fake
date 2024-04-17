@@ -1,0 +1,237 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NLAB308001">
+
+    <statement id="getRwsPutAwayWrk" parameterClass="Map" resultClass="Map">
+        SELECT WRK_TRX_ID             WRK_TRX_ID
+              ,SQ_ID                  SQ_ID
+              ,RWS_NUM                RWS_NUM
+              ,RWS_DTL_LINE_NUM       RWS_DTL_LINE_NUM
+        FROM   RWS_PUT_AWAY_WRK
+        WHERE  GLBL_CMPY_CD         = #glblCmpyCd#
+        AND    PROC_STS_CD          = #procStsCd#
+        AND    SVC_MACH_PROC_STS_CD = #svcMachProcStsCd#
+        AND    EZCANCELFLAG         = '0'
+    </statement>
+
+    <statement id="hasRwsCloseForPutAwaySkipOuder" parameterClass="Map" resultClass="Map">
+        SELECT
+             RH.RWS_NUM
+            ,RH.SCE_ORD_TP_CD
+            ,RH.RWS_STS_CD
+        FROM
+            RWS_HDR RH
+        WHERE
+            RH.GLBL_CMPY_CD  = #glblCmpyCd#
+        AND RH.RWS_NUM       = #rwsNum#
+        AND RH.EZCANCELFLAG  = '0'
+    </statement>
+
+    <statement id="getMachMstrNotRecieved" parameterClass="Map" resultClass="Map">
+        SELECT
+            RD.RWS_NUM
+           ,RD.RWS_DTL_LINE_NUM
+           ,NVL(RD.RWS_QTY, 0)          AS RWS_QTY
+           ,NVL(RD.RWS_PUT_AWAY_QTY, 0) AS RWS_PUT_AWAY_QTY
+           ,RH.SCE_ORD_TP_CD
+           ,MM.SVC_MACH_MSTR_PK
+           ,MM.MDSE_CD
+           ,MM.SER_NUM
+           ,MM.SVC_CONFIG_MSTR_PK
+           ,MM.CUR_LOC_NUM
+           ,RH.SVC_CONFIG_MSTR_PK       AS RWS_SVC_CONFIG_MSTR_PK
+           ,SCM.SVC_MACH_MSTR_PK        AS MAIN_SVC_MACH_MSTR_PK
+           ,RD.TRX_CD
+           ,RD.TRX_RSN_CD
+           ,RD.RTL_WH_CD
+           ,RD.INVTY_STK_STS_CD
+           ,RD.MDSE_CD                  AS RWS_MDSE_CD
+           ,RD.INVTY_LOC_CD
+        FROM
+            RWS_HDR         RH
+           ,RWS_STS         RS
+           ,RWS_DTL         RD
+           ,SVC_MACH_MSTR   MM
+           ,SVC_CONFIG_MSTR SCM
+           ,ALL_MDSE_V      AMV
+        WHERE
+            RH.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND RH.EZCANCELFLAG        = '0'
+        AND RH.GLBL_CMPY_CD        = RS.GLBL_CMPY_CD
+        AND RH.RWS_STS_CD          = RS.RWS_STS_CD
+        AND RS.RCV_FLG             = #rcvFlgY#
+        AND RS.RWS_OPEN_FLG        = #rwsOpenFlgN#
+        AND RS.EZCANCELFLAG        = '0'
+        AND RH.GLBL_CMPY_CD        = SCM.GLBL_CMPY_CD(+)
+        AND RH.SVC_CONFIG_MSTR_PK  = SCM.SVC_CONFIG_MSTR_PK(+)
+        AND SCM.EZCANCELFLAG(+)    = '0'
+        AND RH.GLBL_CMPY_CD        = RD.GLBL_CMPY_CD
+        AND RH.RWS_NUM             = RD.RWS_NUM
+        AND RD.RWS_QTY          &gt; RD.RWS_PUT_AWAY_QTY
+        AND RD.EZCANCELFLAG        = '0'
+        AND RD.GLBL_CMPY_CD        = MM.GLBL_CMPY_CD(+)
+        AND RH.TRX_ORD_NUM         = MM.TRX_HDR_NUM(+)
+        AND RD.TRX_LINE_NUM        = MM.TRX_LINE_NUM(+)
+        AND RD.TRX_LINE_SUB_NUM    = MM.TRX_LINE_SUB_NUM(+)
+        AND MM.EZCANCELFLAG(+)     = '0'
+        AND NOT EXISTS (SELECT
+                            1
+                        FROM
+                            RWS_PUT_AWAY_WRK PAW
+                        WHERE
+                            PAW.GLBL_CMPY_CD     = RD.GLBL_CMPY_CD
+                        AND PAW.RWS_NUM          = RD.RWS_NUM
+                        AND PAW.RWS_DTL_LINE_NUM = RD.RWS_DTL_LINE_NUM
+                        <iterate property="svcMachProcStsListStatus" var="svcMachProcStsListStatus[]" open="AND PAW.SVC_MACH_PROC_STS_CD IN(" conjunction= ", " close=")">
+                        #svcMachProcStsListStatus[]#
+                        </iterate>
+                        AND PAW.EZCANCELFLAG     = '0'
+                       )
+        AND NOT EXISTS (SELECT
+                            1
+                        FROM
+                            RWS_SHTG_WRK RSW
+                        WHERE
+                            RSW.GLBL_CMPY_CD     = RD.GLBL_CMPY_CD
+                        AND RSW.RWS_NUM          = RD.RWS_NUM
+                        AND RSW.RWS_LINE_NUM     = RD.RWS_DTL_LINE_NUM
+                        AND RSW.EZCANCELFLAG     = '0'
+                       )
+        AND RD.GLBL_CMPY_CD         = AMV.GLBL_CMPY_CD
+        AND RD.MDSE_CD              = AMV.MDSE_CD
+        AND AMV.INSTL_BASE_CTRL_FLG = #instlBaseCtrlFlgY#
+        AND AMV.RCV_SER_TAKE_FLG    = #rcvSerTakeFlgN#
+        AND AMV.SHPG_SER_TAKE_FLG   = #shpgSerTakeFlgN#
+        AND AMV.EZCANCELFLAG        = '0'
+        UNION
+        SELECT
+            RD.RWS_NUM
+           ,RD.RWS_DTL_LINE_NUM
+           ,NVL(RD.RWS_QTY, 0)          AS RWS_QTY
+           ,NVL(RD.RWS_PUT_AWAY_QTY, 0) AS RWS_PUT_AWAY_QTY
+           ,RH.SCE_ORD_TP_CD
+           ,MM.SVC_MACH_MSTR_PK
+           ,MM.MDSE_CD
+           ,MM.SER_NUM
+           ,MM.SVC_CONFIG_MSTR_PK
+           ,MM.CUR_LOC_NUM
+           ,RH.SVC_CONFIG_MSTR_PK       AS RWS_SVC_CONFIG_MSTR_PK
+           ,SCM.SVC_MACH_MSTR_PK        AS MAIN_SVC_MACH_MSTR_PK
+           ,RD.TRX_CD
+           ,RD.TRX_RSN_CD
+           ,RD.RTL_WH_CD
+           ,RD.INVTY_STK_STS_CD
+           ,RD.MDSE_CD                  AS RWS_MDSE_CD
+           ,RD.INVTY_LOC_CD
+        FROM
+            RWS_HDR         RH
+           ,RWS_STS         RS
+           ,RWS_DTL         RD
+           ,SHPG_ORD_DTL    SD
+           ,SVC_MACH_MSTR   MM
+           ,SVC_CONFIG_MSTR SCM
+        WHERE
+            RH.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND RH.EZCANCELFLAG        = '0'
+        AND RH.GLBL_CMPY_CD        = RS.GLBL_CMPY_CD
+        AND RH.RWS_STS_CD          = RS.RWS_STS_CD
+        AND RS.RCV_FLG             = #rcvFlgY#
+        AND RS.RWS_OPEN_FLG        = #rwsOpenFlgN#
+        AND RS.EZCANCELFLAG        = '0'
+        AND RH.GLBL_CMPY_CD        = SCM.GLBL_CMPY_CD(+)
+        AND RH.SVC_CONFIG_MSTR_PK  = SCM.SVC_CONFIG_MSTR_PK(+)
+        AND SCM.EZCANCELFLAG(+)    = '0'
+        AND RH.GLBL_CMPY_CD        = RD.GLBL_CMPY_CD
+        AND RH.RWS_NUM             = RD.RWS_NUM
+        AND RD.RWS_QTY          &gt; RD.RWS_PUT_AWAY_QTY
+        AND RD.EZCANCELFLAG        = '0'
+        AND RD.GLBL_CMPY_CD        = SD.GLBL_CMPY_CD
+        AND RH.PO_RCV_TRX_HDR_NUM  = SD.SO_NUM
+        AND RD.PO_RCV_TRX_LINE_NUM = SD.SO_SLP_NUM
+        AND SD.GLBL_CMPY_CD        = MM.GLBL_CMPY_CD
+        AND SD.TRX_HDR_NUM         = MM.TRX_HDR_NUM
+        AND SD.TRX_LINE_NUM        = MM.TRX_LINE_NUM
+        AND MM.EZCANCELFLAG        = '0'
+        AND NOT EXISTS (SELECT
+                            1
+                        FROM
+                            RWS_PUT_AWAY_WRK PAW
+                        WHERE
+                            PAW.GLBL_CMPY_CD     = RD.GLBL_CMPY_CD
+                        AND PAW.RWS_NUM          = RD.RWS_NUM
+                        AND PAW.RWS_DTL_LINE_NUM = RD.RWS_DTL_LINE_NUM
+                        <iterate property="svcMachProcStsListStatus" var="svcMachProcStsListStatus[]" open="AND PAW.SVC_MACH_PROC_STS_CD IN(" conjunction= ", " close=")">
+                        #svcMachProcStsListStatus[]#
+                        </iterate>
+                        AND PAW.EZCANCELFLAG     = '0'
+                       )
+        ORDER BY
+            RWS_DTL_LINE_NUM
+           ,SVC_MACH_MSTR_PK
+    </statement>
+
+    <statement id="getNonAllocMachMstrWHT" parameterClass="Map" resultClass="Map">
+        SELECT
+            SMM.SVC_MACH_MSTR_PK
+           ,SMM.MDSE_CD
+           ,SMM.SER_NUM
+           ,SMM.SVC_CONFIG_MSTR_PK
+           ,SMM.SVC_MACH_MSTR_STS_CD
+           ,SMM.STK_STS_CD
+           ,SMM.SVC_MACH_USG_STS_CD
+        FROM
+            SVC_MACH_MSTR SMM
+        WHERE
+            SMM.GLBL_CMPY_CD             = #glblCmpyCd#
+        <isNotNull property="svcConfigMstrPk">
+            AND SMM.SVC_CONFIG_MSTR_PK   = #svcConfigMstrPk#
+        </isNotNull>
+        <isNull property="svcConfigMstrPk">
+            AND SMM.SVC_CONFIG_MSTR_PK   IS NULL
+        </isNull>
+        AND SMM.MDSE_CD                  = #mdseCd#
+        AND SMM.CUR_LOC_NUM              = #curlocNum#
+        AND SMM.SVC_MACH_MSTR_LOC_STS_CD = #svcMachMstrLocStsCd#
+        AND SMM.STK_STS_CD               = #stkStsCd#
+        AND SMM.SVC_MACH_MAINT_AVAL_FLG  = #flgY#
+        AND SMM.SVC_MACH_MSTR_STS_CD NOT IN (#svcMachMstrStsTrmn#, #svcMachMstrStsDup#)
+        AND SMM.EZCANCELFLAG            = '0'
+        ORDER BY
+            SMM.SVC_MACH_MSTR_PK
+    </statement>
+    <statement id="closeRwsAllocationOff" parameterClass="Map" resultClass="Map">
+        SELECT
+            SMM.SVC_MACH_MSTR_PK
+           ,SMM.SVC_MACH_MSTR_STS_CD
+           ,SMM.SER_NUM
+           ,SMM.TRX_HDR_NUM
+           ,SMM.TRX_LINE_NUM
+           ,SMM.TRX_LINE_SUB_NUM
+        FROM
+            RWS_HDR          RH
+           ,DS_RWS_DTL_V     RDV
+           ,RWS_SER          RS
+           ,SVC_MACH_MSTR    SMM
+        WHERE
+            RH.GLBL_CMPY_CD                = #glblCmpyCd#
+        AND RH.RWS_STS_CD                  IN(#received#, #canceled#)
+        AND RH.GLBL_CMPY_CD                = RDV.GLBL_CMPY_CD
+        AND RH.RWS_NUM                     = RDV.RWS_NUM
+        AND RDV.RWS_QTY                    = RDV.RWS_PUT_AWAY_QTY
+        AND RDV.GLBL_CMPY_CD               = RS.GLBL_CMPY_CD
+        AND RDV.RWS_NUM                    = RS.RWS_NUM
+        AND RDV.MDSE_CD                    = RS.MDSE_CD
+        AND RS.GLBL_CMPY_CD                = SMM.GLBL_CMPY_CD
+        AND RS.MDSE_CD                     = SMM.MDSE_CD
+        AND RS.SER_NUM                     = SMM.SER_NUM
+        AND RDV.SER_ALLOC_TRX_HDR_NUM      = SMM.TRX_HDR_NUM
+        AND RDV.SER_ALLOC_TRX_LINE_NUM     = SMM.TRX_LINE_NUM
+        AND RDV.SER_ALLOC_TRX_LINE_SUB_NUM = SMM.TRX_LINE_SUB_NUM
+        AND SMM.SVC_MACH_MSTR_STS_CD      != #terminated#
+        AND RH.EZCANCELFLAG                = '0'
+        AND RDV.EZCANCELFLAG               = '0'
+        AND RS.EZCANCELFLAG                = '0'
+        AND SMM.EZCANCELFLAG               = '0'
+        ORDER BY SMM.SVC_MACH_MSTR_PK
+    </statement>
+
+</sqlMap>

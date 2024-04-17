@@ -1,0 +1,1466 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NFCB501001">
+
+    <statement id="getTrgtDtRec" parameterClass="Map" resultClass="BigDecimal">
+        SELECT COUNT(1)
+        FROM
+           <!-- START 2017/02/28 S.Fujita [QC#17600,MOD] -->
+            <!-- 
+            FCT_DLY_AR_AGING_BY_COA      FDAABC
+            -->
+            AR_AGING_BY_COA      FDAABC
+           <!-- END   2017/02/28 S.Fujita [QC#17600,MOD] -->
+        WHERE 
+            FDAABC.GLBL_CMPY_CD         = #glblCmpyCd#
+        AND FDAABC.DWH_TRGT_DT          = #dwhtrgtDt#
+        AND FDAABC.EZCANCELFLAG         = '0'
+    </statement>
+
+    <statement id="getMainData" parameterClass="Map" resultClass="Map">
+        WITH
+            TOC_PSN_INFO AS (
+            SELECT 
+                   DISTINCT
+                   OFA.EZCANCELFLAG
+                  ,OFA.GLBL_CMPY_CD
+                  ,OFA.TOC_CD
+                  ,S.PSN_CD
+                  ,S.PSN_FIRST_NM
+                  ,S.PSN_LAST_NM
+                FROM
+                  ORG_FUNC_ASG           OFA,
+                  S21_PSN                S
+                WHERE
+                      OFA.PSN_CD        = S.PSN_CD(+)
+                  AND OFA.GLBL_CMPY_CD  = S.GLBL_CMPY_CD(+)
+                  AND OFA.EZCANCELFLAG  = '0'
+                  AND S.EZCANCELFLAG(+) = '0'
+            ),
+            RCPT_SRC_COA AS (
+            SELECT
+                 ARS.GLBL_CMPY_CD
+                ,ARS.EZCANCELFLAG
+                ,ARS.AR_RCPT_SRC_CD
+                ,CASE RCC.RPT_COND_CONST_VAL_TXT_01
+                    WHEN #rptCondConstValRsUnid#  THEN ARS.UNID_COA_ACCT_CD
+                    WHEN #rptCondConstValRsUnapl# THEN ARS.UNAPL_COA_ACCT_CD
+                    WHEN #rptCondConstValRsCash#  THEN ARS.CASH_COA_ACCT_CD
+                    WHEN #rptCondConstValRsOacc#  THEN ARS.OACC_COA_ACCT_CD
+                    ELSE #coaAcctCdDef#
+                 END AS COA_ACCT_CD
+                ,CASE RCC.RPT_COND_CONST_VAL_TXT_02
+                    WHEN #rptCondConstValRsUnid#  THEN ARS.UNID_COA_AFFL_CD
+                    WHEN #rptCondConstValRsUnapl# THEN ARS.UNAPL_COA_AFFL_CD
+                    WHEN #rptCondConstValRsCash#  THEN ARS.CASH_COA_AFFL_CD
+                    WHEN #rptCondConstValRsOacc#  THEN ARS.OACC_COA_AFFL_CD
+                    ELSE #coaAfflCdDef#
+                 END AS COA_AFFL_CD
+                ,CASE RCC.RPT_COND_CONST_VAL_TXT_03
+                    WHEN #rptCondConstValRsUnid#  THEN ARS.UNID_COA_CC_CD
+                    WHEN #rptCondConstValRsUnapl# THEN ARS.UNAPL_COA_CC_CD
+                    WHEN #rptCondConstValRsCash#  THEN ARS.CASH_COA_CC_CD
+                    WHEN #rptCondConstValRsOacc#  THEN ARS.OACC_COA_CC_CD
+                    ELSE #coaCcCdDef#
+                 END AS COA_CC_CD
+            FROM
+                 AR_RCPT_SRC      ARS
+                ,RPT_COND_CONST   RCC
+            WHERE
+                    RCC.GLBL_CMPY_CD              =   #glblCmpyCd#
+                AND RCC.RPT_COND_CONST_GRP_ID     =   #rptCondConstGrpId#
+                AND RCC.RPT_COND_CONST_CD         =   #rptCondConstCdRcptIdentified#
+                AND RCC.GLBL_CMPY_CD              =   ARS.GLBL_CMPY_CD
+                AND RCC.EZCANCELFLAG              =   '0'
+                AND ARS.EZCANCELFLAG              =   '0'
+            GROUP BY
+                 RCC.RPT_COND_CONST_VAL_TXT_01
+                ,RCC.RPT_COND_CONST_VAL_TXT_02
+                ,RCC.RPT_COND_CONST_VAL_TXT_03
+                ,ARS.EZCANCELFLAG
+                ,ARS.GLBL_CMPY_CD
+                ,ARS.AR_RCPT_SRC_CD
+                ,ARS.UNID_COA_ACCT_CD
+                ,ARS.UNAPL_COA_ACCT_CD
+                ,ARS.CASH_COA_ACCT_CD
+                ,ARS.OACC_COA_ACCT_CD
+                ,ARS.UNID_COA_AFFL_CD
+                ,ARS.UNAPL_COA_AFFL_CD
+                ,ARS.CASH_COA_AFFL_CD
+                ,ARS.OACC_COA_AFFL_CD
+                ,ARS.UNID_COA_CC_CD
+                ,ARS.UNAPL_COA_CC_CD
+                ,ARS.CASH_COA_CC_CD
+                ,ARS.OACC_COA_CC_CD
+            )
+        -- AR_TRX_TP=INV,DED,DEM,CR
+        SELECT
+             SATB.GLBL_CMPY_CD
+            ,NVL(CC.COA_LINE_BIZ_TP_CD, #lineBizTpCdAll#) AS LINE_BIZ_TP_CD
+            ,SATB.BILL_TO_CUST_ACCT_CD
+            ,SATB.BILL_TO_CUST_ACCT_NM
+            ,SATB.BILL_TO_CUST_CD
+            ,NVL(BTC.LOC_NUM, #unknownCd#)                AS BILL_TO_LOC_NUM
+            ,CP.CLT_PSN_CD
+            ,CP.CLT_PSN_NM
+            ,SATB.TOC_CD
+            ,TPI.PSN_CD
+            ,TPI.PSN_FIRST_NM
+            ,TPI.PSN_LAST_NM
+            ,SATB.AR_TRX_TP_CD
+            ,SATB.DS_INV_TP_CD
+            ,''                                           AS AR_RCPT_SRC_CD
+            ,T.COA_CC_CD
+            ,SATB.COA_ACCT_CD
+            ,SATB.COA_AFFL_CD
+            ,SATB.FUNC_CCY_CD
+            ,SATB.ALL_BAL_FUNC_AMT
+            ,SATB.FUNC_AGING_AMT_00
+            ,SATB.FUNC_AGING_AMT_01
+            ,SATB.FUNC_AGING_AMT_02
+            ,SATB.FUNC_AGING_AMT_03
+            ,SATB.FUNC_AGING_AMT_04
+            ,SATB.FUNC_AGING_AMT_05
+            ,SATB.FUNC_AGING_AMT_06
+            ,SATB.FUNC_AGING_AMT_07
+            ,SATB.FUNC_AGING_AMT_08
+            ,SATB.FUNC_AGING_AMT_09
+            ,SATB.FUNC_AGING_AMT_10
+            ,SATB.FUNC_AGING_AMT_11
+            ,SATB.FUNC_AGING_AMT_12
+            ,SATB.FUNC_AGING_AMT_13
+            ,SATB.DEAL_CCY_CD
+            ,SATB.ALL_BAL_DEAL_AMT
+            ,SATB.DEAL_AGING_AMT_00
+            ,SATB.DEAL_AGING_AMT_01
+            ,SATB.DEAL_AGING_AMT_02
+            ,SATB.DEAL_AGING_AMT_03
+            ,SATB.DEAL_AGING_AMT_04
+            ,SATB.DEAL_AGING_AMT_05
+            ,SATB.DEAL_AGING_AMT_06
+            ,SATB.DEAL_AGING_AMT_07
+            ,SATB.DEAL_AGING_AMT_08
+            ,SATB.DEAL_AGING_AMT_09
+            ,SATB.DEAL_AGING_AMT_10
+            ,SATB.DEAL_AGING_AMT_11
+            ,SATB.DEAL_AGING_AMT_12
+            ,SATB.DEAL_AGING_AMT_13
+            ,CP.CLT_PTFO_PK
+            ,CP.CLT_PTFO_CD
+            ,CP.CLT_PTFO_NM
+        FROM 
+             BILL_TO_CUST          BTC
+            ,SELL_TO_CUST          STC
+            ,TOC                   T
+            ,TOC_PSN_INFO          TPI
+            ,COA_CC                CC
+            ,CLT_PTFO              CP
+            -- Balance Summary
+            ,(SELECT
+                     ATB.GLBL_CMPY_CD
+                    ,NVL(ATB.BILL_TO_CUST_ACCT_CD, #unknownCd#)   AS BILL_TO_CUST_ACCT_CD
+                    ,NVL(STC.DS_ACCT_NM, #unknownCd#)             AS BILL_TO_CUST_ACCT_NM
+                    ,NVL(ATB.BILL_TO_CUST_CD, #unknownCd#)        AS BILL_TO_CUST_CD
+                    ,ATB.AR_TRX_TP_CD
+                    ,DIT.DS_INV_TP_CD
+                    ,DIT.AR_COA_ACCT_CD                           AS COA_ACCT_CD
+                    <!-- QC#54624 mod Start -->
+                    <!-- ,DECODE(DIT.AR_COA_AFFL_CD, '@CUST-ACCT', STC.COA_AFFL_CD, DIT.AR_COA_AFFL_CD) AS COA_AFFL_CD -->
+                    ,STC.COA_AFFL_CD                              AS COA_AFFL_CD
+                    <!-- QC#54624 mod End -->
+                    ,ATB.TOC_CD
+                    ,ATB.DEAL_CCY_CD
+                    ,SUM(NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0))       AS ALL_BAL_DEAL_AMT
+                    ,ATB.FUNC_CCY_CD
+                    ,SUM(NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0))       AS ALL_BAL_FUNC_AMT
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age0#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_00
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age0#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age30#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_01
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age30#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age60#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_02
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age60#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age90#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_03
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age90#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age120#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_04
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age120#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age150#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_05
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age150#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age180#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_06
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age180#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age210#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_07
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age210#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age240#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_08
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age240#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age270#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_09
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age270#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age300#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_10
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age300#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age330#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_11
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age330#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age365#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_12
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age365#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_13
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age0#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_00
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age0#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age30#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_01
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age30#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age60#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_02
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age60#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age90#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_03
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age90#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age120#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_04
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age120#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age150#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_05
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age150#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age180#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_06
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age180#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age210#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_07
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age210#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age240#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_08
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age240#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age270#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_09
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age270#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age300#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_10
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age300#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age330#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_11
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age330#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age365#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_12
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age365#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_13
+                FROM
+                     AR_TRX_BAL         ATB
+                    ,SELL_TO_CUST       STC
+                    ,DS_INV_TP          DIT
+                WHERE
+                        ATB.GLBL_CMPY_CD                 =   #glblCmpyCd#
+                    AND ATB.AR_CASH_APPLY_STS_CD         IN (#arCachApplyStsCdUnapplied#, #arCachApplyStsCdPartial#)
+                    AND ATB.AR_TRX_TP_CD                 IN (#arTrxTpCdInvoice#, #arTrxTpCdDeduction#, #arTrxTpCdDebitMemo#, #arTrxTpCdCreditMemo#)
+                    AND ATB.GL_DT                        &lt;= #slsDt#
+                    AND ATB.GLBL_CMPY_CD                 =   STC.GLBL_CMPY_CD
+                    AND ATB.BILL_TO_CUST_ACCT_CD         =   STC.SELL_TO_CUST_CD
+                    AND ATB.GLBL_CMPY_CD                 =   DIT.GLBL_CMPY_CD(+)
+                    AND ATB.DS_INV_TP_CD                 =   DIT.DS_INV_TP_CD(+)
+                    AND ATB.EZCANCELFLAG                 =   '0'
+                    AND STC.EZCANCELFLAG                 =   '0'
+                    AND DIT.EZCANCELFLAG(+)              =   '0'
+                GROUP BY
+                     ATB.GLBL_CMPY_CD
+                    ,ATB.BILL_TO_CUST_ACCT_CD
+                    ,STC.DS_ACCT_NM
+                    ,ATB.BILL_TO_CUST_CD
+                    ,ATB.AR_TRX_TP_CD
+                    ,DIT.DS_INV_TP_CD
+                    ,DIT.AR_COA_ACCT_CD
+                    <!-- QC#54624 mod Start -->
+                    <!-- ,DECODE(DIT.AR_COA_AFFL_CD, '@CUST-ACCT', STC.COA_AFFL_CD, DIT.AR_COA_AFFL_CD) -->
+                    ,STC.COA_AFFL_CD
+                    <!-- QC#54624 mod End -->
+                    ,ATB.TOC_CD
+                    ,ATB.DEAL_CCY_CD
+                    ,ATB.FUNC_CCY_CD
+                ) SATB
+        WHERE   1=1
+            -- join BILL_TO_CUST
+            AND SATB.GLBL_CMPY_CD                   =   BTC.GLBL_CMPY_CD(+)
+            AND SATB.BILL_TO_CUST_CD                =   BTC.BILL_TO_CUST_CD(+)
+            -- join SELL_TO_CUST
+            AND SATB.GLBL_CMPY_CD                   =   STC.GLBL_CMPY_CD(+)
+            AND SATB.BILL_TO_CUST_ACCT_CD           =   STC.SELL_TO_CUST_CD(+)
+            -- join TOC
+            AND SATB.GLBL_CMPY_CD                   =   T.GLBL_CMPY_CD(+)
+            AND SATB.TOC_CD                         =   T.TOC_CD(+)
+            -- join TOC_PSN_INFO
+            AND SATB.GLBL_CMPY_CD                   =   TPI.GLBL_CMPY_CD(+)
+            AND SATB.TOC_CD                         =   TPI.TOC_CD(+)
+            -- join COA_CC
+            AND T.GLBL_CMPY_CD                      =   CC.GLBL_CMPY_CD(+)
+            AND T.COA_CC_CD                         =   CC.COA_CC_CD(+)
+            -- join CLT_PTFO
+            AND STC.GLBL_CMPY_CD                    =   CP.GLBL_CMPY_CD(+)
+            AND STC.CLT_PTFO_PK                     =   CP.CLT_PTFO_PK(+)
+            AND BTC.EZCANCELFLAG(+)                 =   '0'
+            AND STC.EZCANCELFLAG                    =   '0'
+            AND CP.EZCANCELFLAG(+)                  =   '0'
+            AND T.EZCANCELFLAG(+)                   =   '0'
+            AND CC.EZCANCELFLAG(+)                  =   '0'
+        UNION ALL
+        -- AR_TRX_TP=RCP(identified)
+        SELECT
+             SATB.GLBL_CMPY_CD
+            ,#lineBizTpCdAll#                             AS LINE_BIZ_TP_CD
+            ,SATB.BILL_TO_CUST_ACCT_CD 
+            ,SATB.BILL_TO_CUST_ACCT_NM
+            ,SATB.BILL_TO_CUST_CD
+            ,NVL(BTC.LOC_NUM, #unknownCd#)                AS BILL_TO_LOC_NUM
+            ,CP.CLT_PSN_CD
+            ,CP.CLT_PSN_NM
+            ,SATB.TOC_CD
+            ,TPI.PSN_CD
+            ,TPI.PSN_FIRST_NM
+            ,TPI.PSN_LAST_NM
+            ,SATB.AR_TRX_TP_CD
+            ,''                                           AS DS_INV_TP_CD
+            ,SATB.AR_RCPT_SRC_CD
+            ,C.COA_CC_CD
+            ,C.COA_ACCT_CD
+            <!-- Mod 2019/08/17 QC#52782 -->
+       <!-- ,C.COA_AFFL_CD-->
+            ,STC.COA_AFFL_CD
+            <!-- Mod 2019/08/17 QC#52782 -->
+            ,SATB.FUNC_CCY_CD
+            ,-SATB.ALL_BAL_FUNC_AMT                       AS ALL_BAL_FUNC_AMT
+            ,-FUNC_AGING_AMT_00                           AS FUNC_AGING_AMT_00
+            ,-FUNC_AGING_AMT_01                           AS FUNC_AGING_AMT_01
+            ,-FUNC_AGING_AMT_02                           AS FUNC_AGING_AMT_02
+            ,-FUNC_AGING_AMT_03                           AS FUNC_AGING_AMT_03
+            ,-FUNC_AGING_AMT_04                           AS FUNC_AGING_AMT_04
+            ,-FUNC_AGING_AMT_05                           AS FUNC_AGING_AMT_05
+            ,-FUNC_AGING_AMT_06                           AS FUNC_AGING_AMT_06
+            ,-FUNC_AGING_AMT_07                           AS FUNC_AGING_AMT_07
+            ,-FUNC_AGING_AMT_08                           AS FUNC_AGING_AMT_08
+            ,-FUNC_AGING_AMT_09                           AS FUNC_AGING_AMT_09
+            ,-FUNC_AGING_AMT_10                           AS FUNC_AGING_AMT_10
+            ,-FUNC_AGING_AMT_11                           AS FUNC_AGING_AMT_11
+            ,-FUNC_AGING_AMT_12                           AS FUNC_AGING_AMT_12
+            ,-FUNC_AGING_AMT_13                           AS FUNC_AGING_AMT_13
+            ,SATB.DEAL_CCY_CD
+            ,-SATB.ALL_BAL_DEAL_AMT                       AS ALL_BAL_DEAL_AMT
+            ,-DEAL_AGING_AMT_00                           AS DEAL_AGING_AMT_00
+            ,-DEAL_AGING_AMT_01                           AS DEAL_AGING_AMT_01
+            ,-DEAL_AGING_AMT_02                           AS DEAL_AGING_AMT_02
+            ,-DEAL_AGING_AMT_03                           AS DEAL_AGING_AMT_03
+            ,-DEAL_AGING_AMT_04                           AS DEAL_AGING_AMT_04
+            ,-DEAL_AGING_AMT_05                           AS DEAL_AGING_AMT_05
+            ,-DEAL_AGING_AMT_06                           AS DEAL_AGING_AMT_06
+            ,-DEAL_AGING_AMT_07                           AS DEAL_AGING_AMT_07
+            ,-DEAL_AGING_AMT_08                           AS DEAL_AGING_AMT_08
+            ,-DEAL_AGING_AMT_09                           AS DEAL_AGING_AMT_09
+            ,-DEAL_AGING_AMT_10                           AS DEAL_AGING_AMT_10
+            ,-DEAL_AGING_AMT_11                           AS DEAL_AGING_AMT_11
+            ,-DEAL_AGING_AMT_12                           AS DEAL_AGING_AMT_12
+            ,-DEAL_AGING_AMT_13                           AS DEAL_AGING_AMT_13
+            ,CP.CLT_PTFO_PK
+            ,CP.CLT_PTFO_CD
+            ,CP.CLT_PTFO_NM
+        FROM
+             BILL_TO_CUST                          BTC
+            ,SELL_TO_CUST                          STC
+            ,RCPT_SRC_COA                          C
+            ,CLT_PTFO                              CP
+            ,TOC_PSN_INFO                          TPI
+            -- Balance Summary
+            ,(SELECT
+                     ATB.GLBL_CMPY_CD
+                    ,NVL(ATB.BILL_TO_CUST_ACCT_CD, #unknownCd#)        AS BILL_TO_CUST_ACCT_CD
+                    ,NVL(STC.DS_ACCT_NM, #unknownCd#)                  AS BILL_TO_CUST_ACCT_NM
+                    ,NVL(ATB.BILL_TO_CUST_CD, #unknownCd#)             AS BILL_TO_CUST_CD
+                    ,ATB.AR_TRX_TP_CD
+                    ,AR.AR_RCPT_SRC_CD
+                    ,ATB.TOC_CD
+                    ,ATB.DEAL_CCY_CD
+                    ,SUM(NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0))            AS ALL_BAL_DEAL_AMT
+                    ,ATB.FUNC_CCY_CD
+                    ,SUM(NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0))            AS ALL_BAL_FUNC_AMT
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &lt;= #age0#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_00
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &gt; #age0#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &lt;= #age30#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_01
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &gt; #age30#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &lt;= #age60#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_02
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &gt; #age60#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &lt;= #age90#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_03
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &gt; #age90#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &lt;= #age120#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_04
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &gt; #age120#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &lt;= #age150#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_05
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &gt; #age150#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &lt;= #age180#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_06
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &gt; #age180#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &lt;= #age210#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_07
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &gt; #age210#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &lt;= #age240#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_08
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &gt; #age240#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &lt;= #age270#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_09
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &gt; #age270#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &lt;= #age300#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_10
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &gt; #age300#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &lt;= #age330#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_11
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &gt; #age330#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &lt;= #age365#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_12
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &gt; #age365#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_13
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &lt;= #age0#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_00
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &gt; #age0#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &lt;= #age30#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_01
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &gt; #age30#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &lt;= #age60#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_02
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &gt; #age60#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &lt;= #age90#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_03
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &gt; #age90#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &lt;= #age120#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_04
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &gt; #age120#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &lt;= #age150#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_05
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &gt; #age150#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &lt;= #age180#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_06
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &gt; #age180#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &lt;= #age210#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_07
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &gt; #age210#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &lt;= #age240#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_08
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &gt; #age240#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &lt;= #age270#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_09
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &gt; #age270#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &lt;= #age300#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_10
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &gt; #age300#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &lt;= #age330#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_11
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &gt; #age330#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &lt;= #age365#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_12
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &gt; #age365#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_13
+                FROM
+                     AR_TRX_BAL     ATB
+                    ,SELL_TO_CUST   STC
+                    ,AR_RCPT        AR
+                WHERE
+                        ATB.GLBL_CMPY_CD                =   #glblCmpyCd#
+                    AND ATB.AR_CASH_APPLY_STS_CD        IN (#arCachApplyStsCdUnapplied#, #arCachApplyStsCdPartial#)
+                    AND ATB.AR_TRX_TP_CD                IN (#arTrxTpCdReceipt#)
+                    AND ATB.GL_DT                       &lt;= #slsDt#
+                    AND ATB.GLBL_CMPY_CD                =   STC.GLBL_CMPY_CD
+                    AND ATB.BILL_TO_CUST_ACCT_CD        =   STC.SELL_TO_CUST_CD
+                    AND ATB.GLBL_CMPY_CD                =   AR.GLBL_CMPY_CD
+                    AND ATB.AR_TRX_NUM                  =   AR.RCPT_NUM
+                    AND ATB.EZCANCELFLAG                =   '0'
+                    AND STC.EZCANCELFLAG                =   '0'
+                    AND AR.EZCANCELFLAG                 =   '0'
+                GROUP BY
+                     ATB.GLBL_CMPY_CD
+                    ,ATB.BILL_TO_CUST_ACCT_CD
+                    ,STC.DS_ACCT_NM
+                    ,ATB.BILL_TO_CUST_CD
+                    ,ATB.AR_TRX_TP_CD
+                    ,AR.AR_RCPT_SRC_CD
+                    ,ATB.TOC_CD
+                    ,ATB.DEAL_CCY_CD
+                    ,ATB.FUNC_CCY_CD
+                ) SATB
+        WHERE
+            -- join BILL_TO_CUST
+                SATB.GLBL_CMPY_CD                       =   BTC.GLBL_CMPY_CD(+)
+            AND SATB.BILL_TO_CUST_CD                    =   BTC.BILL_TO_CUST_CD(+)
+            -- join SELL_TO_CUST
+            AND SATB.GLBL_CMPY_CD                       =   STC.GLBL_CMPY_CD
+            AND SATB.BILL_TO_CUST_ACCT_CD               =   STC.SELL_TO_CUST_CD
+            -- join RCPT_SRC_COA
+            AND SATB.GLBL_CMPY_CD                       =   C.GLBL_CMPY_CD(+)
+            AND SATB.AR_RCPT_SRC_CD                     =   C.AR_RCPT_SRC_CD(+)
+            -- join TOC_PSN_INFO
+            AND SATB.GLBL_CMPY_CD                       =   TPI.GLBL_CMPY_CD(+)
+            AND SATB.TOC_CD                             =   TPI.TOC_CD(+)
+            -- join CLT_PTFO
+            AND STC.GLBL_CMPY_CD                        =   CP.GLBL_CMPY_CD(+)
+            AND STC.CLT_PTFO_PK                         =   CP.CLT_PTFO_PK(+)
+            AND BTC.EZCANCELFLAG(+)                     =   '0'
+            AND STC.EZCANCELFLAG                        =   '0'
+            AND CP.EZCANCELFLAG(+)                      =   '0'
+        UNION ALL
+        -- AR_TRX_TP=RCP(Unidentified)
+        SELECT
+             SATB.GLBL_CMPY_CD
+            ,#lineBizTpCdAll#                             AS LINE_BIZ_TP_CD
+            ,SATB.BILL_TO_CUST_ACCT_CD 
+            ,SATB.BILL_TO_CUST_ACCT_NM
+            ,SATB.BILL_TO_CUST_CD
+            ,#unknownCd#                                  AS BILL_TO_LOC_NUM
+            ,#unknownCd#                                  AS CLT_PSN_CD
+            ,#unknownCd#                                  AS CLT_PSN_NM
+            ,SATB.TOC_CD
+            ,TPI.PSN_CD
+            ,TPI.PSN_FIRST_NM
+            ,TPI.PSN_LAST_NM
+            ,SATB.AR_TRX_TP_CD
+            ,''                                           AS DS_INV_TP_CD
+            ,SATB.AR_RCPT_SRC_CD
+            ,C.COA_CC_CD
+            ,C.COA_ACCT_CD
+            <!-- QC#54624 mod Start -->
+            <!-- ,C.COA_AFFL_CD -->
+            ,'000'                                        AS COA_AFFL_CD
+            <!-- QC#54624 mod End -->
+            ,SATB.FUNC_CCY_CD
+            ,-SATB.ALL_BAL_FUNC_AMT                       AS ALL_BAL_FUNC_AMT
+            ,-FUNC_AGING_AMT_00                           AS FUNC_AGING_AMT_00
+            ,-FUNC_AGING_AMT_01                           AS FUNC_AGING_AMT_01
+            ,-FUNC_AGING_AMT_02                           AS FUNC_AGING_AMT_02
+            ,-FUNC_AGING_AMT_03                           AS FUNC_AGING_AMT_03
+            ,-FUNC_AGING_AMT_04                           AS FUNC_AGING_AMT_04
+            ,-FUNC_AGING_AMT_05                           AS FUNC_AGING_AMT_05
+            ,-FUNC_AGING_AMT_06                           AS FUNC_AGING_AMT_06
+            ,-FUNC_AGING_AMT_07                           AS FUNC_AGING_AMT_07
+            ,-FUNC_AGING_AMT_08                           AS FUNC_AGING_AMT_08
+            ,-FUNC_AGING_AMT_09                           AS FUNC_AGING_AMT_09
+            ,-FUNC_AGING_AMT_10                           AS FUNC_AGING_AMT_10
+            ,-FUNC_AGING_AMT_11                           AS FUNC_AGING_AMT_11
+            ,-FUNC_AGING_AMT_12                           AS FUNC_AGING_AMT_12
+            ,-FUNC_AGING_AMT_13                           AS FUNC_AGING_AMT_13
+            ,SATB.DEAL_CCY_CD
+            ,-SATB.ALL_BAL_DEAL_AMT                       AS ALL_BAL_DEAL_AMT
+            ,-DEAL_AGING_AMT_00                           AS DEAL_AGING_AMT_00
+            ,-DEAL_AGING_AMT_01                           AS DEAL_AGING_AMT_01
+            ,-DEAL_AGING_AMT_02                           AS DEAL_AGING_AMT_02
+            ,-DEAL_AGING_AMT_03                           AS DEAL_AGING_AMT_03
+            ,-DEAL_AGING_AMT_04                           AS DEAL_AGING_AMT_04
+            ,-DEAL_AGING_AMT_05                           AS DEAL_AGING_AMT_05
+            ,-DEAL_AGING_AMT_06                           AS DEAL_AGING_AMT_06
+            ,-DEAL_AGING_AMT_07                           AS DEAL_AGING_AMT_07
+            ,-DEAL_AGING_AMT_08                           AS DEAL_AGING_AMT_08
+            ,-DEAL_AGING_AMT_09                           AS DEAL_AGING_AMT_09
+            ,-DEAL_AGING_AMT_10                           AS DEAL_AGING_AMT_10
+            ,-DEAL_AGING_AMT_11                           AS DEAL_AGING_AMT_11
+            ,-DEAL_AGING_AMT_12                           AS DEAL_AGING_AMT_12
+            ,-DEAL_AGING_AMT_13                           AS DEAL_AGING_AMT_13
+            ,0                                            AS CLT_PTFO_PK
+            ,#unknownCd#                                  AS CLT_PTFO_CD
+            ,#unknownCd#                                  AS CLT_PTFO_NM
+        FROM
+             RCPT_SRC_COA                          C
+            ,TOC_PSN_INFO                          TPI
+            -- Balance Summary
+            ,(SELECT 
+                     R.GLBL_CMPY_CD
+                    ,#unknownCd#                                       AS BILL_TO_CUST_ACCT_CD
+                    ,#unknownCd#                                       AS BILL_TO_CUST_ACCT_NM
+                    ,#unknownCd#                                       AS BILL_TO_CUST_CD
+                    ,#arTrxTpCdReceipt#                                AS AR_TRX_TP_CD
+                    ,R.AR_RCPT_SRC_CD
+                    ,R.TOC_CD
+                    ,R.DEAL_CCY_CD
+                    ,SUM(DECODE(R.DEAL_RCPT_RMNG_BAL_AMT,0, R.DEAL_NET_RCPT_AMT,R.DEAL_RCPT_RMNG_BAL_AMT))     AS ALL_BAL_DEAL_AMT
+                    ,R.FUNC_CCY_CD
+                    ,SUM(DECODE(R.FUNC_RCPT_RMNG_BAL_AMT,0, R.FUNC_NET_RCPT_AMT,R.FUNC_RCPT_RMNG_BAL_AMT))     AS ALL_BAL_FUNC_AMT
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &lt;= #age0#
+                                THEN NVL(DECODE(R.DEAL_RCPT_RMNG_BAL_AMT,0, R.DEAL_NET_RCPT_AMT,R.DEAL_RCPT_RMNG_BAL_AMT), 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_00
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &gt; #age0#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &lt;= #age30#
+                                THEN NVL(DECODE(R.DEAL_RCPT_RMNG_BAL_AMT,0, R.DEAL_NET_RCPT_AMT,R.DEAL_RCPT_RMNG_BAL_AMT), 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_01
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &gt; #age30#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &lt;= #age60#
+                                THEN NVL(DECODE(R.DEAL_RCPT_RMNG_BAL_AMT,0, R.DEAL_NET_RCPT_AMT,R.DEAL_RCPT_RMNG_BAL_AMT), 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_02
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &gt; #age60#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &lt;= #age90#
+                                THEN NVL(DECODE(R.DEAL_RCPT_RMNG_BAL_AMT,0, R.DEAL_NET_RCPT_AMT,R.DEAL_RCPT_RMNG_BAL_AMT), 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_03
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &gt; #age90#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &lt;= #age120#
+                                THEN NVL(DECODE(R.DEAL_RCPT_RMNG_BAL_AMT,0, R.DEAL_NET_RCPT_AMT,R.DEAL_RCPT_RMNG_BAL_AMT), 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_04
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &gt; #age120#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &lt;= #age150#
+                                THEN NVL(DECODE(R.DEAL_RCPT_RMNG_BAL_AMT,0, R.DEAL_NET_RCPT_AMT,R.DEAL_RCPT_RMNG_BAL_AMT), 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_05
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &gt; #age150#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &lt;= #age180#
+                                THEN NVL(DECODE(R.DEAL_RCPT_RMNG_BAL_AMT,0, R.DEAL_NET_RCPT_AMT,R.DEAL_RCPT_RMNG_BAL_AMT), 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_06
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &gt; #age180#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &lt;= #age210#
+                                THEN NVL(DECODE(R.DEAL_RCPT_RMNG_BAL_AMT,0, R.DEAL_NET_RCPT_AMT,R.DEAL_RCPT_RMNG_BAL_AMT), 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_07
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &gt; #age210#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &lt;= #age240#
+                                THEN NVL(DECODE(R.DEAL_RCPT_RMNG_BAL_AMT,0, R.DEAL_NET_RCPT_AMT,R.DEAL_RCPT_RMNG_BAL_AMT), 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_08
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &gt; #age240#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &lt;= #age270#
+                                THEN NVL(DECODE(R.DEAL_RCPT_RMNG_BAL_AMT,0, R.DEAL_NET_RCPT_AMT,R.DEAL_RCPT_RMNG_BAL_AMT), 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_09
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &gt; #age270#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &lt;= #age300#
+                                THEN NVL(DECODE(R.DEAL_RCPT_RMNG_BAL_AMT,0, R.DEAL_NET_RCPT_AMT,R.DEAL_RCPT_RMNG_BAL_AMT), 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_10
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &gt; #age300#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &lt;= #age330#
+                                THEN NVL(DECODE(R.DEAL_RCPT_RMNG_BAL_AMT,0, R.DEAL_NET_RCPT_AMT,R.DEAL_RCPT_RMNG_BAL_AMT), 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_11
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &gt; #age330#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &lt;= #age365#
+                                THEN NVL(DECODE(R.DEAL_RCPT_RMNG_BAL_AMT,0, R.DEAL_NET_RCPT_AMT,R.DEAL_RCPT_RMNG_BAL_AMT), 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_12
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &gt; #age365#
+                                THEN NVL(DECODE(R.DEAL_RCPT_RMNG_BAL_AMT,0, R.DEAL_NET_RCPT_AMT,R.DEAL_RCPT_RMNG_BAL_AMT), 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_13
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &lt;= #age0#
+                                THEN NVL(DECODE(R.FUNC_RCPT_RMNG_BAL_AMT,0, R.FUNC_NET_RCPT_AMT,R.FUNC_RCPT_RMNG_BAL_AMT), 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_00
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &gt; #age0#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &lt;= #age30#
+                                THEN NVL(DECODE(R.FUNC_RCPT_RMNG_BAL_AMT,0, R.FUNC_NET_RCPT_AMT,R.FUNC_RCPT_RMNG_BAL_AMT), 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_01
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &gt; #age30#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &lt;= #age60#
+                                THEN NVL(DECODE(R.FUNC_RCPT_RMNG_BAL_AMT,0, R.FUNC_NET_RCPT_AMT,R.FUNC_RCPT_RMNG_BAL_AMT), 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_02
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &gt; #age60#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &lt;= #age90#
+                                THEN NVL(DECODE(R.FUNC_RCPT_RMNG_BAL_AMT,0, R.FUNC_NET_RCPT_AMT,R.FUNC_RCPT_RMNG_BAL_AMT), 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_03
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &gt; #age90#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &lt;= #age120#
+                                THEN NVL(DECODE(R.FUNC_RCPT_RMNG_BAL_AMT,0, R.FUNC_NET_RCPT_AMT,R.FUNC_RCPT_RMNG_BAL_AMT), 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_04
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &gt; #age120#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &lt;= #age150#
+                                THEN NVL(DECODE(R.FUNC_RCPT_RMNG_BAL_AMT,0, R.FUNC_NET_RCPT_AMT,R.FUNC_RCPT_RMNG_BAL_AMT), 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_05
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &gt; #age150#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &lt;= #age180#
+                                THEN NVL(DECODE(R.FUNC_RCPT_RMNG_BAL_AMT,0, R.FUNC_NET_RCPT_AMT,R.FUNC_RCPT_RMNG_BAL_AMT), 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_06
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &gt; #age180#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &lt;= #age210#
+                                THEN NVL(DECODE(R.FUNC_RCPT_RMNG_BAL_AMT,0, R.FUNC_NET_RCPT_AMT,R.FUNC_RCPT_RMNG_BAL_AMT), 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_07
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &gt; #age210#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &lt;= #age240#
+                                THEN NVL(DECODE(R.FUNC_RCPT_RMNG_BAL_AMT,0, R.FUNC_NET_RCPT_AMT,R.FUNC_RCPT_RMNG_BAL_AMT), 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_08
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &gt; #age240#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &lt;= #age270#
+                                THEN NVL(DECODE(R.FUNC_RCPT_RMNG_BAL_AMT,0, R.FUNC_NET_RCPT_AMT,R.FUNC_RCPT_RMNG_BAL_AMT), 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_09
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &gt; #age270#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &lt;= #age300#
+                                THEN NVL(DECODE(R.FUNC_RCPT_RMNG_BAL_AMT,0, R.FUNC_NET_RCPT_AMT,R.FUNC_RCPT_RMNG_BAL_AMT), 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_10
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &gt; #age300#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &lt;= #age330#
+                                THEN NVL(DECODE(R.FUNC_RCPT_RMNG_BAL_AMT,0, R.FUNC_NET_RCPT_AMT,R.FUNC_RCPT_RMNG_BAL_AMT), 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_11
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &gt; #age330#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &lt;= #age365#
+                                THEN NVL(DECODE(R.FUNC_RCPT_RMNG_BAL_AMT,0, R.FUNC_NET_RCPT_AMT,R.FUNC_RCPT_RMNG_BAL_AMT), 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_12
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - TO_DATE(R.RCPT_DT, 'YYYYMMDD') &gt; #age365#
+                                THEN NVL(DECODE(R.FUNC_RCPT_RMNG_BAL_AMT,0, R.FUNC_NET_RCPT_AMT,R.FUNC_RCPT_RMNG_BAL_AMT), 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_13
+                FROM
+                    AR_RCPT           R
+                WHERE
+                        R.GLBL_CMPY_CD                  =   #glblCmpyCd#
+                    AND R.AR_CASH_APPLY_STS_CD          IN (#arCachApplyStsCdUnidentified#)
+                    AND R.GL_DT                         &lt;= #slsDt#
+                    AND R.EZCANCELFLAG                  =   '0'
+                GROUP BY  
+                     R.GLBL_CMPY_CD
+                    ,R.AR_RCPT_SRC_CD
+                    ,R.TOC_CD
+                    ,R.DEAL_CCY_CD
+                    ,R.FUNC_CCY_CD
+                ) SATB
+        WHERE
+                SATB.ALL_BAL_DEAL_AMT              &gt; #amt0#
+            -- join RCPT_SRC_COA
+            AND SATB.GLBL_CMPY_CD                  =   C.GLBL_CMPY_CD(+)
+            AND SATB.AR_RCPT_SRC_CD                =   C.AR_RCPT_SRC_CD(+)
+            -- join TOC_PSN_INFO
+            AND SATB.GLBL_CMPY_CD                  =   TPI.GLBL_CMPY_CD(+)
+            AND SATB.TOC_CD                        =   TPI.TOC_CD(+)
+        UNION ALL
+        -- AR_TRX_TP=ACC
+        SELECT
+             SATB.GLBL_CMPY_CD
+            ,#lineBizTpCdAll#                             AS LINE_BIZ_TP_CD
+            ,SATB.BILL_TO_CUST_ACCT_CD
+            ,SATB.BILL_TO_CUST_ACCT_NM
+            ,SATB.BILL_TO_CUST_CD
+            ,NVL(BTC.LOC_NUM, #unknownCd#)                AS BILL_TO_LOC_NUM
+            ,CP.CLT_PSN_CD
+            ,CP.CLT_PSN_NM
+            ,SATB.TOC_CD
+            ,TPI.PSN_CD
+            ,TPI.PSN_FIRST_NM
+            ,TPI.PSN_LAST_NM
+            ,SATB.AR_TRX_TP_CD
+            ,''                                           AS DS_INV_TP_CD
+            ,SATB.AR_RCPT_SRC_CD                          AS AR_RCPT_SRC_CD
+            ,C.COA_CC_CD
+            ,C.COA_ACCT_CD
+            <!-- Mod 2019/08/17 QC#52782 -->
+       <!-- ,C.COA_AFFL_CD-->
+            ,STC.COA_AFFL_CD
+            <!-- Mod 2019/08/17 QC#52782 -->
+            ,SATB.FUNC_CCY_CD
+            ,SATB.ALL_BAL_FUNC_AMT
+            ,SATB.FUNC_AGING_AMT_00
+            ,SATB.FUNC_AGING_AMT_01
+            ,SATB.FUNC_AGING_AMT_02
+            ,SATB.FUNC_AGING_AMT_03
+            ,SATB.FUNC_AGING_AMT_04
+            ,SATB.FUNC_AGING_AMT_05
+            ,SATB.FUNC_AGING_AMT_06
+            ,SATB.FUNC_AGING_AMT_07
+            ,SATB.FUNC_AGING_AMT_08
+            ,SATB.FUNC_AGING_AMT_09
+            ,SATB.FUNC_AGING_AMT_10
+            ,SATB.FUNC_AGING_AMT_11
+            ,SATB.FUNC_AGING_AMT_12
+            ,SATB.FUNC_AGING_AMT_13
+            ,SATB.DEAL_CCY_CD
+            ,SATB.ALL_BAL_DEAL_AMT
+            ,SATB.DEAL_AGING_AMT_00
+            ,SATB.DEAL_AGING_AMT_01
+            ,SATB.DEAL_AGING_AMT_02
+            ,SATB.DEAL_AGING_AMT_03
+            ,SATB.DEAL_AGING_AMT_04
+            ,SATB.DEAL_AGING_AMT_05
+            ,SATB.DEAL_AGING_AMT_06
+            ,SATB.DEAL_AGING_AMT_07
+            ,SATB.DEAL_AGING_AMT_08
+            ,SATB.DEAL_AGING_AMT_09
+            ,SATB.DEAL_AGING_AMT_10
+            ,SATB.DEAL_AGING_AMT_11
+            ,SATB.DEAL_AGING_AMT_12
+            ,SATB.DEAL_AGING_AMT_13
+            ,CP.CLT_PTFO_PK
+            ,CP.CLT_PTFO_CD
+            ,CP.CLT_PTFO_NM
+        FROM
+             BILL_TO_CUST                       BTC
+            ,SELL_TO_CUST                       STC
+            ,RCPT_SRC_COA                       C
+            ,TOC_PSN_INFO                       TPI
+            ,CLT_PTFO                           CP
+            -- Balance Summary
+            ,(SELECT
+                     ATB.GLBL_CMPY_CD
+                    ,NVL(ATB.BILL_TO_CUST_ACCT_CD, #unknownCd#)        AS BILL_TO_CUST_ACCT_CD
+                    ,NVL(STC.DS_ACCT_NM, #unknownCd#)                  AS BILL_TO_CUST_ACCT_NM
+                    ,NVL(ATB.BILL_TO_CUST_CD, #unknownCd#)             AS BILL_TO_CUST_CD
+                    ,ATB.AR_TRX_TP_CD
+                    ,AR.AR_RCPT_SRC_CD
+                    ,AR.TOC_CD
+                    ,ATB.DEAL_CCY_CD
+                    ,SUM(NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0))            AS ALL_BAL_DEAL_AMT
+                    ,ATB.FUNC_CCY_CD
+                    ,SUM(NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0))            AS ALL_BAL_FUNC_AMT
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age0#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_00
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age0#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age30#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_01
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age30#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age60#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_02
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age60#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age90#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_03
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age90#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age120#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_04
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age120#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age150#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_05
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age150#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age180#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_06
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age180#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age210#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_07
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age210#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age240#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_08
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age240#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age270#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_09
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age270#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age300#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_10
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age300#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age330#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_11
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age330#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age365#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_12
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age365#
+                                THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS DEAL_AGING_AMT_13
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age0#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_00
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age0#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age30#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_01
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age30#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age60#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_02
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age60#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age90#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_03
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age90#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age120#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_04
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age120#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age150#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_05
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age150#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age180#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_06
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age180#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age210#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_07
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age210#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age240#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_08
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age240#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age270#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_09
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age270#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age300#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_10
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age300#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age330#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_11
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age330#
+                                    AND TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &lt;= #age365#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_12
+                    ,SUM(
+                        CASE
+                            WHEN TO_DATE(#slsDt#, 'YYYYMMDD') - NVL(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD'), TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD')) &gt; #age365#
+                                THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                            ELSE 0
+                        END
+                        ) AS FUNC_AGING_AMT_13
+                FROM
+                     AR_TRX_BAL        ATB
+                    ,SELL_TO_CUST      STC
+                    ,AR_ADJ            AA
+                    ,AR_TRX_BAL        OATB
+                    ,AR_RCPT           AR
+                WHERE
+                        ATB.GLBL_CMPY_CD                =   #glblCmpyCd#
+                    AND ATB.AR_CASH_APPLY_STS_CD        IN (#arCachApplyStsCdUnapplied#, #arCachApplyStsCdPartial#)
+                    AND ATB.AR_TRX_TP_CD                IN (#arTrxTpCdOnAccount#)
+                    AND ATB.GL_DT                       &lt;= #slsDt#
+                    AND ATB.GLBL_CMPY_CD                =   STC.GLBL_CMPY_CD
+                    AND ATB.BILL_TO_CUST_ACCT_CD        =   STC.SELL_TO_CUST_CD
+                    AND ATB.GLBL_CMPY_CD                =   AA.GLBL_CMPY_CD
+                    AND ATB.ATT_ADJ_NUM                 =   AA.AR_ADJ_NUM
+                    AND AA.GLBL_CMPY_CD                 =   OATB.GLBL_CMPY_CD
+                    AND AA.ORIG_AR_TRX_BAL_PK           =   OATB.AR_TRX_BAL_PK
+                    AND OATB.GLBL_CMPY_CD               =   AR.GLBL_CMPY_CD
+                    AND OATB.AR_TRX_NUM                 =   AR.RCPT_NUM
+                    AND ATB.EZCANCELFLAG                =   '0'
+                    AND STC.EZCANCELFLAG                =   '0'
+                    AND AA.EZCANCELFLAG                 =   '0'
+                    AND OATB.EZCANCELFLAG               =   '0'
+                    AND AR.EZCANCELFLAG                 =   '0'
+                GROUP BY
+                     ATB.GLBL_CMPY_CD
+                    ,ATB.BILL_TO_CUST_ACCT_CD
+                    ,STC.DS_ACCT_NM
+                    ,ATB.BILL_TO_CUST_CD
+                    ,ATB.AR_TRX_TP_CD
+                    ,AR.AR_RCPT_SRC_CD
+                    ,AR.TOC_CD
+                    ,ATB.DEAL_CCY_CD
+                    ,ATB.FUNC_CCY_CD
+                ) SATB
+        WHERE
+            -- join BILL_TO_CUST
+                SATB.GLBL_CMPY_CD              =   BTC.GLBL_CMPY_CD(+)
+            AND SATB.BILL_TO_CUST_CD           =   BTC.BILL_TO_CUST_CD(+)
+            -- join SELL_TO_CUST
+            AND SATB.GLBL_CMPY_CD              =   STC.GLBL_CMPY_CD
+            AND SATB.BILL_TO_CUST_ACCT_CD      =   STC.SELL_TO_CUST_CD
+            -- join RCPT_SRC_COA
+            AND SATB.GLBL_CMPY_CD              =   C.GLBL_CMPY_CD(+)
+            AND SATB.AR_RCPT_SRC_CD            =   C.AR_RCPT_SRC_CD(+)
+            -- join TOC_PSN_INFO
+            AND SATB.GLBL_CMPY_CD              =   TPI.GLBL_CMPY_CD(+)
+            AND SATB.TOC_CD                    =   TPI.TOC_CD(+)
+            -- join CLT_PTFO
+            AND STC.GLBL_CMPY_CD               =   CP.GLBL_CMPY_CD(+)
+            AND STC.CLT_PTFO_PK                =   CP.CLT_PTFO_PK(+)
+            AND BTC.EZCANCELFLAG(+)            =   '0'
+            AND STC.EZCANCELFLAG               =   '0'
+            AND CP.EZCANCELFLAG(+)             =   '0'
+    </statement>
+
+</sqlMap>

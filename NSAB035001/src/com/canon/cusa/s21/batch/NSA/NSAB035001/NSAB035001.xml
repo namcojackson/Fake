@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<sqlMap namespace="NSAB035001">
+    <statement id="getSupplyList" parameterClass="Map" resultClass="Map">
+        SELECT
+            DISTINCT
+             DCD.DS_CONTR_PK      AS DS_CONTR_PK
+            ,DCD.SVC_PGM_MDSE_CD  AS SVC_PGM_MDSE_CD
+            ,DCD.SVC_MACH_MSTR_PK AS SVC_MACH_MSTR_PK
+        FROM
+             DS_CONTR         DC
+            ,DS_CONTR_DTL     DCD
+            ,MDSE             MDS
+            ,SVC_COV_TMPL_TP  SCTT
+            ,SVC_COV_TMPL_DTL SCTD
+            <!-- START 2017/12/19 U.Kim [QC#21527,ADD] -->
+            ,DS_CONTR_STS_V     DCSV
+            ,DS_CONTR_DTL_STS_V DCDSV
+            <!-- END 2017/12/19 U.Kim [QC#21527,ADD] -->
+        WHERE
+                DC.GLBL_CMPY_CD           = #glblCmpyCd#
+            <isNotNull property="dsContrNum">
+            AND DC.DS_CONTR_NUM           LIKE  #dsContrNum#
+            </isNotNull>
+            AND DC.CONTR_VRSN_EFF_FROM_DT &lt;= #slsDt#
+            AND NVL(DC.CONTR_VRSN_EFF_THRU_DT, #thruDtLimit#) &gt;= #slsDt#
+            AND DC.DS_CONTR_CATG_CD       &lt;&gt; #dsContrCatgWty#
+            <!-- START 2017/12/19 U.Kim [QC#21527,ADD] -->
+            AND DC.DS_CONTR_CATG_CD       &lt;&gt; #dsContrCatgFlt#
+            <!-- END 2017/12/19 U.Kim [QC#21527,ADD] -->
+            AND DC.DS_CONTR_STS_CD        &lt;&gt; #dsContrStsOrder#
+            AND DC.GLBL_CMPY_CD           = DCD.GLBL_CMPY_CD
+            AND DC.DS_CONTR_PK            = DCD.DS_CONTR_PK
+            AND DCD.CONTR_EFF_FROM_DT     &lt;= #slsDt#
+            AND NVL(DCD.CONTR_EFF_THRU_DT, #thruDtLimit#) &gt;= #slsDt#
+            AND DCD.SVC_MACH_MSTR_PK      IS NOT NULL
+            <!-- START 2017/06/19 Y.Osawa [QC#19256,ADD] -->
+            AND DCD.DS_CONTR_DTL_STS_CD &lt;&gt; #dsContrDtlStsOrdr#
+            <!-- END   2017/06/19 Y.Osawa [QC#19256,ADD] -->
+            AND DCD.GLBL_CMPY_CD          = MDS.GLBL_CMPY_CD
+            AND DCD.SVC_PGM_MDSE_CD       = MDS.MDSE_CD
+            AND MDS.GLBL_CMPY_CD          = SCTT.GLBL_CMPY_CD
+            AND MDS.SVC_COV_TMPL_TP_CD    = SCTT.SVC_COV_TMPL_TP_CD
+            AND SCTT.GLBL_CMPY_CD         = SCTD.GLBL_CMPY_CD
+            AND SCTT.SVC_COV_TMPL_TP_CD   = SCTD.SVC_COV_TMPL_TP_CD
+            AND (   SCTD.SVC_COV_FEAT_CD  = #featSply# 
+                 OR SCTD.SVC_COV_FEAT_CD  = #featLaser# )
+            <!-- START 2017/12/19 U.Kim [QC#21527,ADD] -->
+            AND DC.GLBL_CMPY_CD           = DCSV.GLBL_CMPY_CD
+            AND DC.DS_CONTR_PK            = DCSV.DS_CONTR_PK
+            AND DCSV.ETTL_AVAL_FLG        = #flgY# 
+            AND DCD.GLBL_CMPY_CD          = DCDSV.GLBL_CMPY_CD
+            AND DCD.DS_CONTR_PK           = DCDSV.DS_CONTR_PK
+            AND DCDSV.ETTL_AVAL_FLG       = #flgY# 
+            <!-- END 2017/12/19 U.Kim [QC#21527,ADD] -->
+            <!-- START 2018/11/21 K.Kitachi [QC#29197, ADD] -->
+            AND EXISTS(
+                SELECT
+                    1
+                FROM
+                    DS_CONTR_DTL_TP DCDT
+                WHERE
+                        DCDT.GLBL_CMPY_CD       = DCD.GLBL_CMPY_CD
+                    AND DCDT.DS_CONTR_DTL_TP_CD = DCD.DS_CONTR_DTL_TP_CD
+                    AND DCDT.USG_CHRG_FLG       = #flgY#
+                    AND DCDT.EZCANCELFLAG       = '0'
+            )
+            <!-- END 2018/11/21 K.Kitachi [QC#29197, ADD] -->
+            <!-- START 2018/02/01 U.Kim [QC#23686,ADD] -->
+            <!-- START 2018/09/07 K.Kojima [QC#28130,MOD] -->
+            <!-- AND MOD(NVL(DC.DS_CONTR_PK,0),#multiCnt#) = #usrVar2# -->
+            AND EXISTS(
+                SELECT
+                    1
+                FROM
+                    SELL_TO_CUST STC
+                WHERE
+                        STC.GLBL_CMPY_CD    = DC.GLBL_CMPY_CD
+                    AND STC.SELL_TO_CUST_CD = DC.DS_ACCT_NUM
+                    AND STC.EZCANCELFLAG    = '0'
+                    AND MOD(NVL(STC.SELL_TO_CUST_PK,0),#multiCnt#) = #usrVar2#
+            )
+            <!-- END 2018/09/07 K.Kojima [QC#28130,MOD] -->
+            <!-- END 2018/02/01 U.Kim [QC#23686,ADD] -->
+            AND DC.EZCANCELFLAG           = '0'
+            AND DCD.EZCANCELFLAG          = '0'
+            AND MDS.EZCANCELFLAG          = '0'
+            AND SCTT.EZCANCELFLAG         = '0'
+            AND SCTD.EZCANCELFLAG         = '0'
+            <!-- START 2017/12/19 U.Kim [QC#21527,ADD] -->
+            AND DCSV.EZCANCELFLAG         = '0'
+            AND DCDSV.EZCANCELFLAG        = '0'
+        UNION ALL
+        SELECT
+            DISTINCT
+             DCD.DS_CONTR_PK       AS DS_CONTR_PK
+            ,DCDP.SVC_PGM_MDSE_CD  AS SVC_PGM_MDSE_CD
+            ,DCD.SVC_MACH_MSTR_PK  AS SVC_MACH_MSTR_PK
+        FROM
+             DS_CONTR           DC
+            ,DS_CONTR_DTL       DCD
+            ,DS_CONTR_DTL       DCDP
+            ,MDSE               MDS
+            ,SVC_COV_TMPL_TP    SCTT
+            ,SVC_COV_TMPL_DTL   SCTD
+            ,DS_CONTR_STS_V     DCSV
+            ,DS_CONTR_DTL_STS_V DCDSV
+        WHERE
+                DC.GLBL_CMPY_CD           = #glblCmpyCd#
+            <isNotNull property="dsContrNum">
+            AND DC.DS_CONTR_NUM           LIKE  #dsContrNum#
+            </isNotNull>
+            AND DC.CONTR_VRSN_EFF_FROM_DT &lt;= #slsDt#
+            AND NVL(DC.CONTR_VRSN_EFF_THRU_DT, #thruDtLimit#) &gt;= #slsDt#
+            AND DC.DS_CONTR_CATG_CD       &lt;&gt; #dsContrCatgWty#
+            AND DC.DS_CONTR_CATG_CD       = #dsContrCatgFlt#
+            AND DC.DS_CONTR_STS_CD        &lt;&gt; #dsContrStsOrder#
+            AND DC.GLBL_CMPY_CD           = DCD.GLBL_CMPY_CD
+            AND DC.DS_CONTR_PK            = DCD.DS_CONTR_PK
+            AND DCD.CONTR_EFF_FROM_DT     &lt;= #slsDt#
+            AND NVL(DCD.CONTR_EFF_THRU_DT, #thruDtLimit#) &gt;= #slsDt#
+            AND DCD.SVC_MACH_MSTR_PK      IS NOT NULL
+            AND DCD.DS_CONTR_DTL_STS_CD   &lt;&gt; #dsContrDtlStsOrdr#
+            AND DCD.GLBL_CMPY_CD          = DCDP.GLBL_CMPY_CD
+            AND DCD.PRNT_DS_CONTR_DTL_PK  = DCDP.DS_CONTR_DTL_PK
+            AND DCDP.GLBL_CMPY_CD         = MDS.GLBL_CMPY_CD
+            AND DCDP.SVC_PGM_MDSE_CD      = MDS.MDSE_CD
+            AND MDS.GLBL_CMPY_CD          = SCTT.GLBL_CMPY_CD
+            AND MDS.SVC_COV_TMPL_TP_CD    = SCTT.SVC_COV_TMPL_TP_CD
+            AND SCTT.GLBL_CMPY_CD         = SCTD.GLBL_CMPY_CD
+            AND SCTT.SVC_COV_TMPL_TP_CD   = SCTD.SVC_COV_TMPL_TP_CD
+            AND (   SCTD.SVC_COV_FEAT_CD  = #featSply# 
+                 OR SCTD.SVC_COV_FEAT_CD  = #featLaser# )
+            AND DC.GLBL_CMPY_CD           = DCSV.GLBL_CMPY_CD
+            AND DC.DS_CONTR_PK            = DCSV.DS_CONTR_PK
+            AND DCSV.ETTL_AVAL_FLG        = #flgY# 
+            AND DCD.GLBL_CMPY_CD          = DCDSV.GLBL_CMPY_CD
+            AND DCD.DS_CONTR_PK           = DCDSV.DS_CONTR_PK
+            AND DCDSV.ETTL_AVAL_FLG       = #flgY#
+            <!-- START 2018/11/21 K.Kitachi [QC#29197, ADD] -->
+            AND EXISTS(
+                SELECT
+                    1
+                FROM
+                    DS_CONTR_DTL_TP DCDT
+                WHERE
+                        DCDT.GLBL_CMPY_CD       = DCD.GLBL_CMPY_CD
+                    AND DCDT.DS_CONTR_DTL_TP_CD = DCD.DS_CONTR_DTL_TP_CD
+                    AND DCDT.USG_CHRG_FLG       = #flgY#
+                    AND DCDT.EZCANCELFLAG       = '0'
+            )
+            <!-- END 2018/11/21 K.Kitachi [QC#29197, ADD] -->
+            <!-- START 2018/02/01 U.Kim [QC#23686,ADD] -->
+            <!-- START 2018/09/07 K.Kojima [QC#28130,MOD] -->
+            <!-- AND MOD(NVL(DC.DS_CONTR_PK,0),#multiCnt#) = #usrVar2# -->
+            AND EXISTS(
+                SELECT
+                    1
+                FROM
+                    SELL_TO_CUST STC
+                WHERE
+                        STC.GLBL_CMPY_CD    = DC.GLBL_CMPY_CD
+                    AND STC.SELL_TO_CUST_CD = DC.DS_ACCT_NUM
+                    AND STC.EZCANCELFLAG    = '0'
+                    AND MOD(NVL(STC.SELL_TO_CUST_PK,0),#multiCnt#) = #usrVar2#
+            )
+            <!-- END 2018/09/07 K.Kojima [QC#28130,MOD] -->
+            <!-- END 2018/02/01 U.Kim [QC#23686,ADD] -->
+            AND DC.EZCANCELFLAG           = '0'
+            AND DCD.EZCANCELFLAG          = '0'
+            AND DCDP.EZCANCELFLAG         = '0'
+            AND MDS.EZCANCELFLAG          = '0'
+            AND SCTT.EZCANCELFLAG         = '0'
+            AND SCTD.EZCANCELFLAG         = '0'
+            AND DCSV.EZCANCELFLAG         = '0'
+            AND DCDSV.EZCANCELFLAG        = '0'
+            <!-- END 2017/12/19 U.Kim [QC#21527,ADD] -->
+        ORDER BY
+             DS_CONTR_PK
+            ,SVC_PGM_MDSE_CD
+            ,SVC_MACH_MSTR_PK
+    </statement>
+
+</sqlMap>

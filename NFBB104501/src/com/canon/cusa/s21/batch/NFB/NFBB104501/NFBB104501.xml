@@ -1,0 +1,335 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sqlMap namespace="NFBB104501">
+
+    <typeAlias alias="CM_STK_INTMsg"            type="business.db.CM_STK_INTMsg"/>
+    <typeAlias alias="CM_AP_INV_DTLTMsg"        type="business.db.CM_AP_INV_DTLTMsg"/>
+    <typeAlias alias="CM_MATCH_TRKTMsg"         type="business.db.CM_MATCH_TRKTMsg"/>
+
+    <statement id="SELECT_AP_INVOICE" parameterClass="Map">
+    <!--  // QC#20316 T.Kikuhara MOD START -->
+    <!--  // QC#54123 MOD START -->
+        SELECT
+             CAID.AP_VND_CD
+        ,    CAID.AP_VND_INV_NUM
+        ,    CAID.AP_VND_INV_SQ_NUM
+        ,    CAID.AP_VND_INV_LINE_NUM
+        FROM
+             CM_AP_INV_HDR    CAIH
+        ,    CM_AP_INV_DTL    CAID
+        ,    PO               PO
+        ,    VND_RTRN         VR
+        WHERE
+                CAIH.GLBL_CMPY_CD        = #glblCmpyCd#
+            <!--  // QC#28734 MOD START -->
+            AND (CAIH.ACCT_INV_STS_CD    != #acctInvStsCd#
+                 OR CAIH.ACCT_INV_STS_CD IS NULL)
+            <!--  // QC#28734 MOD END   -->
+            AND CAIH.GLBL_CMPY_CD        = CAID.GLBL_CMPY_CD
+            AND CAIH.AP_VND_CD           = CAID.AP_VND_CD
+            AND CAIH.AP_VND_INV_NUM      = CAID.AP_VND_INV_NUM
+            AND CAIH.AP_VND_INV_SQ_NUM   = CAID.AP_VND_INV_SQ_NUM
+            AND CAIH.GLBL_CMPY_CD        = PO.GLBL_CMPY_CD(+)
+            AND CAIH.PO_NUM              = PO.PO_ORD_NUM(+)
+            AND CAIH.GLBL_CMPY_CD        = VR.GLBL_CMPY_CD(+)
+            AND CAIH.VND_RTRN_NUM        = VR.VND_RTRN_NUM(+)
+            AND CAID.CM_AP_INV_ASG_CD    = 'N'
+           <iterate property="vndInvImptTpCdList" var="vndInvImptTpCdList[]" open="AND CAIH.VND_INV_IMPT_TP_CD IN (" close=")" conjunction=",">
+                 #vndInvImptTpCdList[]#
+           </iterate>
+            AND EXISTS
+                    (
+                        SELECT
+                            1
+                        FROM
+                            CM_STK_IN CSI
+                        WHERE
+                            CSI.GLBL_CMPY_CD = #glblCmpyCd#
+                        AND CSI.EZCANCELFLAG = '0'
+                        AND CSI.VND_CD       = NVL(PO.VND_CD,VR.SHIP_TO_VND_CD)
+                        AND CSI.PO_NUM       = NVL(PO.PO_ORD_NUM,VR.VND_RTRN_NUM)
+                    )
+            AND CAIH.EZCANCELFLAG        = '0'
+            AND CAID.EZCANCELFLAG        = '0'
+        GROUP BY
+             CAID.AP_VND_CD
+        ,    CAID.AP_VND_INV_NUM
+        ,    CAID.AP_VND_INV_SQ_NUM
+        ,    CAID.AP_VND_INV_LINE_NUM
+        ORDER BY
+             CAID.AP_VND_CD
+        ,    CAID.AP_VND_INV_NUM
+        ,    CAID.AP_VND_INV_SQ_NUM
+        ,    CAID.AP_VND_INV_LINE_NUM
+    <!--  // QC#54123 MOD END -->
+    <!--  // QC#20316 T.Kikuhara MOD END -->
+    </statement>
+
+    <statement id="SELECT_CM_STK_IN" parameterClass="Map" resultMap="result.SELECT_CM_STK_IN">
+       SELECT 
+             CSI.GLBL_CMPY_CD
+            ,CSI.CM_STK_IN_PK
+        FROM 
+             CM_STK_IN     CSI
+            ,CM_AP_INV_DTL CAID
+        WHERE 
+                CSI.GLBL_CMPY_CD        = #glblCmpyCd#
+            AND CSI.EZCANCELFLAG        = '0'
+            AND CSI.GLBL_CMPY_CD        = CAID.GLBL_CMPY_CD
+            AND CAID.EZCANCELFLAG       = '0'
+            AND CSI.VND_CD              = CAID.AP_VND_CD
+            AND CSI.VND_CD              = CAID.VND_CD
+            AND CSI.MDSE_CD             = CAID.MDSE_CD
+            AND CSI.DELY_ORD_NUM        = CAID.DELY_ORD_NUM
+            AND CSI.INV_ASG_FLG         = #flagN#
+            AND CAID.AP_VND_INV_SQ_NUM  = '00'
+            AND CAID.STK_IN_DT          IS NULL
+    </statement>
+
+    <resultMap id="result.SELECT_CM_STK_IN" class="CM_STK_INTMsg">
+        <result property="glblCmpyCd"  column="GLBL_CMPY_CD"   javaType="EZDTStringItem"/>
+        <result property="cmStkInPk"   column="CM_STK_IN_PK"   javaType="EZDTBigDecimalItem"/>
+    </resultMap>
+    
+    <statement id="SELECT_CM_AP_INV_DTL" parameterClass="Map" resultMap="result.SELECT_CM_AP_INV_DTL">
+        SELECT 
+             GLBL_CMPY_CD
+            ,AP_VND_CD
+            ,AP_VND_INV_NUM
+            ,AP_VND_INV_SQ_NUM
+            ,VND_CD
+            ,VND_INV_NUM
+            ,MDSE_CD
+            ,DELY_ORD_NUM
+            ,AP_INV_TP_CD
+            ,PO_NUM
+        FROM
+             CM_AP_INV_DTL
+        WHERE
+            GLBL_CMPY_CD        = #glblCmpyCd#
+        AND AP_VND_CD           = #apVndCd#
+        AND AP_VND_INV_NUM      = #apVndInvNum#
+        AND AP_VND_INV_SQ_NUM   = #apVndInvSqNum#
+        AND VND_CD              = #vndCd#
+        AND VND_INV_NUM         = #vndInvNum#
+        AND MDSE_CD             = #mdseCd#
+        AND DELY_ORD_NUM        = #delyOrdNum#
+        AND AP_INV_TP_CD        = #apInvTpCd#
+        AND PO_NUM              = #poNum#
+        AND EZCANCELFLAG        = '0'
+    </statement>
+
+    <resultMap id="result.SELECT_CM_AP_INV_DTL" class="CM_AP_INV_DTLTMsg">
+        <result property="glblCmpyCd"    column="GLBL_CMPY_CD"      javaType="EZDTStringItem"/>
+        <result property="apVndCd"       column="AP_VND_CD"         javaType="EZDTStringItem"/>
+        <result property="apVndInvNum"   column="AP_VND_INV_NUM"    javaType="EZDTStringItem"/>
+        <result property="apVndInvSqNum" column="AP_VND_INV_SQ_NUM" javaType="EZDTStringItem"/>
+        <result property="vndCd"         column="VND_CD"            javaType="EZDTStringItem"/>
+        <result property="vndInvNum"     column="VND_INV_NUM"       javaType="EZDTStringItem"/>
+        <result property="mdseCd"        column="MDSE_CD"           javaType="EZDTStringItem"/>
+        <result property="delyOrdNum"    column="DELY_ORD_NUM"      javaType="EZDTStringItem"/>
+        <result property="apInvTpCd"     column="AP_INV_TP_CD"      javaType="EZDTStringItem"/>
+        <result property="poNum"         column="PO_NUM"            javaType="EZDTStringItem"/>
+    </resultMap>
+
+    <statement id="SELECT_TARGET_CM_STK_IN" parameterClass="Map" resultMap="result.SELECT_TARGET_CM_STK_IN">
+        SELECT 
+             CSI.GLBL_CMPY_CD
+            ,CSI.CM_STK_IN_PK
+            ,CSI.VND_CD
+            ,CSI.INVTY_LOC_CD
+            ,CSI.DELY_ORD_NUM
+            ,CSI.PROD_LINE_PROD_CTRL_CD
+            ,CSI.MDSE_CD
+            ,CSI.MDSE_OR_PRT_CD
+            ,CSI.VND_REF_NUM
+            ,CSI.IMPT_DO_SO_NUM
+            ,CSI.ACCT_REC_CNT
+            ,CSI.STK_IN_ERR_FLG
+            ,CSI.VND_INV_NUM
+            ,CSI.VND_INV_SQ_NUM
+            ,CSI.INV_RCV_DT
+            ,CSI.COA_PROD_CD
+            ,CSI.ACCT_YR_MTH
+            ,CSI.INV_LOC_RCV_DT
+            ,CSI.INV_SEND_CD
+            ,CSI.LC_DA_NUM
+            ,CSI.VND_SHIP_VIA_PRCH_CD
+            ,CSI.ACTL_FOB_CD
+            ,CSI.ACCT_SHPG_TERM_CD
+            ,CSI.ORIG_DELY_ORD_NUM
+            ,CSI.ORIG_VND_INV_NUM
+            ,CSI.ORIG_VND_INV_SQ_NUM
+            ,CSI.STK_IN_RSN_DESC_TXT
+            ,CSI.INV_SC_FOB_COST_AMT
+            ,CSI.INV_SC_FRT_COST_AMT
+            ,CSI.INV_SC_INS_COST_AMT
+            ,CSI.INV_OC_FOB_COST_AMT
+            ,CSI.INV_OC_FRT_COST_AMT
+            ,CSI.INV_OC_INS_COST_AMT
+            ,CSI.INV_QTY
+            ,CSI.FOB_CCY_CD
+            ,CSI.FRT_CCY_CD
+            ,CSI.INS_CCY_CD
+            ,CSI.RCV_QTY
+            ,CSI.SLS_PRMO_QTY
+            ,CSI.AC_MDSE_FOB_COST_AMT
+            ,CSI.PLN_SC_FOB_COST_AMT
+            ,CSI.PLN_SC_FRT_COST_AMT
+            ,CSI.PLN_SC_INS_COST_AMT
+            ,CSI.PLN_SC_DTY_COST_AMT
+            ,CSI.PLN_SC_OTH_COST_AMT
+            ,CSI.STK_IN_SC_FOB_COST_AMT
+            ,CSI.STK_IN_SC_FRT_COST_AMT
+            ,CSI.STK_IN_SC_INS_COST_AMT
+            ,CSI.STK_IN_SC_DTY_COST_AMT
+            ,CSI.STK_IN_SC_OTH_COST_AMT
+            ,CSI.SLS_PRMO_SC_FOB_COST_AMT
+            ,CSI.SLS_PRMO_SC_FRT_COST_AMT
+            ,CSI.SLS_PRMO_SC_INS_COST_AMT
+            ,CSI.SLS_PRMO_SC_DTY_COST_AMT
+            ,CSI.SLS_PRMO_SC_OTH_COST_AMT
+            ,CSI.PSET_VND_FLG
+            ,CSI.INV_ASG_FLG
+            ,CSI.INV_ASG_DT
+            ,CSI.STK_IN_ITEM_DEL_FLG
+            ,CSI.STK_IN_ITEM_DEL_DT
+            ,CSI.CM_STK_IN_CPLT_FLG
+            ,CSI.CM_STK_IN_CPLT_DT
+            ,CSI.CM_STK_IN_ONL_PROC_FLG
+            ,CSI.PSET_ASG_FLG
+            ,CSI.PSET_ASG_DT
+            ,CSI.TRX_CD
+            ,CSI.TRX_RSN_CD
+            ,CSI.PO_ORD_NUM
+            ,CSI.PO_ORD_DTL_LINE_NUM
+            ,CSI.VND_RTRN_NUM
+            ,CSI.TRX_LINE_NUM
+            ,CSI.TRX_LINE_SUB_NUM
+            ,CSI.CM_STK_IN_VAR_CALC_FLG
+            ,CSI.CM_STK_IN_VAR_FRCE_CALC_FLG
+            ,CSI.STK_IN_ASG_ERR_RSN_CD
+            ,CSI.PO_NUM
+            ,CSI.PO_QTY
+            ,CSI.THIS_MTH_FOB_COST_AMT
+            ,CSI.ENT_DEAL_NET_UNIT_PRC_AMT
+            ,CSI.ENT_PO_DTL_DEAL_NET_AMT
+            ,CSI.ENT_FUNC_NET_UNIT_PRC_AMT
+            ,CSI.ENT_PO_DTL_FUNC_NET_AMT
+            ,CSI.EXCH_RATE
+            ,CSI.INVTY_TRX_PK
+        FROM
+             CM_STK_IN   CSI
+        WHERE
+            CSI.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND CSI.INV_ASG_FLG         = 'N'
+        AND CSI.EZCANCELFLAG        = '0'
+        ORDER BY
+            CSI.CM_STK_IN_PK
+    </statement>
+
+    <resultMap id="result.SELECT_TARGET_CM_STK_IN" class="CM_STK_INTMsg">
+        <result property="glblCmpyCd"                             column="GLBL_CMPY_CD"                              javaType="EZDTStringItem"/>
+        <result property="cmStkInPk"                              column="CM_STK_IN_PK"                              javaType="EZDTBigDecimalItem"/>
+        <result property="vndCd"                                  column="VND_CD"                                    javaType="EZDTStringItem"/>
+        <result property="invtyLocCd"                             column="INVTY_LOC_CD"                              javaType="EZDTStringItem"/>
+        <result property="delyOrdNum"                             column="DELY_ORD_NUM"                              javaType="EZDTStringItem"/>
+        <result property="prodLineProdCtrlCd"                     column="PROD_LINE_PROD_CTRL_CD"                    javaType="EZDTStringItem"/>
+        <result property="mdseCd"                                 column="MDSE_CD"                                   javaType="EZDTStringItem"/>
+        <result property="mdseOrPrtCd"                            column="MDSE_OR_PRT_CD"                            javaType="EZDTStringItem"/>
+        <result property="vndRefNum"                              column="VND_REF_NUM"                               javaType="EZDTStringItem"/>
+        <result property="imptDoSoNum"                            column="IMPT_DO_SO_NUM"                            javaType="EZDTStringItem"/>
+        <result property="acctRecCnt"                             column="ACCT_REC_CNT"                              javaType="EZDTStringItem"/>
+        <result property="stkInErrFlg"                            column="STK_IN_ERR_FLG"                            javaType="EZDTStringItem"/>
+        <result property="vndInvNum"                              column="VND_INV_NUM"                               javaType="EZDTStringItem"/>
+        <result property="vndInvSqNum"                            column="VND_INV_SQ_NUM"                            javaType="EZDTStringItem"/>
+        <result property="invRcvDt"                               column="INV_RCV_DT"                                javaType="EZDTStringItem"/>
+        <result property="coaProdCd"                              column="COA_PROD_CD"                               javaType="EZDTStringItem"/>
+        <result property="acctYrMth"                              column="ACCT_YR_MTH"                               javaType="EZDTStringItem"/>
+        <result property="invLocRcvDt"                            column="INV_LOC_RCV_DT"                            javaType="EZDTStringItem"/>
+        <result property="invSendCd"                              column="INV_SEND_CD"                               javaType="EZDTStringItem"/>
+        <result property="lcDaNum"                                column="LC_DA_NUM"                                 javaType="EZDTStringItem"/>
+        <result property="vndShipViaPrchCd"                       column="VND_SHIP_VIA_PRCH_CD"                      javaType="EZDTStringItem"/>
+        <result property="actlFobCd"                              column="ACTL_FOB_CD"                               javaType="EZDTStringItem"/>
+        <result property="acctShpgTermCd"                         column="ACCT_SHPG_TERM_CD"                         javaType="EZDTStringItem"/>
+        <result property="origDelyOrdNum"                         column="ORIG_DELY_ORD_NUM"                         javaType="EZDTStringItem"/>
+        <result property="origVndInvNum"                          column="ORIG_VND_INV_NUM"                          javaType="EZDTStringItem"/>
+        <result property="origVndInvSqNum"                        column="ORIG_VND_INV_SQ_NUM"                       javaType="EZDTStringItem"/>
+        <result property="stkInRsnDescTxt"                        column="STK_IN_RSN_DESC_TXT"                       javaType="EZDTStringItem"/>
+        <result property="invScFobCostAmt"                        column="INV_SC_FOB_COST_AMT"                       javaType="EZDTBigDecimalItem"/>
+        <result property="invScFrtCostAmt"                        column="INV_SC_FRT_COST_AMT"                       javaType="EZDTBigDecimalItem"/>
+        <result property="invScInsCostAmt"                        column="INV_SC_INS_COST_AMT"                       javaType="EZDTBigDecimalItem"/>
+        <result property="invOcFobCostAmt"                        column="INV_OC_FOB_COST_AMT"                       javaType="EZDTBigDecimalItem"/>
+        <result property="invOcFrtCostAmt"                        column="INV_OC_FRT_COST_AMT"                       javaType="EZDTBigDecimalItem"/>
+        <result property="invOcInsCostAmt"                        column="INV_OC_INS_COST_AMT"                       javaType="EZDTBigDecimalItem"/>
+        <result property="invQty"                                 column="INV_QTY"                                   javaType="EZDTBigDecimalItem"/>
+        <result property="fobCcyCd"                               column="FOB_CCY_CD"                                javaType="EZDTStringItem"/>
+        <result property="frtCcyCd"                               column="FRT_CCY_CD"                                javaType="EZDTStringItem"/>
+        <result property="insCcyCd"                               column="INS_CCY_CD"                                javaType="EZDTStringItem"/>
+        <result property="rcvQty"                                 column="RCV_QTY"                                   javaType="EZDTBigDecimalItem"/>
+        <result property="slsPrmoQty"                             column="SLS_PRMO_QTY"                              javaType="EZDTBigDecimalItem"/>
+        <result property="acMdseFobCostAmt"                       column="AC_MDSE_FOB_COST_AMT"                      javaType="EZDTBigDecimalItem"/>
+        <result property="plnScFobCostAmt"                        column="PLN_SC_FOB_COST_AMT"                       javaType="EZDTBigDecimalItem"/>
+        <result property="plnScFrtCostAmt"                        column="PLN_SC_FRT_COST_AMT"                       javaType="EZDTBigDecimalItem"/>
+        <result property="plnScInsCostAmt"                        column="PLN_SC_INS_COST_AMT"                       javaType="EZDTBigDecimalItem"/>
+        <result property="plnScDtyCostAmt"                        column="PLN_SC_DTY_COST_AMT"                       javaType="EZDTBigDecimalItem"/>
+        <result property="plnScOthCostAmt"                        column="PLN_SC_OTH_COST_AMT"                       javaType="EZDTBigDecimalItem"/>
+        <result property="stkInScFobCostAmt"                      column="STK_IN_SC_FOB_COST_AMT"                    javaType="EZDTBigDecimalItem"/>
+        <result property="stkInScFrtCostAmt"                      column="STK_IN_SC_FRT_COST_AMT"                    javaType="EZDTBigDecimalItem"/>
+        <result property="stkInScInsCostAmt"                      column="STK_IN_SC_INS_COST_AMT"                    javaType="EZDTBigDecimalItem"/>
+        <result property="stkInScDtyCostAmt"                      column="STK_IN_SC_DTY_COST_AMT"                    javaType="EZDTBigDecimalItem"/>
+        <result property="stkInScOthCostAmt"                      column="STK_IN_SC_OTH_COST_AMT"                    javaType="EZDTBigDecimalItem"/>
+        <result property="slsPrmoScFobCostAmt"                    column="SLS_PRMO_SC_FOB_COST_AMT"                  javaType="EZDTBigDecimalItem"/>
+        <result property="slsPrmoScFrtCostAmt"                    column="SLS_PRMO_SC_FRT_COST_AMT"                  javaType="EZDTBigDecimalItem"/>
+        <result property="slsPrmoScInsCostAmt"                    column="SLS_PRMO_SC_INS_COST_AMT"                  javaType="EZDTBigDecimalItem"/>
+        <result property="slsPrmoScDtyCostAmt"                    column="SLS_PRMO_SC_DTY_COST_AMT"                  javaType="EZDTBigDecimalItem"/>
+        <result property="slsPrmoScOthCostAmt"                    column="SLS_PRMO_SC_OTH_COST_AMT"                  javaType="EZDTBigDecimalItem"/>
+        <result property="psetVndFlg"                             column="PSET_VND_FLG"                              javaType="EZDTStringItem"/>
+        <result property="invAsgFlg"                              column="INV_ASG_FLG"                               javaType="EZDTStringItem"/>
+        <result property="invAsgDt"                               column="INV_ASG_DT"                                javaType="EZDTStringItem"/>
+        <result property="stkInItemDelFlg"                        column="STK_IN_ITEM_DEL_FLG"                       javaType="EZDTStringItem"/>
+        <result property="stkInItemDelDt"                         column="STK_IN_ITEM_DEL_DT"                        javaType="EZDTStringItem"/>
+        <result property="cmStkInCpltFlg"                         column="CM_STK_IN_CPLT_FLG"                        javaType="EZDTStringItem"/>
+        <result property="cmStkInCpltDt"                          column="CM_STK_IN_CPLT_DT"                         javaType="EZDTStringItem"/>
+        <result property="cmStkInOnlProcFlg"                      column="CM_STK_IN_ONL_PROC_FLG"                    javaType="EZDTStringItem"/>
+        <result property="psetAsgFlg"                             column="PSET_ASG_FLG"                              javaType="EZDTStringItem"/>
+        <result property="psetAsgDt"                              column="PSET_ASG_DT"                               javaType="EZDTStringItem"/>
+        <result property="trxCd"                                  column="TRX_CD"                                    javaType="EZDTStringItem"/>
+        <result property="trxRsnCd"                               column="TRX_RSN_CD"                                javaType="EZDTStringItem"/>
+        <result property="poOrdNum"                               column="PO_ORD_NUM"                                javaType="EZDTStringItem"/>
+        <result property="poOrdDtlLineNum"                        column="PO_ORD_DTL_LINE_NUM"                       javaType="EZDTStringItem"/>
+        <result property="vndRtrnNum"                             column="VND_RTRN_NUM"                              javaType="EZDTStringItem"/>
+        <result property="trxLineNum"                             column="TRX_LINE_NUM"                              javaType="EZDTStringItem"/>
+        <result property="trxLineSubNum"                          column="TRX_LINE_SUB_NUM"                          javaType="EZDTStringItem"/>
+        <result property="cmStkInVarCalcFlg"                      column="CM_STK_IN_VAR_CALC_FLG"                    javaType="EZDTStringItem"/>
+        <result property="cmStkInVarFrceCalcFlg"                  column="CM_STK_IN_VAR_FRCE_CALC_FLG"               javaType="EZDTStringItem"/>
+        <result property="stkInAsgErrRsnCd"                       column="STK_IN_ASG_ERR_RSN_CD"                     javaType="EZDTStringItem"/>
+        <result property="poNum"                                  column="PO_NUM"                                    javaType="EZDTStringItem"/>
+        <result property="poQty"                                  column="PO_QTY"                                    javaType="EZDTBigDecimalItem"/>
+        <result property="thisMthFobCostAmt"                      column="THIS_MTH_FOB_COST_AMT"                     javaType="EZDTBigDecimalItem"/>
+        <result property="entDealNetUnitPrcAmt"                   column="ENT_DEAL_NET_UNIT_PRC_AMT"                 javaType="EZDTBigDecimalItem"/>
+        <result property="entPoDtlDealNetAmt"                     column="ENT_PO_DTL_DEAL_NET_AMT"                   javaType="EZDTBigDecimalItem"/>
+        <result property="entFuncNetUnitPrcAmt"                   column="ENT_FUNC_NET_UNIT_PRC_AMT"                 javaType="EZDTBigDecimalItem"/>
+        <result property="entPoDtlFuncNetAmt"                     column="ENT_PO_DTL_FUNC_NET_AMT"                   javaType="EZDTBigDecimalItem"/>
+        <result property="exchRate"                               column="EXCH_RATE"                                 javaType="EZDTBigDecimalItem"/>
+        <result property="invtyTrxPk"                             column="INVTY_TRX_PK"                              javaType="EZDTBigDecimalItem"/>
+    </resultMap>
+
+    <statement id="SELECT_TARGET_CM_MATCH_TRK" parameterClass="Map" resultMap="result.SELECT_TARGET_CM_MATCH_TRK">
+        SELECT
+             CMT.CM_STK_IN_PK   CM_STK_IN_PK
+            ,SUM(CMT.MATCH_QTY) SUM_MATCH_QTY
+        FROM
+             CM_MATCH_TRK   CMT
+        WHERE
+            CMT.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND CMT.CM_STK_IN_PK        = #cmStkInPk#
+        AND CMT.EZCANCELFLAG        = '0'
+        GROUP BY
+            CMT.CM_STK_IN_PK
+    </statement>
+
+    <resultMap id="result.SELECT_TARGET_CM_MATCH_TRK" class="CM_MATCH_TRKTMsg">
+        <result property="cmStkInPk"                              column="CM_STK_IN_PK"                              javaType="EZDTBigDecimalItem"/>
+        <result property="matchQty"                               column="SUM_MATCH_QTY"                             javaType="EZDTBigDecimalItem"/>
+    </resultMap>
+</sqlMap>

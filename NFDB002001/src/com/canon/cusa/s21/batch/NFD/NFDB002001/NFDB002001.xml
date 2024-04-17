@@ -1,0 +1,314 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NFDB002001">
+
+<!-- #################### Type Alias #################### -->
+<typeAlias alias="TargetData"    type="com.canon.cusa.s21.batch.NFD.NFDB002001.TargetData"/>
+
+<!-- #################### Statement #################### -->
+    
+  <statement id="getTargetData" parameterClass="Map" resultMap="result.getTargetData">
+      SELECT
+             CST.CLT_ACCT_CD
+            ,CST.BILL_TO_CUST_CD
+            ,CSWIT.CLT_STRGY_WRK_ITEM_TRX_PK
+            ,CSWIT.CLT_WRK_TP_CD
+            ,DLT.CLT_DUN_LTR_TP_CD
+            ,RT.FIRST_LINE_ADDR  AS REM_FIRST_LINE_ADDR
+            ,RT.SCD_LINE_ADDR    AS REM_SCD_LINE_ADDR 
+            ,RT.THIRD_LINE_ADDR  AS REM_THIRD_LINE_ADDR
+            ,RT.FRTH_LINE_ADDR   AS REM_FRTH_LINE_ADDR
+            ,RT.CTY_ADDR         AS REM_CTY_ADDR 
+            ,RT.PROV_NM          AS REM_PROV_NM
+            ,RT.ST_CD            AS REM_ST_CD
+            ,RT.POST_CD          AS REM_POST_CD
+            ,STC.DS_ACCT_NM
+            ,BTC.ADDL_LOC_NM
+            ,BTC.FIRST_LINE_ADDR AS BTC_FIRST_LINE_ADDR
+            ,BTC.SCD_LINE_ADDR   AS BTC_SCD_LINE_ADDR
+            ,BTC.THIRD_LINE_ADDR AS BTC_THIRD_LINE_ADDR
+            ,BTC.FRTH_LINE_ADDR  AS BTC_FRTH_LINE_ADDR
+            ,BTC.CTY_ADDR        AS BTC_CTY_ADDR
+            ,BTC.PROV_NM         AS BTC_PROV_NM
+            ,BTC.ST_CD           AS BTC_ST_CD
+            ,BTC.POST_CD         AS BTC_POST_CD
+            ,GC.GLBL_CMPY_NM
+            
+            <!-- QC7310 UPDATE start -->
+            <!--,CP_BILL.CLT_PSN_CD                     AS CLT_PSN_CD_BILL-->
+            <!--,CP_BILL.CLT_PSN_NM                     AS CLT_PSN_NM_BILL-->
+            <!--,CP_ACCT.CLT_PSN_CD                     AS CLT_PSN_CD_ACCT-->
+            <!--,CP_ACCT.CLT_PSN_NM                     AS CLT_PSN_NM_ACCT-->
+            ,CLP.CLT_PSN_CD
+            ,CLP.CLT_PSN_NM
+            ,CLP.CLT_STMT_PHO_NUM
+            ,CLP.CLT_STMT_FAX_NUM
+            ,PSN.EML_ADDR        AS CLT_PSN_EML_ADDR
+            <!-- QC7310 UPDATE end -->
+         FROM
+             CLT_STRGY_TRX          CST
+            ,CLT_STRGY_WRK_ITEM_TRX CSWIT
+            ,BILL_TO_CUST           BTC
+            ,REM_TO                 RT
+            ,CLT_DUN_LTR_TP         DLT
+            ,GLBL_CMPY              GC
+            ,SELL_TO_CUST           STC
+            <!-- QC7310 UPDATE start -->
+            <!--,CLT_PTFO               CP_BILL-->
+            <!--,CLT_PTFO               CP_ACCT-->
+            ,CLT_PTFO               CLP
+            ,AUTH_PSN               PSN
+            <!-- QC7310 UPDATE end -->
+         WHERE
+                  CST.GLBL_CMPY_CD                 = #glblCmpyCd#
+           AND    CST.CLT_STRGY_CUR_FLG            = #flgY#
+           AND    CST.GLBL_CMPY_CD                 = CSWIT.GLBL_CMPY_CD
+           AND    CST.CLT_STRGY_TRX_PK             = CSWIT.CLT_STRGY_TRX_PK
+           AND    TO_DATE(CSWIT.CLT_WRK_ITEM_RWSD_DT, 'YYYYMMDD')  &lt;= TO_DATE(#batProcDt#, 'YYYYMMDD')
+    <!-- START 2021/08/13 K.Suzuki [QC#59070,MOD] -->
+        <isNull property="autoExeManualWrkItemCdList">
+           AND    CSWIT.CLT_WRK_TP_CD              &lt;&gt; #wrkTpManual#
+        </isNull>
+        <isNotNull property="autoExeManualWrkItemCdList">
+           AND   (CSWIT.CLT_WRK_TP_CD              &lt;&gt; #wrkTpManual#
+              OR  (CSWIT.CLT_WRK_TP_CD              = #wrkTpManual#
+        <iterate property="autoExeManualWrkItemCdList" var="autoExeManualWrkItemCdList[]" open="AND CSWIT.CLT_WRK_ITEM_CD IN (" close=")" conjunction= ", " >
+            #autoExeManualWrkItemCdList[]#
+        </iterate>
+                  )
+                 )
+        </isNotNull>
+    <!-- END   2021/08/13 K.Suzuki [QC#59070,MOD] -->
+           AND    CSWIT.CLT_WRK_ITEM_STS_CD        IN(#wrkItmStsPending#, #wrkItmStsOpen#)
+           AND    CSWIT.GLBL_CMPY_CD               = DLT.GLBL_CMPY_CD
+           AND    CSWIT.CLT_WRK_ITEM_CD            = DLT.CLT_WRK_ITEM_CD   -- will become up to 4 records per bill to
+           
+           AND    CST.GLBL_CMPY_CD                 = BTC.GLBL_CMPY_CD
+           AND    CST.BILL_TO_CUST_CD              = BTC.BILL_TO_CUST_CD
+           
+           AND    BTC.GLBL_CMPY_CD                 = RT.GLBL_CMPY_CD
+           AND    BTC.REM_ID                       = RT.REM_ID
+
+           AND    GC.GLBL_CMPY_CD                  = #glblCmpyCd#
+
+           AND    CST.GLBL_CMPY_CD                 = STC.GLBL_CMPY_CD
+           AND    CST.CLT_ACCT_CD                  = STC.SELL_TO_CUST_CD
+           <!-- QC7310 UPDATE start -->
+           <!-- AND    DBC.GLBL_CMPY_CD                 = CP_BILL.GLBL_CMPY_CD(+) -->
+           <!-- AND    DBC.CLT_PTFO_PK                  = CP_BILL.CLT_PTFO_PK(+) -->
+           <!-- AND    DAC.GLBL_CMPY_CD                 = CP_ACCT.GLBL_CMPY_CD -->
+           <!-- AND    DAC.CLT_PTFO_PK                  = CP_ACCT.CLT_PTFO_PK -->
+           AND    BTC.GLBL_CMPY_CD                 = CLP.GLBL_CMPY_CD
+           AND    CLP.CLT_PTFO_PK                  = CASE
+                                                WHEN BTC.CLT_PTFO_PK IS NOT NULL
+                                                THEN BTC.CLT_PTFO_PK
+                                                ELSE STC.CLT_PTFO_PK
+                                                END
+           AND    CLP.GLBL_CMPY_CD                 = PSN.GLBL_CMPY_CD
+           AND    CLP.CLT_PSN_CD                   = PSN.USR_NM
+           <!-- QC7310 UPDATE end -->
+
+           AND    CST.EZCANCELFLAG                 = '0'
+           AND    CSWIT.EZCANCELFLAG               = '0'
+           AND    BTC.EZCANCELFLAG                 = '0'
+           <!--QC7310 DELETE   AND    CP_BILL.EZCANCELFLAG(+)          = '0' -->
+           AND    STC.EZCANCELFLAG                 = '0'
+           <!--QC7310 DELETE   AND    CP_ACCT.EZCANCELFLAG             = '0' -->
+           AND    RT.EZCANCELFLAG                  = '0'
+           AND    DLT.EZCANCELFLAG                 = '0'
+           AND    GC.EZCANCELFLAG                  = '0'
+           <!-- QC7310 INSERT start -->
+           AND    CLP.EZCANCELFLAG                 = '0'
+           AND    PSN.EZCANCELFLAG                 = '0'
+           <!-- QC7310 INSERT end -->
+           <!-- QC#18754 ADD start -->
+           AND    NOT EXISTS (
+                              SELECT
+                                   CSWIT2.CLT_STRGY_WRK_ITEM_TRX_PK
+                              FROM
+                                   CLT_STRGY_WRK_ITEM_TRX CSWIT2
+                              WHERE
+                                   CSWIT2.GLBL_CMPY_CD          = CST.GLBL_CMPY_CD
+                              AND  CSWIT2.EZCANCELFLAG          = '0'
+                              AND  CSWIT2.CLT_STRGY_TRX_PK      = CST.CLT_STRGY_TRX_PK
+                              AND  CSWIT2.CLT_WRK_ITEM_RWSD_DT  &lt; CSWIT.CLT_WRK_ITEM_RWSD_DT
+                              AND  CSWIT2.CLT_WRK_ITEM_STS_CD   IN(#wrkItmStsPending#, #wrkItmStsOpen#)
+                              AND  CSWIT2.CLT_WRK_TP_CD         = #wrkTpManual#
+                          <isNotNull property="autoExeManualWrkItemCdList">
+                          <iterate property="autoExeManualWrkItemCdList" var="autoExeManualWrkItemCdList[]" open="AND CSWIT2.CLT_WRK_ITEM_CD NOT IN (" close=")" conjunction= ", " >
+                              #autoExeManualWrkItemCdList[]#
+                          </iterate>
+                          </isNotNull>
+                              )
+           <!-- QC#18754 ADD end -->
+         ORDER BY
+                  CST.BILL_TO_CUST_CD
+                 ,CSWIT.CLT_WRK_ITEM_CD 
+  </statement>
+  
+  <resultMap id="result.getTargetData" class="TargetData">
+        <result property="cltAcctCd"                         column="CLT_ACCT_CD"                      javaType="String"/>
+        <result property="billToCustCd"                      column="BILL_TO_CUST_CD"                  javaType="String"/>
+        <result property="cltStrgyWrkItemTrxPk"              column="CLT_STRGY_WRK_ITEM_TRX_PK"        javaType="BigDecimal"/>
+        <result property="cltWrkTpCd"                        column="CLT_WRK_TP_CD"                    javaType="String"/>
+        <result property="cltDunLtrTpCd"                     column="CLT_DUN_LTR_TP_CD"                javaType="String"/>
+        <result property="remFirstLineAddr"                  column="REM_FIRST_LINE_ADDR"              javaType="String"/>
+        <result property="remScdLineAddr"                    column="REM_SCD_LINE_ADDR"                javaType="String"/>
+        <result property="remThirdLineAddr"                  column="REM_THIRD_LINE_ADDR"              javaType="String"/>
+        <result property="remFrthLineAddr"                   column="REM_FRTH_LINE_ADDR"               javaType="String"/>
+        <result property="remCtyAddr"                        column="REM_CTY_ADDR"                     javaType="String"/>
+        <result property="remProvNm"                         column="REM_PROV_NM"                      javaType="String"/>
+        <result property="remStCd"                           column="REM_ST_CD"                        javaType="String"/>
+        <result property="remPostCd"                         column="REM_POST_CD"                      javaType="String"/>
+        <result property="locNm"                             column="DS_ACCT_NM"                       javaType="String"/>
+        <result property="addlLocNm"                         column="ADDL_LOC_NM"                      javaType="String"/>
+        <result property="btcFirstLineAddr"                  column="BTC_FIRST_LINE_ADDR"              javaType="String"/>
+        <result property="btcScdLineAddr"                    column="BTC_SCD_LINE_ADDR"                javaType="String"/>
+        <result property="btcThirdLineAddr"                  column="BTC_THIRD_LINE_ADDR"              javaType="String"/>
+        <result property="btcFrthLineAddr"                   column="BTC_FRTH_LINE_ADDR"               javaType="String"/>
+        <result property="btcCtyAddr"                        column="BTC_CTY_ADDR"                     javaType="String"/>
+        <result property="btcProvNm"                         column="BTC_PROV_NM"                      javaType="String"/>
+        <result property="btcStCd"                           column="BTC_ST_CD"                        javaType="String"/>
+        <result property="btcPostCd"                         column="BTC_POST_CD"                      javaType="String"/>
+        <!-- QC7310 UPDATE start -->
+        <!--<result property="cltPsnCdBill"                      column="CLT_PSN_CD_BILL"                  javaType="String"/>-->
+        <!--<result property="cltPsnNmBill"                      column="CLT_PSN_NM_BILL"                  javaType="String"/>-->
+        <!--<result property="cltPsnCdAcct"                      column="CLT_PSN_CD_ACCT"                  javaType="String"/>-->
+        <!--<result property="cltPsnNmAcct"                      column="CLT_PSN_NM_ACCT"                  javaType="String"/>-->
+        <result property="cltPsnCd"                          column="CLT_PSN_CD"                       javaType="String"/>
+        <result property="cltPsnNm"                          column="CLT_PSN_NM"                       javaType="String"/>
+        <result property="cltStmtPhoNum"                     column="CLT_STMT_PHO_NUM"                 javaType="String"/>
+        <result property="cltStmtFaxNum"                     column="CLT_STMT_FAX_NUM"                 javaType="String"/>
+        <result property="cltPsnEmlAddr"                     column="CLT_PSN_EML_ADDR"                 javaType="String"/>
+        <!-- QC7310 UPDATE end -->
+        <result property="cltDunLtrWrkPk"                    column="CLT_DUN_LTR_WRK_PK"               javaType="BigDecimal"/>
+        <result property="glblCmpyNm"                        column="GLBL_CMPY_NM"                     javaType="String"/>
+    </resultMap>
+    
+    <statement id="getDetailData" parameterClass="Map">
+    
+        -- regular invoice
+        SELECT ATB.AR_CUST_REF_NUM
+    <!-- START 2021/07/12 K.Suzuki [QC#58948,DEL] -->
+    <!--          ,ATB.GRP_INV_NUM -->
+    <!-- END   2021/07/12 K.Suzuki [QC#58948,DEL] -->
+              ,ATB.INV_DUE_DT
+              ,ATB.DEAL_RMNG_BAL_GRS_AMT
+              ,ATB.CPO_ORD_NUM
+              ,ATB.CUST_ISS_PO_NUM
+              ,SI.DS_CONTR_NUM
+              ,SI.SER_NUM
+              ,SIL.BLLG_PER_FROM_DT
+              ,SIL.BLLG_PER_TO_DT
+              ,SI.SVC_INV_NUM
+              ,SI.DS_CONTR_CATG_CD
+              <!-- Late Fee to be treated differently 2016/04/19 -->
+              ,(CASE WHEN ATB.AR_TRX_TP_CD = #ded# THEN 'Late Fee'
+                     ELSE SUBSTR(DOC.DS_ORD_CATG_NM, 1, 10) 
+                END) AS DS_ORD_CATG_NM
+              <!-- end 2016/04/19 -->
+              ,CCY.CCY_SGN_TXT
+              ,TO_DATE(#batProcDt#, 'YYYYMMDD') - TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD') AS DTL_LATE_DAYS_AOT
+          FROM AR_TRX_BAL  ATB
+              ,SVC_INV     SI
+              ,INV         I
+              ,DS_ORD_CATG        DOC
+              ,CCY                CCY
+              ,PMT_TERM_CASH_DISC PTCD
+              , ( SELECT
+                    SIL.SVC_INV_NUM
+                  , MIN(SIL.BLLG_PER_FROM_DT) AS BLLG_PER_FROM_DT
+                  , MAX(BLLG_PER_THRU_DT)     AS BLLG_PER_TO_DT
+                FROM SVC_INV_LINE SIL
+                    WHERE
+                      SIL.GLBL_CMPY_CD        = #glblCmpyCd#
+                  AND SIL.EZCANCELFLAG        = '0' 
+                GROUP BY SIL.SVC_INV_NUM
+              ) SIL
+         WHERE ATB.GLBL_CMPY_CD       = #glblCmpyCd#
+           AND ATB.EZCANCELFLAG       = '0'
+           AND ATB.BILL_TO_CUST_CD    =  #billToCustCd#
+           AND ATB.AR_TRX_TP_CD       NOT IN (#arTrxTpCrm#, #arTrxTpAcc#, #arTrxTpRcpt#)
+           AND ATB.AR_CASH_APPLY_STS_CD   IN (#unApply#, #partial#)
+           AND ATB.GRP_INV_NUM        IS NULL
+           AND ATB.AR_TRX_NUM         = SIL.SVC_INV_NUM(+)
+           AND ATB.GLBL_CMPY_CD       = SI.GLBL_CMPY_CD(+)
+           AND ATB.EZCANCELFLAG       = SI.EZCANCELFLAG(+)
+           AND ATB.AR_TRX_NUM         = SI.SVC_INV_NUM(+)
+           AND ATB.GLBL_CMPY_CD       = I.GLBL_CMPY_CD(+)
+           AND ATB.SVC_INV_PK         = I.SVC_INV_PK(+)
+           AND ATB.EZCANCELFLAG       = I.EZCANCELFLAG(+)
+           AND DECODE(PTCD.ISTL_PMT_TERM_FLG, #flgY#, ATB.ORIG_INV_NUM, ATB.AR_TRX_NUM)      = I.INV_NUM(+)
+           AND I.GLBL_CMPY_CD        = DOC.GLBL_CMPY_CD(+)
+           AND I.EZCANCELFLAG        = DOC.EZCANCELFLAG(+)
+           AND I.DS_ORD_CATG_CD      = DOC.DS_ORD_CATG_CD(+)
+           AND ATB.GLBL_CMPY_CD       = CCY.GLBL_CMPY_CD
+           AND ATB.EZCANCELFLAG       = CCY.EZCANCELFLAG
+           AND ATB.DEAL_CCY_CD        = CCY.CCY_CD
+           AND ATB.GLBL_CMPY_CD       = PTCD.GLBL_CMPY_CD(+)
+           AND ATB.EZCANCELFLAG       = PTCD.EZCANCELFLAG(+)
+           AND ATB.PMT_TERM_CASH_DISC_CD  = PTCD.PMT_TERM_CASH_DISC_CD(+)
+           
+      UNION ALL
+      -- consolidated invoice
+    <!-- START 2021/07/12 K.Suzuki [QC#58948,MOD] -->
+    <!--  SELECT   ATB.AR_CUST_REF_NUM -->
+    <!--          ,ATB.GRP_INV_NUM     -->
+      SELECT ATB.GRP_INV_NUM AS AR_CUST_REF_NUM
+    <!-- END   2021/07/12 K.Suzuki [QC#58948,MOD] -->
+              ,MAX(ATB.INV_DUE_DT)            AS INV_DUE_DT
+              ,SUM(ATB.DEAL_RMNG_BAL_GRS_AMT) AS DEAL_RMNG_BAL_GRS_AMT
+              ,NULL   CPO_ORD_NUM
+              ,NULL   CUST_ISS_PO_NUM
+              ,NULL   DS_CONTR_NUM
+              ,NULL   SER_NUM
+              ,NULL   BLLG_PER_FROM_DT
+              ,NULL   BLLG_PER_TO_DT
+              ,NULL   SVC_INV_NUM
+              ,NULL   DS_CONTR_CATG_CD
+              ,'CONS' DS_ORD_CATG_NM
+              ,MAX(CCY.CCY_SGN_TXT) AS CCY_SGN_TXT
+              ,TO_DATE(#batProcDt#, 'YYYYMMDD') - TO_DATE(MAX(ATB.INV_DUE_DT), 'YYYYMMDD') AS DTL_LATE_DAYS_AOT
+          FROM AR_TRX_BAL  ATB
+              ,CCY         CCY
+         WHERE ATB.GLBL_CMPY_CD       = #glblCmpyCd#
+           AND ATB.EZCANCELFLAG       = '0'
+           AND ATB.BILL_TO_CUST_CD    =  #billToCustCd#
+           AND ATB.AR_TRX_TP_CD       NOT IN (#arTrxTpCrm#, #arTrxTpAcc#, #arTrxTpRcpt#)
+           AND ATB.AR_CASH_APPLY_STS_CD   IN (#unApply#, #partial#)
+           AND ATB.GRP_INV_NUM        IS NOT NULL
+           AND ATB.GLBL_CMPY_CD       = CCY.GLBL_CMPY_CD
+           AND ATB.EZCANCELFLAG       = CCY.EZCANCELFLAG
+           AND ATB.DEAL_CCY_CD        = CCY.CCY_CD
+    <!-- START 2021/07/12 K.Suzuki [QC#58948,MOD] -->
+    <!-- GROUP BY ATB.GRP_INV_NUM -->
+    <!--         ,ATB.AR_CUST_REF_NUM -->
+     GROUP BY ATB.GRP_INV_NUM
+             ,ATB.INV_DUE_DT
+     ORDER BY AR_CUST_REF_NUM
+             ,INV_DUE_DT
+    <!-- END   2021/07/12 K.Suzuki [QC#58948,MOD] -->
+    </statement>
+    
+    <statement id="getSvcInvChrgTp" parameterClass="Map" resultClass="Map">
+    
+        SELECT SIL.SVC_INV_CHRG_TP_CD
+          FROM SVC_INV_LINE SIL
+         WHERE SIL.GLBL_CMPY_CD = #glblCmpyCd#
+           AND SIL.EZCANCELFLAG = '0'
+           AND SIL.SVC_INV_NUM  = #svcInvNum#
+         GROUP BY SIL.SVC_INV_CHRG_TP_CD
+         
+    </statement>
+    
+    <statement id="getDunLtrWrk" parameterClass="Map" resultClass="Map">
+    
+        SELECT DLW.CLT_DUN_LTR_WRK_PK
+          FROM CLT_DUN_LTR_WRK   DLW
+         WHERE DLW.GLBL_CMPY_CD      = #glblCmpyCd#
+           AND DLW.EZCANCELFLAG      = '0'
+           AND DLW.BILL_TO_CUST_CD   = #billToCustCd#
+           AND DLW.CLT_DUN_LTR_TP_CD = #dunLtrTpCd#
+         
+    </statement>
+    
+</sqlMap>

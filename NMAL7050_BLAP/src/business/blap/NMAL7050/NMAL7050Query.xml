@@ -1,0 +1,89 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NMAL7050Query">
+    <statement id ="getServiceMeterPackageDetail" parameterClass="Map" resultClass="Map">
+        SELECT
+            *
+        FROM
+            (SELECT
+                    PMP.PRC_MTR_PKG_PK AS PRC_MTR_PKG_PK
+                   ,PMP.PRC_MTR_PKG_NM AS PRC_MTR_PKG_NM
+                   ,PMP.PRC_MTR_PKG_DESC_TXT AS PRC_MTR_PKG_DESC_TXT
+                   ,PMP.EFF_FROM_DT AS EFF_FROM_DT
+                   ,PMP.EFF_THRU_DT AS EFF_THRU_DT
+                   ,PMPM.MDL_NM AS MDL_NM
+                   <!-- QC#17529 Add -->
+                   ,PMPM.EZINTIME                      AS EZINTIME
+                   ,CASE
+                        WHEN AP1.FIRST_NM IS NOT NULL THEN PMPM.EZINUSERID || '(' || AP1.FIRST_NM || ' ' || AP1.LAST_NM || ')'
+                        ELSE PMPM.EZINUSERID
+                    END EZINUSERNM
+                   ,PMPM.EZUPTIME                      AS EZUPTIME
+                   ,CASE
+                        WHEN AP2.FIRST_NM IS NOT NULL THEN PMPM.EZUPUSERID || '(' || AP2.FIRST_NM || ' ' || AP2.LAST_NM || ')'
+                        ELSE PMPM.EZUPUSERID
+                    END EZUPUSERNM
+             FROM
+                    PRC_MTR_PKG          PMP
+                   ,PRC_MTR_PKG_MDL      PMPM
+                   <!-- QC#17529 Add -->
+                   ,AUTH_PSN        AP1
+                   ,AUTH_PSN        AP2
+             WHERE
+                    PMP.GLBL_CMPY_CD          = #glblCmpyCd#
+                AND PMP.EZCANCELFLAG          = '0'
+                <isNotNull property="prcMtrPkgNm">
+                    AND PMP.PRC_MTR_PKG_NM     LIKE #prcMtrPkgNm#
+                </isNotNull>
+                <isNotNull property="effFromDt">
+                    AND PMP.EFF_FROM_DT = #effFromDt#
+                </isNotNull>
+                <isNotNull property="effThruDt">
+                    AND NVL(PMP.EFF_THRU_DT,'99991231') = #effThruDt#
+                </isNotNull>
+                AND PMPM.GLBL_CMPY_CD         = #glblCmpyCd#
+                AND PMPM.EZCANCELFLAG         = '0'
+                AND PMP.PRC_MTR_PKG_PK        = PMPM.PRC_MTR_PKG_PK
+                <iterate property="mdlNmList" var="mdlNm[]" open="AND ( " close=")" conjunction= " OR " >
+                    PMPM.MDL_NM        LIKE #mdlNm[]#
+                </iterate>
+                <isNotNull property="mtrLbDescTxtBllg">
+                    AND EXISTS(
+                            SELECT 1
+                            FROM   PRC_MTR_PKG_BLLG_MTR PMPBM
+                            WHERE  PMPBM.GLBL_CMPY_CD       = #glblCmpyCd#
+                            AND    PMPBM.EZCANCELFLAG       = '0'
+                            AND    PMPBM.PRC_MTR_PKG_PK     = PMP.PRC_MTR_PKG_PK
+                            <!-- START 01/05/2023 F.Fadriquela [QC#60953,MOD] -->
+                            <!-- AND    PMPBM.MTR_LB_DESC_TXT LIKE #mtrLbDescTxtBllg# ) -->
+                            AND    UPPER(PMPBM.MTR_LB_DESC_TXT) LIKE #mtrLbDescTxtBllg# )
+                            <!-- END 01/05/2023 F.Fadriquela [QC#60953,MOD] -->
+                </isNotNull>
+                <isNotNull property="mtrLbDescTxtPhys">
+                    AND EXISTS(
+                            SELECT 1
+                            FROM   PRC_MTR_PKG_BLLG_MTR PMPBM
+                                  ,PRC_MTR_PKG_PHYS_MTR PMPPM
+                                  ,MTR_LB ML
+                            WHERE  PMPBM.GLBL_CMPY_CD            = #glblCmpyCd#
+                            AND    PMPBM.EZCANCELFLAG            = '0'
+                            AND    PMPBM.PRC_MTR_PKG_PK          = PMP.PRC_MTR_PKG_PK
+                            AND    PMPPM.GLBL_CMPY_CD            = #glblCmpyCd#
+                            AND    PMPPM.EZCANCELFLAG            = '0'
+                            AND    PMPPM.PRC_MTR_PKG_BLLG_MTR_PK = PMPBM.PRC_MTR_PKG_BLLG_MTR_PK
+                            AND    ML.GLBL_CMPY_CD               = #glblCmpyCd#
+                            AND    ML.EZCANCELFLAG               = '0'
+                            AND    ML.MTR_LB_CD                  = PMPPM.MTR_LB_CD
+                            <!-- START 01/05/2023 F.Fadriquela [QC#60953,MOD] -->
+                            <!-- AND    ML.MTR_LB_DESC_TXT         LIKE #mtrLbDescTxtPhys# ) -->
+                            AND    UPPER(ML.MTR_LB_DESC_TXT)     LIKE #mtrLbDescTxtPhys# )
+                            <!-- END 01/05/2023 F.Fadriquela [QC#60953,MOD] -->
+                </isNotNull>
+                <!-- QC#17529 Add -->
+                AND AP1.USR_NM(+)           = PMPM.EZINUSERID
+                AND AP2.USR_NM(+)           = PMPM.EZUPUSERID
+            ORDER BY PMP.PRC_MTR_PKG_NM, PMPM.MDL_NM)
+        WHERE
+            ROWNUM &lt;= #rowNum#
+    </statement>
+</sqlMap>

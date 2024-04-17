@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NFBB123001">
+    <statement id="getInvoiceData" parameterClass="Map">
+        SELECT
+            CV.RTL_INV_PK
+            ,CV.RTL_INV_LINE_PK
+            ,CV.RTL_INV_STS_CD
+            ,CV.BILL_TO_CUST_CD
+            ,CV.SELL_TO_CUST_CD
+            ,CV.SER_NUM
+            ,CV.MDL_NM
+            ,CV.RTL_INV_APVL_DT
+            ,CV.BLLG_PER_FROM_DT
+            ,CV.BLLG_PER_THRU_DT
+            ,CV.RTL_INV_LINE_NUM
+            ,CV.RTL_INV_CHRG_TP_DESC_TXT
+            ,CV.SHIP_QTY
+            ,CV.DEAL_GRS_UNIT_PRC_AMT
+            ,CV.SLS_TAX_RATE
+            ,CV.BLLG_BIZ_TP_CD
+            ,CV.RTL_DIV_CD
+            ,CV.RTL_INV_NUM
+            ,CV.ITRL_RTL_SMRY_INV_NUM
+            ,NVL(CV.MDSE_CD, #dummyMdseCd#) AS MDSE_CD
+            ,CV.SVC_DLR_CD
+            ,CV.INSTL_POST_CD
+            ,CV.INSTL_CD
+            ,CV.ISTL_SUB_LOC_CD
+            ,CV.INV_LINE_CRAT_DT
+            ,CV.INV_LINE_MOD_DT
+          <!-- start 2016/11/09 QC#14798 ADD -->
+            ,NVL(CV.RTL_INV_CHRG_TP_CD, NVL(SUBSTR(CV.MDSE_CD, 0, 6), #dummyMdseCd#)) AS RTL_INV_CHRG_TP_CD
+          <!-- end 2016/11/09 QC#14798 ADD -->
+        FROM
+            CSA_COMP_V CV
+        WHERE
+                CV.GLBL_CMPY_CD    = #glblCmpCdCusa#
+            AND CV.RTL_INV_APVL_DT = #execDate#
+            AND CV.BILL_TO_CUST_CD IN
+                (
+                    SELECT
+                        SV.BILL_TO_CUST_CD
+                    FROM
+                        CSA_SELL_TO_CUST_V SV
+                        ,CSA_TRD_PTNR_LOC_X_REF_V RV
+                    WHERE
+                            SV.GLBL_CMPY_CD                             = #glblCmpCdCusa#
+                        AND SV.GLBL_CMPY_CD                             = RV.GLBL_CMPY_CD
+                        AND SV.SELL_TO_CUST_CD                          = RV.SELL_TO_SHIP_TO_CUST_CD
+                        AND RV.EDI_CUST_TP_CD                           = #sellTo#
+                        AND NVL(RV.CRS_REF_ACTV_FLG, #actvFlg#)         = #actvFlg#
+                            <iterate property="ediTrdPtnrCd" var="ediTrdPtnrCdList[]" open="AND RV.EDI_TRD_PTNR_CD IN (" conjunction= ", " close=")">
+                                #ediTrdPtnrCdList[]#
+                            </iterate>
+                        AND NVL(RV.EFF_FROM_DT, #effFromDtDefault#) &lt;= #salesDate#
+                        AND NVL(RV.EFF_THRU_DT, #effThruDtDefault#) &gt;= #salesDate#
+                        AND SV.EZCANCELFLAG                             = '0'
+                        AND RV.EZCANCELFLAG                             = '0'
+
+                    UNION
+
+                    SELECT
+                        SV.BILL_TO_CUST_CD
+                    FROM
+                        CSA_SHIP_TO_CUST_V SV
+                        ,CSA_TRD_PTNR_LOC_X_REF_V RV
+                    WHERE
+                            SV.GLBL_CMPY_CD                             = #glblCmpCdCusa#
+                        AND SV.GLBL_CMPY_CD                             = RV.GLBL_CMPY_CD
+                        AND SV.SHIP_TO_CUST_CD                          = RV.SELL_TO_SHIP_TO_CUST_CD
+                        AND RV.EDI_CUST_TP_CD                           = #shipTo#
+                        AND NVL(RV.CRS_REF_ACTV_FLG, #actvFlg#)         = #actvFlg#
+                            <iterate property="ediTrdPtnrCd" var="ediTrdPtnrCdList[]" open="AND RV.EDI_TRD_PTNR_CD IN (" conjunction= ", " close=")">
+                                #ediTrdPtnrCdList[]#
+                            </iterate>
+                        AND NVL(RV.EFF_FROM_DT, #effFromDtDefault#) &lt;= #salesDate#
+                        AND NVL(RV.EFF_THRU_DT, #effThruDtDefault#) &gt;= #salesDate#
+                        AND SV.EZCANCELFLAG                             = '0'
+                        AND RV.EZCANCELFLAG                             = '0'
+                )
+            AND NOT EXISTS (
+                SELECT
+                    1
+                FROM
+                    AP_INV_ROSS AI
+                WHERE
+                        AI.GLBL_CMPY_CD    = #glblCmpCd#
+                    AND AI.RTL_INV_PK      = CV.RTL_INV_PK
+                    AND AI.RTL_INV_LINE_PK = CV.RTL_INV_LINE_PK
+                    AND AI.EZCANCELFLAG    = '0'
+            )
+            AND CV.EZCANCELFLAG    = '0'
+    </statement>
+</sqlMap>
+    

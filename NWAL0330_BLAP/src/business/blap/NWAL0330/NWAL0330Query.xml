@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NWAL0330Query">
+    <statement id="getAgingAmt" parameterClass="Map" resultClass="Map">
+		SELECT
+		    SUM(FUNC_01_AGING_AMT + FUNC_02_AGING_AMT + FUNC_03_AGING_AMT) AMT00 ,
+		    SUM(FUNC_01_AGING_AMT) AMT01 ,
+		    SUM(FUNC_02_AGING_AMT) AMT02 ,
+		    SUM(FUNC_03_AGING_AMT) AMT03 ,
+		    SUM(FUNC_04_AGING_AMT) AMT04 ,
+		    SUM(FUNC_05_AGING_AMT) AMT05 ,
+		    SUM(FUNC_06_AGING_AMT) AMT06 ,
+		    SUM(FUNC_07_AGING_AMT) AMT07 ,
+		    SUM(FUNC_08_AGING_AMT) AMT08 ,
+		    SUM(FUNC_09_AGING_AMT) AMT09
+		FROM
+		    AR_CUST_AGING_ADJ
+		WHERE
+		    GLBL_CMPY_CD = #glblCmpyCd#
+		    AND BILL_TO_CUST_CD = #billToCustCd#
+		    AND AGING_PER_TP_CD = '2'
+		GROUP BY
+		    BILL_TO_CUST_CD
+    </statement>
+    <statement id="getOnCreditHoldAmt" parameterClass="Map" resultClass="Map">
+		SELECT
+			NVL(SUM(CASE
+				WHEN HW.MIN_HLD_PK_C = HW.HLD_PK THEN HW.CPO_TOT_FUNC_NET_AMT
+				WHEN HW.MIN_HLD_PK_C IS NULL AND HW.MIN_HLD_PK_CD = HW.HLD_PK THEN HW.CPO_DTL_FUNC_NET_AMT
+				WHEN HW.MIN_HLD_PK_C IS NULL AND HW.MIN_HLD_PK_CD IS NULL AND HW.MIN_HLD_PK_SP = HW.HLD_PK THEN HW.SP_TOT_FUNC_NET_AMT
+				ELSE 0
+			END),0) HOLD_AMOUNT
+		FROM
+			(
+				SELECT
+					MIN(CASE WHEN H.CPO_DTL_LINE_NUM IS NULL THEN H.HLD_PK END) OVER (
+						PARTITION BY
+							H.CPO_ORD_NUM
+					) AS MIN_HLD_PK_C
+					,MIN(CASE WHEN DECODE(C.CPO_ORD_TP_CD,#cpoOrdTp_TS#,NULL,#cpoOrdTp_LS#,NULL,H.SHPG_PLN_NUM) IS NULL THEN H.HLD_PK END) OVER (
+						PARTITION BY
+							H.CPO_ORD_NUM
+							,H.CPO_DTL_LINE_NUM
+							,H.CPO_DTL_LINE_SUB_NUM
+					) AS MIN_HLD_PK_CD
+					,MIN(CASE WHEN DECODE(C.CPO_ORD_TP_CD,#cpoOrdTp_TS#,NULL,#cpoOrdTp_LS#,NULL,H.SHPG_PLN_NUM) IS NOT NULL THEN H.HLD_PK END) OVER (
+						PARTITION BY
+							H.CPO_ORD_NUM
+							,H.CPO_DTL_LINE_NUM
+							,H.CPO_DTL_LINE_SUB_NUM
+							,H.SHPG_PLN_NUM
+					) AS MIN_HLD_PK_SP
+					,C.CPO_TOT_FUNC_NET_AMT
+					,CD.CPO_DTL_FUNC_NET_AMT
+					,SP.SP_TOT_FUNC_NET_AMT
+					,H.HLD_PK
+				FROM
+					HLD H
+					,HLD_RSN HR
+					,CPO C
+					,CPO_DTL CD
+					,SHPG_PLN SP
+				WHERE
+						H.GLBL_CMPY_CD         = #glblCmpyCd#
+					AND H.REL_FLG              = 'N'
+					AND H.EZCANCELFLAG         = '0'
+		
+					AND H.GLBL_CMPY_CD         = HR.GLBL_CMPY_CD
+					AND H.HLD_RSN_CD           = HR.HLD_RSN_CD
+					AND HR.HLD_TP_CD           = #hldTp_CH#
+					AND HR.EZCANCELFLAG        = '0'
+		
+					AND H.GLBL_CMPY_CD         = C.GLBL_CMPY_CD
+					AND H.CPO_ORD_NUM          = C.CPO_ORD_NUM
+					AND C.PAYER_CUST_CD        = #billToCustCd#
+					AND C.EZCANCELFLAG         = '0'
+		
+					AND H.GLBL_CMPY_CD         = CD.GLBL_CMPY_CD(+)
+					AND H.CPO_ORD_NUM          = CD.CPO_ORD_NUM(+)
+					AND H.CPO_DTL_LINE_NUM     = CD.CPO_DTL_LINE_NUM(+)
+					AND H.CPO_DTL_LINE_SUB_NUM = CD.CPO_DTL_LINE_SUB_NUM(+)
+					AND CD.EZCANCELFLAG(+)     = '0'
+		
+					AND H.GLBL_CMPY_CD         = SP.GLBL_CMPY_CD(+)
+					AND H.SHPG_PLN_NUM         = SP.SHPG_PLN_NUM(+)
+					AND SP.EZCANCELFLAG(+)     = '0'
+			) HW
+    </statement>
+        
+    <statement id="getApprovedCredits" parameterClass="Map" resultClass="BigDecimal">
+    	SELECT
+    		NVL(SUM(DECODE(INV_TP_CD,#invTp_Credit#,-1,1) * I.INV_TOT_FUNC_NET_AMT),0) AMT
+    	FROM
+    		INV I
+    	WHERE
+    			I.GLBL_CMPY_CD  = #glblCmpyCd#
+    		AND I.ACCT_DT       = #salesDate#
+    		AND (
+    				I.TRX_SRC_TP_CD IN (#trxSrcTp_Return#,#trxSrcTp_Promo#)
+    				OR  I.SYS_SRC_CD IN (#sysSrc_SandR#,#sysSrc_Ross#)
+    			)
+    		AND I.PAYER_CUST_CD = #billToCustCd#
+    		AND I.EZCANCELFLAG  = '0'
+    </statement>
+    
+</sqlMap>

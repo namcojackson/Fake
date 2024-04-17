@@ -1,0 +1,109 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NFDL0110Query">
+    <typeAlias alias="NFDL0110_ASMsg"   type="business.blap.NFDL0110.NFDL0110_ASMsg"/>
+
+    <!-- *********************************************************** -->
+    <!-- ********** Bean Definition ******************************** -->
+    <!-- *********************************************************** -->
+
+    <statement id="getCustomerCareList" parameterClass="Map" resultMap="result.getCustomerCareList">
+        SELECT
+               TRX.BILL_TO_CUST_CD                    BILL_TO_CUST_CD_A
+              ,NVL(SI.DS_CONTR_NUM, TRX.CPO_ORD_NUM)  XX_DPLY_TRX_NUM_TXT_A
+              ,TRX.AR_TRX_NUM                         AR_TRX_NUM_A
+              ,CASE WHEN SL1.SVC_INV_CHRG_TP_CD IS NOT NULL AND SL2.SVC_INV_CHRG_TP_CD IS NULL     THEN #lineTp01#
+                    WHEN SL1.SVC_INV_CHRG_TP_CD IS NOT NULL AND SL2.SVC_INV_CHRG_TP_CD IS NOT NULL THEN #lineTp02#
+                    WHEN SL1.SVC_INV_CHRG_TP_CD IS NULL     AND SL2.SVC_INV_CHRG_TP_CD IS NOT NULL THEN #lineTp03#
+                    WHEN SL1.SVC_INV_CHRG_TP_CD IS NULL     AND SL2.SVC_INV_CHRG_TP_CD IS NULL     THEN ATT.AR_TRX_TP_DESC_TXT
+               END                                    XX_SCR_ITEM_130_TXT_A1
+              ,SI.BLLG_PER_FROM_DT                    BLLG_PER_FROM_DT_A
+              ,SI.BLLG_PER_TO_DT                      BLLG_PER_TO_DT_A
+              ,TRX.DEAL_ORIG_GRS_AMT                  DEAL_ORIG_GRS_AMT_A
+              ,TRX.DEAL_RMNG_BAL_GRS_AMT              DEAL_RMNG_BAL_GRS_AMT_A
+              ,TRX.INV_DUE_DT                         INV_DUE_DT_A
+              ,CASE WHEN #slsDt# &gt; TRX.INV_DUE_DT THEN TO_NUMBER(TO_DATE(#slsDt#,'YYYYMMDD') - TO_DATE(TRX.INV_DUE_DT,'YYYYMMDD'))
+                    ELSE 0
+               END                                    PMT_LATE_DAYS_AOT_A
+              ,CS.TICKET_NUMBER                       CUST_CARE_TKT_NUM_A
+              ,TO_CHAR(CS.CREATION_DATE, 'YYYYMMDD')  XX_CRAT_DT_A
+              ,CS.TICKET_STATUS                       XX_SCR_ITEM_130_TXT_A2
+        FROM   AR_TRX_BAL TRX
+              ,AR_TRX_TP  ATT
+              ,SVC_INV SI
+              ,(SELECT SL1.SVC_INV_NUM SVC_INV_NUM
+                      ,MAX(SL1.SVC_INV_CHRG_TP_CD) SVC_INV_CHRG_TP_CD
+                FROM   SVC_INV_LINE SL1
+                WHERE  SL1.GLBL_CMPY_CD       = #glblCmpyCd#
+                AND    SL1.SVC_INV_CHRG_TP_CD = #svcInvChrgTpCd#
+                AND    SL1.EZCANCELFLAG       = '0'
+                GROUP BY SL1.SVC_INV_NUM
+               ) SL1
+              ,(SELECT SL2.SVC_INV_NUM  SVC_INV_NUM
+                      ,MAX(SL2.SVC_INV_CHRG_TP_CD) SVC_INV_CHRG_TP_CD
+                FROM   SVC_INV_LINE SL2
+                WHERE  SL2.GLBL_CMPY_CD = #glblCmpyCd#
+                AND    SL2.SVC_INV_CHRG_TP_CD &lt;&gt; #svcInvChrgTpCd#
+                AND    SL2.EZCANCELFLAG = '0'
+                GROUP BY SL2.SVC_INV_NUM
+               ) SL2
+              ,CANON_E193_CS_HEADERS CS
+        WHERE  1=1
+        AND    CS.INVOICE_NUMBER        = TRX.AR_TRX_NUM
+        AND    CS.TICKET_STATUS  &lt;&gt; #stsClose#
+        AND    TRX.GLBL_CMPY_CD         = #glblCmpyCd#
+        AND    TRX.AR_TRX_TP_CD IN (
+          <iterate property="arTrxTpCdList" var="arTrxTpCd[]" open="" close="" conjunction=",">
+              #arTrxTpCd[]#
+          </iterate>
+        )
+        AND    TRX.AR_CASH_APPLY_STS_CD IN (
+          <iterate property="arCashApplyStsCdList" var="arCashApplyStsCd[]" open="" close="" conjunction=",">
+              #arCashApplyStsCd[]#
+          </iterate>
+        )
+        AND    TRX.BILL_TO_CUST_ACCT_CD = #billToCustAcctCd#
+        <isNotNull property="billToCustCd">
+        AND    TRX.BILL_TO_CUST_CD      = #billToCustCd#
+        </isNotNull>
+        AND    TRX.EZCANCELFLAG         = '0'
+        AND    TRX.GLBL_CMPY_CD         = ATT.GLBL_CMPY_CD
+        AND    TRX.AR_TRX_TP_CD         = ATT.AR_TRX_TP_CD
+        AND    ATT.EZCANCELFLAG         = '0'
+        AND    TRX.GLBL_CMPY_CD         = SI.GLBL_CMPY_CD (+)
+        AND    TRX.AR_TRX_NUM           = SI.SVC_INV_NUM  (+)
+        AND    SI.EZCANCELFLAG (+)      = '0'
+        AND    SI.SVC_INV_NUM           = SL1.SVC_INV_NUM (+)
+        AND    SI.SVC_INV_NUM           = SL2.SVC_INV_NUM (+)
+    </statement>
+
+    <resultMap id="result.getCustomerCareList" class="NFDL0110_ASMsg">
+        <result property="billToCustCd_A"        column="BILL_TO_CUST_CD_A"         javaType="EZDCStringItem"/>
+        <result property="xxDplyTrxNumTxt_A"     column="XX_DPLY_TRX_NUM_TXT_A"     javaType="EZDCStringItem"/>
+        <result property="arTrxNum_A"            column="AR_TRX_NUM_A"              javaType="EZDCStringItem"/>
+        <result property="xxScrItem130Txt_A1"    column="XX_SCR_ITEM_130_TXT_A1"    javaType="EZDCStringItem"/>
+        <result property="bllgPerFromDt_A"       column="BLLG_PER_FROM_DT_A"        javaType="EZDCDateItem"/>
+        <result property="bllgPerToDt_A"         column="BLLG_PER_TO_DT_A"          javaType="EZDCDateItem"/>
+        <result property="dealOrigGrsAmt_A"      column="DEAL_ORIG_GRS_AMT_A"       javaType="EZDCBigDecimalItem"/>
+        <result property="dealRmngBalGrsAmt_A"   column="DEAL_RMNG_BAL_GRS_AMT_A"   javaType="EZDCBigDecimalItem"/>
+        <result property="invDueDt_A"            column="INV_DUE_DT_A"              javaType="EZDCDateItem"/>
+        <result property="pmtLateDaysAot_A"      column="PMT_LATE_DAYS_AOT_A"       javaType="EZDCBigDecimalItem"/>
+        <result property="custCareTktNum_A"      column="CUST_CARE_TKT_NUM_A"       javaType="EZDCStringItem"/>
+        <result property="xxCratDt_A"            column="XX_CRAT_DT_A"              javaType="EZDCDateItem"/>
+        <result property="xxScrItem130Txt_A2"    column="XX_SCR_ITEM_130_TXT_A2"    javaType="EZDCStringItem"/>
+    </resultMap>
+
+    <statement id="getBillToCustName" parameterClass="Map" resultClass="String">
+        SELECT
+                 BC.LOC_NM
+
+        FROM
+                BILL_TO_CUST  BC
+
+        WHERE   BC.GLBL_CMPY_CD         = #glblCmpyCd#
+        AND     BC.BILL_TO_CUST_CD      = #billToCustCd#
+        AND     BC.EZCANCELFLAG         = '0'
+        AND     ROWNUM                   &lt;= 1
+    </statement>
+
+</sqlMap>

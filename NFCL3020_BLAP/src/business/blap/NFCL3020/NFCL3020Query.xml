@@ -1,0 +1,704 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NFCL3020Query">
+
+    <!-- *********************************************************** -->
+    <!-- ********** Bean Definition ******************************** -->
+    <!-- *********************************************************** -->
+    <typeAlias alias="NFCL3020CMsg"     type="business.blap.NFCL3020.NFCL3020CMsg"/>
+    <typeAlias alias="NFCL3020_BSMsg"   type="business.blap.NFCL3020.NFCL3020_BSMsg"/>
+
+    <statement id="getBatRcptList" parameterClass="Map" resultMap="result.getBatRcptList">
+        WITH
+          RCPT_H1 AS (
+                      SELECT   SUM(XX_CNT)                    XX_CNT
+                             , SUM(XX_AMT)                    XX_AMT
+                      FROM     (
+                                  SELECT    NVL(COUNT(*),0)               XX_CNT
+                                           ,NVL(SUM(FUNC_RCPT_AMT),0)     XX_AMT
+                                  FROM     AR_RCPT
+                                  WHERE    GLBL_CMPY_CD   = #glblCmpyCd#
+                                  AND      AR_BAT_RCPT_NM = #cMsg.arBatRcptNm_H#
+                                  AND      (AR_CASH_APPLY_STS_CD IS NULL OR AR_CASH_APPLY_STS_CD NOT IN (#arCashApplySts_Void#,#arCashApplySts_Unidentified#))
+                                  AND      EZCANCELFLAG   = '0'
+                                  UNION ALL
+                                  SELECT    NVL(COUNT(*),0)               XX_CNT
+                                           ,NVL(SUM(FUNC_NET_RCPT_AMT),0) XX_AMT
+                                  FROM     AR_RCPT
+                                  WHERE    GLBL_CMPY_CD   = #glblCmpyCd#
+                                  AND      AR_BAT_RCPT_NM = #cMsg.arBatRcptNm_H#
+                                  AND      AR_CASH_APPLY_STS_CD = #arCashApplySts_Unidentified#
+                                  AND      EZCANCELFLAG   = '0'
+                    )
+        )
+        ,RCPT_H2 AS (
+                      SELECT    NVL(COUNT(*),0)               XX_CNT
+                               ,NVL(SUM(FUNC_NET_RCPT_AMT),0)     XX_AMT
+                      FROM     AR_RCPT
+                      WHERE    GLBL_CMPY_CD   = #glblCmpyCd#
+                      AND      AR_BAT_RCPT_NM = #cMsg.arBatRcptNm_H#
+                      AND      AR_CASH_APPLY_STS_CD = #arCashApplySts_Void#
+                      AND      EZCANCELFLAG   = '0'
+        )
+        ,RCPT_H4 AS (
+                      SELECT   SUM(XX_CNT)                    XX_CNT
+                             , SUM(XX_AMT)                    XX_AMT
+                      FROM     (
+                                 SELECT    NVL(COUNT(*),0)               XX_CNT
+                                          ,NVL(SUM(FUNC_APPLY_AMT),0)    XX_AMT
+                                 FROM     AR_RCPT
+                                 WHERE    GLBL_CMPY_CD         = #glblCmpyCd#
+                                 AND      AR_BAT_RCPT_NM       = #cMsg.arBatRcptNm_H#
+                                 AND      GLBL_CMPY_CD         = #glblCmpyCd#
+                                 AND      AR_CASH_APPLY_STS_CD = #arCashApplySts_Applied#
+                                 AND      EZCANCELFLAG         = '0'
+                                 UNION ALL
+                                 SELECT    0                             XX_CNT
+                                          ,NVL(SUM(FUNC_APPLY_AMT),0)    XX_AMT
+                                 FROM     AR_RCPT
+                                 WHERE    GLBL_CMPY_CD         = #glblCmpyCd#
+                                 AND      AR_BAT_RCPT_NM       = #cMsg.arBatRcptNm_H#
+                                 AND      AR_CASH_APPLY_STS_CD = #arCashApplySts_Partial#
+                                 AND      EZCANCELFLAG         = '0'
+                                 UNION ALL
+                                 SELECT    0                              XX_CNT
+                                          ,NVL(SUM(APP.FUNC_APPLY_AMT),0)  XX_AMT
+                                 FROM     AR_CASH_APP APP
+                                         ,AR_ADJ      ADJ
+                                         ,AR_RCPT     RC
+                                 WHERE    APP.GLBL_CMPY_CD      = #glblCmpyCd#
+                                 AND      APP.EZCANCELFLAG      = '0'
+                                 AND      APP.AR_APPLY_TP_CD    = #arApplyTp_Adjustment#
+                                 AND      APP.AR_SCR_CANC_FLG   = 'N'
+                                 AND      ADJ.GLBL_CMPY_CD      = APP.GLBL_CMPY_CD
+                                 AND      ADJ.EZCANCELFLAG      = '0'
+                                 AND      ADJ.AR_ADJ_NUM        = APP.AR_ADJ_NUM
+                                 AND      ADJ.AR_ADJ_TRX_TP_CD  = #arAdjTrxTp_Adjustment#
+                                 AND      RC.GLBL_CMPY_CD       = APP.GLBL_CMPY_CD
+                                 AND      RC.RCPT_NUM           = APP.RCPT_NUM
+                                 AND      RC.EZCANCELFLAG       = '0'
+                                 AND      RC.AR_BAT_RCPT_NM     = #cMsg.arBatRcptNm_H#
+                                 AND      RC.AR_CASH_APPLY_STS_CD IN (#arCashApplySts_Applied#, #arCashApplySts_Partial#)
+                                )
+        )
+        ,RCPT_H5 AS (
+                      SELECT    NVL(COUNT(*),0)                       XX_CNT
+                               ,NVL(SUM(FUNC_RCPT_RMNG_BAL_AMT),0)    XX_AMT
+                      FROM     AR_RCPT
+                      WHERE    GLBL_CMPY_CD   = #glblCmpyCd#
+                      AND      AR_BAT_RCPT_NM = #cMsg.arBatRcptNm_H#
+                      AND      AR_CASH_APPLY_STS_CD IN (#arCashApplySts_UnApplied#, #arCashApplySts_Partial#)
+                      AND      EZCANCELFLAG   = '0'
+        )
+        ,CASH_APP_H6 AS (
+                      SELECT    NVL(COUNT(*),0)               XX_CNT
+                               ,NVL(SUM(FUNC_APPLY_AMT),0)    XX_AMT
+                      FROM     AR_CASH_APP APP
+                              ,AR_ADJ      ADJ
+                      WHERE    APP.GLBL_CMPY_CD      = #glblCmpyCd#
+                      AND      APP.EZCANCELFLAG      = '0'
+                      AND      APP.AR_APPLY_TP_CD    = #arApplyTp_Adjustment#
+                      AND      APP.AR_SCR_CANC_FLG   = 'N'
+                      AND      ADJ.GLBL_CMPY_CD      = APP.GLBL_CMPY_CD
+                      AND      ADJ.EZCANCELFLAG      = '0'
+                      AND      ADJ.AR_ADJ_NUM        = APP.AR_ADJ_NUM
+                      AND      ADJ.AR_ADJ_TRX_TP_CD  = #arAdjTrxTp_OnAccount#
+                      AND      EXISTS
+                               (SELECT 1
+                                FROM   AR_RCPT RC
+                                WHERE  RC.GLBL_CMPY_CD      = APP.GLBL_CMPY_CD
+                                AND    RC.EZCANCELFLAG      = '0'
+                                AND    RC.RCPT_NUM          = APP.RCPT_NUM
+                                AND    RC.AR_BAT_RCPT_NM    = #cMsg.arBatRcptNm_H#
+                               )
+        )
+        ,RCPT_H7 AS (
+                      SELECT    NVL(COUNT(*),0)               XX_CNT
+                               ,NVL(SUM(FUNC_NET_RCPT_AMT),0)     XX_AMT
+                      FROM     AR_RCPT
+                      WHERE    GLBL_CMPY_CD   = #glblCmpyCd#
+                      AND      AR_BAT_RCPT_NM = #cMsg.arBatRcptNm_H#
+                      AND      AR_CASH_APPLY_STS_CD = #arCashApplySts_Unidentified#
+                      AND      EZCANCELFLAG   = '0'
+        )
+        ,CASH_APP_H8 AS (
+                      SELECT    NVL(COUNT(*),0)               XX_CNT
+                               ,NVL(SUM(FUNC_APPLY_AMT),0)    XX_AMT
+                      FROM     AR_CASH_APP APP
+                              ,AR_ADJ      ADJ
+                      WHERE    APP.GLBL_CMPY_CD      = #glblCmpyCd#
+                      AND      APP.EZCANCELFLAG      = '0'
+                      AND      APP.AR_APPLY_TP_CD    = #arApplyTp_Refund#
+                      AND      APP.AR_SCR_CANC_FLG   = 'N'
+                      AND      ADJ.GLBL_CMPY_CD      = APP.GLBL_CMPY_CD
+                      AND      ADJ.EZCANCELFLAG      = '0'
+                      AND      ADJ.AR_ADJ_NUM        = APP.AR_ADJ_NUM
+                      AND      ADJ.AR_ADJ_TRX_TP_CD  = #arAdjTrxTp_Refund#
+                      AND      EXISTS
+                               (SELECT 1
+                                FROM   AR_RCPT RC
+                                WHERE  RC.GLBL_CMPY_CD      = APP.GLBL_CMPY_CD
+                                AND    RC.EZCANCELFLAG      = '0'
+                                AND    RC.RCPT_NUM          = APP.RCPT_NUM
+                                AND    RC.AR_BAT_RCPT_NM    = #cMsg.arBatRcptNm_H#
+                               )
+        )
+        SELECT
+             BR.AR_BAT_RCPT_NM                             AR_BAT_RCPT_NM_H
+            ,BR.AR_RCPT_SRC_CD                             AR_RCPT_SRC_CD_H
+            ,BR.AR_BAT_RCPT_DT                             AR_BAT_RCPT_DT_H
+            ,BR.AR_BAT_RCPT_STS_CD                         AR_BAT_RCPT_STS_CD_H
+            ,BR.AR_BAT_RCPT_CNT                            AR_BAT_RCPT_CNT_H
+            ,BR.AR_BAT_RCPT_AMT                            AR_BAT_RCPT_AMT_H
+            ,BR.AR_LOCK_BOX_FILE_NM                        AR_LOCK_BOX_FILE_NM_H
+            ,BR.AR_LOCK_BOX_CD                             AR_LOCK_BOX_CD_H
+            ,BR.AR_LOCK_BOX_BAT_NUM                        AR_LOCK_BOX_BAT_NUM_H
+            ,BR.AR_BAT_RCPT_CMNT_TXT                       AR_BAT_RCPT_CMNT_TXT_H
+            ,BR.EZUPTIMEZONE                               EZUPTIMEZONE_H
+            ,BR.EZUPTIME                                   EZUPTIME_H
+            ,H1.XX_CNT                                     XX_TOT_CNT_H1
+            ,H2.XX_CNT                                     XX_TOT_CNT_H2
+            <!-- START 2019/07/16 [QC#51515, MOD] -->
+            <!-- ,BR.AR_BAT_RCPT_CNT - (H1.XX_CNT + H2.XX_CNT)  XX_TOT_CNT_H3 -->
+            ,BR.AR_BAT_RCPT_CNT - H1.XX_CNT                XX_TOT_CNT_H3
+            <!-- END   2019/07/16 [QC#51515, MOD] -->
+            ,H4.XX_CNT                                     XX_TOT_CNT_H4
+            ,H5.XX_CNT                                     XX_TOT_CNT_H5
+            ,H6.XX_CNT                                     XX_TOT_CNT_H6
+            ,H7.XX_CNT                                     XX_TOT_CNT_H7
+            ,H8.XX_CNT                                     XX_TOT_CNT_H8
+            ,H1.XX_AMT                                     XX_TOT_AMT_H1
+            ,H2.XX_AMT                                     XX_TOT_AMT_H2
+            <!-- START 2019/07/16 [QC#51515, MOD] -->
+            <!-- ,BR.AR_BAT_RCPT_AMT - (H1.XX_AMT + H2.XX_AMT)  XX_TOT_AMT_H3 -->
+            ,BR.AR_BAT_RCPT_AMT - H1.XX_AMT                XX_TOT_AMT_H3
+            <!-- END   2019/07/16 [QC#51515, MOD] -->
+            ,H4.XX_AMT                                     XX_TOT_AMT_H4
+            ,H5.XX_AMT                                     XX_TOT_AMT_H5
+            ,H6.XX_AMT                                     XX_TOT_AMT_H6
+            ,H7.XX_AMT                                     XX_TOT_AMT_H7
+            ,H8.XX_AMT                                     XX_TOT_AMT_H8
+            ,BK.DS_BANK_CD                                 DS_BANK_CD_H
+            ,BK.BANK_RTE_NUM                               BANK_RTE_NUM_H
+            ,BK.DS_BANK_ACCT_PK                            REM_DS_BANK_ACCT_PK_H
+            ,BK.DS_BANK_ACCT_NUM                           DS_BANK_ACCT_NUM_H
+            ,BK.DS_BANK_ACCT_NM                            DS_BANK_ACCT_NM_H
+            ,BK.DS_BANK_BR_NM                              DS_BANK_BR_NM_H
+        FROM AR_BAT_RCPT      BR
+            ,RCPT_H1          H1
+            ,RCPT_H2          H2
+            ,RCPT_H4          H4
+            ,RCPT_H5          H5
+            ,CASH_APP_H6      H6
+            ,RCPT_H7          H7
+            ,CASH_APP_H8      H8
+
+            ,(
+                SELECT
+                     B3.DS_BANK_CD
+                    ,B2.BANK_RTE_NUM
+                    ,B1.DS_BANK_ACCT_PK
+                    ,B1.DS_BANK_ACCT_NM
+                    ,B1.DS_BANK_ACCT_NUM
+                    ,B2.DS_BANK_BR_NM
+                FROM
+                     DS_BANK_ACCT     B1
+                    ,DS_BANK_BR       B2
+                    ,DS_BANK          B3
+                WHERE
+                        B1.GLBL_CMPY_CD = #glblCmpyCd#
+                    AND B2.GLBL_CMPY_CD = B1.GLBL_CMPY_CD
+                    AND B3.GLBL_CMPY_CD = B1.GLBL_CMPY_CD
+                    AND B1.DS_BANK_CD   = B2.DS_BANK_CD
+                    AND B1.DS_BANK_BR_PK= B2.DS_BANK_BR_PK
+                    AND B2.DS_BANK_CD   = B3.DS_BANK_CD
+                    AND B1.EZCANCELFLAG = '0'
+                    AND B2.EZCANCELFLAG = '0'
+                    AND B3.EZCANCELFLAG = '0'
+             )BK
+
+        WHERE BR.GLBL_CMPY_CD           = #glblCmpyCd#
+        AND   BR.EZCANCELFLAG           = '0'
+        AND   BR.AR_BAT_RCPT_NM         = #cMsg.arBatRcptNm_H#
+
+        AND   BR.REM_DS_BANK_ACCT_PK    = BK.DS_BANK_ACCT_PK(+)
+    </statement>
+
+    <resultMap id="result.getBatRcptList" class="NFCL3020CMsg">
+        <result property="arBatRcptNm_H"      column="AR_BAT_RCPT_NM_H"       javaType="EZDSStringItem" />
+        <result property="arRcptSrcCd_H"      column="AR_RCPT_SRC_CD_H"       javaType="EZDSStringItem" />
+        <result property="arBatRcptDt_H"      column="AR_BAT_RCPT_DT_H"       javaType="EZDSStringItem" />
+        <result property="arBatRcptStsCd_H"   column="AR_BAT_RCPT_STS_CD_H"   javaType="EZDSStringItem" />
+        <result property="arBatRcptCnt_H"     column="AR_BAT_RCPT_CNT_H"      javaType="EZDSBigDecimalItem" />
+        <result property="arBatRcptAmt_H"     column="AR_BAT_RCPT_AMT_H"      javaType="EZDSBigDecimalItem" />
+        <result property="arLockBoxFileNm_H"  column="AR_LOCK_BOX_FILE_NM_H"  javaType="EZDSStringItem" />
+        <result property="arLockBoxCd_H"      column="AR_LOCK_BOX_CD_H"       javaType="EZDSStringItem" />
+        <result property="arLockBoxBatNum_H"  column="AR_LOCK_BOX_BAT_NUM_H"  javaType="EZDSStringItem" />
+        <result property="arBatRcptCmntTxt_H" column="AR_BAT_RCPT_CMNT_TXT_H" javaType="EZDSStringItem" />
+        <result property="xxTotCnt_H1"        column="XX_TOT_CNT_H1"          javaType="EZDSBigDecimalItem" />
+        <result property="xxTotCnt_H2"        column="XX_TOT_CNT_H2"          javaType="EZDSBigDecimalItem" />
+        <result property="xxTotCnt_H3"        column="XX_TOT_CNT_H3"          javaType="EZDSBigDecimalItem" />
+        <result property="xxTotCnt_H4"        column="XX_TOT_CNT_H4"          javaType="EZDSBigDecimalItem" />
+        <result property="xxTotCnt_H5"        column="XX_TOT_CNT_H5"          javaType="EZDSBigDecimalItem" />
+        <result property="xxTotCnt_H6"        column="XX_TOT_CNT_H6"          javaType="EZDSBigDecimalItem" />
+        <result property="xxTotCnt_H7"        column="XX_TOT_CNT_H7"          javaType="EZDSBigDecimalItem" />
+        <result property="xxTotCnt_H8"        column="XX_TOT_CNT_H8"          javaType="EZDSBigDecimalItem" />
+        <result property="xxTotAmt_H1"        column="XX_TOT_AMT_H1"          javaType="EZDSBigDecimalItem" />
+        <result property="xxTotAmt_H2"        column="XX_TOT_AMT_H2"          javaType="EZDSBigDecimalItem" />
+        <result property="xxTotAmt_H3"        column="XX_TOT_AMT_H3"          javaType="EZDSBigDecimalItem" />
+        <result property="xxTotAmt_H4"        column="XX_TOT_AMT_H4"          javaType="EZDSBigDecimalItem" />
+        <result property="xxTotAmt_H5"        column="XX_TOT_AMT_H5"          javaType="EZDSBigDecimalItem" />
+        <result property="xxTotAmt_H6"        column="XX_TOT_AMT_H6"          javaType="EZDSBigDecimalItem" />
+        <result property="xxTotAmt_H7"        column="XX_TOT_AMT_H7"          javaType="EZDSBigDecimalItem" />
+        <result property="xxTotAmt_H8"        column="XX_TOT_AMT_H8"          javaType="EZDSBigDecimalItem" />
+        <result property="ezUpTimeZone_H"     column="EZUPTIMEZONE_H"         javaType="EZDSStringItem" />
+        <result property="ezUpTime_H"         column="EZUPTIME_H"             javaType="EZDSStringItem" />
+
+        <result property="dsBankCd_H"         column="DS_BANK_CD_H"           javaType="EZDSStringItem" />
+        <result property="bankRteNum_H"       column="BANK_RTE_NUM_H"         javaType="EZDSStringItem" />
+        <result property="remDsBankAcctPk_H"  column="REM_DS_BANK_ACCT_PK_H"  javaType="EZDSBigDecimalItem" />
+
+        <result property="dsBankAcctNum_H"    column="DS_BANK_ACCT_NUM_H"     javaType="EZDSStringItem" />
+        <result property="dsBankAcctNm_H"     column="DS_BANK_ACCT_NM_H"      javaType="EZDSStringItem" />
+        <result property="dsBankBrNm_H"       column="DS_BANK_BR_NM_H"        javaType="EZDSStringItem" />
+    </resultMap>
+
+    <statement id="getRcptList_OLD" parameterClass="Map" resultMap="result.getRcptList">
+        SELECT
+             'N'                     XX_CHK_BOX_B
+            ,RC.RCPT_NUM             RCPT_NUM_B
+            ,RC.AR_RCPT_TRX_TP_CD    AR_RCPT_TRX_TP_CD_B
+            ,TP.AR_RCPT_TRX_TP_NM    AR_RCPT_TRX_TP_NM_B
+            <!-- START 2018/09/03 [QC#26750, MOD] -->
+            ,NVL(RC.RCPT_CHK_DT, RC.RCPT_DT) RCPT_DT_B
+            <!-- END 2018/09/03 [QC#26750, MOD] -->
+<!--
+            ,CASE WHEN RC.AR_CASH_APPLY_STS_CD = #arCashApplySts_Unidentified# THEN RC.FUNC_NET_RCPT_AMT
+                  ELSE RC.FUNC_RCPT_AMT
+             END                     FUNC_RCPT_AMT_B
+-->
+            ,RC.FUNC_NET_RCPT_AMT    FUNC_RCPT_AMT_B
+            ,STS.AR_RCPT_STS_NM      AR_RCPT_STS_NM_B
+            ,NVL(APP.AR_TRX_NUM, #Asterisk#) AR_TRX_NUM_B
+            ,TTP.AR_TRX_TP_NM        AR_TRX_TP_NM_B
+            ,APP.FUNC_APPLY_AMT      FUNC_APPLY_AMT_B
+            ,RC.PAYER_CUST_CD        PAYER_CUST_CD_B
+            ,STC.DS_ACCT_NM          DS_ACCT_NM_B
+            ,RC.EZUPTIMEZONE         EZUPTIMEZONE_B
+            ,RC.EZUPTIME             EZUPTIME_B
+            ,RC.RCPT_CHK_NUM         RCPT_CHK_NUM_B
+            ,RC.REM_DS_BANK_ACCT_PK  REM_DS_BANK_ACCT_PK_B
+            ,RC.AR_CASH_APPLY_STS_CD AR_CASH_APPLY_STS_CD_B
+            ,RC.AJE_CRAT_CPLT_FLG    AJE_CRAT_CPLT_FLG_B
+            ,RC.AR_RCPT_STS_CD       AR_RCPT_STS_CD_B
+            ,RC.LOC_NUM              LOC_NUM_B
+        FROM     AR_RCPT        RC
+                ,AR_RCPT_TRX_TP TP
+                ,AR_RCPT_STS    STS
+                ,SELL_TO_CUST   STC
+                ,( SELECT GLBL_CMPY_CD
+                         ,RCPT_NUM
+                         ,CASE WHEN COUNT(1) = 1 THEN MAX(AR_TRX_NUM) ELSE NULL END AR_TRX_NUM
+                         ,SUM(FUNC_APPLY_AMT) FUNC_APPLY_AMT
+                   FROM   AR_CASH_APP
+                   WHERE  EZCANCELFLAG = '0'
+                   GROUP BY GLBL_CMPY_CD
+                          , RCPT_NUM
+                 ) APP
+                ,( SELECT GLBL_CMPY_CD
+                         ,AR_TRX_NUM
+                         ,CASE WHEN COUNT(1) = 1 THEN MAX(AR_TRX_TP_CD) ELSE NULL END AR_TRX_TP_CD
+                   FROM   AR_TRX_BAL
+                   WHERE  EZCANCELFLAG = '0'
+                   GROUP BY GLBL_CMPY_CD
+                           ,AR_TRX_NUM
+                 ) BAL
+                , AR_TRX_TP TTP
+        WHERE   RC.GLBL_CMPY_CD         = #glblCmpyCd#
+        AND     RC.EZCANCELFLAG         = '0'
+        AND     RC.AR_BAT_RCPT_NM       = #cMsg.arBatRcptNm_H#
+        AND     RC.GLBL_CMPY_CD         = TP.GLBL_CMPY_CD(+)
+        AND     RC.AR_RCPT_TRX_TP_CD    = TP.AR_RCPT_TRX_TP_CD(+)
+        AND     TP.EZCANCELFLAG(+)      = '0'
+        AND     RC.GLBL_CMPY_CD         = STS.GLBL_CMPY_CD(+)
+        AND     RC.AR_RCPT_STS_CD       = STS.AR_RCPT_STS_CD(+)
+        AND     STS.EZCANCELFLAG(+)     = '0'
+        AND     RC.GLBL_CMPY_CD         = STC.GLBL_CMPY_CD(+)
+        AND     RC.PAYER_CUST_CD        = STC.SELL_TO_CUST_CD(+)
+        AND     STC.EZCANCELFLAG(+)      = '0'
+        AND     RC.GLBL_CMPY_CD         = APP.GLBL_CMPY_CD(+)
+        AND     RC.RCPT_NUM             = APP.RCPT_NUM(+)
+        AND     APP.GLBL_CMPY_CD        = BAL.GLBL_CMPY_CD(+)
+        AND     APP.AR_TRX_NUM          = BAL.AR_TRX_NUM(+)
+        AND     BAL.GLBL_CMPY_CD        = TTP.GLBL_CMPY_CD(+)
+        AND     BAL.AR_TRX_TP_CD        = TTP.AR_TRX_TP_CD(+)
+        AND     TTP.EZCANCELFLAG(+)     = '0'
+        ORDER BY RCPT_NUM_B
+    </statement>
+
+    <statement id="getRcptList" parameterClass="Map" resultMap="result.getRcptList">
+        SELECT
+             'N'                     XX_CHK_BOX_B
+            ,RC.RCPT_NUM             RCPT_NUM_B
+            ,RC.AR_RCPT_TRX_TP_CD    AR_RCPT_TRX_TP_CD_B
+            ,TP.AR_RCPT_TRX_TP_NM    AR_RCPT_TRX_TP_NM_B
+            ,NVL(RC.RCPT_CHK_DT, RC.RCPT_DT) RCPT_DT_B
+            ,RC.FUNC_NET_RCPT_AMT    FUNC_RCPT_AMT_B
+            ,STS.AR_RCPT_STS_NM      AR_RCPT_STS_NM_B
+            ,NVL(APP.AR_TRX_NUM, #Asterisk#) AR_TRX_NUM_B
+            ,CASE WHEN BAL.AR_TRX_TP_CD = NULL THEN NULL
+                                               ELSE (SELECT TTP.AR_TRX_TP_NM 
+                                                     FROM AR_TRX_TP TTP 
+                                                     WHERE TTP.EZCANCELFLAG = '0'
+                                                     AND TTP.GLBL_CMPY_CD = #glblCmpyCd#
+                                                     AND BAL.AR_TRX_TP_CD = TTP.AR_TRX_TP_CD)
+             END AR_TRX_TP_NM_B
+            ,APP.FUNC_APPLY_AMT      FUNC_APPLY_AMT_B
+            ,RC.PAYER_CUST_CD        PAYER_CUST_CD_B
+            ,CASE WHEN RC.PAYER_CUST_CD = NULL THEN NULL
+                                               ELSE (SELECT STC.DS_ACCT_NM 
+                                                     FROM SELL_TO_CUST STC 
+                                                     WHERE STC.EZCANCELFLAG = '0'
+                                                     AND STC.GLBL_CMPY_CD = #glblCmpyCd#
+                                                     AND RC.PAYER_CUST_CD = STC.SELL_TO_CUST_CD)
+             END DS_ACCT_NM_B
+            ,RC.EZUPTIMEZONE         EZUPTIMEZONE_B
+            ,RC.EZUPTIME             EZUPTIME_B
+            ,RC.RCPT_CHK_NUM         RCPT_CHK_NUM_B
+            ,RC.REM_DS_BANK_ACCT_PK  REM_DS_BANK_ACCT_PK_B
+            ,RC.AR_CASH_APPLY_STS_CD AR_CASH_APPLY_STS_CD_B
+            ,RC.AJE_CRAT_CPLT_FLG    AJE_CRAT_CPLT_FLG_B
+            ,RC.AR_RCPT_STS_CD       AR_RCPT_STS_CD_B
+            ,RC.LOC_NUM              LOC_NUM_B
+        FROM     AR_RCPT        RC
+                ,AR_RCPT_TRX_TP TP
+                ,AR_RCPT_STS    STS
+                ,( SELECT GLBL_CMPY_CD
+                         ,RCPT_NUM
+                         ,CASE WHEN COUNT(1) = 1 THEN MAX(AR_TRX_NUM) ELSE NULL END AR_TRX_NUM
+                         ,SUM(FUNC_APPLY_AMT) FUNC_APPLY_AMT
+                   FROM   AR_CASH_APP
+                   WHERE  EZCANCELFLAG = '0'
+                   GROUP BY GLBL_CMPY_CD
+                          , RCPT_NUM
+                 ) APP
+                ,( SELECT GLBL_CMPY_CD
+                         ,AR_TRX_NUM
+                         ,CASE WHEN COUNT(1) = 1 THEN MAX(AR_TRX_TP_CD) ELSE NULL END AR_TRX_TP_CD
+                   FROM   AR_TRX_BAL
+                   WHERE  EZCANCELFLAG = '0'
+                   GROUP BY GLBL_CMPY_CD
+                           ,AR_TRX_NUM
+                 ) BAL
+        WHERE   RC.GLBL_CMPY_CD         = #glblCmpyCd#
+        AND     RC.EZCANCELFLAG         = '0'
+        AND     RC.AR_BAT_RCPT_NM       = #cMsg.arBatRcptNm_H#
+        AND     RC.GLBL_CMPY_CD         = TP.GLBL_CMPY_CD(+)
+        AND     RC.AR_RCPT_TRX_TP_CD    = TP.AR_RCPT_TRX_TP_CD(+)
+        AND     TP.EZCANCELFLAG(+)      = '0'
+        AND     RC.GLBL_CMPY_CD         = STS.GLBL_CMPY_CD(+)
+        AND     RC.AR_RCPT_STS_CD       = STS.AR_RCPT_STS_CD(+)
+        AND     STS.EZCANCELFLAG(+)     = '0'
+        AND     RC.GLBL_CMPY_CD         = APP.GLBL_CMPY_CD(+)
+        AND     RC.RCPT_NUM             = APP.RCPT_NUM(+)
+        AND     APP.GLBL_CMPY_CD        = BAL.GLBL_CMPY_CD(+)
+        AND     APP.AR_TRX_NUM          = BAL.AR_TRX_NUM(+)
+        ORDER BY RCPT_NUM_B
+    </statement>
+
+    <resultMap id="result.getRcptList"        class="NFCL3020_BSMsg">
+        <result property="xxChkBox_B"         column="XX_CHK_BOX_B"           javaType="EZDSStringItem" />
+        <result property="rcptNum_B"          column="RCPT_NUM_B"             javaType="EZDSStringItem" />
+        <result property="arRcptTrxTpCd_B"    column="AR_RCPT_TRX_TP_CD_B"    javaType="EZDSStringItem" />
+        <result property="arRcptTrxTpNm_B"    column="AR_RCPT_TRX_TP_NM_B"    javaType="EZDSStringItem" />
+        <result property="rcptDt_B"           column="RCPT_DT_B"              javaType="EZDSStringItem" />
+        <result property="funcRcptAmt_B"      column="FUNC_RCPT_AMT_B"        javaType="EZDSStringItem" />
+        <result property="arRcptStsNm_B"      column="AR_RCPT_STS_NM_B"       javaType="EZDSStringItem" />
+        <result property="arTrxNum_B"         column="AR_TRX_NUM_B"           javaType="EZDSStringItem" />
+        <result property="arTrxTpNm_B"        column="AR_TRX_TP_NM_B"         javaType="EZDSStringItem" />
+        <result property="funcApplyAmt_B"     column="FUNC_APPLY_AMT_B"       javaType="EZDSBigDecimalItem" />
+        <result property="payerCustCd_B"      column="PAYER_CUST_CD_B"        javaType="EZDSStringItem" />
+        <result property="dsAcctNm_B"         column="DS_ACCT_NM_B"           javaType="EZDSStringItem" />
+        <result property="ezUpTimeZone_B"     column="EZUPTIMEZONE_B"         javaType="EZDSStringItem" />
+        <result property="ezUpTime_B"         column="EZUPTIME_B"             javaType="EZDSStringItem" />
+
+        <result property="rcptChkNum_B"       column="RCPT_CHK_NUM_B"         javaType="EZDSStringItem" />
+        <result property="remDsBankAcctPk_B"  column="REM_DS_BANK_ACCT_PK_B"  javaType="EZDSBigDecimalItem" />
+        <result property="arCashApplyStsCd_B" column="AR_CASH_APPLY_STS_CD_B" javaType="EZDSStringItem" />
+        <result property="ajeCratCpltFlg_B"   column="AJE_CRAT_CPLT_FLG_B"    javaType="EZDSStringItem" />
+        <result property="arRcptStsCd_B"      column="AR_RCPT_STS_CD_B"       javaType="EZDSStringItem" />
+        <result property="locNum_B"           column="LOC_NUM_B"              javaType="EZDSStringItem" />
+
+    </resultMap>
+
+    <statement id="getBankPullDownList" parameterClass="Map" resultClass="Map">
+        SELECT
+                 BANK.DS_BANK_CD
+                ,BANK.DS_BANK_NM
+        FROM
+                DS_BANK BANK
+        WHERE
+                BANK.GLBL_CMPY_CD              =   #glblCmpyCd#
+            AND BANK.EZCANCELFLAG              =  '0'
+            ORDER BY
+                DS_BANK_SORT_NUM
+    </statement>
+
+    <statement id="getBankBrPullDownList" parameterClass="Map" resultClass="Map">
+        SELECT
+                 BR.BANK_RTE_NUM
+                ,BR.DS_BANK_BR_NM
+        FROM
+                DS_BANK_BR BR
+        WHERE
+                BR.GLBL_CMPY_CD              =   #glblCmpyCd#
+            AND BR.EZCANCELFLAG              =  '0'
+            AND BR.DS_BANK_CD                =   #dsBankCd#
+            ORDER BY
+                BANK_RTE_NUM
+    </statement>
+
+    <statement id="getBankAccountPullDownList" parameterClass="Map" resultClass="Map">
+        SELECT
+                 ACCT.DS_BANK_ACCT_PK
+                ,ACCT.DS_BANK_ACCT_NUM
+                ,ACCT.DS_BANK_ACCT_NM
+        FROM
+                DS_BANK_ACCT ACCT
+        WHERE
+                ACCT.GLBL_CMPY_CD              =   #glblCmpyCd#
+            AND ACCT.EZCANCELFLAG              =  '0'
+            AND ACCT.DS_BANK_CD                =   #dsBankCd#
+            AND ACCT.DS_BANK_CD                =   #dsBankCd#
+            AND ACCT.BANK_RTE_NUM              =   #bankRteNum#
+            AND ACCT.DS_BANK_ACCT_TP_CD        =   #dsBankAcctTpCd#
+            ORDER BY
+                DS_BANK_ACCT_NUM
+    </statement>
+
+    <statement id="getArRcptSrcPullDownList" parameterClass="Map" resultClass="Map">
+        SELECT
+                 SRC.AR_RCPT_SRC_CD
+                ,SRC.AR_RCPT_SRC_NM
+        FROM
+                AR_RCPT_SRC SRC
+        WHERE
+                SRC.GLBL_CMPY_CD              =   #glblCmpyCd#
+            AND SRC.EZCANCELFLAG              =  '0'
+            <isEqual property="arRcptManCrftFlg" compareValue="Y">
+                AND SRC.AR_RCPT_MAN_CRAT_FLG      =  'Y'
+            </isEqual>
+        ORDER BY
+                AR_RCPT_SRC_SORT_NUM
+    </statement>
+
+    <statement id="getArRcptTrxTpPullDownList" parameterClass="Map" resultClass="Map">
+        SELECT
+                 A.AR_RCPT_TRX_TP_CD
+                ,A.AR_RCPT_TRX_TP_NM
+        FROM
+                AR_RCPT_TRX_TP      A
+        WHERE
+                A.GLBL_CMPY_CD              =   #glblCmpyCd#
+            AND A.EZCANCELFLAG              =  '0'
+            AND A.AR_RCPT_TRX_TP_CD         IN($arRcptTrxTpCd$)
+        ORDER BY
+                AR_RCPT_TRX_TP_SORT_NUM
+    </statement>
+
+    <statement id="searchBankInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+            A.RTL_WH_CD
+           ,A.RTL_WH_NM
+        FROM
+            DS_INVTY_LOC_V  A
+        WHERE
+                A.GLBL_CMPY_CD      = #glblCmpyCd#
+            AND A.RGTN_STS_CD       = #rgtnStsCd#
+            AND A.RTL_WH_CD         = #whCd#
+            AND WH.EFF_FROM_DT  &lt;= #procDt#
+            AND NVL(WH.EFF_THRU_DT, '99991231') &gt;= #procDt#
+            AND A.EZCANCELFLAG      = '0'
+        GROUP BY
+            A.RTL_WH_CD
+           ,A.RTL_WH_NM
+    </statement>
+
+    <statement id="getArBatRcptStsPullDownList" parameterClass="Map" resultClass="Map">
+        SELECT
+             A.AR_BAT_RCPT_STS_CD
+            ,A.AR_BAT_RCPT_STS_NM
+        FROM
+            AR_BAT_RCPT_STS A
+        WHERE
+                A.GLBL_CMPY_CD  =   #glblCmpyCd#
+            AND A.EZCANCELFLAG  =  '0'
+        ORDER BY
+                AR_BAT_RCPT_STS_SORT_NUM
+    </statement>
+
+    <statement id="getRcptAmtList_OLD" parameterClass="Map" resultClass="Map">
+        SELECT
+             RC.RCPT_NUM             RCPT_NUM
+            ,RC.FUNC_NET_RCPT_AMT    FUNC_RCPT_AMT
+            ,RC.AR_CASH_APPLY_STS_CD AR_CASH_APPLY_STS_CD
+        FROM     AR_RCPT        RC
+                ,AR_RCPT_TRX_TP TP
+                ,AR_RCPT_STS    STS
+                ,SELL_TO_CUST   STC
+                ,( SELECT GLBL_CMPY_CD
+                         ,RCPT_NUM
+                         ,CASE WHEN COUNT(1) = 1 THEN MAX(AR_TRX_NUM) ELSE NULL END AR_TRX_NUM
+                         ,SUM(FUNC_APPLY_AMT) FUNC_APPLY_AMT
+                   FROM   AR_CASH_APP
+                   WHERE  EZCANCELFLAG = '0'
+                   GROUP BY GLBL_CMPY_CD
+                          , RCPT_NUM
+                 ) APP
+                ,( SELECT GLBL_CMPY_CD
+                         ,AR_TRX_NUM
+                         ,CASE WHEN COUNT(1) = 1 THEN MAX(AR_TRX_TP_CD) ELSE NULL END AR_TRX_TP_CD
+                   FROM   AR_TRX_BAL
+                   WHERE  EZCANCELFLAG = '0'
+                   GROUP BY GLBL_CMPY_CD
+                           ,AR_TRX_NUM
+                 ) BAL
+                , AR_TRX_TP TTP
+        WHERE   RC.GLBL_CMPY_CD         = #glblCmpyCd#
+        AND     RC.EZCANCELFLAG         = '0'
+        AND     RC.AR_BAT_RCPT_NM       = #cMsg.arBatRcptNm_H#
+        AND     RC.GLBL_CMPY_CD         = TP.GLBL_CMPY_CD(+)
+        AND     RC.AR_RCPT_TRX_TP_CD    = TP.AR_RCPT_TRX_TP_CD(+)
+        AND     TP.EZCANCELFLAG(+)      = '0'
+        AND     RC.GLBL_CMPY_CD         = STS.GLBL_CMPY_CD(+)
+        AND     RC.AR_RCPT_STS_CD       = STS.AR_RCPT_STS_CD(+)
+        AND     STS.EZCANCELFLAG(+)     = '0'
+        AND     RC.GLBL_CMPY_CD         = STC.GLBL_CMPY_CD(+)
+        AND     RC.PAYER_CUST_CD        = STC.SELL_TO_CUST_CD(+)
+        AND     STC.EZCANCELFLAG(+)      = '0'
+        AND     RC.GLBL_CMPY_CD         = APP.GLBL_CMPY_CD(+)
+        AND     RC.RCPT_NUM             = APP.RCPT_NUM(+)
+        AND     APP.GLBL_CMPY_CD        = BAL.GLBL_CMPY_CD(+)
+        AND     APP.AR_TRX_NUM          = BAL.AR_TRX_NUM(+)
+        AND     BAL.GLBL_CMPY_CD        = TTP.GLBL_CMPY_CD(+)
+        AND     BAL.AR_TRX_TP_CD        = TTP.AR_TRX_TP_CD(+)
+        AND     TTP.EZCANCELFLAG(+)     = '0'
+        ORDER BY RCPT_NUM
+    </statement>
+
+    <statement id="getRcptAmtList" parameterClass="Map" resultClass="Map">
+        SELECT
+             RC.RCPT_NUM             RCPT_NUM
+            ,RC.FUNC_NET_RCPT_AMT    FUNC_RCPT_AMT
+            ,RC.AR_CASH_APPLY_STS_CD AR_CASH_APPLY_STS_CD
+            ,CASE WHEN RC.PAYER_CUST_CD = NULL THEN NULL
+                                               ELSE (SELECT STC.DS_ACCT_NM 
+                                                     FROM SELL_TO_CUST STC 
+                                                     WHERE STC.EZCANCELFLAG = '0'
+                                                     AND STC.GLBL_CMPY_CD = #glblCmpyCd#
+                                                     AND RC.PAYER_CUST_CD = STC.SELL_TO_CUST_CD)
+             END PAYER_CUST_CD
+            ,CASE WHEN BAL.AR_TRX_TP_CD = NULL THEN NULL
+                                               ELSE (SELECT TTP.AR_TRX_TP_NM 
+                                                     FROM AR_TRX_TP TTP 
+                                                     WHERE TTP.EZCANCELFLAG = '0'
+                                                     AND TTP.GLBL_CMPY_CD = #glblCmpyCd#
+                                                     AND BAL.AR_TRX_TP_CD = TTP.AR_TRX_TP_CD)
+             END AR_TRX_TP_CD
+        FROM     AR_RCPT        RC
+                ,AR_RCPT_TRX_TP TP
+                ,AR_RCPT_STS    STS
+                ,( SELECT GLBL_CMPY_CD
+                         ,RCPT_NUM
+                         ,CASE WHEN COUNT(1) = 1 THEN MAX(AR_TRX_NUM) ELSE NULL END AR_TRX_NUM
+                         ,SUM(FUNC_APPLY_AMT) FUNC_APPLY_AMT
+                   FROM   AR_CASH_APP
+                   WHERE  EZCANCELFLAG = '0'
+                   GROUP BY GLBL_CMPY_CD
+                          , RCPT_NUM
+                 ) APP
+                ,( SELECT GLBL_CMPY_CD
+                         ,AR_TRX_NUM
+                         ,CASE WHEN COUNT(1) = 1 THEN MAX(AR_TRX_TP_CD) ELSE NULL END AR_TRX_TP_CD
+                   FROM   AR_TRX_BAL
+                   WHERE  EZCANCELFLAG = '0'
+                   GROUP BY GLBL_CMPY_CD
+                           ,AR_TRX_NUM
+                 ) BAL
+        WHERE   RC.GLBL_CMPY_CD         = #glblCmpyCd#
+        AND     RC.EZCANCELFLAG         = '0'
+        AND     RC.AR_BAT_RCPT_NM       = #cMsg.arBatRcptNm_H#
+        AND     RC.GLBL_CMPY_CD         = TP.GLBL_CMPY_CD(+)
+        AND     RC.AR_RCPT_TRX_TP_CD    = TP.AR_RCPT_TRX_TP_CD(+)
+        AND     TP.EZCANCELFLAG(+)      = '0'
+        AND     RC.GLBL_CMPY_CD         = STS.GLBL_CMPY_CD(+)
+        AND     RC.AR_RCPT_STS_CD       = STS.AR_RCPT_STS_CD(+)
+        AND     STS.EZCANCELFLAG(+)     = '0'
+        AND     RC.GLBL_CMPY_CD         = APP.GLBL_CMPY_CD(+)
+        AND     RC.RCPT_NUM             = APP.RCPT_NUM(+)
+        AND     APP.GLBL_CMPY_CD        = BAL.GLBL_CMPY_CD(+)
+        AND     APP.AR_TRX_NUM          = BAL.AR_TRX_NUM(+)
+        ORDER BY RCPT_NUM
+    </statement>
+
+    <statement id="getRcptTotalAmount" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            SUM(A.DEAL_NET_RCPT_AMT)    AS TOT_AMT
+        FROM
+            AR_RCPT     A
+        WHERE
+                A.GLBL_CMPY_CD      = #glblCmpyCd#
+            AND A.AR_BAT_RCPT_NM    = #arBatRcptNm#
+            AND A.EZCANCELFLAG      = '0'
+    </statement>
+
+    <!-- START 2018/05/09 [QC#25856, ADD] -->
+    <statement id="getCustomer" parameterClass="Map" resultClass="Map">
+        SELECT
+              CUST.SELL_TO_CUST_CD  DS_ACCT_NUM
+             ,CUST.DS_ACCT_NM       DS_ACCT_NM
+             ,AL.LOC_NUM            LOC_NUM
+        FROM  
+              SELL_TO_CUST  CUST
+             ,ACCT_LOC      AL
+             ,PTY_LOC_WRK   PLW
+             ,BILL_TO_CUST  BILL
+             ,SHIP_TO_CUST  SHIP
+             ,CNTY          CNTY
+        WHERE 
+            CUST.GLBL_CMPY_CD           = #glblCmpyCd#
+        <isNotNull property="dsAcctNum">
+        AND CUST.SELL_TO_CUST_CD        = #dsAcctNum#
+        </isNotNull>
+        <!--2019/09/02 QC#53097 Del Start-->
+        <!--AND CUST.DS_ACCT_ACTV_CUST_FLG  = #flgY#-->
+        <!--2019/09/02 QC#53097 Del End-->
+        AND CUST.EZCANCELFLAG           = '0'
+        AND CUST.GLBL_CMPY_CD           = AL.GLBL_CMPY_CD
+        AND CUST.SELL_TO_CUST_CD        = AL.DS_ACCT_NUM
+        <isNotNull property="locNum">
+        AND AL.LOC_NUM                  = #locNum#
+        </isNotNull>
+        <!--2019/09/02 QC#53097 Del Start-->
+        <!--AND AL.RGTN_STS_CD              = #rgtnStsCd#-->
+        <!--2019/09/02 QC#53097 Del End-->
+        AND AL.EZCANCELFLAG             = 0
+        AND AL.GLBL_CMPY_CD             = PLW.GLBL_CMPY_CD
+        AND AL.LOC_NUM                  = PLW.LOC_NUM
+        AND PLW.EZCANCELFLAG            = 0
+        AND CUST.GLBL_CMPY_CD           = BILL.GLBL_CMPY_CD(+)
+        AND PLW.LOC_NUM                 = BILL.LOC_NUM(+)
+        <!--2019/09/02 QC#53097 Del Start-->
+        <!--AND BILL.RGTN_STS_CD            = #rgtnStsCd#-->
+        <!--2019/09/02 QC#53097 Del End-->
+        AND BILL.EZCANCELFLAG(+)        = '0'
+        AND CUST.GLBL_CMPY_CD           = SHIP.GLBL_CMPY_CD(+)
+        AND PLW.LOC_NUM                 = SHIP.LOC_NUM(+)
+        AND SHIP.EZCANCELFLAG(+)        = '0'
+        AND CUST.CNTY_PK                = CNTY.CNTY_PK(+)
+        AND CUST.GLBL_CMPY_CD           = CNTY.GLBL_CMPY_CD(+)
+        AND CNTY.EZCANCELFLAG(+)        = '0'
+    </statement>
+    <!-- END   2018/05/09 [QC#25856, ADD] -->
+
+</sqlMap>

@@ -1,0 +1,40 @@
+/*
+ * <pre>Copyright (c) 2016 Canon USA Inc. All rights reserved.</pre>
+ */
+package business.servlet.NWAL2200;
+
+import parts.common.EZDBMsg;
+import parts.common.EZDCMsg;
+import business.servlet.NWAL2200.NWAL2200BMsg;
+import parts.servletcommon.EZDApplicationContext;
+
+import com.canon.cusa.s21.framework.online.servlet.S21CommonHandler;
+
+/**
+ *<pre>
+ * NWAL2200_NWAL1640
+ *
+ * Date         Company         Name            Create/Update   Defect No
+ * ----------------------------------------------------------------------
+ * 2016/01/22   Fujitsu         T.Ishii         Create          N/A
+ *</pre>
+ */
+public class NWAL2200_NWAL1640 extends S21CommonHandler {
+
+    @Override
+    protected void checkInput(EZDApplicationContext ctx, EZDBMsg bMsg) {
+        // do nothing
+    }
+
+    @Override
+    protected EZDCMsg setRequestData(EZDApplicationContext ctx, EZDBMsg bMsg) {
+        return null;
+    }
+
+    @Override
+    protected void doProcess(EZDApplicationContext ctx, EZDBMsg bMsg, EZDCMsg cMsg) {
+
+        NWAL2200BMsg scrnMsg = (NWAL2200BMsg) bMsg;
+        scrnMsg.setFocusItem(scrnMsg.B.no(scrnMsg.xxCellIdx.getValueInt()).xxChkBox_LL);
+    }
+}

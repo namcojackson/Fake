@@ -1,0 +1,251 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NWAB204001">
+    <statement id="getTargetInvoice" parameterClass="Map" resultClass="Map">
+    SELECT
+         INV.INV_NUM
+        ,INV.BILL_TO_CUST_ACCT_CD
+        ,INV.CPO_ORD_NUM
+        ,INV.BILL_TO_CUST_CD
+        ,INV.SELL_TO_CUST_CD
+        ,INV.SYS_SRC_CD
+        ,INV.INV_TP_CD
+        ,INV.INV_TOT_DEAL_NET_AMT
+        ,INV.INV_TOT_FUNC_NET_AMT
+        ,INV.INV_TOT_FUNC_TAX_AMT
+        ,INV.INV_DT
+        ,SI.SVC_INV_NUM
+        ,SI.SVC_INV_SRC_TP_CD
+        ,SI.FSR_NUM
+        ,SI.CR_CARD_CUST_REF_NUM
+        <!-- Add Start 2022/1/24 QC#56129 -->
+        ,INV.SELL_TO_LOC_NM
+        ,CP.CLT_PSN_CD
+        ,CP.CLT_PSN_NM
+        <!-- Add  End   2022/1/24 QC#56129 -->
+    
+    FROM
+         INV      INV
+        ,SVC_INV  SI
+        <!-- Add Start 2022/1/24 QC#56129 -->
+        ,SELL_TO_CUST STC
+        ,CLT_PTFO     CP
+        <!-- Add End   2022/1/24 QC#56129 -->
+    
+    WHERE
+            INV.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND INV.ORIG_INV_NUM        IS NULL
+        AND INV.FNLZ_INV_FLG        = #fnlzinvFlg#
+        AND INV.EZCANCELFLAG        = '0'
+        AND NOT EXISTS ( 
+            SELECT 
+                '1'
+            FROM 
+                 INV               INV2
+                ,INV_LINE          DIL
+                ,DS_ORD_LINE_CATG  CATG
+            WHERE 
+                    INV2.GLBL_CMPY_CD          = INV.GLBL_CMPY_CD
+                AND INV2.INV_NUM               = INV.INV_NUM
+                AND INV2.EZCANCELFLAG          = '0'
+                
+                AND INV2.GLBL_CMPY_CD          = DIL.GLBL_CMPY_CD
+                AND INV2.INV_NUM               = DIL.INV_NUM
+                AND DIL.EZCANCELFLAG           = '0'
+    
+                AND DIL.GLBL_CMPY_CD           = CATG.GLBL_CMPY_CD
+                AND DIL.DS_ORD_LINE_CATG_CD    = CATG.DS_ORD_LINE_CATG_CD
+                AND CATG.DS_ORD_LINE_DRCTN_CD  = #dsOrdLineDrctnCd#
+                AND CATG.EZCANCELFLAG          = '0')
+    
+        AND INV.CR_CARD_CHRG_CPLT_CD  = #crCardChrgCpltCd#
+    
+        AND INV.GLBL_CMPY_CD         = SI.GLBL_CMPY_CD(+)
+        AND INV.INV_NUM              = SI.SVC_INV_NUM(+)
+        AND SI.EZCANCELFLAG(+)       = '0'
+        <!-- Add Start 2022/1/24 QC#56129 -->
+        AND INV.GLBL_CMPY_CD         = STC.GLBL_CMPY_CD
+        AND INV.BILL_TO_CUST_ACCT_CD = STC.SELL_TO_CUST_CD
+        AND STC.EZCANCELFLAG         = '0'
+        AND STC.GLBL_CMPY_CD         = CP.GLBL_CMPY_CD
+        AND STC.CLT_PTFO_PK          = CP.CLT_PTFO_PK
+        AND CP.EZCANCELFLAG          = '0'
+        <!-- Add End   2022/1/24 QC#56129 -->
+    </statement>
+    
+    <statement id="getCrCardTrx" parameterClass="Map" resultClass="Map">
+    WITH
+        CR_CARD AS (
+            SELECT
+                 TRX.CR_CARD_TRX_PK
+                ,TRX.CR_CARD_CUST_REF_NUM
+                <isEqual property="selectNullFlg" compareValue="Y">
+                ,NULL    AS CR_CARD_AUTH_REF_NUM
+                ,NULL    AS CR_CARD_REF_IDX_NUM
+                ,NULL    AS SETL_CPLT_FLG
+                </isEqual>
+                <isNotEqual property="selectNullFlg" compareValue="Y">
+                ,TRX.CR_CARD_AUTH_REF_NUM
+                ,TRX.CR_CARD_REF_IDX_NUM
+                ,TRX.SETL_CPLT_FLG
+                </isNotEqual>
+                <!-- 2018/07/10 S21_NA#25797 Add Start -->
+                ,TRX.CR_CARD_AUTH_AMT
+                <!-- 2018/07/10 S21_NA#25797 Add End -->
+            FROM
+                CR_CARD_TRX  TRX
+            WHERE
+                    TRX.GLBL_CMPY_CD         = #glblCmpyCd#
+                AND TRX.CR_CARD_TRX_TP_CD    = #crCardTrxTpCd#
+                AND TRX.FIRST_TRX_INFO_TXT   = #firstTrxInfoTxt#
+                <isNotNull property="crCardAuthStsCd">
+                AND TRX.CR_CARD_AUTH_STS_CD  = #crCardAuthStsCd#
+                </isNotNull>
+                <isNull property="crCardAuthStsCd">
+                AND TRX.CR_CARD_AUTH_STS_CD  in (#AuthStsVoidCompleted#, #AuthStsVoidFailed#)
+                </isNull>
+                <isNotNull property="setlCpltFlg">
+                AND TRX.SETL_CPLT_FLG        = #setlCpltFlg#
+                </isNotNull>
+                <isNotNull property="crCardCustRefNum">
+                AND TRX.CR_CARD_CUST_REF_NUM = #crCardCustRefNum#
+                </isNotNull>
+                AND TRX.EZCANCELFLAG         = '0'
+            ORDER BY
+                <isEqual property="selectNullFlg" compareValue="Y">
+                 TRX.CR_CARD_TRX_PK  DESC
+                </isEqual>
+                <isNotEqual property="selectNullFlg" compareValue="Y">
+                 TRX.SETL_CPLT_FLG   ASC
+                ,TRX.CR_CARD_TRX_PK  DESC
+                </isNotEqual>
+        )
+    SELECT
+        CC.CR_CARD_TRX_PK
+       ,CC.CR_CARD_CUST_REF_NUM
+       ,CC.CR_CARD_AUTH_REF_NUM
+       ,CC.CR_CARD_REF_IDX_NUM
+       ,CC.SETL_CPLT_FLG
+       <!-- 2018/07/10 S21_NA#25797 Add Start -->
+       ,CC.CR_CARD_AUTH_AMT
+       <!-- 2018/07/10 S21_NA#25797 Add End -->
+    FROM
+        CR_CARD  CC
+    WHERE
+        ROWNUM <![CDATA[<=]]> #rowNum#
+    </statement>
+    <!-- Add QC#58621 Start -->
+    <statement id="getInvInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+             COUNT(A.SHIP_TO_POST_CD) OVER() CNT
+            ,A.SHIP_TO_POST_CD
+            ,A.ADDR
+            ,A.SHIP_TO_CTY_ADDR
+            ,A.SHIP_TO_ST_CD
+            ,A.INV_TOT_DEAL_FRT_AMT
+            ,A.SHIP_TO_CTRY_CD
+            ,A.INV_TOT_DEAL_DISC_AMT
+            ,A.MDSE_NM
+            ,A.UPC_CD
+            ,A.ORD_QTY
+            ,A.INV_LINE_DEAL_TAX_AMT
+            ,A.TAX_PCT
+            ,A.INV_LINE_DEAL_NET_AMT
+            ,A.DEAL_NET_UNIT_PRC_AMT
+            ,A.POST_CD
+            ,A.INV_TOT_DEAL_TAX_AMT
+            ,A.INV_NUM
+        FROM
+            (
+             SELECT
+                  IB.SHIP_TO_POST_CD
+                 ,IB.ADDR
+                 ,IB.SHIP_TO_CTY_ADDR
+                 ,IB.SHIP_TO_ST_CD
+                 ,I.INV_TOT_DEAL_FRT_AMT
+                 ,IB.SHIP_TO_CTRY_CD
+                 ,I.INV_TOT_DEAL_DISC_AMT
+                 ,IL.MDSE_NM
+                 ,NVL(M.UPC_CD, SUBSTR(IL.MDSE_NM, 0, 12)) UPC_CD
+                 ,NVL(IL.ORD_QTY, IL.SHIP_QTY) ORD_QTY
+                 ,IL.INV_LINE_DEAL_TAX_AMT
+                 ,IL.TAX_PCT
+                 ,IL.INV_LINE_DEAL_NET_AMT
+                 ,IL.DEAL_NET_UNIT_PRC_AMT
+                 ,STC.POST_CD
+                 ,I.INV_TOT_DEAL_TAX_AMT
+                 ,I.INV_NUM
+             FROM
+                  INV          I
+                 ,INV_LINE     IL
+                 ,MDSE         M
+                 ,SHIP_TO_CUST STC
+                 ,(
+                   SELECT
+                        IBN.INV_NUM
+                       ,IBN.SHIP_TO_POST_CD
+                       ,IBN.ADDR
+                       ,IBN.SHIP_TO_CTY_ADDR
+                       ,IBN.SHIP_TO_ST_CD
+                       ,IBN.SHIP_TO_CTRY_CD
+                       ,IBN.SHIP_FROM_INVTY_LOC_CD
+                   FROM
+                       (
+                        SELECT 
+                             IB.INV_NUM
+                            ,IB.SHIP_TO_POST_CD
+                            ,SUBSTR((IB.SHIP_TO_FIRST_LINE_ADDR || ' ' ||IB.SHIP_TO_SCD_LINE_ADDR || ' ' || IB.SHIP_TO_THIRD_LINE_ADDR || ' ' || IB.SHIP_TO_FRTH_LINE_ADDR), 0, 28) ADDR
+                            ,IB.SHIP_TO_CTY_ADDR
+                            ,IB.SHIP_TO_ST_CD
+                            ,IB.SHIP_TO_CTRY_CD
+                            ,IB.SHIP_FROM_INVTY_LOC_CD
+                            ,ROW_NUMBER() OVER(PARTITION BY IB.INV_NUM ORDER BY IB.INV_BOL_LINE_NUM DESC) CNT
+                        FROM
+                             INV_BOL IB 
+                        WHERE
+                             IB.GLBL_CMPY_CD = #glblCmpyCd# 
+                        AND  IB.EZCANCELFLAG = '0' 
+                        <iterate property="arTrxNumList" var="arTrxNumList[]" open="AND IB.INV_NUM IN (" conjunction= ", " close=")">
+                        #arTrxNumList[]#
+                        </iterate> 
+                        ORDER BY IB.INV_BOL_LINE_NUM DESC
+                        ) IBN
+                   WHERE
+                       1=1
+                   AND  CNT = 1 
+                  )            IB
+             WHERE
+                  I.GLBL_CMPY_CD             = #glblCmpyCd#
+             <iterate property="arTrxNumList" var="arTrxNumList[]" open="AND IB.INV_NUM IN (" conjunction= ", " close=")">
+             #arTrxNumList[]#
+             </iterate>
+             AND  I.EZCANCELFLAG             = '0'
+             AND  IL.GLBL_CMPY_CD            = I.GLBL_CMPY_CD
+             AND  IL.INV_NUM                 = I.INV_NUM
+             AND  IL.EZCANCELFLAG            = '0'
+             AND  IB.INV_NUM                 = I.INV_NUM
+             AND  M.GLBL_CMPY_CD             = IL.GLBL_CMPY_CD
+             AND  M.MDSE_CD                  = IL.MDSE_CD
+             AND  M.EZCANCELFLAG             = '0'
+             AND  I.GLBL_CMPY_CD             = STC.GLBL_CMPY_CD(+)
+             AND  STC.EZCANCELFLAG(+)        = '0'
+             AND  IB.SHIP_FROM_INVTY_LOC_CD  = STC.SHIP_TO_CUST_CD(+)
+             ORDER BY
+                  INV_LINE_DEAL_NET_AMT DESC
+            ) A
+            <isNotNull property="constNum">
+            WHERE ROWNUM &lt;= #constNum#
+            </isNotNull>
+    </statement>
+
+    <statement id="getDsCardInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+             SUBSTR(DCC.CR_CARD_HLD_NM, 0, 27) CR_CARD_HLD_NM
+        FROM
+             DS_CR_CARD DCC
+        WHERE
+                  DCC.GLBL_CMPY_CD         = #glblCmpyCd#
+             AND  DCC.CR_CARD_CUST_REF_NUM = #crCardCustRefNum#
+             AND  DCC.EZCANCELFLAG         = '0'
+    </statement>
+    <!-- Add QC#58621 End -->
+</sqlMap>

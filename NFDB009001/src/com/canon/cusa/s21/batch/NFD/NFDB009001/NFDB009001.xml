@@ -1,0 +1,253 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sqlMap namespace="NFDB009001">
+    <statement id="getCltDunLtrWrk" parameterClass="Map" resultClass="Map">
+        WITH DUN_LTR AS (
+            SELECT
+                 A.CLT_STRGY_WRK_ITEM_TRX_PK
+                ,A.GLBL_CMPY_CD
+                ,A.BILL_TO_CUST_CD
+                ,A.CLT_ACCT_CD
+                ,A.CLT_PSN_CD
+                ,A.CLT_DUN_LTR_TP_CD
+                ,MAX(A.INV_PAST_DUE_FLG)    AS INV_PAST_DUE_FLG
+                ,MAX(B.DUN_FLG)             AS DUN_FLG
+                ,MAX(D.RPT_GRP_PRINT_FLG)   AS RPT_GRP_PRINT_FLG
+                ,MAX(D.RPT_PRINT_OTPT_FLG)  AS RPT_PRINT_OTPT_FLG
+                ,MAX(D.RPT_EML_OTPT_FLG)    AS RPT_EML_OTPT_FLG
+                ,MAX(D.RPT_FAX_OTPT_FLG)    AS RPT_FAX_OTPT_FLG
+                ,MAX(D.RPT_FILE_OTPT_FLG)   AS RPT_FILE_OTPT_FLG
+                ,MAX(D.RPT_FTP_OTPT_FLG)    AS RPT_FTP_OTPT_FLG
+                ,MAX(D.DUN_ML_TMPL_ID)      AS DUN_ML_TMPL_ID
+                ,MAX(D.DEST_TP_CD)          AS DEST_TP_CD
+                ,MAX(D.RPT_ID)              AS RPT_ID
+                ,MAX(D.RPT_TTL_NM)          AS RPT_TTL_NM
+                ,MAX(D.CLT_DUN_LTR_TP_DESC_TXT) AS CLT_DUN_LTR_TP_DESC_TXT
+                ,MAX(D.RPT_EML_OTPT_RPT_BR_NUM)   AS RPT_EML_OTPT_RPT_BR_NUM
+                ,MAX(D.RPT_PRINT_OTPT_RPT_BR_NUM) AS RPT_PRINT_OTPT_RPT_BR_NUM
+                ,MAX(D.RPT_FAX_OTPT_RPT_BR_NUM)   AS RPT_FAX_OTPT_RPT_BR_NUM
+                ,MAX(D.RPT_FILE_OTPT_RPT_BR_NUM)  AS RPT_FILE_OTPT_RPT_BR_NUM
+                ,MAX(D.RPT_FTP_OTPT_RPT_BR_NUM)   AS RPT_FTP_OTPT_RPT_BR_NUM
+            FROM
+                 CLT_DUN_LTR_WRK    A
+                ,BILL_TO_CUST       B
+                ,CLT_DUN_LTR_TP     D
+            WHERE
+                    A.GLBL_CMPY_CD          = #glblCmpyCd#
+                AND A.EZCANCELFLAG          = '0'
+                  <iterate property="cltPrintStsCdList" var="cltPrintStsCdList[]" open="AND A.CLT_PRINT_STS_CD IN (" close=")" conjunction=",">
+                      #cltPrintStsCdList[]#
+                  </iterate>
+                AND A.GLBL_CMPY_CD             = B.GLBL_CMPY_CD
+                AND A.BILL_TO_CUST_CD          = B.BILL_TO_CUST_CD
+                AND B.EZCANCELFLAG             = '0'
+                AND A.GLBL_CMPY_CD             = D.GLBL_CMPY_CD
+                AND A.CLT_DUN_LTR_TP_CD        = D.CLT_DUN_LTR_TP_CD
+                AND D.EZCANCELFLAG             = '0'
+            GROUP BY
+                 A.CLT_STRGY_WRK_ITEM_TRX_PK
+                ,A.GLBL_CMPY_CD
+                ,A.BILL_TO_CUST_CD
+                ,A.CLT_ACCT_CD
+                ,A.CLT_PSN_CD
+                ,A.CLT_DUN_LTR_TP_CD
+        )
+        , BILL_TO_CTAC AS (
+            SELECT
+                 BC.BILL_TO_CUST_CD
+                ,BC.DS_CTAC_PNT_VAL_TXT AS DS_CTAC_PNT_VAL_TXT_BC
+            FROM
+                (
+                    SELECT
+                         B.BILL_TO_CUST_CD
+                        ,G.DS_CTAC_PNT_VAL_TXT
+                        ,ROW_NUMBER() OVER(PARTITION BY B.BILL_TO_CUST_CD, C.LOC_NUM ORDER BY C.DS_PRIM_LOC_FLG DESC, E.CTAC_PSN_PK ASC) RANK_SORT
+                    FROM
+                         BILL_TO_CUST       B
+                        ,DS_CTAC_PSN_RELN   C
+                        ,CTAC_PSN           E
+                        ,DS_CTAC_PNT        G
+                    WHERE
+                            B.GLBL_CMPY_CD             = #glblCmpyCd#
+                        AND B.EZCANCELFLAG             = '0'
+                        AND C.GLBL_CMPY_CD         (+) = B.GLBL_CMPY_CD
+                        AND C.LOC_NUM              (+) = B.LOC_NUM
+                        AND C.CTAC_TP_CD           (+) = #ctacTpCdIsCreditOrCollectons#
+                        AND C.EZCANCELFLAG         (+) = '0'
+                        AND C.GLBL_CMPY_CD             = E.GLBL_CMPY_CD 
+                        AND C.CTAC_PSN_PK              = E.CTAC_PSN_PK
+                        AND E.EZCANCELFLAG             = '0'
+                        AND E.CTAC_PSN_ACTV_FLG        = 'Y'
+                        AND E.GLBL_CMPY_CD             = G.GLBL_CMPY_CD
+                        AND E.CTAC_PSN_PK              = G.CTAC_PSN_PK
+                        AND G.DS_CTAC_PNT_TP_CD        = #dsCtacPntTpIsEmailWork#
+                        AND G.DS_CTAC_PNT_ACTV_FLG     = 'Y'
+                        AND G.EZCANCELFLAG             = '0'
+                        AND EXISTS (SELECT * FROM DUN_LTR L WHERE L.BILL_TO_CUST_CD = B.BILL_TO_CUST_CD)
+                ) BC
+            WHERE BC.RANK_SORT = 1
+        )
+        , SELL_TO_CTAC AS (
+            SELECT
+                 AC.SELL_TO_CUST_CD
+                ,AC.DS_CTAC_PNT_VAL_TXT AS DS_CTAC_PNT_VAL_TXT_AC
+            FROM
+                (
+                    SELECT
+                         B.SELL_TO_CUST_CD
+                        ,G.DS_CTAC_PNT_VAL_TXT
+                        ,ROW_NUMBER() OVER(PARTITION BY B.SELL_TO_CUST_CD, C.DS_ACCT_NUM ORDER BY C.DS_PRIM_LOC_FLG DESC, E.CTAC_PSN_PK ASC) RANK_SORT
+                    FROM
+                         SELL_TO_CUST       B
+                        ,DS_CTAC_PSN_RELN   C
+                        ,CTAC_PSN           E
+                        ,DS_CTAC_PNT        G
+                    WHERE
+                            B.GLBL_CMPY_CD             = #glblCmpyCd#
+                        AND B.EZCANCELFLAG             = '0'
+                        AND C.GLBL_CMPY_CD         (+) = B.GLBL_CMPY_CD
+                        AND C.DS_ACCT_NUM          (+) = B.SELL_TO_CUST_CD
+                        AND C.CTAC_TP_CD           (+) = #ctacTpCdIsCreditOrCollectons#
+                        AND C.EZCANCELFLAG         (+) = '0'
+                        AND C.GLBL_CMPY_CD             = E.GLBL_CMPY_CD
+                        AND C.CTAC_PSN_PK              = E.CTAC_PSN_PK
+                        AND E.EZCANCELFLAG             = '0'
+                        AND E.CTAC_PSN_ACTV_FLG        = 'Y'
+                        AND E.GLBL_CMPY_CD             = G.GLBL_CMPY_CD
+                        AND E.CTAC_PSN_PK              = G.CTAC_PSN_PK
+                        AND G.DS_CTAC_PNT_TP_CD        = #dsCtacPntTpIsEmailWork#
+                        AND G.DS_CTAC_PNT_ACTV_FLG     = 'Y'
+                        AND G.EZCANCELFLAG             = '0'
+                        AND EXISTS (SELECT * FROM DUN_LTR L WHERE L.CLT_ACCT_CD = B.SELL_TO_CUST_CD)
+                ) AC
+            WHERE AC.RANK_SORT = 1
+        )
+        SELECT
+             A.CLT_STRGY_WRK_ITEM_TRX_PK
+            ,A.BILL_TO_CUST_CD
+            ,A.CLT_ACCT_CD
+            ,A.CLT_PSN_CD
+            ,A.CLT_DUN_LTR_TP_CD
+            ,A.INV_PAST_DUE_FLG
+            ,A.RPT_GRP_PRINT_FLG
+            ,A.RPT_PRINT_OTPT_FLG
+            ,A.RPT_EML_OTPT_FLG
+            ,A.RPT_FAX_OTPT_FLG
+            ,A.RPT_FILE_OTPT_FLG
+            ,A.RPT_FTP_OTPT_FLG
+            ,A.DUN_ML_TMPL_ID
+            ,A.DEST_TP_CD
+            ,A.RPT_ID
+            ,A.RPT_TTL_NM
+            ,A.CLT_DUN_LTR_TP_DESC_TXT
+            ,A.RPT_EML_OTPT_RPT_BR_NUM
+            ,A.RPT_PRINT_OTPT_RPT_BR_NUM
+            ,A.RPT_FAX_OTPT_RPT_BR_NUM
+            ,A.RPT_FILE_OTPT_RPT_BR_NUM
+            ,A.RPT_FTP_OTPT_RPT_BR_NUM
+            ,A.GLBL_CMPY_CD
+            ,B.DS_CTAC_PNT_VAL_TXT_BC
+            ,C.DS_CTAC_PNT_VAL_TXT_AC
+        FROM
+             DUN_LTR        A
+            ,BILL_TO_CTAC   B
+            ,SELL_TO_CTAC   C
+        WHERE
+                A.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND A.BILL_TO_CUST_CD       = B.BILL_TO_CUST_CD(+)
+            AND A.CLT_ACCT_CD           = C.SELL_TO_CUST_CD(+)
+        ORDER BY
+             A.CLT_STRGY_WRK_ITEM_TRX_PK   NULLS LAST
+            ,A.BILL_TO_CUST_CD             NULLS LAST
+            ,A.CLT_ACCT_CD                 NULLS LAST
+            ,A.CLT_PSN_CD                  NULLS LAST
+            ,A.CLT_DUN_LTR_TP_CD           NULLS LAST
+    </statement>
+    <!-- START 2021/05/10 G.Delgado [QC#58340,ADD] -->
+    <statement id="getEipRptProcLogPk" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            MAX(CDLW.EIP_RPT_PROC_LOG_PK)
+        FROM
+            CLT_DUN_LTR_WRK     CDLW
+        WHERE
+                CDLW.GLBL_CMPY_CD             = #glblCmpyCd#
+            AND CDLW.CLT_DUN_LTR_ISS_DT       = #cltDunLtrIssDt#
+            AND CDLW.RPT_PRINT_OTPT_FLG       = #rptOtptCpltFlg#
+            AND CDLW.EZCANCELFLAG             = '0'
+    </statement>
+    <statement id="getEIPResultChk" parameterClass="Map" resultClass="Map">
+        SELECT
+            ER.EIP_RPT_RQST_PK
+           ,ER.RPT_TTL_NM
+           ,ER.RPT_RQST_STS_TXT
+        FROM
+            EIP_RPT_RQST    ER
+        WHERE
+                ER.GLBL_CMPY_CD               = #glblCmpyCd#
+            AND (ER.RPT_RQST_STS_TXT         IS NULL
+                OR ER.RPT_RQST_STS_TXT &lt;&gt; #rptRqstStsTxtSuccess#)
+            AND ER.EIP_RPT_PROC_LOG_PK        = #eipRptProcLogPk#
+            AND ER.EZCANCELFLAG               = '0'
+    </statement>
+    <statement id="getSuccessEIPRptRqstPk" parameterClass="Map" resultClass="Map">
+        SELECT
+            CDLW.CLT_DUN_LTR_RQST_NUM       AS  EIP_RPT_RQST_PK
+           ,CDLW.CLT_DUN_LTR_WRK_PK
+           ,CDLW.CLT_STRGY_WRK_ITEM_TRX_PK
+           ,CDLT.RPT_ID
+    <!-- START 2021/07/12 K.Suzuki [QC#58945,MOD] -->
+           <!-- ,CDLT.RPT_EML_OTPT_RPT_BR_NUM -->
+           ,CDLT.RPT_PRINT_OTPT_RPT_BR_NUM
+    <!-- END   2021/07/12 K.Suzuki [QC#58945,MOD] -->
+        FROM
+            CLT_DUN_LTR_WRK     CDLW
+           ,EIP_RPT_RQST        ERR
+           ,CLT_DUN_LTR_TP      CDLT
+        WHERE
+                CDLW.GLBL_CMPY_CD             = #glblCmpyCd#
+            AND CDLW.EIP_RPT_PROC_LOG_PK      = #eipRptProcLogPk#
+            AND CDLW.CLT_DUN_LTR_ISS_DT       = #cltDunLtrIssDt#
+            AND CDLW.CLT_PRINT_STS_CD         = #cltPrintStsCd#
+            AND CDLW.RPT_OTPT_CPLT_FLG        = #rptOtptCpltFlg#
+            AND CDLW.RPT_PRINT_RQST_CPLT_FLG  = #rptPrintRqstCpltFlg#
+            AND ERR.RPT_RQST_STS_TXT          = #rptRqstStsTxtSuccess#
+            AND CDLW.GLBL_CMPY_CD             = ERR.GLBL_CMPY_CD
+            AND CDLT.GLBL_CMPY_CD             = CDLW.GLBL_CMPY_CD
+            AND CDLW.CLT_DUN_LTR_RQST_NUM     = ERR.EIP_RPT_RQST_PK
+            AND CDLT.CLT_DUN_LTR_TP_CD        = CDLW.CLT_DUN_LTR_TP_CD
+            AND CDLW.EZCANCELFLAG             = '0'
+            AND ERR.EZCANCELFLAG              = '0'
+            AND CDLT.EZCANCELFLAG             = '0'
+        ORDER BY
+            CDLW.CLT_DUN_LTR_WRK_PK
+    </statement>
+    <!-- END 2021/05/10 G.Delgado [QC#58340,ADD] -->
+
+    <!-- START 2021/09/21 K.Suzuki [QC#59212,ADD] -->
+    <statement id="getEipRptRqstPkListToPrintComplete" parameterClass="Map" resultClass="Map">
+        SELECT
+            CDLW.CLT_DUN_LTR_RQST_NUM       AS  EIP_RPT_RQST_PK
+        FROM
+            CLT_DUN_LTR_WRK     CDLW
+           ,CLT_DUN_LTR_TP      CDLT
+        WHERE
+                CDLW.GLBL_CMPY_CD             = #glblCmpyCd#
+            AND CDLW.EIP_RPT_PROC_LOG_PK      = #eipRptProcLogPk#
+            AND CDLW.CLT_DUN_LTR_ISS_DT       = #cltDunLtrIssDt#
+            AND NOT (
+                    CDLW.CLT_PRINT_STS_CD         = #cltPrintStsCd#
+                AND CDLW.RPT_EML_OTPT_FLG         = #rptEmlOtptFlg#
+                AND CDLW.RPT_PRINT_OTPT_FLG       = #rptPrintOtptFlg#
+                AND CDLW.RPT_OTPT_CPLT_FLG        = #rptOtptCpltFlg#
+                AND CDLW.RPT_PRINT_RQST_CPLT_FLG  = #rptPrintRqstCpltFlg#
+                )
+            AND CDLT.GLBL_CMPY_CD             = CDLW.GLBL_CMPY_CD
+            AND CDLT.CLT_DUN_LTR_TP_CD        = CDLW.CLT_DUN_LTR_TP_CD
+            AND CDLW.EZCANCELFLAG             = '0'
+            AND CDLT.EZCANCELFLAG             = '0'
+        GROUP BY
+            CDLW.CLT_DUN_LTR_RQST_NUM
+        ORDER BY
+            CDLW.CLT_DUN_LTR_RQST_NUM
+    </statement>
+    <!-- END   2021/09/21 K.Suzuki [QC#59212,ADD] -->
+</sqlMap>

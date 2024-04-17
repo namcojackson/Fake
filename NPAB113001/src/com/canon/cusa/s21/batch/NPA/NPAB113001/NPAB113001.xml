@@ -1,0 +1,322 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NPAB113001">
+
+    <statement id="getTargetPlan" parameterClass="Map" resultClass="Map">
+        SELECT
+            MRP.MRP_RUN_SCHD_ID
+            ,MRP.LINE_BIZ_TP_CD
+            ,MRP.MRP_PLN_NM
+            ,MRP.RTL_WH_CD
+            ,MRP.RTL_SWH_CD
+            ,MRP.DMND_CTOFF_DT
+            ,MRP.DMND_CTOFF_DAYS_AOT
+            ,MRP.SPLY_CTOFF_DT
+            ,MRP.SPLY_CTOFF_DAYS_AOT
+            ,MRP.CRAT_PRCH_REQ_FLG
+            ,MRP.PRINT_ITEM_STS_FLG
+            ,MRP.PRINT_ITEM_DESC_FLG
+            ,MRP.LOC_TP_CD
+        FROM
+            MRP_RUN_SCHD MRP
+            ,(
+                SELECT
+                    MRP.GLBL_CMPY_CD
+                    ,MRP.MRP_PLN_NM
+                    ,MRP.LINE_BIZ_TP_CD
+                    ,MRP.RTL_WH_CD
+                    ,MRP.RTL_SWH_CD
+                    ,MRP.LOC_TP_CD
+                    ,MIN(RUN_TM) AS RUN_TM
+                FROM
+                    MRP_RUN_SCHD MRP
+                WHERE
+                    MRP.GLBL_CMPY_CD                                        = #glblCmpyCd#
+                AND MRP.LOC_TP_CD                                           = #locTpCd#
+                AND NVL(MRP.RUN_TM, '0000')                                 &lt;= #runTm#
+                AND NVL(SUBSTR(MRP.MRP_RUN_LAST_RQST_TS, 1, 8), '00000000') &lt; #mrpRunLastRqstTs#
+                AND MRP.EZCANCELFLAG                                        = '0'
+                GROUP BY
+                    MRP.GLBL_CMPY_CD
+                    ,MRP.MRP_PLN_NM
+                    ,MRP.LINE_BIZ_TP_CD
+                    ,MRP.RTL_WH_CD
+                    ,MRP.RTL_SWH_CD
+                    ,MRP.LOC_TP_CD
+            ) PWL
+        WHERE
+            1 = 1
+        -- JOIN TO PLAN_WH_LST
+        AND MRP.GLBL_CMPY_CD   = PWL.GLBL_CMPY_CD
+        AND MRP.LINE_BIZ_TP_CD = PWL.LINE_BIZ_TP_CD
+        AND MRP.RTL_WH_CD      = PWL.RTL_WH_CD
+        AND MRP.RTL_SWH_CD     = PWL.RTL_SWH_CD
+        AND MRP.LOC_TP_CD      = PWL.LOC_TP_CD
+        AND MRP.RUN_TM         = PWL.RUN_TM
+        AND MRP.EZCANCELFLAG   = '0'
+        ORDER BY
+            MRP.RTL_WH_CD
+           ,MRP.MRP_PLN_NM
+    </statement>
+
+    <statement id="getTrnDatForTec" parameterClass="Map" resultClass="Map">
+        SELECT
+            MI.RTL_WH_CD
+           ,MI.RTL_SWH_CD
+           ,MI.MRP_PLN_NM
+           ,COUNT(MI.MDSE_CD) AS ITM_CNT
+        FROM
+            TECH_MSTR     TM
+           ,S21_PSN       SP
+           ,RTL_WH        RW
+           ,MRP_INFO      MI
+           ,TECH_LOC      TL
+           ,ALL_MDSE_V    AMV
+           ,MDSE_ITEM_STS MIS
+        WHERE
+            1 = 1
+        AND TM.GLBL_CMPY_CD                      = #glblCmpyCd#
+        -- JOIN TO S21_PSN
+        AND TM.GLBL_CMPY_CD                      = SP.GLBL_CMPY_CD
+        AND TM.TECH_TOC_CD                       = SP.PSN_CD
+        AND SP.DEL_FLG                           = #delFlg#
+        -- JOIN TO RTL_WH
+        AND SP.GLBL_CMPY_CD                      = RW.GLBL_CMPY_CD
+        AND SP.PSN_CD                            = RW.TECH_TOC_CD
+        AND RW.EFF_FROM_DT                   &lt;= #salesDate#
+        AND NVL(RW.EFF_THRU_DT, '99991231')  &gt;= #salesDate#
+        -- JOIN TO MRP_INFO
+        AND RW.GLBL_CMPY_CD                      = MI.GLBL_CMPY_CD
+        AND RW.RTL_WH_CD                         = MI.RTL_WH_CD
+        AND MI.MRP_ENBL_FLG                      = #mrpEnblFlg#
+        AND MI.MRP_INFO_RGTN_STS_CD              = #mrpInfoRgtnStsCd#
+        AND NOT EXISTS(
+            SELECT
+                1
+            FROM
+                MRP_RUN_PRM MRP
+            WHERE
+                1 = 1
+            -- JOIN TO MRP_RUN_PRM
+            AND MRP.GLBL_CMPY_CD                 = MI.GLBL_CMPY_CD
+            AND MRP.MRP_RUN_PRM_PK               = MI.MRP_RUN_PRM_PK
+            <iterate property="mrpRunStsCdList" var="mrpRunStsCd[]" open="AND MRP.MRP_RUN_STS_CD IN (" conjunction= ", " close=")">
+                #mrpRunStsCd[]#
+            </iterate>
+            AND MRP.EZCANCELFLAG                 = '0'
+        )
+        -- JOIN TO TECH_LOC
+        AND MI.GLBL_CMPY_CD                      = TL.GLBL_CMPY_CD
+        AND MI.INVTY_LOC_CD                      = TL.TECH_LOC_CD
+        AND TL.RGTN_STS_CD                       = #rgtnStsCd#
+        -- JOIN TO ALL_MDSE_V
+        AND MI.GLBL_CMPY_CD                      = AMV.GLBL_CMPY_CD
+        AND MI.MDSE_CD                           = AMV.MDSE_CD
+        -- JOIN TO MDSE_ITEM_STS
+        AND AMV.GLBL_CMPY_CD                     = MIS.GLBL_CMPY_CD
+        AND AMV.MDSE_ITEM_STS_CD                 = MIS.MDSE_ITEM_STS_CD
+        AND MIS.PRCH_PLN_AVAL_FLG                = #prchPlnAvalFlg#
+        -- DYNAMIC PARAM S21_PSN
+        <isNotEqual property="linebizTpCd" compareValue="*">
+        AND SP.LINE_BIZ_TP_CD                    = #lineBizTpCd#
+        </isNotEqual>
+        -- DYNAMIC PARAM MRP_INFO
+        <isEqual  property="rplshWeek" compareValue="2">
+        AND (MI.RPLSH_DLY_FLG = #flgValueY# OR MI.RPLSH_MON_FLG = #flgValueY#)
+        </isEqual>
+        <isEqual  property="rplshWeek" compareValue="3">
+        AND (MI.RPLSH_DLY_FLG = #flgValueY# OR MI.RPLSH_TUE_FLG = #flgValueY#)
+        </isEqual>
+        <isEqual  property="rplshWeek" compareValue="4">
+        AND (MI.RPLSH_DLY_FLG = #flgValueY# OR MI.RPLSH_WED_FLG = #flgValueY#)
+        </isEqual>
+        <isEqual  property="rplshWeek" compareValue="5">
+        AND (MI.RPLSH_DLY_FLG = #flgValueY# OR MI.RPLSH_THU_FLG = #flgValueY#)
+        </isEqual>
+        <isEqual  property="rplshWeek" compareValue="6">
+        AND (MI.RPLSH_DLY_FLG = #flgValueY# OR MI.RPLSH_FRI_FLG = #flgValueY#)
+        </isEqual>
+<!-- QC#20809 Start -->
+        <isEqual  property="rplshWeek" compareValue="1">
+        AND (MI.RPLSH_DLY_FLG = #flgValueY#)
+        </isEqual>
+        <isEqual  property="rplshWeek" compareValue="7">
+        AND (MI.RPLSH_DLY_FLG = #flgValueY#)
+        </isEqual>
+<!-- QC#20809 End  -->
+        <isNotEqual property="mrpPlnNm" compareValue="*">
+        AND MI.MRP_PLN_NM                        = #mrpPlnNm#
+        </isNotEqual>
+        <isNotEqual property="rtlWhCd" compareValue="*">
+        AND MI.RTL_WH_CD                         = #rtlWhCd#
+        </isNotEqual>
+        <isNotEqual property="rtlSwhCd" compareValue="*">
+        AND MI.RTL_SWH_CD                        = #rtlSwhCd#
+        </isNotEqual>
+        -- EZCANCELFLAG
+        AND TM.EZCANCELFLAG                      = '0'
+        AND SP.EZCANCELFLAG                      = '0'
+        AND RW.EZCANCELFLAG                      = '0'
+        AND MI.EZCANCELFLAG                      = '0'
+        AND TL.EZCANCELFLAG                      = '0'
+        AND AMV.EZCANCELFLAG                     = '0'
+        AND MIS.EZCANCELFLAG                     = '0'
+        GROUP BY
+            MI.RTL_WH_CD
+           ,MI.RTL_SWH_CD
+           ,MI.MRP_PLN_NM
+        ORDER BY
+            MI.RTL_WH_CD ASC
+           ,MI.RTL_SWH_CD ASC
+           ,ITM_CNT DESC
+    </statement>
+
+    <statement id="getTrnDatForWh" parameterClass="Map" resultClass="Map">
+        SELECT
+            MI.RTL_WH_CD
+           ,MI.RTL_SWH_CD
+           ,MI.MRP_PLN_NM
+           ,COUNT(MI.MDSE_CD) AS ITM_CNT
+        FROM
+           MRP_INFO        MI
+           ,DS_INVTY_LOC_V DILV
+           ,ALL_MDSE_V     AMV
+           ,MDSE_ITEM_STS  MIS
+        WHERE
+            1 = 1
+        AND MI.GLBL_CMPY_CD                      = #glblCmpyCd#
+        AND MI.MRP_ENBL_FLG                      = #mrpEnblFlg#
+        AND MI.MRP_INFO_RGTN_STS_CD              = #mrpInfoRgtnStsCd#
+        AND NOT EXISTS(
+            SELECT
+                1
+            FROM
+                MRP_RUN_PRM MRP
+            WHERE
+                1 = 1
+            -- JOIN TO MRP_RUN_PRM
+            AND MRP.GLBL_CMPY_CD                 = MI.GLBL_CMPY_CD
+            AND MRP.MRP_RUN_PRM_PK               = MI.MRP_RUN_PRM_PK
+            <iterate property="mrpRunStsCdList" var="mrpRunStsCd[]" open="AND MRP.MRP_RUN_STS_CD IN (" conjunction= ", " close=")">
+                #mrpRunStsCd[]#
+            </iterate>
+            AND MRP.EZCANCELFLAG                 = '0'
+        )
+        -- JOIN TO DILV
+        AND MI.GLBL_CMPY_CD                      = DILV.GLBL_CMPY_CD
+        AND MI.INVTY_LOC_CD                      = DILV.INVTY_LOC_CD
+        AND DILV.EFF_FROM_DT                   &lt;= #salesDate#
+        AND NVL(DILV.EFF_THRU_DT, '99991231')  &gt;= #salesDate#
+        -- JOIN TO ALL_MDSE_V
+        AND MI.GLBL_CMPY_CD                      = AMV.GLBL_CMPY_CD
+        AND MI.MDSE_CD                           = AMV.MDSE_CD
+        -- JOIN TO MDSE_ITEM_STS
+        AND AMV.GLBL_CMPY_CD                     = MIS.GLBL_CMPY_CD
+        AND AMV.MDSE_ITEM_STS_CD                 = MIS.MDSE_ITEM_STS_CD
+        AND MIS.PRCH_PLN_AVAL_FLG                = #prchPlnAvalFlg#
+        -- DYNAMIC PARAM MRP_INFO
+        <isEqual  property="rplshWeek" compareValue="2">
+        AND (MI.RPLSH_DLY_FLG = #flgValueY# OR MI.RPLSH_MON_FLG = #flgValueY#)
+        </isEqual>
+        <isEqual  property="rplshWeek" compareValue="3">
+        AND (MI.RPLSH_DLY_FLG = #flgValueY# OR MI.RPLSH_TUE_FLG = #flgValueY#)
+        </isEqual>
+        <isEqual  property="rplshWeek" compareValue="4">
+        AND (MI.RPLSH_DLY_FLG = #flgValueY# OR MI.RPLSH_WED_FLG = #flgValueY#)
+        </isEqual>
+        <isEqual  property="rplshWeek" compareValue="5">
+        AND (MI.RPLSH_DLY_FLG = #flgValueY# OR MI.RPLSH_THU_FLG = #flgValueY#)
+        </isEqual>
+        <isEqual  property="rplshWeek" compareValue="6">
+        AND (MI.RPLSH_DLY_FLG = #flgValueY# OR MI.RPLSH_FRI_FLG = #flgValueY#)
+        </isEqual>
+<!-- QC#20809 Start -->
+        <isEqual  property="rplshWeek" compareValue="1">
+        AND (MI.RPLSH_DLY_FLG = #flgValueY#)
+        </isEqual>
+        <isEqual  property="rplshWeek" compareValue="7">
+        AND (MI.RPLSH_DLY_FLG = #flgValueY#)
+        </isEqual>
+<!-- QC#20809 End  -->
+        <isNotEqual property="mrpPlnNm" compareValue="*">
+        AND MI.MRP_PLN_NM                        = #mrpPlnNm#
+        </isNotEqual>
+        <isNotEqual property="rtlWhCd" compareValue="*">
+        AND MI.RTL_WH_CD                         = #rtlWhCd#
+        </isNotEqual>
+        <isNotEqual property="rtlSwhCd" compareValue="*">
+        AND MI.RTL_SWH_CD                        = #rtlSwhCd#
+        </isNotEqual>
+        -- EZCANCELFLAG
+        AND MI.EZCANCELFLAG                      = '0'
+        AND DILV.EZCANCELFLAG                    = '0'
+        AND AMV.EZCANCELFLAG                     = '0'
+        AND MIS.EZCANCELFLAG                     = '0'
+        GROUP BY
+            MI.RTL_WH_CD
+           ,MI.RTL_SWH_CD
+           ,MI.MRP_PLN_NM
+        ORDER BY
+            MI.RTL_WH_CD ASC
+           ,MI.RTL_SWH_CD ASC
+           ,MI.MRP_PLN_NM
+           ,ITM_CNT DESC
+    </statement>
+
+    <statement id="getMrpInfoPk" parameterClass="Map" resultClass="Map">
+        SELECT
+            MI.MRP_INFO_PK
+        FROM
+            MRP_INFO MI
+        WHERE
+            MI.GLBL_CMPY_CD                      = #glblCmpyCd#
+        AND MI.RTL_WH_CD                         = #rtlWhCd#
+        AND MI.RTL_SWH_CD                        = #rtlSwhCd#
+        AND MI.MRP_ENBL_FLG                      = #mrpEnblFlg#
+        AND MI.MRP_INFO_RGTN_STS_CD              = #mrpInfoRgtnStsCd#
+        AND MI.MRP_PLN_NM                        = #mrpPlnNm#
+        AND EXISTS(
+            SELECT
+                1
+            FROM
+                ALL_MDSE_V AMV
+                ,MDSE_ITEM_STS MIS
+            WHERE
+                1 = 1
+            -- JOIN TO ALL_MDSE_V
+            AND AMV.GLBL_CMPY_CD                 = MI.GLBL_CMPY_CD
+            AND AMV.MDSE_CD                      = MI.MDSE_CD
+            -- JOIN TO MDSE_ITEM_STS
+            AND MIS.GLBL_CMPY_CD                 = AMV.GLBL_CMPY_CD
+            AND MIS.MDSE_ITEM_STS_CD             = AMV.MDSE_ITEM_STS_CD
+            AND MIS.PRCH_PLN_AVAL_FLG            = #prchPlnAvalFlg#
+            -- EZCANCELFLAG
+            AND AMV.EZCANCELFLAG                 = '0'
+            AND MIS.EZCANCELFLAG                 = '0'
+        )
+        <isEqual  property="rplshWeek" compareValue="2">
+        AND (MI.RPLSH_DLY_FLG = #flgValueY# OR MI.RPLSH_MON_FLG = #flgValueY#)
+        </isEqual>
+        <isEqual  property="rplshWeek" compareValue="3">
+        AND (MI.RPLSH_DLY_FLG = #flgValueY# OR MI.RPLSH_TUE_FLG = #flgValueY#)
+        </isEqual>
+        <isEqual  property="rplshWeek" compareValue="4">
+        AND (MI.RPLSH_DLY_FLG = #flgValueY# OR MI.RPLSH_WED_FLG = #flgValueY#)
+        </isEqual>
+        <isEqual  property="rplshWeek" compareValue="5">
+        AND (MI.RPLSH_DLY_FLG = #flgValueY# OR MI.RPLSH_THU_FLG = #flgValueY#)
+        </isEqual>
+        <isEqual  property="rplshWeek" compareValue="6">
+        AND (MI.RPLSH_DLY_FLG = #flgValueY# OR MI.RPLSH_FRI_FLG = #flgValueY#)
+        </isEqual>
+<!-- QC#20809 Start -->
+        <isEqual  property="rplshWeek" compareValue="1">
+        AND (MI.RPLSH_DLY_FLG = #flgValueY#)
+        </isEqual>
+        <isEqual  property="rplshWeek" compareValue="7">
+        AND (MI.RPLSH_DLY_FLG = #flgValueY#)
+        </isEqual>
+<!-- QC#20809 End  -->
+        AND MI.EZCANCELFLAG                      = '0'
+    </statement>
+
+</sqlMap>

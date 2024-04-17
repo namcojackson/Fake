@@ -1,0 +1,3506 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NWAL1810Query">
+
+    <typeAlias alias="NWAL1810SMsg"    type="business.blap.NWAL1810.NWAL1810SMsg"/>
+    <typeAlias alias="NWAL1810_ASMsg"  type="business.blap.NWAL1810.NWAL1810_ASMsg"/>
+    <typeAlias alias="NWAL1810_BSMsg"  type="business.blap.NWAL1810.NWAL1810_BSMsg"/>
+    <typeAlias alias="NWAL1810_CCMsg"  type="business.blap.NWAL1810.NWAL1810_CCMsg"/>
+
+    <statement id ="getSummaryList" parameterClass="Map"  resultMap="result.getSummary">
+    SELECT
+           *
+        FROM
+            (
+            SELECT
+                      EVENT_NM
+                    , ORD_PRFT_TRX_CATG_CD
+                    , SORT_CATG
+                    , EZINTIME
+                    , DOC_ID
+                    , EZINUSERID
+                    , PSN_NM
+                    , MEMO
+                    , SORT_DOC_ID
+                    , MIN(BIZ_PROC_LOG_PK) BIZ_PROC_LOG_PK
+                FROM
+                    ( 
+                SELECT
+                     ABP.EVENT_NM
+                     <!-- 2018/12/5 S21_NA#29015 Add Start -->
+                     , CASE
+                         WHEN SBPL.EVENT_ID = 'Booked' THEN 1
+                         ELSE NULL
+                         END AS WF_SORT
+                     <!-- 2018/12/5 S21_NA#29015 Add End -->
+                     --
+                       , CASE
+                           WHEN SBPL.DOC_ID        IS NULL        THEN NULL
+                           WHEN SBPL.DOC_TP_CD      = #docTpCdRT# THEN #ordPrftTrxCatgInbound#
+                           WHEN SBPL.EVENT_ID    LIKE 'Shell%'    THEN #ordPrftTrxCatgService#
+                           ELSE                                        #ordPrftTrxCatgOutbound#
+                           END ORD_PRFT_TRX_CATG_CD
+                     --
+                       , ( 
+                           SELECT
+                                     TC.ORD_PRFT_TRX_CATG_SORT_NUM
+                               FROM
+                                   ORD_PRFT_TRX_CATG TC
+                               WHERE
+                                   TC.GLBL_CMPY_CD              = #glblCmpyCd#
+                                   AND TC.ORD_PRFT_TRX_CATG_CD  = (
+                                       CASE
+                                         WHEN SBPL.DOC_ID        IS NULL        THEN NULL
+                                         WHEN SBPL.DOC_TP_CD      = #docTpCdRT# THEN #ordPrftTrxCatgInbound#
+                                         WHEN SBPL.EVENT_ID    LIKE 'Shell%'    THEN #ordPrftTrxCatgService#
+                                         ELSE                                        #ordPrftTrxCatgOutbound#
+                                         END
+                                   )
+                                   AND TC.EZCANCELFLAG = '0'
+                       ) SORT_CATG
+                     --
+                    ,SBPL.EZINTIME
+                    ,SBPL.DOC_ID
+                    ,SBPL.EZINUSERID
+                    ,AP.FIRST_NM
+                        || ' '
+                        || AP.LAST_NM
+                        AS PSN_NM
+                    ,SBPL.BIZ_PROC_CMNT_TXT_01
+                        ||DECODE(SBPL.BIZ_PROC_CMNT_TXT_01, null, null, DECODE(BIZ_PROC_CMNT_TXT_02, null, null, '/'))
+                        ||SBPL.BIZ_PROC_CMNT_TXT_02
+                        ||DECODE(
+                            SBPL.EVENT_ID
+                            , 'Hold'
+                            , ':' || H.HLD_RSN_NM
+                            , 'Hold Release'
+                            , ':' || H.HLD_RSN_NM
+                            ,null)
+                        ||DECODE(
+                            SBPL.BIZ_PROC_CMNT_TXT_01
+                            , null
+                            , DECODE(
+                                BIZ_PROC_CMNT_TXT_02
+                                , null
+                                , null
+                                , DECODE(
+                                    BIZ_PROC_CMNT_TXT_03
+                                    , null
+                                    , null
+                                    , '/'))
+                                , DECODE(
+                                    BIZ_PROC_CMNT_TXT_03
+                                    , null
+                                    , null
+                                    , '/'))
+                        ||SBPL.BIZ_PROC_CMNT_TXT_03
+                        AS MEMO
+                      ,SBPL.BIZ_PROC_LOG_PK
+                    --
+                            , CASE 
+                                WHEN SBPL.EVENT_ID LIKE 'Shell%'
+                                AND REGEXP_LIKE(DOC_ID, #fltPattern#)
+                                THEN REPLACE (SBPL.DOC_ID, '.', '.0.')
+                                WHEN SBPL.EVENT_ID LIKE 'Shell%'
+                                AND EXISTS (
+                                    SELECT
+                                              'EXISTS'
+                                        FROM
+                                            MDL_NM T
+                                        WHERE
+                                            T.T_GLBL_CMPY_CD        = #glblCmpyCd#
+                                            AND TO_CHAR(T.T_MDL_ID) = SUBSTR(SBPL.DOC_ID, INSTR(SBPL.DOC_ID, '.') + 1)
+                                            AND T.EZCANCELFLAG      = '0'
+                                ) 
+                                THEN REPLACE (SBPL.DOC_ID, '.', '.0.')
+                    --
+                                WHEN SBPL.EVENT_ID NOT LIKE 'Shell%' AND REGEXP_LIKE(DOC_ID, #pattern#) -- 001.001
+                                THEN ( 
+                                    CASE 
+                                        WHEN SBPL.DOC_TP_CD = #docTpCdOM#
+                                        THEN ( 
+                                          <isEqual property="targetEntity" compareValue="Order">
+                                            SELECT
+                                                      D.DS_ORD_POSN_NUM || '.' || SBPL.DOC_ID
+                                                FROM
+                                                    CPO_DTL_V D
+                                                WHERE
+                                                    D.GLBL_CMPY_CD      = #glblCmpyCd#
+                                                    AND D.CPO_ORD_NUM   = SBPL.PRNT_DOC_ID
+                                                    AND SBPL.DOC_ID     = D.CPO_DTL_LINE_NUM || '.' || D.CPO_DTL_LINE_SUB_NUM
+                                                    AND D.EZCANCELFLAG  = '0'
+                                          </isEqual>
+                                          <isEqual property="targetEntity" compareValue="Quote">
+                                            SBPL.DOC_ID
+                                          </isEqual>
+                                          <isEqual property="targetEntity" compareValue="Schedule">
+                                            SBPL.DOC_ID
+                                          </isEqual>
+                                        ) 
+                                        ELSE ( -- Return
+                                            SELECT
+                                                      D.DS_ORD_POSN_NUM || '.' || SBPL.DOC_ID 
+                                                FROM
+                                                    DS_CPO_RTRN_DTL_V D 
+                                                WHERE
+                                                    D.GLBL_CMPY_CD      = #glblCmpyCd#
+                                                    AND D.CPO_ORD_NUM   = SBPL.PRNT_DOC_ID 
+                                                    AND SBPL.DOC_ID     = D.DS_CPO_RTRN_LINE_NUM || '.' || D.DS_CPO_RTRN_LINE_SUB_NUM 
+                                                    AND D.EZCANCELFLAG  = '0'
+                                        ) 
+                                        END
+        
+                                )
+                                ELSE DOC_ID
+                                END SORT_DOC_ID
+                    --
+                FROM
+                     BIZ_PROC_LOG  SBPL
+                    ,BIZ_EVENT     ABP
+                    ,HLD_RSN       H
+                    ,AUTH_PSN      AP
+                    
+                WHERE
+                        SBPL.PRNT_DOC_ID          = #prntDocId#
+                    AND SBPL.PROC_ID              = #procId#
+                  <isNotNull property="docTpCd">
+                    AND SBPL.DOC_TP_CD            = #docTpCd#
+                  </isNotNull>
+                  <isNotNull property="docIdConfigList">
+                    AND (
+                        SBPL.DOC_ID IN
+                    <iterate property="docIdConfigList" var="docIdConfig[]" open=" (" close=")" conjunction=",">
+                        #docIdConfig[]#
+                    </iterate>
+                        OR  NOT ABP.EVENT_NM LIKE 'Shell%'
+                        AND (
+                    <iterate property="docIdConfigLineList" var="docIdConfigLine[]" conjunction=" OR ">
+                            SBPL.DOC_ID LIKE #docIdConfigLine[]#
+                    </iterate>
+                        )
+                    )
+                  </isNotNull>
+                  <isNotNull property="docIdLineList">
+                    AND (
+                    <iterate property="docIdLineList" var="docIdLine[]" conjunction=" OR ">
+                        SBPL.DOC_ID LIKE #docIdLine[]#
+                    </iterate>
+                    )
+                  </isNotNull>
+                  <!-- 2022/10/20 QC#60258 Add Start -->
+                  <isNotNull property = "xxFromDt">
+                     AND SBPL.EZINTIME &gt;= #xxFromDt#
+                  </isNotNull>
+                  <isNotNull property = "xxThruDt">
+                     AND SBPL.EZINTIME &lt;= #xxThruDt#
+                  </isNotNull>
+                  <!-- 2022/10/20 QC#60258 Add End -->
+                    AND SBPL.PROC_ID              = ABP.PROC_ID
+                    AND SBPL.EVENT_ID             = ABP.EVENT_ID
+                  <!-- 2022/10/20 QC#60258 Add Start -->
+                  <isNotNull property = "eventNm">
+                    AND SBPL.EVENT_ID IN (SELECT BE.EVENT_ID 
+
+                                            FROM BIZ_EVENT BE
+
+                                            WHERE BE.GLBL_CMPY_CD          = #glblCmpyCd#
+                                              AND BE.EZCANCELFLAG          = '0'
+                                              AND BE.EVENT_NM              = #eventNm#
+                                            )
+                  </isNotNull>
+                  <isNotNull property = "ordPrftTrxCatgCd">
+                     AND SBPL.DOC_ID        IS NOT NULL
+                     <isEqual property="ordPrftTrxCatgCd" compareValue="I">
+                         AND SBPL.DOC_TP_CD      = #docTpCdRT#
+                     </isEqual>
+                     <isEqual property="ordPrftTrxCatgCd" compareValue="S">
+                         AND SBPL.EVENT_ID    LIKE 'Shell%'
+                         AND SBPL.DOC_TP_CD     &lt;&gt;  #docTpCdRT#
+                     </isEqual>
+                     <isEqual property="ordPrftTrxCatgCd" compareValue="O">
+                         AND SBPL.EVENT_ID   NOT LIKE 'Shell%'
+                         AND SBPL.DOC_TP_CD     &lt;&gt;  #docTpCdRT#
+                     </isEqual>
+                  </isNotNull>
+                  <isNotNull property = "docId">
+                     <isEqual property="lineSearchTypeFlg" compareValue="Y">
+                         AND( 
+                               (
+                                  (
+                                     SELECT D.DPLY_LINE_NUM
+
+                                     FROM   CPO_DTL_V D
+
+                                     WHERE D.GLBL_CMPY_CD  = #glblCmpyCd#
+                                       AND D.CPO_ORD_NUM   = SBPL.PRNT_DOC_ID
+                                       AND SBPL.DOC_ID     = D.CPO_DTL_LINE_NUM || '.' || D.CPO_DTL_LINE_SUB_NUM
+                                       AND D.EZCANCELFLAG  = '0'
+                                   ) LIKE #docId#
+                               )
+                            OR
+                               (
+                                   (
+                                     SELECT D.DPLY_LINE_NUM
+
+                                     FROM   DS_CPO_RTRN_DTL_V D
+
+                                     WHERE  D.GLBL_CMPY_CD      = #glblCmpyCd#
+                                      AND D.CPO_ORD_NUM   = SBPL.PRNT_DOC_ID
+                                      AND SBPL.DOC_ID     = D.DS_CPO_RTRN_LINE_NUM || '.' || D.DS_CPO_RTRN_LINE_SUB_NUM
+                                      AND D.EZCANCELFLAG  = '0'
+                                    ) LIKE #docId# 
+                                )
+                            )
+                     </isEqual>
+                       <isEqual property="lineSearchTypeFlg" compareValue="N">
+                          AND
+                             (
+                                (
+                                  EXISTS
+                                         (
+                                             SELECT D.DPLY_LINE_NUM
+
+                                             FROM   CPO_DTL_V D
+
+                                             WHERE D.GLBL_CMPY_CD  = #glblCmpyCd#
+                                               AND D.CPO_ORD_NUM   = SBPL.PRNT_DOC_ID
+                                               AND SBPL.PRNT_DOC_ID= #prntDocId#
+                                               AND SBPL.DOC_ID     = D.CPO_DTL_LINE_NUM || '.' || D.CPO_DTL_LINE_SUB_NUM
+                                               AND D.EZCANCELFLAG  = '0'
+                                               <iterate property="docIdList" var="docIdListDtl[]" open="AND D.DPLY_LINE_NUM IN (" conjunction= "," close=")">
+                                                  #docIdListDtl[]#
+                                               </iterate>
+                                          ) 
+                                   )
+                                OR
+                                   (
+                                     EXISTS    (
+                                                SELECT D.DPLY_LINE_NUM
+
+                                                FROM   DS_CPO_RTRN_DTL_V D
+
+                                                WHERE D.GLBL_CMPY_CD  = #glblCmpyCd#
+                                                  AND D.CPO_ORD_NUM   = SBPL.PRNT_DOC_ID
+                                                  AND SBPL.PRNT_DOC_ID= #prntDocId#
+                                                  AND SBPL.DOC_ID     = D.DS_CPO_RTRN_LINE_NUM || '.' || D.DS_CPO_RTRN_LINE_SUB_NUM
+                                                  AND D.EZCANCELFLAG  = '0'
+                                                  <iterate property="docIdList" var="docIdListDtl[]" open="AND D.DPLY_LINE_NUM IN (" conjunction= "," close=")">
+                                                     #docIdListDtl[]#
+                                                  </iterate>
+                                              )
+                                    )
+                            )
+                     </isEqual>
+                  </isNotNull>
+                  <isNotNull property = "xxSrUsrId">
+                    AND SBPL.EZINUSERID = UPPER(#xxSrUsrId#)
+                  </isNotNull>
+                  <isNotNull property = "xxPsnNm">
+                    AND  UPPER (AP.FIRST_NM || ' ' || AP.LAST_NM ) LIKE UPPER(#xxPsnNm#)
+                  </isNotNull>
+                  <isNotNull property = "bizProcCmntTxt">
+                    AND UPPER (SBPL.BIZ_PROC_CMNT_TXT_01 || SBPL.BIZ_PROC_CMNT_TXT_02 || SBPL.BIZ_PROC_CMNT_TXT_03) LIKE UPPER(#bizProcCmntTxt#)
+                  </isNotNull>
+                  <!-- 2022/10/20 QC#60258 Add End -->
+                    AND ABP.GLBL_CMPY_CD          = #glblCmpyCd#
+                    AND ABP.USR_OPS_FLG           = #userOpsFlg#
+                    AND SBPL.BIZ_PROC_CMNT_TXT_02 = H.HLD_RSN_CD(+)
+                    AND H.GLBL_CMPY_CD(+)         = ABP.GLBL_CMPY_CD
+                    AND H.EZCANCELFLAG(+)         = '0'
+                    AND SBPL.EZCANCELFLAG         = '0'
+                    AND ABP.EZCANCELFLAG          = '0'
+                    AND SBPL.EZINUSERID           = AP.USR_NM(+)
+                    AND AP.EZCANCELFLAG(+)        = '0'
+                    AND AP.GLBL_CMPY_CD(+)        = ABP.GLBL_CMPY_CD
+            )
+                GROUP BY
+                    EVENT_NM
+                    , ORD_PRFT_TRX_CATG_CD
+                    , WF_SORT <!-- 2018/12/5 S21_NA#29015 Add -->
+                    , SORT_CATG
+                    , EZINTIME
+                    , DOC_ID
+                    , EZINUSERID
+                    , PSN_NM
+                    , MEMO
+                    , SORT_DOC_ID
+        ORDER BY 
+              EZINTIME              ASC
+            , WF_SORT               ASC NULLS FIRST  <!-- 2018/12/5 S21_NA#29015 Add -->
+            , BIZ_PROC_LOG_PK       ASC
+            , SORT_CATG             ASC NULLS FIRST
+          <isEqual property="supplyFlg" compareValue="Y">
+            , (CASE 
+                WHEN TRIM(TRANSLATE(SORT_DOC_ID, '0123456789', ' ')) IS NULL
+                THEN TO_NUMBER(SORT_DOC_ID) 
+
+                WHEN TRIM( 
+                    TRANSLATE(
+                        SUBSTR(SORT_DOC_ID, 1, INSTR(SORT_DOC_ID, '.') - 1)
+                        , '0123456789'
+                        , ' '
+                    )
+                ) IS NULL 
+                THEN TO_NUMBER( 
+                    SUBSTR(SORT_DOC_ID, 1, INSTR(SORT_DOC_ID, '.') - 1)
+                ) 
+
+                ELSE 9999999999999999
+                END)                ASC NULLS FIRST
+            , (CASE 
+                WHEN TRIM(TRANSLATE(SORT_DOC_ID, '0123456789', ' ')) IS NULL
+                THEN NULL
+
+                WHEN TRIM( 
+                    TRANSLATE( 
+                        SUBSTR(SORT_DOC_ID, INSTR(SORT_DOC_ID, '.') + 1)
+                        , '0123456789'
+                        , ' '
+                    )
+                ) IS NULL 
+                THEN TO_NUMBER( 
+                    SUBSTR(SORT_DOC_ID, INSTR(SORT_DOC_ID, '.') + 1)
+                ) 
+
+                ELSE 9999999999999999
+                END)                ASC NULLS FIRST
+          </isEqual>
+          <isNotEqual property="supplyFlg" compareValue="Y">
+            , (CASE 
+                WHEN TRIM(TRANSLATE(SORT_DOC_ID, '0123456789', ' ')) IS NULL
+                THEN TO_NUMBER(SORT_DOC_ID) 
+
+                WHEN TRIM( 
+                    TRANSLATE( 
+                        SUBSTR(SORT_DOC_ID, 1, INSTR(SORT_DOC_ID, '.') - 1)
+                        , '0123456789'
+                        , ' '
+                    )
+                ) IS NULL 
+                THEN TO_NUMBER( 
+                    SUBSTR(SORT_DOC_ID, 1, INSTR(SORT_DOC_ID, '.') - 1)
+                ) 
+
+                ELSE 9999999999999999
+                END)                ASC NULLS FIRST
+          </isNotEqual>
+            , SORT_DOC_ID           ASC NULLS FIRST
+        )
+    WHERE
+        <!-- 2022/10/20 QC#60258 Mod Start-->
+        <!-- ROWNUM &lt; #rowNum# -->
+        ROWNUM &lt;= #rowNum#
+        <!-- 2022/10/20 QC#60258 Mod End-->
+    </statement>
+    <resultMap id="result.getSummary"   class="NWAL1810_ASMsg">
+        <result property="eventNm_A0"          column="EVENT_NM"                javaType="EZDSStringItem"/>
+        <result property="ordPrftTrxCatgCd_A0" column="ORD_PRFT_TRX_CATG_CD"    javaType="EZDSStringItem"/>
+        <result property="xxDtTm_A0"           column="EZINTIME"                javaType="EZDSStringItem"/>
+        <result property="docId_A0"            column="DOC_ID"                  javaType="EZDSStringItem"/>
+        <result property="xxSrUsrId_A0"        column="EZINUSERID"              javaType="EZDSStringItem"/>
+        <result property="xxPsnNm_A0"          column="PSN_NM"                  javaType="EZDSStringItem"/>
+        <result property="bizProcCmntTxt_A0"   column="MEMO"                    javaType="EZDSStringItem"/>
+    </resultMap>
+
+    <statement id ="getDetailOrderList" parameterClass="Map" resultMap="result.getDetailOrderList">
+    SELECT -- DISTINCT
+        *
+    FROM
+        (
+        SELECT
+             ABP.EVENT_NM
+             --
+               , CASE
+                   WHEN SBPL.DOC_ID        IS NULL        THEN NULL
+                   WHEN SBPL.DOC_TP_CD      = #docTpCdRT# THEN #ordPrftTrxCatgInbound#
+                   WHEN SBPL.EVENT_ID    LIKE 'Shell%'    THEN #ordPrftTrxCatgService#
+                   ELSE                                        #ordPrftTrxCatgOutbound#
+                   END ORD_PRFT_TRX_CATG_CD
+             --
+               , ( 
+                   SELECT
+                             TC.ORD_PRFT_TRX_CATG_SORT_NUM
+                       FROM
+                           ORD_PRFT_TRX_CATG TC
+                       WHERE
+                           TC.GLBL_CMPY_CD              = #glblCmpyCd#
+                           AND TC.ORD_PRFT_TRX_CATG_CD  = ( 
+                               CASE 
+                                 WHEN SBPL.DOC_ID        IS NULL        THEN NULL
+                                 WHEN SBPL.DOC_TP_CD      = #docTpCdRT# THEN #ordPrftTrxCatgInbound#
+                                 WHEN SBPL.EVENT_ID    LIKE 'Shell%'    THEN #ordPrftTrxCatgService#
+                                 ELSE                                        #ordPrftTrxCatgOutbound#
+                                 END
+                           )
+                           AND TC.EZCANCELFLAG = '0'
+               ) SORT_CATG
+             --
+            ,SBPL.EZINTIME
+            ,SBPL.DOC_ID
+            ,SBPL.EZINUSERID
+            ,AP.FIRST_NM || ' ' || AP.LAST_NM AS PSN_NM
+            ,COMP.ATTR
+            ,COMP.ATTR_NAME
+            ,COMP.BF1_VALUE
+            ,COMP.AF1_VALUE
+            ,SBPL.BIZ_PROC_LOG_PK
+            --
+                    , CASE 
+                        WHEN SBPL.EVENT_ID NOT LIKE 'Shell%' AND REGEXP_LIKE(DOC_ID, #pattern#)
+                        THEN ( 
+                            CASE 
+                                WHEN SBPL.DOC_TP_CD = #docTpCdOM#
+                                THEN ( 
+                                    SELECT
+                                              D.DS_ORD_POSN_NUM || '.' || SBPL.DOC_ID 
+                                        FROM
+                                            CPO_DTL_V D 
+                                        WHERE
+                                            D.GLBL_CMPY_CD      = #glblCmpyCd#
+                                            AND D.CPO_ORD_NUM   = SBPL.PRNT_DOC_ID 
+                                            AND SBPL.DOC_ID     = D.CPO_DTL_LINE_NUM || '.' || D.CPO_DTL_LINE_SUB_NUM 
+                                            AND D.EZCANCELFLAG  = '0'
+                                ) 
+                                ELSE ( 
+                                    SELECT
+                                              D.DS_ORD_POSN_NUM || '.' || SBPL.DOC_ID 
+                                        FROM
+                                            DS_CPO_RTRN_DTL_V D 
+                                        WHERE
+                                            D.GLBL_CMPY_CD      = #glblCmpyCd#
+                                            AND D.CPO_ORD_NUM   = SBPL.PRNT_DOC_ID 
+                                            AND SBPL.DOC_ID     = D.DS_CPO_RTRN_LINE_NUM || '.' || D.DS_CPO_RTRN_LINE_SUB_NUM 
+                                            AND D.EZCANCELFLAG  = '0'
+                                ) 
+                                END
+                        ) 
+                        ELSE DOC_ID
+                        END SORT_DOC_ID
+            --
+        FROM 
+              BIZ_PROC_LOG          SBPL
+            , VIEW_CHNG_LOG_ATTRB   VCLA
+            , BIZ_EVENT             ABP
+            , AUTH_PSN              AP
+            , (
+-- [ALL]
+            <isEqual property="cpoRecFlg" compareValue="Y">
+                SELECT
+                     CPO_ORD_NUM
+                    ,ATTR
+                    ,ATTR_NAME
+                    ,ATTR_DB_NAME
+                    ,BF1_VALUE 
+                    ,AF1_VALUE
+                    ,EVENT_TS
+                    ,BF_BIZ_PROC_LOG_PK
+                    ,AF_BIZ_PROC_LOG_PK
+                    --, 'Header' EDIT_DOC_ID  --*
+                FROM 
+                    (
+                    WITH BF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECB.CPO_ORD_NUM
+                                ORDER BY
+                                    RECB.EZINTIME, RECB.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECB.*
+                        FROM
+                            CPO_REC RECB
+                        WHERE
+                                RECB.CPO_ORD_NUM  = #prntDocId#
+                            AND RECB.GLBL_CMPY_CD = #glblCmpyCd#
+                    ), AF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECA.CPO_ORD_NUM
+                                ORDER BY
+                                    RECA.EZINTIME, RECA.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECA.*
+                        FROM
+                            CPO_REC RECA
+                        WHERE
+                                RECA.CPO_ORD_NUM  = #prntDocId#
+                            AND RECA.GLBL_CMPY_CD = #glblCmpyCd#
+                     ), A2 AS (
+                    <isNotNull property="cpoAttr">
+                        $cpoAttr$
+                    </isNotNull>
+                     )
+                     SELECT 
+                          BF1.ROW_NUM
+                         ,AF1.ROW_NUM
+                         ,BF1.BIZ_PROC_LOG_PK AS BF_BIZ_PROC_LOG_PK
+                         ,AF1.BIZ_PROC_LOG_PK AS AF_BIZ_PROC_LOG_PK
+                         ,AF1.CPO_ORD_NUM
+                         ,A2.ATTR
+                         ,A2.ATTR_NAME
+                         ,A2.ATTR_DB_NAME
+                         ,CASE
+                        <isNotNull property="cpoCaseBf">
+                            $cpoCaseBf$
+                        </isNotNull>
+                          END AS BF1_VALUE
+                         ,CASE 
+                        <isNotNull property="cpoCaseAf">
+                            $cpoCaseAf$
+                        </isNotNull>
+                          END AS AF1_VALUE
+                         ,AF1.EZINTIME AS EVENT_TS
+                     FROM 
+                          BF1
+                         ,CPO_REC BF2
+                         ,AF1
+                         ,CPO_REC AF2
+                         ,A2
+                     WHERE 
+                             BF1.BIZ_PROC_LOG_PK = BF2.BIZ_PROC_LOG_PK
+                         AND AF1.BIZ_PROC_LOG_PK = AF2.BIZ_PROC_LOG_PK
+                         AND AF1.ROW_NUM - 1     = BF1.ROW_NUM
+                         AND AF1.CPO_ORD_NUM     = BF1.CPO_ORD_NUM
+                         AND AF1.EZCANCELFLAG    = '0'
+                         AND AF2.EZCANCELFLAG    = '0'
+                         AND BF1.EZCANCELFLAG    = '0'
+                         AND BF2.EZCANCELFLAG    = '0'
+                         AND (
+                        <isNotNull property="cpoComp">
+                            $cpoComp$
+                        </isNotNull>
+                        )
+                    )
+                WHERE BF1_VALUE &lt;&gt; AF1_VALUE
+              <!-- QC#5283 start -->
+                 OR ( BF1_VALUE IS NULL     AND AF1_VALUE IS NOT NULL )
+                 OR ( BF1_VALUE IS NOT NULL AND AF1_VALUE IS NULL )
+              <!-- QC#5283 end -->
+            </isEqual>
+
+            <isEqual property="dsCpoSlsCpoRecFlg" compareValue="Y">
+                <isEqual property="dsCpoSlsCpoRecUnionFlg" compareValue="Y">
+                UNION --ALL
+                </isEqual>
+                SELECT
+                     CPO_ORD_NUM
+                    ,ATTR
+                    ,ATTR_NAME
+                    ,ATTR_DB_NAME
+                    ,BF1_VALUE 
+                    ,AF1_VALUE
+                    ,EVENT_TS
+                    ,BF_BIZ_PROC_LOG_PK
+                    ,AF_BIZ_PROC_LOG_PK
+                    --, AF1.DS_ORD_POSN_NUM || '(Sales Credit)' EDIT_DOC_ID  --*
+                FROM 
+                (
+                    WITH BF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECB.CPO_ORD_NUM
+                                    , RECB.SLS_REP_TOC_CD
+                                    , RECB.SLS_REP_ROLE_TP_CD
+                                ORDER BY
+                                    RECB.EZINTIME, RECB.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECB.*
+                        FROM
+                            DS_CPO_SLS_CR_REC RECB
+                        WHERE
+                                RECB.CPO_ORD_NUM     = #prntDocId#
+                            AND RECB.DS_ORD_POSN_NUM IS NULL
+                            AND RECB.GLBL_CMPY_CD    = #glblCmpyCd#
+                     ), AF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECA.CPO_ORD_NUM
+                                    , RECA.SLS_REP_TOC_CD
+                                    , RECA.SLS_REP_ROLE_TP_CD
+                                ORDER BY
+                                    RECA.EZINTIME, RECA.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECA.*
+                        FROM
+                            DS_CPO_SLS_CR_REC RECA
+                        WHERE
+                                RECA.CPO_ORD_NUM     = #prntDocId#
+                            AND RECA.DS_ORD_POSN_NUM IS NULL
+                            AND RECA.GLBL_CMPY_CD    = #glblCmpyCd#
+                     ), A2 AS (
+                        <isNotNull property="dsCpoSlsCpoAttr">
+                            $dsCpoSlsCpoAttr$
+                        </isNotNull>
+                     )
+                     SELECT 
+                          BF1.ROW_NUM
+                         ,AF1.ROW_NUM
+                         ,BF1.BIZ_PROC_LOG_PK AS BF_BIZ_PROC_LOG_PK
+                         ,AF1.BIZ_PROC_LOG_PK AS AF_BIZ_PROC_LOG_PK
+                         ,AF1.CPO_ORD_NUM
+                         ,A2.ATTR
+                         ,A2.ATTR_NAME
+                         ,A2.ATTR_DB_NAME
+                         ,CASE 
+                         <isNotNull property="dsCpoSlsCpoCaseBf">
+                            $dsCpoSlsCpoCaseBf$
+                         </isNotNull>
+                          END AS BF1_VALUE
+                         ,CASE 
+                         <isNotNull property="dsCpoSlsCpoCaseAf">
+                            $dsCpoSlsCpoCaseAf$
+                         </isNotNull>
+                          END AS AF1_VALUE
+                         ,AF1.EZINTIME AS EVENT_TS
+                     FROM 
+                          BF1
+                         ,AF1
+                         ,A2
+                     WHERE 
+                             AF1.ROW_NUM - 1         = BF1.ROW_NUM
+                         AND AF1.CPO_ORD_NUM         = BF1.CPO_ORD_NUM
+                         AND AF1.SLS_REP_TOC_CD      = BF1.SLS_REP_TOC_CD
+                         AND AF1.SLS_REP_ROLE_TP_CD  = BF1.SLS_REP_ROLE_TP_CD
+                         AND AF1.EZCANCELFLAG        = '0'
+                         AND BF1.EZCANCELFLAG        = '0'
+                         AND (
+                         <isNotNull property="dsCpoSlsCpoComp">
+                            $dsCpoSlsCpoComp$
+                         </isNotNull>
+                    )
+                )
+                WHERE BF1_VALUE &lt;&gt; AF1_VALUE
+              <!-- QC#5283 start -->
+                 OR ( BF1_VALUE IS NULL     AND AF1_VALUE IS NOT NULL )
+                 OR ( BF1_VALUE IS NOT NULL AND AF1_VALUE IS NULL )
+              <!-- QC#5283 end -->
+            </isEqual>
+-- [Config]
+            <isEqual property="dsCpoConfRecFlg" compareValue="Y">
+                <isEqual property="dsCpoConfRecUnionFlg" compareValue="Y">
+                UNION --ALL
+                </isEqual>
+                SELECT
+                     CPO_ORD_NUM
+                    ,ATTR
+                    ,ATTR_NAME
+                    ,ATTR_DB_NAME
+                    ,BF1_VALUE 
+                    ,AF1_VALUE
+                    ,EVENT_TS
+                    ,BF_BIZ_PROC_LOG_PK
+                    ,AF_BIZ_PROC_LOG_PK
+                FROM 
+                (
+                    WITH BF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+<!--                                    RECB.DS_CPO_CONFIG_PK-->
+                                    RECB.CPO_ORD_NUM
+                                    , RECB.CONFIG_CATG_CD
+                                    , RECB.DS_ORD_POSN_NUM
+                                ORDER BY
+                                    RECB.EZINTIME, RECB.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECB.*
+                        FROM
+                            DS_CPO_CONFIG_REC RECB
+                        WHERE
+                                RECB.CPO_ORD_NUM  = #prntDocId#
+                            AND RECB.GLBL_CMPY_CD = #glblCmpyCd#
+                            <iterate property="configList" var="configList[]" open="AND RECB.DS_ORD_POSN_NUM IN (" close=")" conjunction=",">
+                                #configList[]#
+                            </iterate>
+                     ), AF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+<!--                                    RECA.DS_CPO_CONFIG_PK-->
+                                    RECA.CPO_ORD_NUM
+                                    , RECA.CONFIG_CATG_CD
+                                    , RECA.DS_ORD_POSN_NUM
+                                ORDER BY
+                                    RECA.EZINTIME, RECA.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECA.*
+                        FROM
+                            DS_CPO_CONFIG_REC RECA
+                        WHERE
+                                RECA.CPO_ORD_NUM  = #prntDocId#
+                            AND RECA.GLBL_CMPY_CD = #glblCmpyCd#
+                            <iterate property="configList" var="configList[]" open="AND RECA.DS_ORD_POSN_NUM IN (" close=")" conjunction=",">
+                                #configList[]#
+                            </iterate>
+                     ), A2 AS (
+                           <isNotNull property="dsCpoConfAttr">
+                               $dsCpoConfAttr$
+                           </isNotNull>
+                     )
+                     SELECT 
+                          BF1.ROW_NUM
+                         ,AF1.ROW_NUM
+                         ,BF1.BIZ_PROC_LOG_PK AS BF_BIZ_PROC_LOG_PK
+                         ,AF1.BIZ_PROC_LOG_PK AS AF_BIZ_PROC_LOG_PK
+                         ,AF1.CPO_ORD_NUM
+                         ,A2.ATTR
+                         ,A2.ATTR_NAME
+                         ,A2.ATTR_DB_NAME
+                         ,CASE
+                           <isNotNull property="dsCpoConfCaseBf">
+                               $dsCpoConfCaseBf$
+                           </isNotNull>
+                          END AS BF1_VALUE
+                         ,CASE 
+                           <isNotNull property="dsCpoConfCaseAf">
+                               $dsCpoConfCaseAf$
+                           </isNotNull>
+                          END AS AF1_VALUE
+                         ,AF1.EZINTIME AS EVENT_TS
+                     FROM 
+                          BF1
+                         ,AF1
+                         ,A2
+                     WHERE 
+                             AF1.ROW_NUM - 1     = BF1.ROW_NUM
+                         AND AF1.CPO_ORD_NUM     = BF1.CPO_ORD_NUM
+                         AND AF1.CONFIG_CATG_CD  = BF1.CONFIG_CATG_CD
+                         AND AF1.DS_ORD_POSN_NUM = BF1.DS_ORD_POSN_NUM
+                         AND AF1.EZCANCELFLAG    = '0'
+                         AND BF1.EZCANCELFLAG    = '0'
+                         AND (
+                           <isNotNull property="dsCpoConfComp">
+                               $dsCpoConfComp$
+                           </isNotNull>
+                    )
+                )
+                WHERE BF1_VALUE &lt;&gt; AF1_VALUE
+              <!-- QC#5283 start -->
+                 OR ( BF1_VALUE IS NULL     AND AF1_VALUE IS NOT NULL )
+                 OR ( BF1_VALUE IS NOT NULL AND AF1_VALUE IS NULL )
+              <!-- QC#5283 end -->
+            </isEqual>
+
+            <isEqual property="dsCpoSlsConfRecFlg" compareValue="Y">
+                <isEqual property="dsCpoSlsConfRecUnionFlg" compareValue="Y">
+                UNION --ALL
+                </isEqual>
+                SELECT
+                     CPO_ORD_NUM
+                    ,ATTR
+                    ,ATTR_NAME
+                    ,ATTR_DB_NAME
+                    ,BF1_VALUE 
+                    ,AF1_VALUE
+                    ,EVENT_TS
+                    ,BF_BIZ_PROC_LOG_PK
+                    ,AF_BIZ_PROC_LOG_PK
+                FROM 
+                (
+                    WITH BF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECB.CPO_ORD_NUM
+                                    , RECB.DS_ORD_POSN_NUM
+                                    , RECB.SLS_REP_TOC_CD
+                                    , RECB.SLS_REP_ROLE_TP_CD
+                                ORDER BY
+                                    RECB.EZINTIME, RECB.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECB.*
+                        FROM
+                            DS_CPO_SLS_CR_REC RECB
+                        WHERE
+                                RECB.CPO_ORD_NUM     = #prntDocId#
+                            AND RECB.GLBL_CMPY_CD    = #glblCmpyCd#
+                        <isEqual property="useAllFlg" compareValue="Y">
+                            AND RECB.DS_ORD_POSN_NUM IS NOT NULL
+                        </isEqual>    
+                        <isNotEqual property="useAllFlg" compareValue="Y">
+                            <iterate property="configList" var="configList[]" open="AND RECB.DS_ORD_POSN_NUM IN (" close=")" conjunction=",">
+                                #configList[]#
+                            </iterate>
+                        </isNotEqual>
+                     ), AF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECA.CPO_ORD_NUM
+                                    , RECA.DS_ORD_POSN_NUM
+                                    , RECA.SLS_REP_TOC_CD
+                                    , RECA.SLS_REP_ROLE_TP_CD
+                                ORDER BY
+                                    RECA.EZINTIME, RECA.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECA.*
+                        FROM
+                            DS_CPO_SLS_CR_REC RECA
+                        WHERE
+                                RECA.CPO_ORD_NUM     = #prntDocId#
+                            AND RECA.GLBL_CMPY_CD    = #glblCmpyCd#
+                        <isEqual property="useAllFlg" compareValue="Y">
+                            AND RECA.DS_ORD_POSN_NUM IS NOT NULL
+                        </isEqual>    
+                        <isNotEqual property="useAllFlg" compareValue="Y">
+                            <iterate property="configList" var="configList[]" open="AND RECA.DS_ORD_POSN_NUM IN (" close=")" conjunction=",">
+                                #configList[]#
+                            </iterate>
+                        </isNotEqual>
+                     ), A2 AS (
+                        <isNotNull property="dsCpoSlsConfAttr">
+                            $dsCpoSlsConfAttr$
+                        </isNotNull>
+                     )
+                     SELECT 
+                          BF1.ROW_NUM
+                         ,AF1.ROW_NUM
+                         ,BF1.BIZ_PROC_LOG_PK AS BF_BIZ_PROC_LOG_PK
+                         ,AF1.BIZ_PROC_LOG_PK AS AF_BIZ_PROC_LOG_PK
+                         ,AF1.CPO_ORD_NUM
+                         ,A2.ATTR
+                         ,A2.ATTR_NAME
+                         ,A2.ATTR_DB_NAME
+                         ,CASE 
+                         <isNotNull property="dsCpoSlsConfCaseBf">
+                            $dsCpoSlsConfCaseBf$
+                         </isNotNull>
+                          END AS BF1_VALUE
+                         ,CASE 
+                         <isNotNull property="dsCpoSlsConfCaseAf">
+                            $dsCpoSlsConfCaseAf$
+                         </isNotNull>
+                          END AS AF1_VALUE
+                         ,AF1.EZINTIME AS EVENT_TS
+                     FROM 
+                          BF1
+                         ,AF1
+                         ,A2
+                     WHERE 
+                             AF1.ROW_NUM - 1        = BF1.ROW_NUM
+                         AND AF1.CPO_ORD_NUM        = BF1.CPO_ORD_NUM
+                         AND AF1.DS_ORD_POSN_NUM    = BF1.DS_ORD_POSN_NUM
+                         AND AF1.SLS_REP_TOC_CD     = BF1.SLS_REP_TOC_CD
+                         AND AF1.SLS_REP_ROLE_TP_CD = BF1.SLS_REP_ROLE_TP_CD
+                         AND AF1.EZCANCELFLAG       = '0'
+                         AND BF1.EZCANCELFLAG       = '0'
+                         AND (
+                         <isNotNull property="dsCpoSlsConfComp">
+                            $dsCpoSlsConfComp$
+                         </isNotNull>
+                    )
+                )
+                WHERE BF1_VALUE &lt;&gt; AF1_VALUE
+                 OR ( BF1_VALUE IS NULL     AND AF1_VALUE IS NOT NULL )
+                 OR ( BF1_VALUE IS NOT NULL AND AF1_VALUE IS NULL )
+            </isEqual>
+-- [Line]
+            <isEqual property="cpoDtlRecFlg" compareValue="Y">
+                <isEqual property="cpoDtlRecUnionFlg" compareValue="Y">
+                UNION --ALL
+                </isEqual>
+                SELECT
+                     CPO_ORD_NUM
+                    ,ATTR
+                    ,ATTR_NAME
+                    ,ATTR_DB_NAME
+                    ,BF1_VALUE 
+                    ,AF1_VALUE
+                    ,EVENT_TS
+                    ,BF_BIZ_PROC_LOG_PK
+                    ,AF_BIZ_PROC_LOG_PK
+                FROM 
+                (
+                    WITH BF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECB.CPO_ORD_NUM
+                                    , RECB.CPO_DTL_LINE_NUM
+                                    , RECB.CPO_DTL_LINE_SUB_NUM
+                                ORDER BY
+                                    RECB.EZINTIME, RECB.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECB.*
+                        FROM
+                             CPO_DTL_REC RECB
+                            ,CPO_DTL     DTL
+                        WHERE
+                                RECB.CPO_ORD_NUM          = #prntDocId#
+                            AND RECB.GLBL_CMPY_CD         = #glblCmpyCd#
+                            AND RECB.CPO_ORD_NUM          = DTL.CPO_ORD_NUM
+                            AND RECB.CPO_DTL_LINE_NUM     = DTL.CPO_DTL_LINE_NUM
+                            AND RECB.CPO_DTL_LINE_SUB_NUM = DTL.CPO_DTL_LINE_SUB_NUM
+                            <isEqual property="lvlConfFlg" compareValue="Y">
+                                <iterate property="configOrdList" var="configOrdList[]" open="AND DTL.DS_ORD_POSN_NUM IN (" close=")" conjunction=",">
+                                #configOrdList[]#
+                                </iterate>
+                            </isEqual>
+                            <isEqual property="lvlLineFlg" compareValue="Y">
+                                <iterate property="msgC" var="c[]" open="AND (" close=")" conjunction="OR">
+                               (
+                                DTL.DS_ORD_POSN_NUM       = #c[].dsOrdPosnNum_C0#
+                            AND DTL.CPO_DTL_LINE_NUM      = #c[].xxLineNum_C0#
+                            AND DTL.CPO_DTL_LINE_SUB_NUM  = #c[].xxCpoLineSubNum_C0#
+                               )
+                                </iterate>
+                            </isEqual>
+                     ), AF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECA.CPO_ORD_NUM
+                                    , RECA.CPO_DTL_LINE_NUM
+                                    , RECA.CPO_DTL_LINE_SUB_NUM
+                                ORDER BY
+                                    RECA.EZINTIME, RECA.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECA.*
+                        FROM
+                             CPO_DTL_REC RECA
+                            ,CPO_DTL     DTL
+                        WHERE
+                                RECA.CPO_ORD_NUM          = #prntDocId#
+                            AND RECA.GLBL_CMPY_CD         = #glblCmpyCd#
+                            AND RECA.CPO_ORD_NUM          = DTL.CPO_ORD_NUM
+                            AND RECA.CPO_DTL_LINE_NUM     = DTL.CPO_DTL_LINE_NUM
+                            AND RECA.CPO_DTL_LINE_SUB_NUM = DTL.CPO_DTL_LINE_SUB_NUM
+                            <isEqual property="lvlConfFlg" compareValue="Y">
+                                <iterate property="configOrdList" var="configOrdList[]" open="AND DTL.DS_ORD_POSN_NUM IN (" close=")" conjunction=",">
+                                #configOrdList[]#
+                                </iterate>
+                            </isEqual>
+                            <isEqual property="lvlLineFlg" compareValue="Y">
+                                <iterate property="msgC" var="c[]" open="AND (" close=")" conjunction="OR">
+                               (
+                                DTL.DS_ORD_POSN_NUM       = #c[].dsOrdPosnNum_C0#
+                            AND DTL.CPO_DTL_LINE_NUM      = #c[].xxLineNum_C0#
+                            AND DTL.CPO_DTL_LINE_SUB_NUM  = #c[].xxCpoLineSubNum_C0#
+                               )
+                                </iterate>
+                            </isEqual>
+                     ), A2 AS (
+                           <isNotNull property="cpoDtlAttr">
+                               $cpoDtlAttr$
+                           </isNotNull>
+                     )
+                     SELECT 
+                          BF1.ROW_NUM
+                         ,AF1.ROW_NUM
+                         ,BF1.BIZ_PROC_LOG_PK AS BF_BIZ_PROC_LOG_PK
+                         ,AF1.BIZ_PROC_LOG_PK AS AF_BIZ_PROC_LOG_PK
+                         ,AF1.CPO_ORD_NUM
+                         ,A2.ATTR
+                         ,A2.ATTR_NAME
+                         ,A2.ATTR_DB_NAME
+                         ,CASE
+                           <isNotNull property="cpoDtlCaseBf">
+                               $cpoDtlCaseBf$
+                           </isNotNull>
+                          END AS BF1_VALUE
+                         ,CASE 
+                           <isNotNull property="cpoDtlCaseAf">
+                               $cpoDtlCaseAf$
+                           </isNotNull>
+                          END AS AF1_VALUE
+                         ,AF1.EZINTIME AS EVENT_TS
+                     FROM 
+                          BF1
+                         ,AF1
+                         ,A2
+                     WHERE 
+                             AF1.ROW_NUM - 1           = BF1.ROW_NUM
+                         AND AF1.CPO_ORD_NUM           = BF1.CPO_ORD_NUM
+                         AND AF1.CPO_DTL_LINE_NUM      = BF1.CPO_DTL_LINE_NUM
+                         AND AF1.CPO_DTL_LINE_SUB_NUM  = BF1.CPO_DTL_LINE_SUB_NUM
+                         AND AF1.EZCANCELFLAG          = '0'
+                         AND BF1.EZCANCELFLAG          = '0'
+                         AND (
+                           <isNotNull property="cpoDtlComp">
+                               $cpoDtlComp$
+                           </isNotNull>
+                    )
+                )
+                WHERE BF1_VALUE &lt;&gt; AF1_VALUE
+                 OR ( BF1_VALUE IS NULL     AND AF1_VALUE IS NOT NULL )
+                 OR ( BF1_VALUE IS NOT NULL AND AF1_VALUE IS NULL )
+            </isEqual>
+            
+            <isEqual property="dsCpoDtlRecFlg" compareValue="Y">
+                <isEqual property="dsCpoDtlRecUnionFlg" compareValue="Y">
+                UNION
+                </isEqual>
+                SELECT
+                     CPO_ORD_NUM
+                    ,ATTR
+                    ,ATTR_NAME
+                    ,ATTR_DB_NAME
+                    ,BF1_VALUE
+                    ,AF1_VALUE
+                    ,EVENT_TS
+                    ,BF_BIZ_PROC_LOG_PK
+                    ,AF_BIZ_PROC_LOG_PK
+                FROM 
+                (
+                    WITH BF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECB.CPO_ORD_NUM
+                                    , RECB.CPO_DTL_LINE_NUM
+                                    , RECB.CPO_DTL_LINE_SUB_NUM
+                                ORDER BY
+                                    RECB.EZINTIME, RECB.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECB.*
+                        FROM
+                             CPO_DTL_REC RECB
+                            ,CPO_DTL     DTL
+                        WHERE
+                                RECB.CPO_ORD_NUM          = #prntDocId#
+                            AND RECB.GLBL_CMPY_CD         = #glblCmpyCd#
+                            AND RECB.CPO_ORD_NUM          = DTL.CPO_ORD_NUM
+                            AND RECB.CPO_DTL_LINE_NUM     = DTL.CPO_DTL_LINE_NUM
+                            AND RECB.CPO_DTL_LINE_SUB_NUM = DTL.CPO_DTL_LINE_SUB_NUM
+                            <isEqual property="lvlConfFlg" compareValue="Y">
+                                <iterate property="configOrdList" var="configOrdList[]" open="AND DTL.DS_ORD_POSN_NUM IN (" close=")" conjunction=",">
+                                #configOrdList[]#
+                                </iterate>
+                            </isEqual>
+                            <isEqual property="lvlLineFlg" compareValue="Y">
+                                <iterate property="msgC" var="c[]" open="AND (" close=")" conjunction="OR">
+                               (
+                                DTL.DS_ORD_POSN_NUM       = #c[].dsOrdPosnNum_C0#
+                            AND DTL.CPO_DTL_LINE_NUM      = #c[].xxLineNum_C0#
+                            AND DTL.CPO_DTL_LINE_SUB_NUM  = #c[].xxCpoLineSubNum_C0#
+                               )
+                                </iterate>
+                            </isEqual>
+                     ), AF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECA.CPO_ORD_NUM
+                                    , RECA.CPO_DTL_LINE_NUM
+                                    , RECA.CPO_DTL_LINE_SUB_NUM
+                                ORDER BY
+                                    RECA.EZINTIME, RECA.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECA.*
+                        FROM
+                             CPO_DTL_REC RECA
+                            ,CPO_DTL     DTL
+                        WHERE
+                                RECA.CPO_ORD_NUM          = #prntDocId#
+                            AND RECA.GLBL_CMPY_CD         = #glblCmpyCd#
+                            AND RECA.CPO_ORD_NUM          = DTL.CPO_ORD_NUM
+                            AND RECA.CPO_DTL_LINE_NUM     = DTL.CPO_DTL_LINE_NUM
+                            AND RECA.CPO_DTL_LINE_SUB_NUM = DTL.CPO_DTL_LINE_SUB_NUM
+                            <isEqual property="lvlConfFlg" compareValue="Y">
+                                <iterate property="configOrdList" var="configOrdList[]" open="AND DTL.DS_ORD_POSN_NUM IN (" close=")" conjunction=",">
+                                #configOrdList[]#
+                                </iterate>
+                            </isEqual>
+                            <isEqual property="lvlLineFlg" compareValue="Y">
+                                <iterate property="msgC" var="c[]" open="AND (" close=")" conjunction="OR">
+                               (
+                                DTL.DS_ORD_POSN_NUM       = #c[].dsOrdPosnNum_C0#
+                            AND DTL.CPO_DTL_LINE_NUM      = #c[].xxLineNum_C0#
+                            AND DTL.CPO_DTL_LINE_SUB_NUM  = #c[].xxCpoLineSubNum_C0#
+                               )
+                                </iterate>
+                            </isEqual>
+                     ), A2 AS (
+                           <isNotNull property="dsCpoDtlAttr">
+                               $dsCpoDtlAttr$
+                           </isNotNull>
+                     )
+                     SELECT 
+                          BF1.ROW_NUM
+                         ,AF1.ROW_NUM
+                         ,BF1.BIZ_PROC_LOG_PK AS BF_BIZ_PROC_LOG_PK
+                         ,AF1.BIZ_PROC_LOG_PK AS AF_BIZ_PROC_LOG_PK
+                         ,AF1.CPO_ORD_NUM
+                         ,A2.ATTR
+                         ,A2.ATTR_NAME
+                         ,A2.ATTR_DB_NAME
+                         ,CASE
+                           <isNotNull property="dsCpoDtlCaseBf">
+                               $dsCpoDtlCaseBf$
+                           </isNotNull>
+                          END AS BF1_VALUE
+                         ,CASE 
+                           <isNotNull property="dsCpoDtlCaseAf">
+                               $dsCpoDtlCaseAf$
+                           </isNotNull>
+                          END AS AF1_VALUE
+                         ,AF1.EZINTIME AS EVENT_TS
+                     FROM 
+                          BF1
+                         ,AF1
+                         ,A2
+                     WHERE 
+                             AF1.ROW_NUM - 1           = BF1.ROW_NUM
+                         AND AF1.CPO_ORD_NUM           = BF1.CPO_ORD_NUM
+                         AND AF1.CPO_DTL_LINE_NUM      = BF1.CPO_DTL_LINE_NUM
+                         AND AF1.CPO_DTL_LINE_SUB_NUM  = BF1.CPO_DTL_LINE_SUB_NUM
+                         AND AF1.EZCANCELFLAG          = '0'
+                         AND BF1.EZCANCELFLAG          = '0'
+                         AND (
+                           <isNotNull property="dsCpoDtlComp">
+                               $dsCpoDtlComp$
+                           </isNotNull>
+                    )
+                )
+                WHERE BF1_VALUE &lt;&gt; AF1_VALUE
+                 OR ( BF1_VALUE IS NULL     AND AF1_VALUE IS NOT NULL )
+                 OR ( BF1_VALUE IS NOT NULL AND AF1_VALUE IS NULL )
+            </isEqual>
+            
+            <isEqual property="dsCpoRtrnDtlRecFlg" compareValue="Y">
+                <isEqual property="dsCpoRtrnDtlRecUnionFlg" compareValue="Y">
+                UNION --ALL
+                </isEqual>
+                SELECT
+                     CPO_ORD_NUM
+                    ,ATTR
+                    ,ATTR_NAME
+                    ,ATTR_DB_NAME
+                    ,BF1_VALUE
+                    ,AF1_VALUE
+                    ,EVENT_TS
+                    ,BF_BIZ_PROC_LOG_PK
+                    ,AF_BIZ_PROC_LOG_PK
+                FROM 
+                (
+                    WITH BF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECB.CPO_ORD_NUM
+                                    , RECB.DS_CPO_RTRN_LINE_NUM
+                                    , RECB.DS_CPO_RTRN_LINE_SUB_NUM
+                                ORDER BY
+                                    RECB.EZINTIME, RECB.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECB.*
+                        FROM
+                             DS_CPO_RTRN_DTL_REC RECB
+                            ,DS_CPO_RTRN_DTL     DTL
+                        WHERE
+                                RECB.CPO_ORD_NUM              = #prntDocId#
+                            AND RECB.GLBL_CMPY_CD             = #glblCmpyCd#
+                            AND RECB.CPO_ORD_NUM              = DTL.CPO_ORD_NUM
+                            AND RECB.DS_CPO_RTRN_LINE_NUM     = DTL.DS_CPO_RTRN_LINE_NUM
+                            AND RECB.DS_CPO_RTRN_LINE_SUB_NUM = DTL.DS_CPO_RTRN_LINE_SUB_NUM
+                            <isEqual property="lvlConfFlg" compareValue="Y">
+                                <iterate property="configRtnList" var="configRtnList[]" open="AND DTL.DS_ORD_POSN_NUM IN (" close=")" conjunction=",">
+                                #configRtnList[]#
+                                </iterate>
+                            </isEqual>
+                            <isEqual property="lvlLineFlg" compareValue="Y">
+                                <iterate property="msgD" var="d[]" open="AND (" close=")" conjunction="OR">
+                               (
+                                DTL.DS_ORD_POSN_NUM           = #d[].dsOrdPosnNum_D0#
+                            AND DTL.DS_CPO_RTRN_LINE_NUM      = #d[].xxLineNum_D0#
+                            AND DTL.DS_CPO_RTRN_LINE_SUB_NUM  = #d[].xxCpoLineSubNum_D0#
+                               )
+                                </iterate>
+                            </isEqual>
+                     ), AF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECA.CPO_ORD_NUM
+                                    , RECA.DS_CPO_RTRN_LINE_NUM
+                                    , RECA.DS_CPO_RTRN_LINE_SUB_NUM
+                                ORDER BY
+                                    RECA.EZINTIME, RECA.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECA.*
+                        FROM
+                             DS_CPO_RTRN_DTL_REC RECA
+                            ,DS_CPO_RTRN_DTL     DTL
+                        WHERE
+                                RECA.CPO_ORD_NUM              = #prntDocId#
+                            AND RECA.GLBL_CMPY_CD             = #glblCmpyCd#
+                            AND RECA.CPO_ORD_NUM              = DTL.CPO_ORD_NUM
+                            AND RECA.DS_CPO_RTRN_LINE_NUM     = DTL.DS_CPO_RTRN_LINE_NUM
+                            AND RECA.DS_CPO_RTRN_LINE_SUB_NUM = DTL.DS_CPO_RTRN_LINE_SUB_NUM
+                            <isEqual property="lvlConfFlg" compareValue="Y">
+                                <iterate property="configRtnList" var="configRtnList[]" open="AND DTL.DS_ORD_POSN_NUM IN (" close=")" conjunction=",">
+                                #configRtnList[]#
+                                </iterate>
+                            </isEqual>
+                            <isEqual property="lvlLineFlg" compareValue="Y">
+                                <iterate property="msgD" var="d[]" open="AND (" close=")" conjunction="OR">
+                               (
+                                DTL.DS_ORD_POSN_NUM           = #d[].dsOrdPosnNum_D0#
+                            AND DTL.DS_CPO_RTRN_LINE_NUM      = #d[].xxLineNum_D0#
+                            AND DTL.DS_CPO_RTRN_LINE_SUB_NUM  = #d[].xxCpoLineSubNum_D0#
+                               )
+                                </iterate>
+                            </isEqual>
+                     ), A2 AS (
+                           <isNotNull property="dsCpoRtrnDtlAttr">
+                               $dsCpoRtrnDtlAttr$
+                           </isNotNull>
+                     )
+                     SELECT 
+                          BF1.ROW_NUM
+                         ,AF1.ROW_NUM
+                         ,BF1.BIZ_PROC_LOG_PK AS BF_BIZ_PROC_LOG_PK
+                         ,AF1.BIZ_PROC_LOG_PK AS AF_BIZ_PROC_LOG_PK
+                         ,AF1.CPO_ORD_NUM
+                         ,A2.ATTR
+                         ,A2.ATTR_NAME
+                         ,A2.ATTR_DB_NAME
+                         ,CASE 
+                           <isNotNull property="dsCpoRtrnDtlCaseBf">
+                               $dsCpoRtrnDtlCaseBf$
+                           </isNotNull>
+                          END AS BF1_VALUE
+                         ,CASE 
+                           <isNotNull property="dsCpoRtrnDtlCaseAf">
+                               $dsCpoRtrnDtlCaseAf$
+                           </isNotNull>
+                          END AS AF1_VALUE
+                         ,AF1.EZINTIME AS EVENT_TS
+                     FROM 
+                          BF1
+                         ,AF1
+                         ,A2
+                     WHERE 
+                             AF1.ROW_NUM - 1               = BF1.ROW_NUM
+                         AND AF1.CPO_ORD_NUM               = BF1.CPO_ORD_NUM
+                         AND AF1.DS_CPO_RTRN_LINE_NUM      = BF1.DS_CPO_RTRN_LINE_NUM
+                         AND AF1.DS_CPO_RTRN_LINE_SUB_NUM  = BF1.DS_CPO_RTRN_LINE_SUB_NUM
+                         AND AF1.EZCANCELFLAG              = '0'
+                         AND BF1.EZCANCELFLAG              = '0'
+                         AND (
+                           <isNotNull property="dsCpoRtrnDtlComp">
+                               $dsCpoRtrnDtlComp$
+                           </isNotNull>
+                    )
+                )
+                WHERE BF1_VALUE &lt;&gt; AF1_VALUE
+                 OR ( BF1_VALUE IS NULL     AND AF1_VALUE IS NOT NULL )
+                 OR ( BF1_VALUE IS NOT NULL AND AF1_VALUE IS NULL )
+            </isEqual>
+                
+            <isEqual property="ordPrcCalcBaseRecFlg" compareValue="Y">
+                <isEqual property="ordPrcCalcBaseRecUnionFlg" compareValue="Y">
+                UNION --ALL
+                </isEqual>
+                SELECT
+                     CPO_ORD_NUM
+                    ,ATTR
+                    ,ATTR_NAME
+                    ,ATTR_DB_NAME
+                    ,BF1_VALUE
+                    ,AF1_VALUE
+                    ,EVENT_TS
+                    ,BF_BIZ_PROC_LOG_PK
+                    ,AF_BIZ_PROC_LOG_PK
+                FROM 
+                (
+                    WITH BF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECB.CPO_ORD_NUM
+                                    , RECB.CPO_DTL_LINE_NUM
+                                    , RECB.CPO_DTL_LINE_SUB_NUM
+                                    , RECB.SPEC_COND_PRC_PK
+                                ORDER BY
+                                    RECB.EZINTIME, RECB.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECB.*
+                        FROM
+                             ORD_PRC_CALC_BASE_REC RECB
+                            ,CPO_DTL               DTL
+                        WHERE
+                                RECB.CPO_ORD_NUM          = #prntDocId#
+                            AND RECB.GLBL_CMPY_CD         = #glblCmpyCd#
+                            AND RECB.CPO_ORD_NUM          = DTL.CPO_ORD_NUM
+                            AND RECB.CPO_DTL_LINE_NUM     = DTL.CPO_DTL_LINE_NUM
+                            AND RECB.CPO_DTL_LINE_SUB_NUM = DTL.CPO_DTL_LINE_SUB_NUM
+                            <isEqual property="lvlConfFlg" compareValue="Y">
+                                <iterate property="configOrdList" var="configOrdList[]" open="AND DTL.DS_ORD_POSN_NUM IN (" close=")" conjunction=",">
+                                #configOrdList[]#
+                                </iterate>
+                            </isEqual>
+                            <isEqual property="lvlLineFlg" compareValue="Y">
+                                <iterate property="msgC" var="c[]" open="AND (" close=")" conjunction="OR">
+                               (
+                                DTL.DS_ORD_POSN_NUM       = #c[].dsOrdPosnNum_C0#
+                            AND DTL.CPO_DTL_LINE_NUM      = #c[].xxLineNum_C0#
+                            AND DTL.CPO_DTL_LINE_SUB_NUM  = #c[].xxCpoLineSubNum_C0#
+                               )
+                                </iterate>
+                            </isEqual>
+                     ), AF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECA.CPO_ORD_NUM
+                                    , RECA.CPO_DTL_LINE_NUM
+                                    , RECA.CPO_DTL_LINE_SUB_NUM
+                                    , RECA.SPEC_COND_PRC_PK
+                                ORDER BY
+                                    RECA.EZINTIME, RECA.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECA.*
+                        FROM
+                             ORD_PRC_CALC_BASE_REC RECA
+                            ,CPO_DTL               DTL
+                        WHERE
+                                RECA.CPO_ORD_NUM          = #prntDocId#
+                            AND RECA.GLBL_CMPY_CD         = #glblCmpyCd#
+                            AND RECA.CPO_ORD_NUM          = DTL.CPO_ORD_NUM
+                            AND RECA.CPO_DTL_LINE_NUM     = DTL.CPO_DTL_LINE_NUM
+                            AND RECA.CPO_DTL_LINE_SUB_NUM = DTL.CPO_DTL_LINE_SUB_NUM
+                            <isEqual property="lvlConfFlg" compareValue="Y">
+                                <iterate property="configOrdList" var="configOrdList[]" open="AND DTL.DS_ORD_POSN_NUM IN (" close=")" conjunction=",">
+                                #configOrdList[]#
+                                </iterate>
+                            </isEqual>
+                            <isEqual property="lvlLineFlg" compareValue="Y">
+                                <iterate property="msgC" var="c[]" open="AND (" close=")" conjunction="OR">
+                               (
+                                DTL.DS_ORD_POSN_NUM       = #c[].dsOrdPosnNum_C0#
+                            AND DTL.CPO_DTL_LINE_NUM      = #c[].xxLineNum_C0#
+                            AND DTL.CPO_DTL_LINE_SUB_NUM  = #c[].xxCpoLineSubNum_C0#
+                               )
+                                </iterate>
+                            </isEqual>
+                     ), A2 AS (
+                           <isNotNull property="ordPrcCalcBaseAttr">
+                               $ordPrcCalcBaseAttr$
+                           </isNotNull>
+                     )
+                     SELECT 
+                          BF1.ROW_NUM
+                         ,AF1.ROW_NUM
+                         ,BF1.BIZ_PROC_LOG_PK AS BF_BIZ_PROC_LOG_PK
+                         ,AF1.BIZ_PROC_LOG_PK AS AF_BIZ_PROC_LOG_PK
+                         ,AF1.CPO_ORD_NUM
+                         ,A2.ATTR
+                         ,A2.ATTR_NAME
+                         ,A2.ATTR_DB_NAME
+                         ,CASE 
+                           <isNotNull property="ordPrcCalcBaseCaseBf">
+                               $ordPrcCalcBaseCaseBf$
+                           </isNotNull>
+                          END AS BF1_VALUE
+                         ,CASE 
+                           <isNotNull property="ordPrcCalcBaseCaseAf">
+                               $ordPrcCalcBaseCaseAf$
+                           </isNotNull>
+                          END AS AF1_VALUE
+                         ,AF1.EZINTIME AS EVENT_TS
+                     FROM 
+                          BF1
+                         ,AF1
+                         ,A2
+                     WHERE 
+                             AF1.ROW_NUM - 1           = BF1.ROW_NUM
+                         AND AF1.CPO_ORD_NUM           = BF1.CPO_ORD_NUM
+                         AND AF1.CPO_DTL_LINE_NUM      = BF1.CPO_DTL_LINE_NUM
+                         AND AF1.CPO_DTL_LINE_SUB_NUM  = BF1.CPO_DTL_LINE_SUB_NUM
+                         AND AF1.SPEC_COND_PRC_PK      = BF1.SPEC_COND_PRC_PK   <!-- QC#7128 -->
+                         AND AF1.EZCANCELFLAG          = '0'
+                         AND BF1.EZCANCELFLAG          = '0'
+                         AND (
+                           <isNotNull property="ordPrcCalcBaseComp">
+                               $ordPrcCalcBaseComp$
+                           </isNotNull>
+                    )
+                )
+                WHERE BF1_VALUE &lt;&gt; AF1_VALUE
+                 OR ( BF1_VALUE IS NULL     AND AF1_VALUE IS NOT NULL )
+                 OR ( BF1_VALUE IS NOT NULL AND AF1_VALUE IS NULL )
+            </isEqual>
+
+            <isEqual property="cpoRtrnCalcBaseRecFlg" compareValue="Y">
+                <isEqual property="cpoRtrnCalcBaseRecUnionFlg" compareValue="Y">
+                UNION
+                </isEqual>
+                SELECT
+                     CPO_ORD_NUM
+                    ,ATTR
+                    ,ATTR_NAME
+                    ,ATTR_DB_NAME
+                    ,BF1_VALUE
+                    ,AF1_VALUE
+                    ,EVENT_TS
+                    ,BF_BIZ_PROC_LOG_PK
+                    ,AF_BIZ_PROC_LOG_PK
+                FROM 
+                (
+                    WITH BF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECB.CPO_ORD_NUM
+                                    , RECB.DS_CPO_RTRN_LINE_NUM
+                                    , RECB.DS_CPO_RTRN_LINE_SUB_NUM
+                                    , RECB.SPEC_COND_PRC_PK
+                                ORDER BY
+                                    RECB.EZINTIME, RECB.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECB.*
+                        FROM
+                             CPO_RTRN_CALC_BASE_REC RECB
+                            ,DS_CPO_RTRN_DTL        DTL
+                        WHERE
+                                RECB.CPO_ORD_NUM              = #prntDocId#
+                            AND RECB.GLBL_CMPY_CD             = #glblCmpyCd#
+                            AND RECB.CPO_ORD_NUM              = DTL.CPO_ORD_NUM
+                            AND RECB.DS_CPO_RTRN_LINE_NUM     = DTL.DS_CPO_RTRN_LINE_NUM
+                            AND RECB.DS_CPO_RTRN_LINE_SUB_NUM = DTL.DS_CPO_RTRN_LINE_SUB_NUM
+                            <isEqual property="lvlConfFlg" compareValue="Y">
+                                <iterate property="configRtnList" var="configRtnList[]" open="AND DTL.DS_ORD_POSN_NUM IN (" close=")" conjunction=",">
+                                #configRtnList[]#
+                                </iterate>
+                            </isEqual>
+                            <isEqual property="lvlLineFlg" compareValue="Y">
+                                <iterate property="msgD" var="d[]" open="AND (" close=")" conjunction="OR">
+                               (
+                                DTL.DS_ORD_POSN_NUM           = #d[].dsOrdPosnNum_D0#
+                            AND DTL.DS_CPO_RTRN_LINE_NUM      = #d[].xxLineNum_D0#
+                            AND DTL.DS_CPO_RTRN_LINE_SUB_NUM  = #d[].xxCpoLineSubNum_D0#
+                               )
+                                </iterate>
+                            </isEqual>
+                     ), AF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECA.CPO_ORD_NUM
+                                    , RECA.DS_CPO_RTRN_LINE_NUM
+                                    , RECA.DS_CPO_RTRN_LINE_SUB_NUM
+                                    , RECA.SPEC_COND_PRC_PK
+                                ORDER BY
+                                    RECA.EZINTIME, RECA.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECA.*
+                        FROM
+                             CPO_RTRN_CALC_BASE_REC RECA
+                            ,DS_CPO_RTRN_DTL        DTL
+                        WHERE
+                                RECA.CPO_ORD_NUM              = #prntDocId#
+                            AND RECA.GLBL_CMPY_CD             = #glblCmpyCd#
+                            AND RECA.CPO_ORD_NUM              = DTL.CPO_ORD_NUM
+                            AND RECA.DS_CPO_RTRN_LINE_NUM     = DTL.DS_CPO_RTRN_LINE_NUM
+                            AND RECA.DS_CPO_RTRN_LINE_SUB_NUM = DTL.DS_CPO_RTRN_LINE_SUB_NUM
+                            <isEqual property="lvlConfFlg" compareValue="Y">
+                                <iterate property="configRtnList" var="configRtnList[]" open="AND DTL.DS_ORD_POSN_NUM IN (" close=")" conjunction=",">
+                                #configRtnList[]#
+                                </iterate>
+                            </isEqual>
+                            <isEqual property="lvlLineFlg" compareValue="Y">
+                                <iterate property="msgD" var="d[]" open="AND (" close=")" conjunction="OR">
+                               (
+                                DTL.DS_ORD_POSN_NUM           = #d[].dsOrdPosnNum_D0#
+                            AND DTL.DS_CPO_RTRN_LINE_NUM      = #d[].xxLineNum_D0#
+                            AND DTL.DS_CPO_RTRN_LINE_SUB_NUM  = #d[].xxCpoLineSubNum_D0#
+                               )
+                                </iterate>
+                            </isEqual>
+                     ), A2 AS (
+                           <isNotNull property="cpoRtrnCalcBaseAttr">
+                               $cpoRtrnCalcBaseAttr$
+                           </isNotNull>
+                     )
+                     SELECT 
+                          BF1.ROW_NUM
+                         ,AF1.ROW_NUM
+                         ,BF1.BIZ_PROC_LOG_PK AS BF_BIZ_PROC_LOG_PK
+                         ,AF1.BIZ_PROC_LOG_PK AS AF_BIZ_PROC_LOG_PK
+                         ,AF1.CPO_ORD_NUM
+                         ,A2.ATTR
+                         ,A2.ATTR_NAME
+                         ,A2.ATTR_DB_NAME
+                         ,CASE
+                           <isNotNull property="cpoRtrnCalcBaseCaseBf">
+                               $cpoRtrnCalcBaseCaseBf$
+                           </isNotNull>
+                          END AS BF1_VALUE
+                         ,CASE 
+                           <isNotNull property="cpoRtrnCalcBaseCaseAf">
+                               $cpoRtrnCalcBaseCaseAf$
+                           </isNotNull>
+                          END AS AF1_VALUE
+                         ,AF1.EZINTIME AS EVENT_TS
+                     FROM 
+                          BF1
+                         ,AF1
+                         ,A2
+                     WHERE 
+                             AF1.ROW_NUM - 1               = BF1.ROW_NUM
+                         AND AF1.CPO_ORD_NUM               = BF1.CPO_ORD_NUM
+                         AND AF1.DS_CPO_RTRN_LINE_NUM      = BF1.DS_CPO_RTRN_LINE_NUM
+                         AND AF1.DS_CPO_RTRN_LINE_SUB_NUM  = BF1.DS_CPO_RTRN_LINE_SUB_NUM
+                         AND AF1.SPEC_COND_PRC_PK          = BF1.SPEC_COND_PRC_PK
+                         AND AF1.EZCANCELFLAG              = '0'
+                         AND BF1.EZCANCELFLAG              = '0'
+                         AND (
+                           <isNotNull property="cpoRtrnCalcBaseComp">
+                               $cpoRtrnCalcBaseComp$
+                           </isNotNull>
+                    )
+                )
+                WHERE BF1_VALUE &lt;&gt; AF1_VALUE
+                 OR ( BF1_VALUE IS NULL     AND AF1_VALUE IS NOT NULL )
+                 OR ( BF1_VALUE IS NOT NULL AND AF1_VALUE IS NULL )
+            </isEqual>
+            
+-- [Service Price]
+            <isEqual property="dsContrRecFlg" compareValue="Y">
+                <isEqual property="dsContrRecUnionFlg" compareValue="Y">
+                UNION --ALL
+                </isEqual>
+                SELECT
+                     CPO_ORD_NUM
+                    ,ATTR
+                    ,ATTR_NAME
+                    ,ATTR_DB_NAME
+                    ,BF1_VALUE
+                    ,AF1_VALUE
+                    ,EVENT_TS
+                    ,BF_BIZ_PROC_LOG_PK
+                    ,AF_BIZ_PROC_LOG_PK
+                FROM 
+                (
+                    WITH BF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECB.DS_CONTR_PK
+                                ORDER BY
+                                    RECB.EZINTIME, RECB.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECB.*
+                            ,DCD.CPO_ORD_NUM     CPO_ORD_NUM
+                        FROM
+                             DS_CONTR_REC            RECB
+                            ,DS_CONTR_DTL            DCD
+                        WHERE
+                                DCD.CPO_ORD_NUM      = #prntDocId#
+                            AND DCD.GLBL_CMPY_CD     = #glblCmpyCd#
+                            AND DCD.EZCANCELFLAG     = '0'
+                            AND RECB.DS_CONTR_PK     = DCD.DS_CONTR_PK
+                            AND RECB.GLBL_CMPY_CD    = DCD.GLBL_CMPY_CD
+                            AND RECB.EZCANCELFLAG    = '0'
+                     ), AF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECB.DS_CONTR_PK
+                                ORDER BY
+                                    RECB.EZINTIME, RECB.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECB.*
+                            ,DCD.CPO_ORD_NUM     CPO_ORD_NUM
+                        FROM
+                             DS_CONTR_REC            RECB
+                            ,DS_CONTR_DTL            DCD
+                        WHERE
+                                DCD.CPO_ORD_NUM      = #prntDocId#
+                            AND DCD.GLBL_CMPY_CD     = #glblCmpyCd#
+                            AND DCD.EZCANCELFLAG     = '0'
+                            AND RECB.DS_CONTR_PK     = DCD.DS_CONTR_PK
+                            AND RECB.GLBL_CMPY_CD    = DCD.GLBL_CMPY_CD
+                            AND RECB.EZCANCELFLAG    = '0'
+                     ), A2 AS (
+                           <isNotNull property="dsContrAttr">
+                               $dsContrAttr$
+                           </isNotNull>
+                     )
+                     SELECT 
+                          BF1.ROW_NUM
+                         ,AF1.ROW_NUM
+                         ,BF1.BIZ_PROC_LOG_PK AS BF_BIZ_PROC_LOG_PK
+                         ,AF1.BIZ_PROC_LOG_PK AS AF_BIZ_PROC_LOG_PK
+                         ,AF1.CPO_ORD_NUM
+                         ,A2.ATTR
+                         ,A2.ATTR_NAME
+                         ,A2.ATTR_DB_NAME
+                         ,CASE
+                           <isNotNull property="dsContrCaseBf">
+                               $dsContrCaseBf$
+                           </isNotNull>
+                          END AS BF1_VALUE
+                         ,CASE 
+                           <isNotNull property="dsContrCaseAf">
+                               $dsContrCaseAf$
+                           </isNotNull>
+                          END AS AF1_VALUE
+                         ,AF1.EZINTIME AS EVENT_TS
+                     FROM 
+                          BF1
+                         ,AF1
+                         ,A2
+                     WHERE 
+                             AF1.ROW_NUM - 1             = BF1.ROW_NUM
+                         AND AF1.DS_CONTR_PK             = BF1.DS_CONTR_PK
+                         AND AF1.EZCANCELFLAG            = '0'
+                         AND BF1.EZCANCELFLAG            = '0'
+                         AND (
+                           <isNotNull property="dsContrComp">
+                               $dsContrComp$
+                           </isNotNull>
+                    )
+                )
+                WHERE BF1_VALUE &lt;&gt; AF1_VALUE
+                 OR ( BF1_VALUE IS NULL     AND AF1_VALUE IS NOT NULL )
+                 OR ( BF1_VALUE IS NOT NULL AND AF1_VALUE IS NULL )
+            </isEqual>
+
+            <isEqual property="dsContrDtlRecFlg" compareValue="Y">
+                <isEqual property="dsContrDtlRecUnionFlg" compareValue="Y">
+                UNION --ALL
+                </isEqual>
+                SELECT
+                     CPO_ORD_NUM
+                    ,ATTR
+                    ,ATTR_NAME
+                    ,ATTR_DB_NAME
+                    ,BF1_VALUE
+                    ,AF1_VALUE
+                    ,EVENT_TS
+                    ,BF_BIZ_PROC_LOG_PK
+                    ,AF_BIZ_PROC_LOG_PK
+                FROM 
+                (
+                    WITH BF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECB.CPO_ORD_NUM
+                                  , RECB.SHELL_LINE_NUM
+                                ORDER BY
+                                    RECB.EZINTIME, RECB.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECB.*
+                        FROM
+                             DS_CONTR_DTL_REC         RECB
+                        WHERE
+                                RECB.CPO_ORD_NUM    = #prntDocId#
+                            AND RECB.GLBL_CMPY_CD   = #glblCmpyCd#
+                            AND RECB.EZCANCELFLAG   = '0'
+                     ), AF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECB.CPO_ORD_NUM
+                                  , RECB.SHELL_LINE_NUM
+                                ORDER BY
+                                    RECB.EZINTIME, RECB.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECB.*
+                        FROM
+                             DS_CONTR_DTL_REC         RECB
+                        WHERE
+                                RECB.CPO_ORD_NUM    = #prntDocId#
+                            AND RECB.GLBL_CMPY_CD   = #glblCmpyCd#
+                            AND RECB.EZCANCELFLAG   = '0'
+
+                     ), A2 AS (
+                           <isNotNull property="dsContrDtlAttr">
+                               $dsContrDtlAttr$
+                           </isNotNull>
+                     )
+                     SELECT 
+                          BF1.ROW_NUM
+                         ,AF1.ROW_NUM
+                         ,BF1.BIZ_PROC_LOG_PK AS BF_BIZ_PROC_LOG_PK
+                         ,AF1.BIZ_PROC_LOG_PK AS AF_BIZ_PROC_LOG_PK
+                         ,AF1.CPO_ORD_NUM
+                         ,A2.ATTR
+                         ,A2.ATTR_NAME
+                         ,A2.ATTR_DB_NAME
+                         ,CASE
+                           <isNotNull property="dsContrDtlCaseBf">
+                               $dsContrDtlCaseBf$
+                           </isNotNull>
+                          END AS BF1_VALUE
+                         ,CASE 
+                           <isNotNull property="dsContrDtlCaseAf">
+                               $dsContrDtlCaseAf$
+                           </isNotNull>
+                          END AS AF1_VALUE
+                         ,AF1.EZINTIME AS EVENT_TS
+                     FROM 
+                          BF1
+                         ,AF1
+                         ,A2
+                     WHERE 
+                             AF1.ROW_NUM - 1             = BF1.ROW_NUM
+                         AND AF1.CPO_ORD_NUM             = BF1.CPO_ORD_NUM
+                         AND AF1.SHELL_LINE_NUM          = BF1.SHELL_LINE_NUM
+                         AND AF1.EZCANCELFLAG            = '0'
+                         AND BF1.EZCANCELFLAG            = '0'
+                         AND (
+                           <isNotNull property="dsContrDtlComp">
+                               $dsContrDtlComp$
+                           </isNotNull>
+                    )
+                )
+                WHERE BF1_VALUE &lt;&gt; AF1_VALUE
+                 OR ( BF1_VALUE IS NULL     AND AF1_VALUE IS NOT NULL )
+                 OR ( BF1_VALUE IS NOT NULL AND AF1_VALUE IS NULL )
+            </isEqual>
+
+            <isEqual property="svcMemoRecFlg" compareValue="Y">
+                <isEqual property="svcMemoRecUnionFlg" compareValue="Y">
+                UNION --ALL
+                </isEqual>
+                SELECT
+                     CPO_ORD_NUM
+                    ,ATTR
+                    ,ATTR_NAME
+                    ,ATTR_DB_NAME
+                    ,BF1_VALUE
+                    ,AF1_VALUE
+                    ,EVENT_TS
+                    ,BF_BIZ_PROC_LOG_PK
+                    ,AF_BIZ_PROC_LOG_PK
+                FROM 
+                (
+                    WITH BF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    SVC_MEMO_PK
+                                ORDER BY
+                                    RECB.EZINTIME, RECB.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECB.*
+                            ,DCD.CPO_ORD_NUM     CPO_ORD_NUM
+                        FROM
+                             SVC_MEMO_REC            RECB
+                            ,DS_CONTR_DTL            DCD
+                        WHERE
+                                RECB.GLBL_CMPY_CD    = #glblCmpyCd#
+                            AND RECB.EZCANCELFLAG    = '0'
+
+                            AND RECB.GLBL_CMPY_CD    = DCD.GLBL_CMPY_CD
+                            AND RECB.DS_CONTR_PK     = DCD.DS_CONTR_PK
+                            AND DCD.CPO_ORD_NUM      = #prntDocId#
+                            AND DCD.EZCANCELFLAG     = '0'
+
+                     ), AF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    SVC_MEMO_PK
+                                ORDER BY
+                                    RECB.EZINTIME, RECB.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECB.*
+                            ,DCD.CPO_ORD_NUM     CPO_ORD_NUM
+                        FROM
+                             SVC_MEMO_REC            RECB
+                            ,DS_CONTR_DTL            DCD
+                        WHERE
+                                RECB.GLBL_CMPY_CD    = #glblCmpyCd#
+                            AND RECB.EZCANCELFLAG    = '0'
+
+                            AND RECB.GLBL_CMPY_CD    = DCD.GLBL_CMPY_CD
+                            AND RECB.DS_CONTR_PK     = DCD.DS_CONTR_PK
+                            AND DCD.CPO_ORD_NUM      = #prntDocId#
+                            AND DCD.EZCANCELFLAG     = '0'
+                     ), A2 AS (
+                           <isNotNull property="svcMemoAttr">
+                               $svcMemoAttr$
+                           </isNotNull>
+                     )
+                     SELECT 
+                          BF1.ROW_NUM
+                         ,AF1.ROW_NUM
+                         ,BF1.BIZ_PROC_LOG_PK AS BF_BIZ_PROC_LOG_PK
+                         ,AF1.BIZ_PROC_LOG_PK AS AF_BIZ_PROC_LOG_PK
+                         ,AF1.CPO_ORD_NUM
+                         ,A2.ATTR
+                         ,A2.ATTR_NAME
+                         ,A2.ATTR_DB_NAME
+                         ,CASE
+                           <isNotNull property="svcMemoCaseBf">
+                               $svcMemoCaseBf$
+                           </isNotNull>
+                          END AS BF1_VALUE
+                         ,CASE 
+                           <isNotNull property="svcMemoCaseAf">
+                               $svcMemoCaseAf$
+                           </isNotNull>
+                          END AS AF1_VALUE
+                         ,AF1.EZINTIME AS EVENT_TS
+                     FROM 
+                          BF1
+                         ,AF1
+                         ,A2
+                     WHERE 
+                             AF1.ROW_NUM - 1             = BF1.ROW_NUM
+                         AND AF1.SVC_MEMO_PK             = BF1.SVC_MEMO_PK
+                         AND AF1.EZCANCELFLAG            = '0'
+                         AND BF1.EZCANCELFLAG            = '0'
+                         AND (
+                           <isNotNull property="svcMemoComp">
+                               $svcMemoComp$
+                           </isNotNull>
+                    )
+                )
+                WHERE BF1_VALUE &lt;&gt; AF1_VALUE
+                 OR ( BF1_VALUE IS NULL     AND AF1_VALUE IS NOT NULL )
+                 OR ( BF1_VALUE IS NOT NULL AND AF1_VALUE IS NULL )
+            </isEqual>
+
+            <isEqual property="dsContrAddlChrgRecFlg" compareValue="Y">
+                <isEqual property="dsContrAddlChrgRecUnionFlg" compareValue="Y">
+                UNION
+                </isEqual>
+                SELECT
+                     CPO_ORD_NUM
+                    ,ATTR
+                    ,ATTR_NAME
+                    ,ATTR_DB_NAME
+                    ,BF1_VALUE
+                    ,AF1_VALUE
+                    ,EVENT_TS
+                    ,BF_BIZ_PROC_LOG_PK
+                    ,AF_BIZ_PROC_LOG_PK
+                FROM 
+                (
+                    WITH BF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECB.DS_CONTR_ADDL_CHRG_PK
+                                ORDER BY
+                                    RECB.EZINTIME, RECB.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            , RECB.*
+                            , DCD.CPO_ORD_NUM
+                        FROM
+                             DS_CONTR_ADDL_CHRG_REC  RECB
+                            ,DS_CONTR_DTL            DCD
+                        WHERE
+                                DCD.CPO_ORD_NUM         = #prntDocId#
+                            AND RECB.GLBL_CMPY_CD       = #glblCmpyCd#
+                            AND RECB.EZCANCELFLAG       = '0'
+                            AND RECB.GLBL_CMPY_CD       = DCD.GLBL_CMPY_CD
+                            AND RECB.DS_CONTR_DTL_PK    = DCD.DS_CONTR_DTL_PK
+                            AND DCD.EZCANCELFLAG        = '0'
+                     ), AF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECB.DS_CONTR_ADDL_CHRG_PK
+                                ORDER BY
+                                    RECB.EZINTIME, RECB.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            , RECB.*
+                            , DCD.CPO_ORD_NUM
+                        FROM
+                             DS_CONTR_ADDL_CHRG_REC  RECB
+                            ,DS_CONTR_DTL            DCD
+                        WHERE
+                                DCD.CPO_ORD_NUM         = #prntDocId#
+                            AND RECB.GLBL_CMPY_CD       = #glblCmpyCd#
+                            AND RECB.EZCANCELFLAG       = '0'
+                            AND RECB.GLBL_CMPY_CD       = DCD.GLBL_CMPY_CD
+                            AND RECB.DS_CONTR_DTL_PK    = DCD.DS_CONTR_DTL_PK
+                            AND DCD.EZCANCELFLAG        = '0'
+                     ), A2 AS (
+                           <isNotNull property="dsContrAddlChrgAttr">
+                               $dsContrAddlChrgAttr$
+                           </isNotNull>
+                     )
+                     SELECT 
+                          BF1.ROW_NUM
+                         ,AF1.ROW_NUM
+                         ,BF1.BIZ_PROC_LOG_PK AS BF_BIZ_PROC_LOG_PK
+                         ,AF1.BIZ_PROC_LOG_PK AS AF_BIZ_PROC_LOG_PK
+                         ,AF1.CPO_ORD_NUM
+                         ,A2.ATTR
+                         ,A2.ATTR_NAME
+                         ,A2.ATTR_DB_NAME
+                         ,CASE
+                           <isNotNull property="dsContrAddlChrgCaseBf">
+                               $dsContrAddlChrgCaseBf$
+                           </isNotNull>
+                          END AS BF1_VALUE
+                         ,CASE 
+                           <isNotNull property="dsContrAddlChrgCaseAf">
+                               $dsContrAddlChrgCaseAf$
+                           </isNotNull>
+                          END AS AF1_VALUE
+                         ,AF1.EZINTIME AS EVENT_TS
+                     FROM 
+                          BF1
+                         ,AF1
+                         ,A2
+                     WHERE 
+                             AF1.ROW_NUM - 1             = BF1.ROW_NUM
+                         AND AF1.CPO_ORD_NUM             = BF1.CPO_ORD_NUM
+                         AND AF1.DS_CONTR_ADDL_CHRG_PK   = BF1.DS_CONTR_ADDL_CHRG_PK
+                         AND AF1.EZCANCELFLAG            = '0'
+                         AND BF1.EZCANCELFLAG            = '0'
+                         AND (
+                           <isNotNull property="dsContrAddlChrgComp">
+                               $dsContrAddlChrgComp$
+                           </isNotNull>
+                    )
+                )
+                WHERE BF1_VALUE &lt;&gt; AF1_VALUE
+                 OR ( BF1_VALUE IS NULL     AND AF1_VALUE IS NOT NULL )
+                 OR ( BF1_VALUE IS NOT NULL AND AF1_VALUE IS NULL )
+            </isEqual>
+
+            <isEqual property="compDummyOutputFlg" compareValue="Y">
+                SELECT
+                     '' AS CPO_ORD_NUM
+                    ,'' AS ATTR
+                    ,'' AS ATTR_NAME
+                    ,'' AS ATTR_DB_NAME
+                    ,'' AS BF1_VALUE 
+                    ,'' AS AF1_VALUE
+                    ,'' AS EVENT_TS
+                    ,'' AS BF_BIZ_PROC_LOG_PK
+                    ,'' AS AF_BIZ_PROC_LOG_PK
+                FROM 
+                    DUAL
+            </isEqual>
+
+            ) COMP
+
+            WHERE
+                    SBPL.PRNT_DOC_ID     = #prntDocId#
+                AND SBPL.PROC_ID         = #procId#
+
+              <isNotNull property="docTpCd">
+                AND SBPL.DOC_TP_CD           = #docTpCd#
+              </isNotNull>
+              <isNotNull property="docIdConfigList">
+                AND (
+                    SBPL.DOC_ID IN
+                <iterate property="docIdConfigList" var="docIdConfig[]" open=" (" close=")" conjunction=",">
+                    #docIdConfig[]#
+                </iterate>
+                    AND NOT ABP.EVENT_NM LIKE 'Shell%'
+                <iterate property="docIdConfigLineList" var="docIdConfigLine[]">
+                    OR SBPL.DOC_ID LIKE #docIdConfigLine[]#
+                </iterate>
+                )
+              </isNotNull>
+              <isNotNull property="docIdLineList">
+                AND (
+                <iterate property="docIdLineList" var="docIdLine[]" conjunction=" OR ">
+                    SBPL.DOC_ID LIKE #docIdLine[]#
+                </iterate>
+                )
+              </isNotNull>
+                AND SBPL.PROC_ID         = ABP.PROC_ID
+                AND SBPL.EVENT_ID        = ABP.EVENT_ID
+                AND SBPL.EZCANCELFLAG    = '0'
+                AND ABP.USR_OPS_FLG      = #userOpsFlg#
+                AND ABP.GLBL_CMPY_CD     = #glblCmpyCd#
+                AND ABP.EZCANCELFLAG     = '0'
+                AND SBPL.BIZ_PROC_LOG_PK = COMP.AF_BIZ_PROC_LOG_PK
+                AND SBPL.EZINUSERID      = AP.USR_NM(+)
+                AND AP.GLBL_CMPY_CD(+)   = ABP.GLBL_CMPY_CD
+                AND AP.EZCANCELFLAG(+)   = '0'
+                --
+                AND VCLA.GLBL_CMPY_CD(+)         = ABP.GLBL_CMPY_CD
+                AND VCLA.REC_DB_NM(+)            = COMP.ATTR_DB_NAME
+                AND VCLA.REC_DB_ITEM_NM(+)       = COMP.ATTR    <!-- QC#12740 -->
+                AND VCLA.REC_DB_ITEM_ATTRB_NM(+) = COMP.ATTR_NAME
+                AND VCLA.EZCANCELFLAG(+)         = '0'
+                <!-- 2022/10/20 QC#60258 Add Start -->
+                <isNotNull property = "xxFromDt">
+                    AND SBPL.EZINTIME &gt; #xxFromDt#
+                </isNotNull>
+                <isNotNull property = "xxThruDt">
+                    AND SBPL.EZINTIME &lt; #xxThruDt#
+                </isNotNull>
+                <isNotNull property = "eventNm">
+                    AND SBPL.EVENT_ID IN (SELECT BE.EVENT_ID 
+
+                                            FROM BIZ_EVENT BE
+
+                                            WHERE BE.GLBL_CMPY_CD          = #glblCmpyCd#
+                                              AND BE.EZCANCELFLAG          = '0'
+                                              AND BE.EVENT_NM              = #eventNm#
+                                            )
+                 </isNotNull>
+                <isNotNull property = "ordPrftTrxCatgCd">
+                     AND SBPL.DOC_ID        IS NOT NULL
+                     <isEqual property="ordPrftTrxCatgCd" compareValue="I">
+                         AND SBPL.DOC_TP_CD      = #docTpCdRT#
+                     </isEqual>
+                     <isEqual property="ordPrftTrxCatgCd" compareValue="S">
+                         AND SBPL.EVENT_ID    LIKE 'Shell%'
+                         AND SBPL.DOC_TP_CD     &lt;&gt;  #docTpCdRT#
+                     </isEqual>
+                     <isEqual property="ordPrftTrxCatgCd" compareValue="O">
+                         AND SBPL.EVENT_ID   NOT LIKE 'Shell%'
+                         AND SBPL.DOC_TP_CD     &lt;&gt;  #docTpCdRT#
+                     </isEqual>
+                  </isNotNull>
+                 <isNotNull property = "docId">
+                     <isEqual property="lineSearchTypeFlg" compareValue="Y">
+                         AND( 
+                               (
+                                  (
+                                     SELECT D.DPLY_LINE_NUM
+
+                                     FROM   CPO_DTL_V D
+
+                                     WHERE D.GLBL_CMPY_CD  = #glblCmpyCd#
+                                       AND D.CPO_ORD_NUM   = SBPL.PRNT_DOC_ID
+                                       AND SBPL.DOC_ID     = D.CPO_DTL_LINE_NUM || '.' || D.CPO_DTL_LINE_SUB_NUM
+                                       AND D.EZCANCELFLAG  = '0'
+                                   ) LIKE #docId#
+                               )
+                            OR
+                               (
+                                   (
+                                     SELECT D.DPLY_LINE_NUM
+
+                                     FROM   DS_CPO_RTRN_DTL_V D
+
+                                     WHERE  D.GLBL_CMPY_CD      = #glblCmpyCd#
+                                      AND D.CPO_ORD_NUM   = SBPL.PRNT_DOC_ID
+                                      AND SBPL.DOC_ID     = D.DS_CPO_RTRN_LINE_NUM || '.' || D.DS_CPO_RTRN_LINE_SUB_NUM
+                                      AND D.EZCANCELFLAG  = '0'
+                                    ) LIKE #docId# 
+                                )
+                            )
+                     </isEqual>
+                     <isEqual property="lineSearchTypeFlg" compareValue="N">
+                          AND
+                             (
+                                (
+                                  EXISTS
+                                         (
+                                             SELECT D.DPLY_LINE_NUM
+
+                                             FROM   CPO_DTL_V D
+
+                                             WHERE D.GLBL_CMPY_CD  = #glblCmpyCd#
+                                               AND D.CPO_ORD_NUM   = SBPL.PRNT_DOC_ID
+                                               AND SBPL.PRNT_DOC_ID= #prntDocId#
+                                               AND SBPL.DOC_ID     = D.CPO_DTL_LINE_NUM || '.' || D.CPO_DTL_LINE_SUB_NUM
+                                               AND D.EZCANCELFLAG  = '0'
+                                               <iterate property="docIdList" var="docIdListDtl[]" open="AND D.DPLY_LINE_NUM IN (" conjunction= "," close=")">
+                                                  #docIdListDtl[]#
+                                               </iterate>
+                                          ) 
+                                   )
+                                OR
+                                   (
+                                     EXISTS    (
+                                                SELECT D.DPLY_LINE_NUM
+
+                                                FROM   DS_CPO_RTRN_DTL_V D
+
+                                                WHERE D.GLBL_CMPY_CD  = #glblCmpyCd#
+                                                  AND D.CPO_ORD_NUM   = SBPL.PRNT_DOC_ID
+                                                  AND SBPL.PRNT_DOC_ID= #prntDocId#
+                                                  AND SBPL.DOC_ID     = D.DS_CPO_RTRN_LINE_NUM || '.' || D.DS_CPO_RTRN_LINE_SUB_NUM
+                                                  AND D.EZCANCELFLAG  = '0'
+                                                  <iterate property="docIdList" var="docIdListDtl[]" open="AND D.DPLY_LINE_NUM IN (" conjunction= "," close=")">
+                                                     #docIdListDtl[]#
+                                                  </iterate>
+                                              )
+                                    )
+                            )
+                     </isEqual>
+                  </isNotNull>
+                  <isNotNull property = "xxSrUsrId">
+                    AND SBPL.EZINUSERID = UPPER(#xxSrUsrId#)
+                  </isNotNull>
+                  <isNotNull property = "xxPsnNm">
+                    AND  UPPER (AP.FIRST_NM || ' ' || AP.LAST_NM ) LIKE UPPER(#xxPsnNm#)
+                  </isNotNull>
+                <isNotNull property = "recDbItemAttrbNm">
+                    AND UPPER (COMP.ATTR_NAME) LIKE UPPER(#recDbItemAttrbNm#)
+                </isNotNull>
+                <isNotNull property = "xxRecValBefTxt">
+                    AND UPPER (COMP.BF1_VALUE) LIKE UPPER(#xxRecValBefTxt#)
+                </isNotNull>
+                <isNotNull property = "xxRecValAftTxt">
+                    AND UPPER(COMP.AF1_VALUE) LIKE UPPER(#xxRecValAftTxt#)
+                </isNotNull>
+                <!-- 2022/10/20 QC#60258 Add Start -->
+            ORDER BY
+                 SBPL.EZINTIME      ASC
+                , SORT_CATG         ASC NULLS FIRST
+                , (CASE 
+                    WHEN TRIM(TRANSLATE(SORT_DOC_ID, '0123456789', ' ')) IS NULL
+                    THEN TO_NUMBER(SORT_DOC_ID)
+
+                    WHEN TRIM( 
+                        TRANSLATE( 
+                            SUBSTR(SORT_DOC_ID, 1, INSTR(SORT_DOC_ID, '.') - 1)
+                            , '0123456789'
+                            , ' '
+                        )
+                    ) IS NULL
+                    THEN TO_NUMBER( 
+                        SUBSTR(SORT_DOC_ID, 1, INSTR(SORT_DOC_ID, '.') - 1)
+                    )
+
+                    ELSE 9999999999999999
+                    END)               ASC NULLS FIRST
+                , SORT_DOC_ID          ASC NULLS FIRST
+                , SBPL.BIZ_PROC_LOG_PK ASC
+                , VCLA.VIEW_CHNG_LVL_GRP_SORT_NUM
+                , VCLA.VIEW_CHNG_ITEM_SORT_NUM
+        )
+    WHERE
+        <!-- 2022/10/20 QC#60258 Mod Start-->
+        <!-- ROWNUM &lt; #rowNum# -->
+        ROWNUM &lt;= #rowNum#
+        <!-- 2022/10/20 QC#60258 Mod End-->
+    </statement>
+    <resultMap id="result.getDetailOrderList"   class="NWAL1810_BSMsg">
+        <result property="eventNm_B0"            column="EVENT_NM"              javaType="EZDSStringItem"/>
+        <result property="ordPrftTrxCatgCd_B0"   column="ORD_PRFT_TRX_CATG_CD"  javaType="EZDSStringItem"/>
+        <result property="xxDtTm_B0"             column="EZINTIME"              javaType="EZDSStringItem"/>
+        <result property="docId_B0"              column="DOC_ID"                javaType="EZDSStringItem"/>
+        <result property="xxSrUsrId_B0"          column="EZINUSERID"            javaType="EZDSStringItem"/>
+        <result property="xxPsnNm_B0"            column="PSN_NM"                javaType="EZDSStringItem"/>
+        <result property="recDbItemAttrbNm_B0"   column="ATTR_NAME"             javaType="EZDSStringItem"/>
+        <result property="xxRecValBefTxt_B0"     column="BF1_VALUE"             javaType="EZDSStringItem"/>
+        <result property="xxRecValAftTxt_B0"     column="AF1_VALUE"             javaType="EZDSStringItem"/>
+    </resultMap>
+
+    <statement id ="getDetailQuoteList" parameterClass="Map"  resultMap="result.getDetailQuoteList">
+    SELECT
+        *
+    FROM
+        (
+        SELECT 
+             ABP.EVENT_NM
+             --
+               , CASE
+                   WHEN SBPL.DOC_ID        IS NULL        THEN NULL
+                   ELSE                                        #ordPrftTrxCatgOutbound#
+                   END ORD_PRFT_TRX_CATG_CD
+             --
+            ,SBPL.EZINTIME
+            ,SBPL.DOC_ID
+            ,SBPL.EZINUSERID
+            ,AP.FIRST_NM || ' ' || AP.LAST_NM AS PSN_NM
+            ,COMP.ATTR
+            ,COMP.ATTR_NAME
+            ,COMP.BF1_VALUE
+            ,COMP.AF1_VALUE 
+        FROM 
+             BIZ_PROC_LOG  SBPL
+            ,BIZ_EVENT     ABP
+            ,AUTH_PSN      AP
+            ,(
+-- [ALL]
+            <isEqual property="splyQuoteRecFlg" compareValue="Y">
+                SELECT
+                     SPLY_QUOTE_NUM
+                    ,ATTR
+                    ,ATTR_NAME
+                    ,ATTR_DB_NAME
+                    --
+                    ,GRP_SORT_NUM
+                    ,ITEM_SORT_NUM
+                    --
+                    ,BF1_VALUE
+                    ,AF1_VALUE
+                    ,EVENT_TS
+                    ,BF_BIZ_PROC_LOG_PK
+                    ,AF_BIZ_PROC_LOG_PK
+                FROM 
+                (
+                    WITH BF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECB.SPLY_QUOTE_NUM
+                                ORDER BY
+                                    RECB.EZINTIME, RECB.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECB.*
+                        FROM
+                            SPLY_QUOTE_REC RECB
+                        WHERE
+                                RECB.SPLY_QUOTE_NUM = #prntDocId#
+                            AND RECB.GLBL_CMPY_CD   = #glblCmpyCd#
+                     ), AF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECA.SPLY_QUOTE_NUM
+                                ORDER BY
+                                    RECA.EZINTIME, RECA.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECA.*
+                        FROM
+                            SPLY_QUOTE_REC RECA
+                        WHERE
+                                RECA.SPLY_QUOTE_NUM = #prntDocId#
+                            AND RECA.GLBL_CMPY_CD   = #glblCmpyCd#
+                     ), A2 AS (
+                           <isNotNull property="dbNameSplyQuoteRec">
+                            SELECT
+                                      REC_DB_ITEM_NM                ATTR
+                                    , REC_DB_ITEM_ATTRB_NM          ATTR_NAME
+                                    , REC_DB_NM                     ATTR_DB_NAME
+                                    , VIEW_CHNG_LVL_GRP_SORT_NUM    GRP_SORT_NUM
+                                    , VIEW_CHNG_ITEM_SORT_NUM       ITEM_SORT_NUM
+                                FROM
+                                    VIEW_CHNG_LOG_ATTRB A 
+                                WHERE
+                                    A.REC_DB_NM = #dbNameSplyQuoteRec# -- 'SPLY_QUOTE_REC'
+                                ORDER BY
+                                    A.VIEW_CHNG_LVL_GRP_SORT_NUM
+                                    , A.VIEW_CHNG_ITEM_SORT_NUM
+                           </isNotNull>
+                     )
+                     SELECT 
+                          BF1.ROW_NUM
+                         ,AF1.ROW_NUM
+                         ,BF1.BIZ_PROC_LOG_PK AS BF_BIZ_PROC_LOG_PK
+                         ,AF1.BIZ_PROC_LOG_PK AS AF_BIZ_PROC_LOG_PK
+                         ,AF1.SPLY_QUOTE_NUM
+                         ,A2.ATTR
+                         ,A2.ATTR_NAME
+                         ,A2.ATTR_DB_NAME
+                         --
+                         ,A2.GRP_SORT_NUM
+                         ,A2.ITEM_SORT_NUM
+                         --
+                         ,CASE 
+                           <isNotNull property="splyQuoteCaseBf">
+                               $splyQuoteCaseBf$
+                           </isNotNull>
+                          END AS BF1_VALUE
+                         ,CASE 
+                           <isNotNull property="splyQuoteCaseAf">
+                               $splyQuoteCaseAf$
+                           </isNotNull>
+                          END AS AF1_VALUE
+                         ,AF1.EZINTIME AS EVENT_TS
+                     FROM 
+                          BF1
+                         ,AF1
+                         ,A2
+                     WHERE 
+                             AF1.ROW_NUM - 1     = BF1.ROW_NUM
+                         AND AF1.SPLY_QUOTE_NUM  = BF1.SPLY_QUOTE_NUM
+                         AND AF1.EZCANCELFLAG    = '0'
+                         AND BF1.EZCANCELFLAG    = '0'
+                         AND (
+                           <isNotNull property="splyQuoteComp">
+                               $splyQuoteComp$
+                           </isNotNull>
+                    )
+                )
+                WHERE BF1_VALUE &lt;&gt; AF1_VALUE
+                 OR ( BF1_VALUE IS NULL     AND AF1_VALUE IS NOT NULL )
+                 OR ( BF1_VALUE IS NOT NULL AND AF1_VALUE IS NULL )
+            </isEqual>
+            
+            <isEqual property="splyQuoteSlsCrRecFlg" compareValue="Y">
+                <isEqual property="splyQuoteSlsCrRecUnionFlg" compareValue="Y">
+                UNION ALL
+                </isEqual>
+                SELECT
+                     SPLY_QUOTE_NUM
+                    ,ATTR
+                    ,ATTR_NAME
+                    ,ATTR_DB_NAME
+                    --
+                    ,GRP_SORT_NUM
+                    ,ITEM_SORT_NUM
+                    --
+                    ,BF1_VALUE
+                    ,AF1_VALUE
+                    ,EVENT_TS
+                    ,BF_BIZ_PROC_LOG_PK
+                    ,AF_BIZ_PROC_LOG_PK
+                FROM 
+                (
+                    WITH BF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECB.SPLY_QUOTE_NUM
+                                    , RECB.SLS_REP_TOC_CD
+                                    , RECB.SLS_REP_ROLE_TP_CD
+                                ORDER BY
+                                    RECB.EZINTIME, RECB.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECB.*
+                        FROM
+                            SPLY_QUOTE_SLS_CR_REC RECB
+                        WHERE
+                                RECB.SPLY_QUOTE_NUM = #prntDocId#
+                            AND RECB.GLBL_CMPY_CD   = #glblCmpyCd#
+                     ), AF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECA.SPLY_QUOTE_NUM
+                                    , RECA.SLS_REP_TOC_CD
+                                    , RECA.SLS_REP_ROLE_TP_CD
+                                ORDER BY
+                                    RECA.EZINTIME, RECA.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECA.*
+                        FROM
+                            SPLY_QUOTE_SLS_CR_REC RECA
+                        WHERE
+                                RECA.SPLY_QUOTE_NUM = #prntDocId#
+                            AND RECA.GLBL_CMPY_CD   = #glblCmpyCd#
+                     ), A2 AS (
+                           <isNotNull property="dbNameSplyQuoteSlsCrRec">
+                            SELECT
+                                      REC_DB_ITEM_NM                ATTR
+                                    , REC_DB_ITEM_ATTRB_NM          ATTR_NAME
+                                    , REC_DB_NM                     ATTR_DB_NAME
+                                    , VIEW_CHNG_LVL_GRP_SORT_NUM    GRP_SORT_NUM
+                                    , VIEW_CHNG_ITEM_SORT_NUM       ITEM_SORT_NUM
+                                FROM
+                                    VIEW_CHNG_LOG_ATTRB A 
+                                WHERE
+                                    A.REC_DB_NM = #dbNameSplyQuoteSlsCrRec# -- 'SPLY_QUOTE_SLS_CR_REC'
+                                ORDER BY
+                                    A.VIEW_CHNG_LVL_GRP_SORT_NUM
+                                    , A.VIEW_CHNG_ITEM_SORT_NUM
+                           </isNotNull>
+                     )
+                     SELECT 
+                          BF1.ROW_NUM
+                         ,AF1.ROW_NUM
+                         ,BF1.BIZ_PROC_LOG_PK AS BF_BIZ_PROC_LOG_PK
+                         ,AF1.BIZ_PROC_LOG_PK AS AF_BIZ_PROC_LOG_PK
+                         ,AF1.SPLY_QUOTE_NUM
+                         ,A2.ATTR
+                         ,A2.ATTR_NAME
+                         ,A2.ATTR_DB_NAME
+                         --
+                         ,A2.GRP_SORT_NUM
+                         ,A2.ITEM_SORT_NUM
+                         --
+                         ,CASE
+                           <isNotNull property="splyQuoteSlsCrCaseBf">
+                               $splyQuoteSlsCrCaseBf$
+                           </isNotNull>
+                          END AS BF1_VALUE 
+                         ,CASE 
+                           <isNotNull property="splyQuoteSlsCrCaseAf">
+                               $splyQuoteSlsCrCaseAf$
+                           </isNotNull>
+                          END AS AF1_VALUE
+                         ,AF1.EZINTIME AS EVENT_TS
+                     FROM 
+                          BF1
+                         ,AF1
+                         ,A2
+                     WHERE 
+                             AF1.ROW_NUM - 1        = BF1.ROW_NUM
+                         AND AF1.SPLY_QUOTE_NUM     = BF1.SPLY_QUOTE_NUM
+                         AND AF1.SLS_REP_TOC_CD     = BF1.SLS_REP_TOC_CD
+                         AND AF1.SLS_REP_ROLE_TP_CD = BF1.SLS_REP_ROLE_TP_CD
+                         AND AF1.EZCANCELFLAG       = '0'
+                         AND BF1.EZCANCELFLAG       = '0'
+                         AND (
+                           <isNotNull property="splyQuoteSlsCrComp">
+                               $splyQuoteSlsCrComp$
+                           </isNotNull>
+                    )
+                )
+                WHERE BF1_VALUE &lt;&gt; AF1_VALUE
+                 OR ( BF1_VALUE IS NULL     AND AF1_VALUE IS NOT NULL )
+                 OR ( BF1_VALUE IS NOT NULL AND AF1_VALUE IS NULL )
+            </isEqual>
+-- [Line]
+            <isEqual property="splyQuoteDtlRecFlg" compareValue="Y">
+                <isEqual property="splyQuoteDtlRecUnionFlg" compareValue="Y">
+                UNION ALL
+                </isEqual>
+                SELECT
+                     SPLY_QUOTE_NUM
+                    ,ATTR
+                    ,ATTR_NAME
+                    ,ATTR_DB_NAME
+                    --
+                    ,GRP_SORT_NUM
+                    ,ITEM_SORT_NUM
+                    --
+                    ,BF1_VALUE
+                    ,AF1_VALUE
+                    ,EVENT_TS
+                    ,BF_BIZ_PROC_LOG_PK
+                    ,AF_BIZ_PROC_LOG_PK
+                FROM 
+                (
+                    WITH BF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECB.SPLY_QUOTE_NUM
+                                    , RECB.SPLY_QUOTE_DTL_LINE_NUM
+                                    , RECB.SPLY_QUOTE_DTL_LINE_SUB_NUM
+                                ORDER BY
+                                    RECB.EZINTIME, RECB.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECB.*
+                        FROM
+                            SPLY_QUOTE_DTL_REC RECB
+                        WHERE
+                                RECB.SPLY_QUOTE_NUM = #prntDocId#
+                            AND RECB.GLBL_CMPY_CD   = #glblCmpyCd#
+                            <iterate property="docIdConfigList" var="docIdConfig[]" open="AND (RECB.SPLY_QUOTE_DTL_LINE_NUM LIKE " close=")" conjunction=" OR RECB.SPLY_QUOTE_DTL_LINE_NUM LIKE ">
+                                #docIdConfig[]#
+                            </iterate>
+                            <iterate property="docIdLineList" var="docIdLine[]" open="AND RECB.SPLY_QUOTE_DTL_LINE_NUM IN (" close=")" conjunction=",">
+                                #docIdLine[]#
+                            </iterate>
+                     ), AF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECA.SPLY_QUOTE_NUM
+                                    , RECA.SPLY_QUOTE_DTL_LINE_NUM
+                                    , RECA.SPLY_QUOTE_DTL_LINE_SUB_NUM
+                                ORDER BY
+                                    RECA.EZINTIME, RECA.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECA.*
+                        FROM
+                            SPLY_QUOTE_DTL_REC RECA
+                        WHERE
+                                RECA.SPLY_QUOTE_NUM = #prntDocId#
+                            AND RECA.GLBL_CMPY_CD   = #glblCmpyCd#
+                            <iterate property="docIdConfigList" var="docIdConfig[]" open="AND (RECA.SPLY_QUOTE_DTL_LINE_NUM LIKE " close=")" conjunction=" OR RECA.SPLY_QUOTE_DTL_LINE_NUM LIKE ">
+                                #docIdConfig[]#
+                            </iterate>
+                            <iterate property="docIdLineList" var="docIdLine[]" open="AND RECA.SPLY_QUOTE_DTL_LINE_NUM IN (" close=")" conjunction=",">
+                                #docIdLine[]#
+                            </iterate>
+                     ), A2 AS (
+                           <isNotNull property="dbNameSplyQuoteDtlRec">
+                            SELECT
+                                      REC_DB_ITEM_NM                ATTR
+                                    , REC_DB_ITEM_ATTRB_NM          ATTR_NAME
+                                    , REC_DB_NM                     ATTR_DB_NAME
+                                    , VIEW_CHNG_LVL_GRP_SORT_NUM    GRP_SORT_NUM
+                                    , VIEW_CHNG_ITEM_SORT_NUM       ITEM_SORT_NUM
+                                FROM
+                                    VIEW_CHNG_LOG_ATTRB A 
+                                WHERE
+                                    A.REC_DB_NM = #dbNameSplyQuoteDtlRec# -- 'SPLY_QUOTE_DTL_REC'
+                                ORDER BY
+                                    A.VIEW_CHNG_LVL_GRP_SORT_NUM
+                                    , A.VIEW_CHNG_ITEM_SORT_NUM
+                           </isNotNull>
+                     )
+                     SELECT 
+                          BF1.ROW_NUM
+                         ,AF1.ROW_NUM
+                         ,BF1.BIZ_PROC_LOG_PK AS BF_BIZ_PROC_LOG_PK
+                         ,AF1.BIZ_PROC_LOG_PK AS AF_BIZ_PROC_LOG_PK
+                         ,AF1.SPLY_QUOTE_NUM
+                         ,A2.ATTR
+                         ,A2.ATTR_NAME
+                         ,A2.ATTR_DB_NAME
+                         --
+                         ,A2.GRP_SORT_NUM
+                         ,A2.ITEM_SORT_NUM
+                         --
+                         ,CASE
+                           <isNotNull property="splyQuoteDtlCaseBf">
+                               $splyQuoteDtlCaseBf$
+                           </isNotNull>
+                          END AS BF1_VALUE
+                         ,CASE 
+                           <isNotNull property="splyQuoteDtlCaseAf">
+                               $splyQuoteDtlCaseAf$
+                           </isNotNull>
+                          END AS AF1_VALUE
+                         ,AF1.EZINTIME AS EVENT_TS
+                     FROM 
+                          BF1
+                         ,AF1
+                         ,A2
+                     WHERE 
+                             AF1.ROW_NUM - 1                  = BF1.ROW_NUM
+                         AND AF1.SPLY_QUOTE_NUM               = BF1.SPLY_QUOTE_NUM
+                         AND AF1.SPLY_QUOTE_DTL_LINE_NUM      = BF1.SPLY_QUOTE_DTL_LINE_NUM
+                         AND AF1.SPLY_QUOTE_DTL_LINE_SUB_NUM  = BF1.SPLY_QUOTE_DTL_LINE_SUB_NUM
+                         AND AF1.EZCANCELFLAG                 = '0'
+                         AND BF1.EZCANCELFLAG                 = '0'
+                         AND (
+                           <isNotNull property="splyQuoteDtlComp">
+                               $splyQuoteDtlComp$
+                           </isNotNull>
+                    )
+                )
+                WHERE BF1_VALUE &lt;&gt; AF1_VALUE
+                 OR ( BF1_VALUE IS NULL     AND AF1_VALUE IS NOT NULL )
+                 OR ( BF1_VALUE IS NOT NULL AND AF1_VALUE IS NULL )
+            </isEqual>
+            
+            <isEqual property="splyQuotePrcCalcBaseRecFlg" compareValue="Y">
+                <isEqual property="splyQuotePrcCalcBaseRecUnionFlg" compareValue="Y">
+                UNION ALL
+                </isEqual>
+                SELECT
+                     SPLY_QUOTE_NUM
+                    ,ATTR
+                    ,ATTR_NAME
+                    ,ATTR_DB_NAME
+                    --
+                    ,GRP_SORT_NUM
+                    ,ITEM_SORT_NUM
+                    --
+                    ,BF1_VALUE
+                    ,AF1_VALUE
+                    ,EVENT_TS
+                    ,BF_BIZ_PROC_LOG_PK
+                    ,AF_BIZ_PROC_LOG_PK
+                FROM 
+                (
+                    WITH BF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECB.SPLY_QUOTE_NUM
+                                    , RECB.SPLY_QUOTE_DTL_LINE_NUM
+                                    , RECB.SPLY_QUOTE_DTL_LINE_SUB_NUM
+                                    , RECB.SPEC_COND_PRC_PK
+                                ORDER BY
+                                    RECB.EZINTIME, RECB.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECB.*
+                        FROM
+                            SPLY_QUOTE_CALC_BASE_REC RECB
+                        WHERE
+                                RECB.SPLY_QUOTE_NUM = #prntDocId#
+                            AND RECB.GLBL_CMPY_CD   = #glblCmpyCd#
+                            <iterate property="docIdConfigList" var="docIdConfig[]" open="AND (RECB.SPLY_QUOTE_DTL_LINE_NUM LIKE " close=")" conjunction=" OR RECB.SPLY_QUOTE_DTL_LINE_NUM LIKE ">
+                                #docIdConfig[]#
+                            </iterate>
+                            <iterate property="docIdLineList" var="docIdLine[]" open="AND RECB.SPLY_QUOTE_DTL_LINE_NUM IN (" close=")" conjunction=",">
+                                #docIdLine[]#
+                            </iterate>
+                     ), AF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECA.SPLY_QUOTE_NUM
+                                    , RECA.SPLY_QUOTE_DTL_LINE_NUM
+                                    , RECA.SPLY_QUOTE_DTL_LINE_SUB_NUM
+                                    , RECA.SPEC_COND_PRC_PK
+                                ORDER BY
+                                    RECA.EZINTIME, RECA.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECA.*
+                        FROM
+                            SPLY_QUOTE_CALC_BASE_REC RECA
+                        WHERE
+                                RECA.SPLY_QUOTE_NUM = #prntDocId#
+                            AND RECA.GLBL_CMPY_CD   = #glblCmpyCd#
+                            <iterate property="docIdConfigList" var="docIdConfig[]" open="AND (RECA.SPLY_QUOTE_DTL_LINE_NUM LIKE " close=")" conjunction=" OR RECA.SPLY_QUOTE_DTL_LINE_NUM LIKE ">
+                                #docIdConfig[]#
+                            </iterate>
+                            <iterate property="docIdLineList" var="docIdLine[]" open="AND RECA.SPLY_QUOTE_DTL_LINE_NUM IN (" close=")" conjunction=",">
+                                #docIdLine[]#
+                            </iterate>
+                     ), A2 AS (
+                           <isNotNull property="dbNameSplyQuoteCalcBaseRec">
+                            SELECT
+                                      REC_DB_ITEM_NM                ATTR
+                                    , REC_DB_ITEM_ATTRB_NM          ATTR_NAME
+                                    , REC_DB_NM                     ATTR_DB_NAME
+                                    , VIEW_CHNG_LVL_GRP_SORT_NUM    GRP_SORT_NUM
+                                    , VIEW_CHNG_ITEM_SORT_NUM       ITEM_SORT_NUM
+                                FROM
+                                    VIEW_CHNG_LOG_ATTRB A 
+                                WHERE
+                                    A.REC_DB_NM = #dbNameSplyQuoteCalcBaseRec# -- 'SPLY_QUOTE_CALC_BASE_REC'
+                                ORDER BY
+                                    A.VIEW_CHNG_LVL_GRP_SORT_NUM
+                                    , A.VIEW_CHNG_ITEM_SORT_NUM
+                           </isNotNull>
+                     )
+                     SELECT 
+                          BF1.ROW_NUM
+                         ,AF1.ROW_NUM
+                         ,BF1.BIZ_PROC_LOG_PK AS BF_BIZ_PROC_LOG_PK
+                         ,AF1.BIZ_PROC_LOG_PK AS AF_BIZ_PROC_LOG_PK
+                         ,AF1.SPLY_QUOTE_NUM
+                         ,A2.ATTR
+                         ,A2.ATTR_NAME
+                         ,A2.ATTR_DB_NAME
+                         --
+                         ,A2.GRP_SORT_NUM
+                         ,A2.ITEM_SORT_NUM
+                         --
+                         ,CASE
+                           <isNotNull property="splyQuotePrcCalcBaseCaseBf">
+                               $splyQuotePrcCalcBaseCaseBf$
+                           </isNotNull>
+                          END AS BF1_VALUE
+                         ,CASE 
+                           <isNotNull property="splyQuotePrcCalcBaseCaseAf">
+                               $splyQuotePrcCalcBaseCaseAf$
+                           </isNotNull>
+                          END AS AF1_VALUE
+                         ,AF1.EZINTIME AS EVENT_TS
+                     FROM 
+                          BF1
+                         ,AF1
+                         ,A2
+                     WHERE 
+                             AF1.ROW_NUM - 1                  = BF1.ROW_NUM
+                         AND AF1.SPLY_QUOTE_NUM               = BF1.SPLY_QUOTE_NUM
+                         AND AF1.SPLY_QUOTE_DTL_LINE_NUM      = BF1.SPLY_QUOTE_DTL_LINE_NUM
+                         AND AF1.SPLY_QUOTE_DTL_LINE_SUB_NUM  = BF1.SPLY_QUOTE_DTL_LINE_SUB_NUM
+                         AND AF1.SPEC_COND_PRC_PK             = BF1.SPEC_COND_PRC_PK
+                         AND AF1.EZCANCELFLAG                 = '0'
+                         AND BF1.EZCANCELFLAG                 = '0'
+                         AND (
+                           <isNotNull property="splyQuotePrcCalcBaseComp">
+                               $splyQuotePrcCalcBaseComp$
+                           </isNotNull>
+                    )
+                )
+                WHERE BF1_VALUE &lt;&gt; AF1_VALUE
+                 OR ( BF1_VALUE IS NULL     AND AF1_VALUE IS NOT NULL )
+                 OR ( BF1_VALUE IS NOT NULL AND AF1_VALUE IS NULL )
+            </isEqual>
+            
+            <isEqual property="compDummyOutputFlg" compareValue="Y">
+                SELECT
+                     '' AS SPLY_QUOTE_NUM
+                    ,'' AS ATTR
+                    ,'' AS ATTR_NAME
+                         --
+                    ,NULL   GRP_SORT_NUM
+                    ,NULL   ITEM_SORT_NUM
+                         --
+                    ,'' AS BF1_VALUE 
+                    ,'' AS AF1_VALUE
+                    ,'' AS EVENT_TS
+                    ,'' AS BF_BIZ_PROC_LOG_PK
+                    ,'' AS AF_BIZ_PROC_LOG_PK
+                FROM 
+                    DUAL
+            </isEqual>
+
+            ) COMP
+            
+            WHERE
+                    SBPL.PRNT_DOC_ID     = #prntDocId#
+                AND SBPL.PROC_ID         = #procId#
+                AND SBPL.DOC_TP_CD       = #docTpQuote#
+            <iterate property="docIdConfigList" var="docIdConfig[]" open="AND (SBPL.DOC_ID LIKE " close=")" conjunction=" OR SBPL.DOC_ID LIKE ">
+                #docIdConfig[]#
+            </iterate>
+            <iterate property="docIdLineList" var="docIdLine[]" open="AND SBPL.DOC_ID IN (" close=")" conjunction=",">
+                #docIdLine[]#
+            </iterate>
+                AND SBPL.PROC_ID         = ABP.PROC_ID
+                AND SBPL.EVENT_ID        = ABP.EVENT_ID
+                AND SBPL.EZCANCELFLAG    = '0'
+                AND ABP.USR_OPS_FLG      = #userOpsFlg#
+                AND ABP.GLBL_CMPY_CD     = #glblCmpyCd#
+                AND ABP.EZCANCELFLAG     = '0'
+                AND SBPL.BIZ_PROC_LOG_PK = COMP.AF_BIZ_PROC_LOG_PK
+                AND SBPL.EZINUSERID      = AP.USR_NM(+)
+                AND AP.GLBL_CMPY_CD(+)   = ABP.GLBL_CMPY_CD
+                AND AP.EZCANCELFLAG(+)   = '0' 
+            ORDER BY 
+                 SBPL.EZINTIME        ASC
+                ,SBPL.DOC_ID          NULLS FIRST
+                    --
+                ,COMP.GRP_SORT_NUM
+                ,COMP.ITEM_SORT_NUM
+                    --
+                ,SBPL.BIZ_PROC_LOG_PK ASC
+        )
+    WHERE
+        <!-- 2022/10/20 QC#60258 Mod Start-->
+        <!-- ROWNUM &lt; #rowNum# -->
+        ROWNUM &lt;= #rowNum#
+        <!-- 2022/10/20 QC#60258 Mod End-->
+    </statement>
+    <resultMap id="result.getDetailQuoteList"   class="NWAL1810_BSMsg">
+        <result property="eventNm_B0"            column="EVENT_NM"              javaType="EZDSStringItem"/>
+        <result property="ordPrftTrxCatgCd_B0"   column="ORD_PRFT_TRX_CATG_CD"  javaType="EZDSStringItem"/>
+        <result property="xxDtTm_B0"             column="EZINTIME"              javaType="EZDSStringItem"/>
+        <result property="docId_B0"              column="DOC_ID"                javaType="EZDSStringItem"/>
+        <result property="xxSrUsrId_B0"          column="EZINUSERID"            javaType="EZDSStringItem"/>
+        <result property="xxPsnNm_B0"            column="PSN_NM"                javaType="EZDSStringItem"/>
+        <result property="recDbItemAttrbNm_B0"   column="ATTR_NAME"             javaType="EZDSStringItem"/>
+        <result property="xxRecValBefTxt_B0"     column="BF1_VALUE"             javaType="EZDSStringItem"/>
+        <result property="xxRecValAftTxt_B0"     column="AF1_VALUE"             javaType="EZDSStringItem"/>
+    </resultMap>
+
+    <statement id ="getDetailScheduleList" parameterClass="Map"  resultMap="result.getDetailScheduleList">
+    SELECT
+        *
+    FROM
+        (
+        SELECT 
+             ABP.EVENT_NM
+             --
+               , CASE
+                   WHEN SBPL.DOC_ID        IS NULL        THEN NULL
+                   ELSE                                        #ordPrftTrxCatgOutbound#
+                   END ORD_PRFT_TRX_CATG_CD
+             --
+            ,SBPL.EZINTIME
+            ,SBPL.DOC_ID
+            ,SBPL.EZINUSERID
+            ,AP.FIRST_NM || ' ' || AP.LAST_NM AS PSN_NM
+            ,COMP.ATTR
+            ,COMP.ATTR_NAME
+            ,COMP.BF1_VALUE
+            ,COMP.AF1_VALUE 
+        FROM 
+             BIZ_PROC_LOG  SBPL
+            ,BIZ_EVENT     ABP
+            ,AUTH_PSN      AP
+            ,(
+-- [ALL]
+            <isEqual property="schdAgmtRecFlg" compareValue="Y">
+                SELECT
+                     SCHD_AGMT_NUM
+                    ,ATTR
+                    ,ATTR_NAME
+                    ,ATTR_DB_NAME
+                    --
+                    ,GRP_SORT_NUM
+                    ,ITEM_SORT_NUM
+                    --
+                    ,BF1_VALUE
+                    ,AF1_VALUE
+                    ,EVENT_TS
+                    ,BF_BIZ_PROC_LOG_PK
+                    ,AF_BIZ_PROC_LOG_PK
+                FROM 
+                (
+                    WITH BF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECB.SCHD_AGMT_NUM
+                                ORDER BY
+                                    RECB.EZINTIME, RECB.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECB.*
+                        FROM
+                            SCHD_AGMT_REC RECB
+                        WHERE
+                                RECB.SCHD_AGMT_NUM = #prntDocId#
+                            AND RECB.GLBL_CMPY_CD  = #glblCmpyCd#
+                     ), AF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECA.SCHD_AGMT_NUM
+                                ORDER BY
+                                    RECA.EZINTIME, RECA.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECA.*
+                        FROM
+                            SCHD_AGMT_REC RECA
+                        WHERE
+                                RECA.SCHD_AGMT_NUM = #prntDocId#
+                            AND RECA.GLBL_CMPY_CD  = #glblCmpyCd#
+                     ), A2 AS (
+                           <isNotNull property="dbNameSchdAgmtRec">
+                            SELECT
+                                      REC_DB_ITEM_NM                ATTR
+                                    , REC_DB_ITEM_ATTRB_NM          ATTR_NAME
+                                    , REC_DB_NM                     ATTR_DB_NAME
+                                    , VIEW_CHNG_LVL_GRP_SORT_NUM    GRP_SORT_NUM
+                                    , VIEW_CHNG_ITEM_SORT_NUM       ITEM_SORT_NUM
+                                FROM
+                                    VIEW_CHNG_LOG_ATTRB A 
+                                WHERE
+                                    A.REC_DB_NM = #dbNameSchdAgmtRec# -- 'SCHD_AGMT_REC'
+                                ORDER BY
+                                    A.VIEW_CHNG_LVL_GRP_SORT_NUM
+                                    , A.VIEW_CHNG_ITEM_SORT_NUM
+                           </isNotNull>
+                     )
+                     SELECT 
+                          BF1.ROW_NUM
+                         ,AF1.ROW_NUM
+                         ,BF1.BIZ_PROC_LOG_PK AS BF_BIZ_PROC_LOG_PK
+                         ,AF1.BIZ_PROC_LOG_PK AS AF_BIZ_PROC_LOG_PK
+                         ,AF1.SCHD_AGMT_NUM
+                         ,A2.ATTR
+                         ,A2.ATTR_NAME
+                         ,A2.ATTR_DB_NAME
+                         --
+                         ,A2.GRP_SORT_NUM
+                         ,A2.ITEM_SORT_NUM
+                         --
+                         ,CASE 
+                           <isNotNull property="schdAgmtCaseBf">
+                               $schdAgmtCaseBf$
+                           </isNotNull>
+                          END AS BF1_VALUE
+                         ,CASE 
+                           <isNotNull property="schdAgmtCaseAf">
+                               $schdAgmtCaseAf$
+                           </isNotNull>
+                          END AS AF1_VALUE
+                         ,AF1.EZINTIME AS EVENT_TS
+                     FROM 
+                          BF1
+                         ,AF1
+                         ,A2
+                     WHERE 
+                             AF1.ROW_NUM - 1     = BF1.ROW_NUM
+                         AND AF1.SCHD_AGMT_NUM   = BF1.SCHD_AGMT_NUM
+                         AND AF1.EZCANCELFLAG    = '0'
+                         AND BF1.EZCANCELFLAG    = '0'
+                         AND (
+                           <isNotNull property="schdAgmtComp">
+                               $schdAgmtComp$
+                           </isNotNull>
+                    )
+                )
+                WHERE BF1_VALUE &lt;&gt; AF1_VALUE
+                 OR ( BF1_VALUE IS NULL     AND AF1_VALUE IS NOT NULL )
+                 OR ( BF1_VALUE IS NOT NULL AND AF1_VALUE IS NULL )
+            </isEqual>
+            
+            <isEqual property="schdAgmtSlsCrRecFlg" compareValue="Y">
+                <isEqual property="schdAgmtSlsCrRecUnionFlg" compareValue="Y">
+                UNION ALL
+                </isEqual>
+                SELECT
+                     SCHD_AGMT_NUM
+                    ,ATTR
+                    ,ATTR_NAME
+                    ,ATTR_DB_NAME
+                    --
+                    ,GRP_SORT_NUM
+                    ,ITEM_SORT_NUM
+                    --
+                    ,BF1_VALUE
+                    ,AF1_VALUE
+                    ,EVENT_TS
+                    ,BF_BIZ_PROC_LOG_PK
+                    ,AF_BIZ_PROC_LOG_PK
+                FROM 
+                (
+                    WITH BF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECB.SCHD_AGMT_NUM
+                                    , RECB.SLS_REP_TOC_CD
+                                    , RECB.SLS_REP_ROLE_TP_CD
+                                ORDER BY
+                                    RECB.EZINTIME, RECB.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECB.*
+                        FROM
+                            SCHD_AGMT_SLS_CR_REC RECB
+                        WHERE
+                                RECB.SCHD_AGMT_NUM = #prntDocId#
+                            AND RECB.GLBL_CMPY_CD  = #glblCmpyCd#
+                     ), AF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECA.SCHD_AGMT_NUM
+                                    , RECA.SLS_REP_TOC_CD
+                                    , RECA.SLS_REP_ROLE_TP_CD
+                                ORDER BY
+                                    RECA.EZINTIME, RECA.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECA.*
+                        FROM
+                            SCHD_AGMT_SLS_CR_REC RECA
+                        WHERE
+                                RECA.SCHD_AGMT_NUM = #prntDocId#
+                            AND RECA.GLBL_CMPY_CD  = #glblCmpyCd#
+                     ), A2 AS (
+                           <isNotNull property="dbNameSchdAgmtSlsCrRec">
+                            SELECT
+                                      REC_DB_ITEM_NM                ATTR
+                                    , REC_DB_ITEM_ATTRB_NM          ATTR_NAME
+                                    , REC_DB_NM                     ATTR_DB_NAME
+                                    , VIEW_CHNG_LVL_GRP_SORT_NUM    GRP_SORT_NUM
+                                    , VIEW_CHNG_ITEM_SORT_NUM       ITEM_SORT_NUM
+                                FROM
+                                    VIEW_CHNG_LOG_ATTRB A 
+                                WHERE
+                                    A.REC_DB_NM = #dbNameSchdAgmtSlsCrRec# -- 'SCHD_AGMT_SLS_CR_REC'
+                                ORDER BY
+                                    A.VIEW_CHNG_LVL_GRP_SORT_NUM
+                                    , A.VIEW_CHNG_ITEM_SORT_NUM
+                           </isNotNull>
+                     )
+                     SELECT 
+                          BF1.ROW_NUM
+                         ,AF1.ROW_NUM
+                         ,BF1.BIZ_PROC_LOG_PK AS BF_BIZ_PROC_LOG_PK
+                         ,AF1.BIZ_PROC_LOG_PK AS AF_BIZ_PROC_LOG_PK
+                         ,AF1.SCHD_AGMT_NUM
+                         ,A2.ATTR
+                         ,A2.ATTR_NAME
+                         ,A2.ATTR_DB_NAME
+                         --
+                         ,A2.GRP_SORT_NUM
+                         ,A2.ITEM_SORT_NUM
+                         --
+                         ,CASE
+                           <isNotNull property="schdAgmtSlsCrCaseBf">
+                               $schdAgmtSlsCrCaseBf$
+                           </isNotNull>
+                          END AS BF1_VALUE
+                         ,CASE 
+                           <isNotNull property="schdAgmtSlsCrCaseAf">
+                               $schdAgmtSlsCrCaseAf$
+                           </isNotNull>
+                          END AS AF1_VALUE
+                         ,AF1.EZINTIME AS EVENT_TS
+                     FROM 
+                          BF1
+                         ,AF1
+                         ,A2
+                     WHERE 
+                             AF1.ROW_NUM - 1        = BF1.ROW_NUM
+                         AND AF1.SCHD_AGMT_NUM      = BF1.SCHD_AGMT_NUM
+                         AND AF1.SLS_REP_TOC_CD     = BF1.SLS_REP_TOC_CD
+                         AND AF1.SLS_REP_ROLE_TP_CD = BF1.SLS_REP_ROLE_TP_CD
+                         AND AF1.EZCANCELFLAG       = '0'
+                         AND BF1.EZCANCELFLAG       = '0'
+                         AND (
+                           <isNotNull property="schdAgmtSlsCrComp">
+                               $schdAgmtSlsCrComp$
+                           </isNotNull>
+                    )
+                )
+                WHERE BF1_VALUE &lt;&gt; AF1_VALUE
+                 OR ( BF1_VALUE IS NULL     AND AF1_VALUE IS NOT NULL )
+                 OR ( BF1_VALUE IS NOT NULL AND AF1_VALUE IS NULL )
+            </isEqual>
+-- [Line]
+            <isEqual property="schdAgmtLineRecFlg" compareValue="Y">
+                <isEqual property="schdAgmtLineRecUnionFlg" compareValue="Y">
+                UNION ALL
+                </isEqual>
+                SELECT
+                     SCHD_AGMT_NUM
+                    ,ATTR
+                    ,ATTR_NAME
+                    ,ATTR_DB_NAME
+                    --
+                    ,GRP_SORT_NUM
+                    ,ITEM_SORT_NUM
+                    --
+                    ,BF1_VALUE
+                    ,AF1_VALUE
+                    ,EVENT_TS
+                    ,BF_BIZ_PROC_LOG_PK
+                    ,AF_BIZ_PROC_LOG_PK
+                FROM 
+                (
+                    WITH BF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECB.SCHD_AGMT_NUM
+                                    , RECB.SCHD_AGMT_LINE_NUM
+                                ORDER BY
+                                    RECB.EZINTIME, RECB.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECB.*
+                        FROM
+                            SCHD_AGMT_LINE_REC RECB
+                        WHERE
+                                RECB.SCHD_AGMT_NUM = #prntDocId#
+                            AND RECB.GLBL_CMPY_CD  = #glblCmpyCd#
+                            <iterate property="docIdConfigList" var="docIdConfig[]" open="AND (RECB.SCHD_AGMT_LINE_NUM LIKE " close=")" conjunction=" OR RECB.SCHD_AGMT_LINE_NUM LIKE ">
+                                #docIdConfig[]#
+                            </iterate>
+                            <iterate property="docIdLineList" var="docIdLine[]" open="AND RECB.SCHD_AGMT_LINE_NUM IN (" close=")" conjunction=",">
+                                #docIdLine[]#
+                            </iterate>
+                     ), AF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECA.SCHD_AGMT_NUM
+                                    , RECA.SCHD_AGMT_LINE_NUM
+                                ORDER BY
+                                    RECA.EZINTIME, RECA.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECA.*
+                        FROM
+                            SCHD_AGMT_LINE_REC RECA
+                        WHERE
+                                RECA.SCHD_AGMT_NUM = #prntDocId#
+                            AND RECA.GLBL_CMPY_CD  = #glblCmpyCd#
+                            <iterate property="docIdConfigList" var="docIdConfig[]" open="AND (RECA.SCHD_AGMT_LINE_NUM LIKE " close=")" conjunction=" OR RECA.SCHD_AGMT_LINE_NUM LIKE ">
+                                #docIdConfig[]#
+                            </iterate>
+                            <iterate property="docIdLineList" var="docIdLine[]" open="AND RECA.SCHD_AGMT_LINE_NUM IN (" close=")" conjunction=",">
+                                #docIdLine[]#
+                            </iterate>
+                     ), A2 AS (
+                           <isNotNull property="dbNameSchdAgmtLineRec">
+                            SELECT
+                                      REC_DB_ITEM_NM                ATTR
+                                    , REC_DB_ITEM_ATTRB_NM          ATTR_NAME
+                                    , REC_DB_NM                     ATTR_DB_NAME
+                                    , VIEW_CHNG_LVL_GRP_SORT_NUM    GRP_SORT_NUM
+                                    , VIEW_CHNG_ITEM_SORT_NUM       ITEM_SORT_NUM
+                                FROM
+                                    VIEW_CHNG_LOG_ATTRB A 
+                                WHERE
+                                    A.REC_DB_NM = #dbNameSchdAgmtLineRec# -- 'SCHD_AGMT_LINE_REC'
+                                ORDER BY
+                                    A.VIEW_CHNG_LVL_GRP_SORT_NUM
+                                    , A.VIEW_CHNG_ITEM_SORT_NUM
+                           </isNotNull>
+                     )
+                     SELECT 
+                          BF1.ROW_NUM
+                         ,AF1.ROW_NUM
+                         ,BF1.BIZ_PROC_LOG_PK AS BF_BIZ_PROC_LOG_PK
+                         ,AF1.BIZ_PROC_LOG_PK AS AF_BIZ_PROC_LOG_PK
+                         ,AF1.SCHD_AGMT_NUM
+                         ,A2.ATTR
+                         ,A2.ATTR_NAME
+                         ,A2.ATTR_DB_NAME
+                         --
+                         ,A2.GRP_SORT_NUM
+                         ,A2.ITEM_SORT_NUM
+                         --
+                         ,CASE
+                           <isNotNull property="schdAgmtLineCaseBf">
+                               $schdAgmtLineCaseBf$
+                           </isNotNull>
+                          END AS BF1_VALUE
+                         ,CASE 
+                           <isNotNull property="schdAgmtLineCaseAf">
+                               $schdAgmtLineCaseAf$
+                           </isNotNull>
+                          END AS AF1_VALUE
+                         ,AF1.EZINTIME AS EVENT_TS
+                     FROM 
+                          BF1
+                         ,AF1
+                         ,A2
+                     WHERE 
+                             AF1.ROW_NUM - 1         = BF1.ROW_NUM
+                         AND AF1.SCHD_AGMT_NUM       = BF1.SCHD_AGMT_NUM
+                         AND AF1.SCHD_AGMT_LINE_NUM  = BF1.SCHD_AGMT_LINE_NUM
+                         AND AF1.EZCANCELFLAG        = '0'
+                         AND BF1.EZCANCELFLAG        = '0'
+                         AND (
+                           <isNotNull property="schdAgmtLineComp">
+                               $schdAgmtLineComp$
+                           </isNotNull>
+                    )
+                )
+                WHERE BF1_VALUE &lt;&gt; AF1_VALUE
+                 OR ( BF1_VALUE IS NULL     AND AF1_VALUE IS NOT NULL )
+                 OR ( BF1_VALUE IS NOT NULL AND AF1_VALUE IS NULL )
+            </isEqual>
+            
+            <isEqual property="schdAgmtPrcCalcRecFlg" compareValue="Y">
+                <isEqual property="schdAgmtPrcCalcRecUnionFlg" compareValue="Y">
+                UNION ALL
+                </isEqual>
+                SELECT
+                     SCHD_AGMT_NUM
+                    ,ATTR
+                    ,ATTR_NAME
+                    ,ATTR_DB_NAME
+                    --
+                    ,GRP_SORT_NUM
+                    ,ITEM_SORT_NUM
+                    --
+                    ,BF1_VALUE
+                    ,AF1_VALUE
+                    ,EVENT_TS
+                    ,BF_BIZ_PROC_LOG_PK
+                    ,AF_BIZ_PROC_LOG_PK
+                FROM 
+                (
+                    WITH BF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECB.SCHD_AGMT_NUM
+                                    , RECB.SCHD_AGMT_LINE_NUM
+                                    , RECB.SPEC_COND_PRC_PK
+                                ORDER BY
+                                    RECB.EZINTIME, RECB.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECB.*
+                        FROM
+                            SCHD_AGMT_CALC_BASE_REC RECB
+                        WHERE
+                                RECB.SCHD_AGMT_NUM = #prntDocId#
+                            AND RECB.GLBL_CMPY_CD  = #glblCmpyCd#
+                            <iterate property="docIdConfigList" var="docIdConfig[]" open="AND (RECB.SCHD_AGMT_LINE_NUM LIKE " close=")" conjunction=" OR RECB.SCHD_AGMT_LINE_NUM LIKE ">
+                                #docIdConfig[]#
+                            </iterate>
+                            <iterate property="docIdLineList" var="docIdLine[]" open="AND RECB.SCHD_AGMT_LINE_NUM IN (" close=")" conjunction=",">
+                                #docIdLine[]#
+                            </iterate>
+                     ), AF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECA.SCHD_AGMT_NUM
+                                    , RECA.SCHD_AGMT_LINE_NUM
+                                    , RECA.SPEC_COND_PRC_PK
+                                ORDER BY
+                                    RECA.EZINTIME, RECA.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECA.*
+                        FROM
+                            SCHD_AGMT_CALC_BASE_REC RECA
+                        WHERE
+                                RECA.SCHD_AGMT_NUM = #prntDocId#
+                            AND RECA.GLBL_CMPY_CD  = #glblCmpyCd#
+                            <iterate property="docIdConfigList" var="docIdConfig[]" open="AND (RECA.SCHD_AGMT_LINE_NUM LIKE " close=")" conjunction=" OR RECA.SCHD_AGMT_LINE_NUM LIKE ">
+                                #docIdConfig[]#
+                            </iterate>
+                            <iterate property="docIdLineList" var="docIdLine[]" open="AND RECA.SCHD_AGMT_LINE_NUM IN (" close=")" conjunction=",">
+                                #docIdLine[]#
+                            </iterate>
+                     ), A2 AS (
+                           <isNotNull property="dbNameSchdAgmtCalcBaseRec">
+                            SELECT
+                                      REC_DB_ITEM_NM                ATTR
+                                    , REC_DB_ITEM_ATTRB_NM          ATTR_NAME
+                                    , REC_DB_NM                     ATTR_DB_NAME
+                                    , VIEW_CHNG_LVL_GRP_SORT_NUM    GRP_SORT_NUM
+                                    , VIEW_CHNG_ITEM_SORT_NUM       ITEM_SORT_NUM
+                                FROM
+                                    VIEW_CHNG_LOG_ATTRB A 
+                                WHERE
+                                    A.REC_DB_NM = #dbNameSchdAgmtCalcBaseRec# -- 'SCHD_AGMT_CALC_BASE_REC'
+                           </isNotNull>
+                     )
+                     SELECT 
+                          BF1.ROW_NUM
+                         ,AF1.ROW_NUM
+                         ,BF1.BIZ_PROC_LOG_PK AS BF_BIZ_PROC_LOG_PK
+                         ,AF1.BIZ_PROC_LOG_PK AS AF_BIZ_PROC_LOG_PK
+                         ,AF1.SCHD_AGMT_NUM
+                         ,A2.ATTR
+                         ,A2.ATTR_NAME
+                         ,A2.ATTR_DB_NAME
+                         --
+                         ,A2.GRP_SORT_NUM
+                         ,A2.ITEM_SORT_NUM
+                         --
+                         ,CASE
+                           <isNotNull property="schdAgmtPrcCalcCaseBf">
+                               $schdAgmtPrcCalcCaseBf$
+                           </isNotNull>
+                          END AS BF1_VALUE
+                         ,CASE 
+                           <isNotNull property="schdAgmtPrcCalcCaseAf">
+                               $schdAgmtPrcCalcCaseAf$
+                           </isNotNull>
+                          END AS AF1_VALUE
+                         ,AF1.EZINTIME AS EVENT_TS
+                     FROM 
+                          BF1
+                         ,AF1
+                         ,A2
+                     WHERE 
+                             AF1.ROW_NUM - 1         = BF1.ROW_NUM
+                         AND AF1.SCHD_AGMT_NUM       = BF1.SCHD_AGMT_NUM
+                         AND AF1.SCHD_AGMT_LINE_NUM  = BF1.SCHD_AGMT_LINE_NUM
+                         AND AF1.SPEC_COND_PRC_PK    = BF1.SPEC_COND_PRC_PK
+                         AND AF1.EZCANCELFLAG        = '0'
+                         AND BF1.EZCANCELFLAG        = '0'
+                         AND (
+                           <isNotNull property="schdAgmtPrcCalcComp">
+                               $schdAgmtPrcCalcComp$
+                           </isNotNull>
+                    )
+                )
+                WHERE BF1_VALUE &lt;&gt; AF1_VALUE
+                 OR ( BF1_VALUE IS NULL     AND AF1_VALUE IS NOT NULL )
+                 OR ( BF1_VALUE IS NOT NULL AND AF1_VALUE IS NULL )
+            </isEqual>
+-- [Plan]
+            <isEqual property="schdAgmtPlnRecFlg" compareValue="Y">
+                <isEqual property="schdAgmtPlnRecUnionFlg" compareValue="Y">
+                UNION ALL
+                </isEqual>
+                SELECT
+                     SCHD_AGMT_NUM
+                    ,ATTR
+                    ,ATTR_NAME
+                    ,ATTR_DB_NAME
+                    --
+                    ,GRP_SORT_NUM
+                    ,ITEM_SORT_NUM
+                    --
+                    ,BF1_VALUE
+                    ,AF1_VALUE
+                    ,EVENT_TS
+                    ,BF_BIZ_PROC_LOG_PK
+                    ,AF_BIZ_PROC_LOG_PK
+                FROM 
+                (
+                    WITH BF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECB.SCHD_AGMT_NUM
+                                    , RECB.SCHD_AGMT_LINE_NUM
+                                    , RECB.SCHD_AGMT_SCHD_LINE_NUM
+                                ORDER BY
+                                    RECB.EZINTIME, RECB.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECB.*
+                        FROM
+                            SCHD_AGMT_PLN_REC RECB
+                        WHERE
+                                RECB.SCHD_AGMT_NUM = #prntDocId#
+                            AND RECB.GLBL_CMPY_CD  = #glblCmpyCd#
+                            <iterate property="docIdConfigList" var="docIdConfig[]" open="AND (RECB.SCHD_AGMT_LINE_NUM LIKE " close=")" conjunction=" OR RECB.SCHD_AGMT_LINE_NUM LIKE ">
+                                #docIdConfig[]#
+                            </iterate>
+                            <iterate property="docIdLineList" var="docIdLine[]" open="AND RECB.SCHD_AGMT_LINE_NUM IN (" close=")" conjunction=",">
+                                #docIdLine[]#
+                            </iterate>
+                     ), AF1 AS (
+                        SELECT
+                             ROW_NUMBER() OVER(PARTITION BY
+                                    RECA.SCHD_AGMT_NUM
+                                    , RECA.SCHD_AGMT_LINE_NUM
+                                    , RECA.SCHD_AGMT_SCHD_LINE_NUM
+                                ORDER BY
+                                    RECA.EZINTIME, RECA.BIZ_PROC_LOG_PK) AS ROW_NUM
+                            ,RECA.*
+                        FROM
+                            SCHD_AGMT_PLN_REC RECA
+                        WHERE
+                                RECA.SCHD_AGMT_NUM = #prntDocId#
+                            AND RECA.GLBL_CMPY_CD  = #glblCmpyCd#
+                            <iterate property="docIdConfigList" var="docIdConfig[]" open="AND (RECA.SCHD_AGMT_LINE_NUM LIKE " close=")" conjunction=" OR RECA.SCHD_AGMT_LINE_NUM LIKE ">
+                                #docIdConfig[]#
+                            </iterate>
+                            <iterate property="docIdLineList" var="docIdLine[]" open="AND RECA.SCHD_AGMT_LINE_NUM IN (" close=")" conjunction=",">
+                                #docIdLine[]#
+                            </iterate>
+                     ), A2 AS (
+                           <isNotNull property="dbNameSchdAgmtPlnRec">
+                            SELECT
+                                      REC_DB_ITEM_NM                ATTR
+                                    , REC_DB_ITEM_ATTRB_NM          ATTR_NAME
+                                    , REC_DB_NM                     ATTR_DB_NAME
+                                    , VIEW_CHNG_LVL_GRP_SORT_NUM    GRP_SORT_NUM
+                                    , VIEW_CHNG_ITEM_SORT_NUM       ITEM_SORT_NUM
+                                FROM
+                                    VIEW_CHNG_LOG_ATTRB A 
+                                WHERE
+                                    A.REC_DB_NM = #dbNameSchdAgmtPlnRec# -- 'SCHD_AGMT_PLN_REC'
+                           </isNotNull>
+                     )
+                     SELECT 
+                          BF1.ROW_NUM
+                         ,AF1.ROW_NUM
+                         ,BF1.BIZ_PROC_LOG_PK AS BF_BIZ_PROC_LOG_PK
+                         ,AF1.BIZ_PROC_LOG_PK AS AF_BIZ_PROC_LOG_PK
+                         ,AF1.SCHD_AGMT_NUM
+                         ,A2.ATTR
+                         ,A2.ATTR_NAME
+                         ,A2.ATTR_DB_NAME
+                         --
+                         ,A2.GRP_SORT_NUM
+                         ,A2.ITEM_SORT_NUM
+                         --
+                         ,CASE
+                           <isNotNull property="schdAgmtPlnCaseBf">
+                               $schdAgmtPlnCaseBf$
+                           </isNotNull>
+                          END AS BF1_VALUE
+                         ,CASE 
+                           <isNotNull property="schdAgmtPlnCaseAf">
+                               $schdAgmtPlnCaseAf$
+                           </isNotNull>
+                          END AS AF1_VALUE
+                         ,AF1.EZINTIME AS EVENT_TS
+                     FROM 
+                          BF1
+                         ,AF1
+                         ,A2
+                     WHERE 
+                             AF1.ROW_NUM - 1              = BF1.ROW_NUM
+                         AND AF1.SCHD_AGMT_NUM            = BF1.SCHD_AGMT_NUM
+                         AND AF1.SCHD_AGMT_LINE_NUM       = BF1.SCHD_AGMT_LINE_NUM
+                         AND AF1.SCHD_AGMT_SCHD_LINE_NUM  = BF1.SCHD_AGMT_SCHD_LINE_NUM
+                         AND AF1.EZCANCELFLAG             = '0'
+                         AND BF1.EZCANCELFLAG             = '0'
+                         AND (
+                           <isNotNull property="schdAgmtPlnComp">
+                               $schdAgmtPlnComp$
+                           </isNotNull>
+                    )
+                )
+                WHERE BF1_VALUE &lt;&gt; AF1_VALUE
+                 OR ( BF1_VALUE IS NULL     AND AF1_VALUE IS NOT NULL )
+                 OR ( BF1_VALUE IS NOT NULL AND AF1_VALUE IS NULL )
+            </isEqual>
+            
+            <isEqual property="compDummyOutputFlg" compareValue="Y">
+                SELECT
+                     '' AS SCHD_AGMT_NUM
+                    ,'' AS ATTR
+                    ,'' AS ATTR_NAME
+                    --
+                    ,NULL   GRP_SORT_NUM
+                    ,NULL   ITEM_SORT_NUM
+                    --
+                    ,'' AS BF1_VALUE 
+                    ,'' AS AF1_VALUE
+                    ,'' AS EVENT_TS
+                    ,'' AS BF_BIZ_PROC_LOG_PK
+                    ,'' AS AF_BIZ_PROC_LOG_PK
+                FROM 
+                    DUAL
+            </isEqual>
+
+            ) COMP
+            
+            WHERE
+                    SBPL.PRNT_DOC_ID     = #prntDocId#
+                AND SBPL.PROC_ID         = #procId#
+                AND SBPL.DOC_TP_CD       = #docTpScheduleAgreement#
+            <iterate property="docIdConfigList" var="docIdConfig[]" open="AND (SBPL.DOC_ID LIKE " close=")" conjunction=" OR SBPL.DOC_ID LIKE ">
+                #docIdConfig[]#
+            </iterate>
+            <iterate property="docIdLineList" var="docIdLine[]" open="AND SBPL.DOC_ID IN (" close=")" conjunction=",">
+                #docIdLine[]#
+            </iterate>
+                AND SBPL.PROC_ID         = ABP.PROC_ID
+                AND SBPL.EVENT_ID        = ABP.EVENT_ID
+                AND SBPL.EZCANCELFLAG    = '0'
+                AND ABP.USR_OPS_FLG      = #userOpsFlg#
+                AND ABP.GLBL_CMPY_CD     = #glblCmpyCd#
+                AND ABP.EZCANCELFLAG     = '0'
+                AND SBPL.BIZ_PROC_LOG_PK = COMP.AF_BIZ_PROC_LOG_PK
+                AND SBPL.EZINUSERID      = AP.USR_NM(+)
+                AND AP.GLBL_CMPY_CD(+)   = ABP.GLBL_CMPY_CD
+                AND AP.EZCANCELFLAG(+)   = '0'
+            ORDER BY 
+                 SBPL.EZINTIME        ASC
+                --
+                , (CASE 
+                    WHEN TRIM(TRANSLATE(DOC_ID, '0123456789', ' ')) IS NULL
+                    THEN TO_NUMBER(DOC_ID) 
+
+                    WHEN TRIM( 
+                        TRANSLATE(
+                            SUBSTR(DOC_ID, 1, INSTR(DOC_ID, '.') - 1)
+                            , '0123456789'
+                            , ' '
+                        )
+                    ) IS NULL 
+                    THEN TO_NUMBER( 
+                        SUBSTR(DOC_ID, 1, INSTR(DOC_ID, '.') - 1)
+                    ) 
+
+                    ELSE 9999999999999999
+                    END)                ASC NULLS FIRST
+                , (CASE 
+                    WHEN TRIM(TRANSLATE(DOC_ID, '0123456789', ' ')) IS NULL
+                    THEN NULL
+
+                    WHEN TRIM( 
+                        TRANSLATE( 
+                            SUBSTR(DOC_ID, INSTR(DOC_ID, '.') + 1)
+                            , '0123456789'
+                            , ' '
+                        )
+                    ) IS NULL 
+                    THEN TO_NUMBER( 
+                        SUBSTR(DOC_ID, INSTR(DOC_ID, '.') + 1)
+                    ) 
+
+                    ELSE 9999999999999999
+                    END)                ASC NULLS FIRST
+                --
+                ,SBPL.DOC_ID          NULLS FIRST
+                    --
+                ,COMP.GRP_SORT_NUM
+                ,COMP.ITEM_SORT_NUM
+                    --
+                ,SBPL.BIZ_PROC_LOG_PK ASC
+        )
+    WHERE
+        <!-- 2022/10/20 QC#60258 Mod Start-->
+        <!-- ROWNUM &lt; #rowNum# -->
+        ROWNUM &lt;= #rowNum#
+        <!-- 2022/10/20 QC#60258 Mod End-->
+    </statement>
+    <resultMap id="result.getDetailScheduleList"   class="NWAL1810_BSMsg">
+        <result property="eventNm_B0"            column="EVENT_NM"              javaType="EZDSStringItem"/>
+        <result property="ordPrftTrxCatgCd_B0"   column="ORD_PRFT_TRX_CATG_CD"  javaType="EZDSStringItem"/>
+        <result property="xxDtTm_B0"             column="EZINTIME"              javaType="EZDSStringItem"/>
+        <result property="docId_B0"              column="DOC_ID"                javaType="EZDSStringItem"/>
+        <result property="xxSrUsrId_B0"          column="EZINUSERID"            javaType="EZDSStringItem"/>
+        <result property="xxPsnNm_B0"            column="PSN_NM"                javaType="EZDSStringItem"/>
+        <result property="recDbItemAttrbNm_B0"   column="ATTR_NAME"             javaType="EZDSStringItem"/>
+        <result property="xxRecValBefTxt_B0"     column="BF1_VALUE"             javaType="EZDSStringItem"/>
+        <result property="xxRecValAftTxt_B0"     column="AF1_VALUE"             javaType="EZDSStringItem"/>
+    </resultMap>
+
+    <statement id ="getViewChngLogAttrbList" parameterClass="Map"  resultClass="Map">
+        SELECT
+             VCLA.REC_DB_ITEM_NM
+            ,VCLA.REC_DB_ITEM_ATTRB_NM
+            ,VCLA.REC_DB_NM
+            ,VCLA.VIEW_CHNG_LVL_GRP_SORT_NUM
+            ,VCLA.VIEW_CHNG_ITEM_SORT_NUM
+        FROM 
+            VIEW_CHNG_LOG_ATTRB  VCLA
+        WHERE 
+            VCLA.GLBL_CMPY_CD           = #glblCmpyCd#
+        AND VCLA.VIEW_CHNG_LOG_SRC_NM   = #srcNm#
+        AND VCLA.VIEW_CHNG_LOG_LVL_NUM  = #lvlNum#
+        AND VCLA.REC_DB_NM              = #recDbNm#
+        AND VCLA.EZCANCELFLAG           = '0'
+    </statement>
+
+    <statement id ="getDisplayLineStr" parameterClass="Map"  resultClass="String">
+        SELECT
+                  DCD.DPLY_LINE_NUM
+            FROM
+              <isEqual property="outboundFlg" compareValue="Y">
+                CPO_DTL_V DCD
+              </isEqual>
+              <isNotEqual property="outboundFlg" compareValue="Y">
+                DS_CPO_RTRN_DTL_V DCD
+              </isNotEqual>
+            WHERE
+                DCD.GLBL_CMPY_CD                 = #glblCmpyCd#
+                AND DCD.CPO_ORD_NUM              = #ordNum#
+              <isEqual property="outboundFlg" compareValue="Y">
+                AND DCD.CPO_DTL_LINE_NUM         = #dtlLineNum#
+                AND DCD.CPO_DTL_LINE_SUB_NUM     = #dtlLineSubNum#
+              </isEqual>
+              <isNotEqual property="outboundFlg" compareValue="Y">
+                AND DCD.DS_CPO_RTRN_LINE_NUM     = #dtlLineNum#
+                AND DCD.DS_CPO_RTRN_LINE_SUB_NUM = #dtlLineSubNum#
+              </isNotEqual>
+                AND DCD.EZCANCELFLAG             = '0'
+    </statement>
+
+    <statement id ="getDisplayLineStrForQuote" parameterClass="Map"  resultClass="String">
+        SELECT
+                  CASE 
+                    WHEN D.DPLY_QUOTE_LINE_NUM IS NULL
+                    THEN NULL
+                    ELSE
+                          CASE 
+                            WHEN D.DPLY_QUOTE_LINE_SUB_NUM IS NULL
+                            THEN #quoteConfigPreFix# || TO_CHAR(D.DPLY_QUOTE_LINE_NUM)
+                            ELSE #quoteConfigPreFix# || TO_CHAR(D.DPLY_QUOTE_LINE_NUM) || '.' || TO_CHAR(D.DPLY_QUOTE_LINE_SUB_NUM)
+                            END
+                    END     DPLY_LINE_NUM
+            FROM
+                SPLY_QUOTE_DTL D
+            WHERE
+                D.GLBL_CMPY_CD                      = #glblCmpyCd#
+                AND D.SPLY_QUOTE_NUM                = #ordNum#
+                AND D.SPLY_QUOTE_DTL_LINE_NUM       = #dtlLineNum#
+                AND D.SPLY_QUOTE_DTL_LINE_SUB_NUM   = #dtlLineSubNum#
+                AND D.EZCANCELFLAG                  = '0'
+    </statement>
+
+    <statement id ="getDisplayLineStrForSchedule" parameterClass="Map"  resultClass="String">
+        SELECT
+                  D.SCHD_AGMT_LINE_NUM DPLY_LINE_NUM 
+            FROM
+                SCHD_AGMT_LINE D 
+            WHERE
+                D.GLBL_CMPY_CD           = #glblCmpyCd#
+                AND D.SCHD_AGMT_NUM      = #ordNum#
+                AND D.SCHD_AGMT_LINE_NUM = #dtlLineNum#
+                AND D.EZCANCELFLAG       = '0'
+    </statement>
+
+    <statement id ="getDocIdConfigLineListFromOrder" parameterClass="Map"  resultClass="Map">
+        SELECT
+                  V.CPO_DTL_LINE_NUM || '.'    LINE
+                  , V.DPLY_LINE_NUM 
+            FROM
+                CPO_DTL_V    V
+            WHERE
+                V.DS_ORD_POSN_NUM  = #dsOrdPosnNum#
+                AND V.CPO_ORD_NUM  = #cpoOrdNum#
+                AND V.GLBL_CMPY_CD = #glblCmpyCd#
+                AND V.EZCANCELFLAG = '0'
+    </statement>
+
+    <statement id ="getDocIdConfigLineListFromReturn" parameterClass="Map"  resultClass="Map">
+        SELECT
+                  V.DS_CPO_RTRN_LINE_NUM || '.'    LINE
+                , V.DPLY_LINE_NUM
+            FROM
+                DS_CPO_RTRN_DTL_V   V
+            WHERE
+                V.DS_ORD_POSN_NUM  = #dsOrdPosnNum#
+                AND V.CPO_ORD_NUM  = #cpoOrdNum#
+                AND V.GLBL_CMPY_CD = #glblCmpyCd#
+                AND V.EZCANCELFLAG = '0'
+    </statement>
+
+    <!--- 2022/10/20 QC#60258 Add Start -->
+    <statement id ="getEventList" parameterClass="Map"  resultClass="Map">
+        SELECT DISTINCT
+                BIZ.EVENT_NM
+            FROM
+                BIZ_EVENT BIZ
+            WHERE
+                BIZ.GLBL_CMPY_CD     = #glblCmpyCd#
+                AND BIZ.EZCANCELFLAG = '0'
+                AND BIZ.PROC_ID      = #procId#
+           ORDER BY 
+                BIZ.EVENT_NM
+    </statement>
+    <!--- 2022/10/20 QC#60258 Add End -->
+
+</sqlMap>

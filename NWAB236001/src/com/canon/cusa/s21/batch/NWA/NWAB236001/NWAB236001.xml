@@ -1,0 +1,309 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NWAB236001">
+    <typeAlias alias="SVC_MACH_MSTRTMsg" type="business.db.SVC_MACH_MSTRTMsg"/>
+    <typeAlias alias="SHPG_PLNTMsg"      type="business.db.SHPG_PLNTMsg"/>
+
+    <statement id="getShpgPlnInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+              SP.SHPG_PLN_NUM           AS SHPG_PLN_NUM
+            , SP.TRX_HDR_NUM            AS TRX_HDR_NUM
+            , SP.TRX_LINE_NUM           AS TRX_LINE_NUM
+            , SP.TRX_LINE_SUB_NUM       AS TRX_LINE_SUB_NUM
+            , SP.SO_NUM                 AS SO_NUM
+            , SP.SHPG_STS_CD            AS SHPG_STS_CD
+            , SP.ORD_QTY                AS ORD_QTY
+            , CD.DS_ORD_POSN_NUM        AS DS_ORD_POSN_NUM
+            , CD.SVC_CONFIG_MSTR_PK     AS SVC_CONFIG_MSTR_PK
+            , M.MDSE_TP_CD              AS MDSE_TP_CD
+            , MC.MACH_MSTR_CRAT_FLG     AS MACH_MSTR_CRAT_FLG
+            , M.INSTL_BASE_CTRL_FLG   AS INSTL_BASE_CTRL_FLG
+            , CD.DS_CPO_CONFIG_PK
+        FROM
+              SHPG_PLN SP
+            , CPO_DTL CD
+            , DS_ORD_TP DOT
+            , MDSE M
+            , MDSE_CATG MC
+            , CPO C
+        WHERE
+              SP.GLBL_CMPY_CD           = #glblCmpyCd#
+          AND SP.TRX_SRC_TP_CD          = #trxSrcTpCd#
+          AND SP.SHPG_STS_CD            IN (#shpgStsShipped#,#shpgStsArrived#)
+          AND SP.REV_RECOG_FLG          = #revRecogFlg#
+          AND SP.TRX_LINE_SUB_NUM       &lt;&gt; #trxLineSubNum#
+          AND SP.EZCANCELFLAG           = '0'
+
+          AND SP.GLBL_CMPY_CD           = C.GLBL_CMPY_CD
+          AND SP.TRX_HDR_NUM            = C.CPO_ORD_NUM
+          AND C.EZCANCELFLAG            = '0'
+
+          AND SP.GLBL_CMPY_CD           = CD.GLBL_CMPY_CD
+          AND SP.TRX_HDR_NUM            = CD.CPO_ORD_NUM
+          AND SP.TRX_LINE_NUM           = CD.CPO_DTL_LINE_NUM
+          AND SP.TRX_LINE_SUB_NUM       = CD.CPO_DTL_LINE_SUB_NUM
+          AND CD.EZCANCELFLAG           = '0'
+
+          AND C.GLBL_CMPY_CD            = DOT.GLBL_CMPY_CD
+          AND C.DS_ORD_TP_CD            = DOT.DS_ORD_TP_CD
+          AND DOT.EZCANCELFLAG          = '0'
+
+          AND SP.GLBL_CMPY_CD           = M.GLBL_CMPY_CD
+          AND SP.MDSE_CD                = M.MDSE_CD
+          AND M.EZCANCELFLAG            = '0'
+          AND M.INSTL_BASE_CTRL_FLG     = 'Y' <!-- 2019/10/10 QC#53972 Add -->
+
+          AND M.GLBL_CMPY_CD            = MC.GLBL_CMPY_CD
+          AND M.MDSE_CATG_CD            = MC.MDSE_CATG_CD
+          AND MC.EZCANCELFLAG           = '0'
+          AND C.REV_RECOG_METH_CD       &lt;&gt; #revRecogMethCd#
+          AND EXISTS (
+                SELECT
+                    'X'
+                FROM
+                     SHPG_PLN       SP2
+                    ,MDSE           M2
+                WHERE
+                        SP2.GLBL_CMPY_CD    = SP.GLBL_CMPY_CD
+                    AND SP2.TRX_HDR_NUM     = SP.TRX_HDR_NUM
+                    --QC22719 Mod Start
+                    AND SP2.SHPG_STS_CD    != '99'
+                    --AND SP2.SHPG_STS_CD   NOT IN ('90', '99')
+                    --QC22719 Mod End
+                    AND SP2.EZCANCELFLAG    = '0'
+
+                    AND SP2.GLBL_CMPY_CD            = M2.GLBL_CMPY_CD
+                    AND SP2.MDSE_CD                 = M2.MDSE_CD
+                    AND M2.INSTL_BASE_CTRL_FLG    = 'Y'
+                    AND M2.EZCANCELFLAG           = '0'
+          )
+        ORDER BY
+              SP.TRX_HDR_NUM
+            , SP.TRX_LINE_NUM
+            , SP.TRX_LINE_SUB_NUM
+            , SP.SHPG_PLN_NUM
+    </statement>
+
+    <statement id="getMainUnitInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+              SP.SHPG_PLN_NUM           AS SHPG_PLN_NUM
+            , SP.TRX_SRC_TP_CD          AS TRX_SRC_TP_CD
+            , SP.TRX_HDR_NUM            AS TRX_HDR_NUM
+            , SP.TRX_LINE_NUM           AS TRX_LINE_NUM
+            , SP.TRX_LINE_SUB_NUM       AS TRX_LINE_SUB_NUM
+            , SP.SHPG_STS_CD            AS SHPG_STS_CD
+            , SMM.SVC_MACH_MSTR_PK      AS SVC_MACH_MSTR_PK
+            , SMM.SVC_MACH_MSTR_STS_CD  AS SVC_MACH_MSTR_STS_CD
+            , SMM.ISTL_DT               AS ISTL_DT
+        FROM
+              SHPG_PLN SP
+            , CPO_DTL CD
+            , SVC_MACH_MSTR SMM
+        WHERE
+              SP.GLBL_CMPY_CD     = #glblCmpyCd#
+          AND SP.TRX_SRC_TP_CD    = #trxSrcTpCd#
+          AND SP.TRX_HDR_NUM      = #trxHdrNum#
+          <isNotEqual property="mdseTpCd" compareValue="5">
+          AND SP.SO_NUM           = #soNum#
+          </isNotEqual>
+          AND SP.EZCANCELFLAG     = '0'
+
+          AND SP.GLBL_CMPY_CD     = CD.GLBL_CMPY_CD
+          AND SP.TRX_HDR_NUM      = CD.CPO_ORD_NUM
+          AND SP.TRX_LINE_NUM     = CD.CPO_DTL_LINE_NUM
+          AND SP.TRX_LINE_SUB_NUM = CD.CPO_DTL_LINE_SUB_NUM
+          AND CD.DS_ORD_POSN_NUM  = #dsOrdPosnNum#
+          AND CD.BASE_CMPT_FLG    = #baseCmptFlg#
+          AND CD.EZCANCELFLAG     = '0'
+
+          AND SP.GLBL_CMPY_CD     = SMM.GLBL_CMPY_CD(+)
+          AND SP.SHPG_PLN_NUM     = SMM.SHPG_PLN_NUM(+)
+          AND SMM.EZCANCELFLAG(+) = '0'
+    </statement>
+
+    <statement id="getFnshShpgPlnInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+              SP.SHPG_PLN_NUM       AS SHPG_PLN_NUM
+            , SP.TRX_HDR_NUM        AS TRX_HDR_NUM
+            , SP.TRX_LINE_NUM       AS TRX_LINE_NUM
+            , SP.TRX_LINE_SUB_NUM   AS TRX_LINE_SUB_NUM
+            , SP.SET_SHPG_PLN_NUM   AS SET_SHPG_PLN_NUM
+            , SP.SHPG_STS_CD        AS SHPG_STS_CD
+            , SP.ORD_QTY            AS ORD_QTY_SP
+            , SP.REV_RECOG_FLG      AS REV_RECOG_FLG
+            , CD.CPO_ORD_NUM        AS CPO_ORD_NUM
+            , CD.CPO_DTL_LINE_NUM   AS CPO_DTL_LINE_NUM
+            , CD.ORD_LINE_STS_CD    AS ORD_LINE_STS_CD
+            , CD.ORD_QTY            AS ORD_QTY_CD
+        FROM
+              SHPG_PLN SP
+            , CPO_DTL CD
+        WHERE
+              SP.GLBL_CMPY_CD          = #glblCmpyCd#
+          AND ((SP.TRX_SRC_TP_CD       = #trxSrcTpCd#
+              AND (SP.SHPG_STS_CD      IN (#shpgStsInvoiced#,#shpgStsCancelled#)
+                OR   (SP.SHPG_STS_CD   IN (#shpgStsShipped#,#shpgStsArrived#,#shpgStsInstalled#)
+                  AND SP.REV_RECOG_FLG = #revRecogFlg#))
+              AND SP.TRX_HDR_NUM       = #trxHdrNum#
+              AND SP.TRX_LINE_NUM      = #trxLineNum#
+              AND SP.TRX_LINE_SUB_NUM  &lt;&gt; #trxLineSubNum#
+             <iterate property="shpgPlnNumListNotTarget" var="shpgPlnNumNotTarget[]" open="AND SP.SHPG_PLN_NUM NOT IN (" close=")" conjunction=",">
+                #shpgPlnNumNotTarget[]#
+             </iterate>
+              )
+             <iterate property="shpgPlnNumListTarget" var="shpgPlnNumTarget[]" open="OR SP.SHPG_PLN_NUM IN (" close=")" conjunction=",">
+                #shpgPlnNumTarget[]#
+             </iterate>
+              )
+          AND SP.EZCANCELFLAG          = '0'
+
+          AND SP.GLBL_CMPY_CD      = CD.GLBL_CMPY_CD
+          AND SP.TRX_HDR_NUM       = CD.CPO_ORD_NUM
+          AND SP.TRX_LINE_NUM      = CD.CPO_DTL_LINE_NUM
+          AND SP.TRX_LINE_SUB_NUM  = CD.CPO_DTL_LINE_SUB_NUM
+          AND CD.EZCANCELFLAG      = '0'
+        ORDER BY
+              SP.SHPG_PLN_NUM
+    </statement>
+
+    <statement id="getCpoDtlSts" parameterClass="Map" resultClass="String">
+        SELECT
+              DISTINCT CD.ORD_LINE_STS_CD   AS ORD_LINE_STS_CD
+        FROM
+              CPO_DTL CD
+        WHERE
+              CD.GLBL_CMPY_CD = #glblCmpyCd#
+          AND CD.CPO_ORD_NUM  = #cpoOrdNum#
+          AND CD.EZCANCELFLAG = '0'
+    </statement>
+
+    <statement id="getPrntShpgPln" parameterClass="Map" resultMap="result.SHPG_PLNTMsg">
+        SELECT
+              SP.SHPG_PLN_NUM   AS SHPG_PLN_NUM
+            , SP.SHPG_STS_CD    AS SHPG_STS_CD
+            , SP.REV_RECOG_FLG  AS REV_RECOG_FLG
+            , SP.ORD_QTY        AS ORD_QTY
+        FROM
+              SHPG_PLN SP
+        WHERE
+              SP.GLBL_CMPY_CD = #glblCmpyCd#
+          AND SP.SHPG_PLN_NUM = #shpgPlnNum#
+          AND SP.EZCANCELFLAG = '0'
+    </statement>
+    <resultMap id="result.SHPG_PLNTMsg" class="SHPG_PLNTMsg">
+        <result property="shpgPlnNum"       column="SHPG_PLN_NUM"           javaType="EZDTStringItem"/>
+        <result property="shpgStsCd"        column="SHPG_STS_CD"            javaType="EZDTStringItem"/>
+        <result property="revRecogFlg"      column="REV_RECOG_FLG"          javaType="EZDTStringItem"/>
+        <result property="ordQty"           column="ORD_QTY"                javaType="EZDTBigDecimalItem"/>
+    </resultMap>
+
+    <statement id="getMachMstr" parameterClass="Map" resultMap="result.SVC_MACH_MSTRTMsg">
+        SELECT
+              SMM.SVC_MACH_MSTR_PK      AS SVC_MACH_MSTR_PK
+            , SMM.SVC_MACH_MSTR_STS_CD  AS SVC_MACH_MSTR_STS_CD
+            , SMM.ISTL_DT               AS ISTL_DT
+            , SMM.SVC_CONFIG_MSTR_PK <!-- QC#3145 -->
+        FROM
+              SVC_MACH_MSTR SMM
+        WHERE
+              SMM.GLBL_CMPY_CD = #glblCmpyCd#
+          AND SMM.SHPG_PLN_NUM = #shpgPlnNum#
+          AND SMM.EZCANCELFLAG = '0'
+          <isEqual property="rowNumFlg" compareValue="Y">
+          AND ROWNUM &lt; 2
+          </isEqual>
+        ORDER BY
+              SMM.SVC_MACH_MSTR_PK
+    </statement>
+    <resultMap id="result.SVC_MACH_MSTRTMsg" class="SVC_MACH_MSTRTMsg">
+        <result property="svcMachMstrPk"    column="SVC_MACH_MSTR_PK"       javaType="EZDTBigDecimalItem"/>
+        <result property="svcMachMstrStsCd" column="SVC_MACH_MSTR_STS_CD"   javaType="EZDTStringItem"/>
+        <result property="istlDt"           column="ISTL_DT"                javaType="EZDTStringItem"/>
+        <result property="svcConfigMstrPk"  column="SVC_CONFIG_MSTR_PK"     javaType="EZDTBigDecimalItem"/>
+    </resultMap>
+
+    <statement id="countNotInstalledMachMstr" parameterClass="Map" resultClass="Integer">
+        SELECT
+            COUNT(*)
+        FROM
+            SVC_MACH_MSTR SMM
+            ,DS_CPO_CONFIG DCC
+        WHERE
+              DCC.GLBL_CMPY_CD          = #glblCmpyCd#
+          <!-- Del Start 2019/10/01 QC#53587 -->
+          <!-- AND DCC.CPO_ORD_NUM           = #cpoOrdNum# -->
+          <!-- AND DCC.DS_CPO_CONFIG_PK      = #dsCpoConfigPk# -->
+          <!-- Del End 2019/10/01 QC#53587 -->
+          AND DCC.EZCANCELFLAG          = '0'
+
+          AND DCC.GLBL_CMPY_CD          = SMM.GLBL_CMPY_CD 
+          AND DCC.SVC_CONFIG_MSTR_PK    = SMM.SVC_CONFIG_MSTR_PK 
+          <!-- Mod Start 2019/09/30 QC#53587 -->
+          AND SMM.SVC_CONFIG_MSTR_PK    = #svcConfigMstrPk#
+          <!-- AND SMM.SVC_MACH_MSTR_STS_CD != #svcMachMstrStsCd# -->
+           AND SMM.SVC_MACH_MSTR_STS_CD NOT IN (#stsIntaled#, #stsW4R#, #stsRemoved#, #stsTerminated#)
+          <!-- Mod End 2019/09/30 QC#53587 -->
+          AND SMM.EZCANCELFLAG          = '0'
+    </statement>
+
+    <statement id="searchHoldReleaseTarget" parameterClass="Map" resultClass="Map">
+        SELECT
+             HLD.HLD_PK
+            ,HLD.CPO_ORD_NUM
+            ,HLD.CPO_DTL_LINE_NUM
+            ,HLD.CPO_DTL_LINE_SUB_NUM
+            ,HLD.SHPG_PLN_NUM
+        FROM
+             HLD            HLD
+            ,SHPG_PLN       SP
+            ,CPO_DTL        CD
+        WHERE
+                HLD.GLBL_CMPY_CD        = #glblCmpyCd#
+            <!-- Del Start 2019/10/01 QC#53587 -->
+            <!-- AND HLD.CPO_ORD_NUM         = #cpoOrdNum# -->
+            <!-- Del End 2019/10/01 QC#53587 -->
+            AND HLD.HLD_RSN_CD          = #hldRsnS03#
+            AND HLD.REL_FLG             = #relflgN#
+            AND HLD.EZCANCELFLAG        = '0'
+
+            AND HLD.GLBL_CMPY_CD        = SP.GLBL_CMPY_CD
+            AND HLD.SHPG_PLN_NUM        = SP.SHPG_PLN_NUM
+            AND SP.EZCANCELFLAG         = '0'
+
+            AND SP.GLBL_CMPY_CD         = CD.GLBL_CMPY_CD
+            AND SP.TRX_HDR_NUM          = CD.CPO_ORD_NUM
+            AND SP.TRX_LINE_NUM         = CD.CPO_DTL_LINE_NUM
+            AND SP.TRX_LINE_SUB_NUM     = CD.CPO_DTL_LINE_SUB_NUM
+            <!-- Mod Start 2019/10/01 QC#53587 -->
+            <!-- AND CD.DS_CPO_CONFIG_PK     = #dsCpoConfigPk# -->
+            AND CD.SVC_CONFIG_MSTR_PK   = #svcConfigMstrPk#
+            <!-- Mod End 2019/10/01 QC#53587 -->
+            AND CD.EZCANCELFLAG         = '0'
+    </statement>
+
+    <!-- 2019/11/11 QC#54200 Add Start -->
+    <statement id="getShippingStatusInConfig" parameterClass="Map" resultClass="Map">
+        SELECT
+             SP.SHPG_STS_CD            AS SHPG_STS_CD
+            ,SP.SHPG_PLN_NUM           AS SHPG_PLN_NUM
+        FROM
+             CPO_DTL        CD
+            ,SHPG_PLN       SP
+            ,MDSE           M
+        WHERE
+                CD.GLBL_CMPY_CD         = #glblCmpyCd#
+            AND CD.SVC_CONFIG_MSTR_PK   = #svcConfigMstrPk#
+            AND CD.EZCANCELFLAG         = '0'
+            AND CD.GLBL_CMPY_CD         = SP.GLBL_CMPY_CD
+            AND CD.CPO_ORD_NUM          = SP.TRX_HDR_NUM
+            AND CD.CPO_DTL_LINE_NUM     = SP.TRX_LINE_NUM
+            AND CD.CPO_DTL_LINE_SUB_NUM = SP.TRX_LINE_SUB_NUM
+            AND SP.EZCANCELFLAG         = '0'
+            AND SP.GLBL_CMPY_CD         = M.GLBL_CMPY_CD
+            AND SP.MDSE_CD              = M.MDSE_CD
+            AND M.EZCANCELFLAG          = '0'
+            AND M.INSTL_BASE_CTRL_FLG   = 'Y'
+        ORDER BY
+             SP.SHPG_PLN_NUM
+    </statement>
+    <!-- 2019/11/11 QC#54200 Add Start -->
+</sqlMap>

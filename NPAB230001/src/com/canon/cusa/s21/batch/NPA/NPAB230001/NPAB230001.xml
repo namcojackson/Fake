@@ -1,0 +1,263 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NPAB230001">
+
+    <statement id="findIFData" parameterClass="Map" resultClass="Map">
+        SELECT
+            MAIN.*
+           ,MI.MRP_INFO_PK
+        FROM(
+            SELECT
+                AMV.MDSE_CD
+               ,IF.MIN_INVTY_QTY
+               ,IF.MAX_INVTY_QTY
+               ,TPWRX.RTL_WH_CD
+               ,TPWRX.RTL_SWH_CD
+               ,WO.WH_OWNR_CD
+               ,RW.RTL_WH_CATG_CD
+               <!-- QC#59649 Start -->
+               <!--
+               ,CASE
+                    WHEN WO.WH_OWNR_CD != #whOwnrMNX# THEN(
+                            SELECT
+                                CASE
+                                    WHEN AMV.COA_PROD_CD = DCC.DS_COND_CONST_VAL_TXT_02 THEN DCC.DS_COND_CONST_VAL_TXT_03
+                                    WHEN AMV.COA_PROD_CD = DCC.DS_COND_CONST_VAL_TXT_04 THEN DCC.DS_COND_CONST_VAL_TXT_05
+                                    ELSE DS_COND_CONST_VAL_TXT_01
+                                END AS MRP_PLN_NM
+                            FROM
+                                DS_COND_CONST DCC
+                           WHERE
+                               DCC.GLBL_CMPY_CD         = #glblCmpyCd#
+                           AND DCC.DS_COND_CONST_GRP_ID = #dsCondConstGrpId#
+                           AND DCC.DS_COND_CONST_CD     = AH.PRNT_VND_CD
+                           AND DCC.EZCANCELFLAG         = '0'
+                        )
+                    ELSE TPWRX.RTL_WH_CD || #parts#
+                END AS MRP_PLN_NM
+               -->
+               <!-- QC#59649 End -->
+               ,CASE
+                    <!-- Mod QC#60261 -->
+                    WHEN WO.WH_OWNR_CD != #whOwnrMNX# AND RW.RTL_WH_CATG_CD = #partsDepo# THEN TPWRX.RTL_WH_CD || ' PARTS'
+                    WHEN WO.WH_OWNR_CD != #whOwnrMNX# AND MPPC1.COA_PROD_CD IS NOT NULL THEN MPPC1.MRP_PLN_NM
+                    WHEN WO.WH_OWNR_CD != #whOwnrMNX# AND MPPC2.COA_PROD_CD IS NULL THEN MPPC2.MRP_PLN_NM
+                    ELSE TPWRX.RTL_WH_CD || ' PARTS'
+                END AS MRP_PLN_NM
+               ,AD.ASL_DTL_PK
+               ,IF.WH_RG_CD
+               ,IF.MDSE_CD AS IF_MDSE_CD
+            FROM
+                NPAI2300_01         IF
+               ,TRD_PTNR_WH_RG_XREF TPWRX
+               ,ALL_MDSE_V          AMV
+               ,ASL_HDR             AH
+               ,ASL_DTL             AD
+               ,RTL_WH              RW
+               ,WH_OWNR             WO
+               <!-- QC#59649 Start -->
+               ,MRP_PLN_PROD_COND   MPPC1
+               ,MRP_PLN_PROD_COND   MPPC2
+               <!-- QC#59649 End -->
+            WHERE
+                IF.INTERFACE_ID                         = #interfaceId#
+            AND IF.TRANSACTION_ID                       = #transactionId#
+            AND TPWRX.GLBL_CMPY_CD(+)                   = #glblCmpyCd#
+            AND IF.WH_RG_CD                             = TPWRX.TRD_PTNR_WH_RG_NM(+)
+            AND IF.RTL_WH_CD                            = TPWRX.RTL_WH_CD(+)
+            AND AMV.GLBL_CMPY_CD(+)                     = #glblCmpyCd#
+            AND IF.MDSE_CD                              = AMV.MDSE_CD(+)
+            AND AD.GLBL_CMPY_CD(+)                      = #glblCmpyCd#
+            AND NVL(AD.EFF_FROM_DT(+), '00000000')  &lt;= #salesDate#
+            AND NVL(AD.EFF_THRU_DT(+), '99991231')  &gt;= #salesDate#
+            AND AD.PRIM_SPLY_FLG(+)                     = 'Y'
+            AND AMV.MDSE_CD                             = AD.MDSE_CD(+)
+            AND AD.GLBL_CMPY_CD                         = AH.GLBL_CMPY_CD(+)
+            AND AD.ASL_HDR_PK                           = AH.ASL_HDR_PK(+)
+            AND NVL(AH.ASL_START_DT(+), '00000000') &lt;= #salesDate#
+            AND NVL(AH.ASL_END_DT(+), '99991231')   &gt;= #salesDate#
+            AND TPWRX.GLBL_CMPY_CD                      = RW.GLBL_CMPY_CD(+)
+            AND TPWRX.RTL_WH_CD                         = RW.RTL_WH_CD(+)
+            AND RW.GLBL_CMPY_CD                         = WO.GLBL_CMPY_CD(+)
+            AND RW.WH_OWNR_CD                           = WO.WH_OWNR_CD(+)
+            <!-- QC#59649 Start -->
+            AND AH.GLBL_CMPY_CD                         = MPPC1.GLBL_CMPY_CD(+)
+            AND AH.PRNT_VND_CD                          = MPPC1.PRNT_VND_CD(+)
+            AND AMV.COA_PROD_CD                         = MPPC1.COA_PROD_CD(+)
+            AND AH.GLBL_CMPY_CD                         = MPPC2.GLBL_CMPY_CD(+)
+            AND AH.PRNT_VND_CD                          = MPPC2.PRNT_VND_CD(+)
+            AND MPPC2.COA_PROD_CD(+)                    IS NULL
+            <!-- QC#59649 End -->
+            AND IF.EZCANCELFLAG(+)                      = '0'
+            AND TPWRX.EZCANCELFLAG(+)                   = '0'
+            AND AH.EZCANCELFLAG(+)                      = '0'
+            AND AD.EZCANCELFLAG(+)                      = '0'
+            AND RW.EZCANCELFLAG(+)                      = '0'
+            AND WO.EZCANCELFLAG(+)                      = '0'
+            <!-- QC#59649 Start -->
+            AND MPPC1.EZCANCELFLAG(+)                   = '0'
+            AND MPPC2.EZCANCELFLAG(+)                   = '0'
+            <!-- QC#59649 End -->
+            <!-- Mod QC#60261 start -->
+            <isNotNull property="rtlWhCatgList">
+            AND NOT EXISTS(
+                SELECT
+                    1
+                FROM
+                    RTL_WH CHK_RW
+                WHERE
+                    CHK_RW.GLBL_CMPY_CD = #glblCmpyCd#
+                AND CHK_RW.RTL_WH_CD = IF.RTL_WH_CD
+                <iterate property="rtlWhCatgList" var="rtlWhCatgList[]" open="AND CHK_RW.RTL_WH_CATG_CD IN ( " close=" )" conjunction=",">
+                #rtlWhCatgList[]#
+                </iterate>
+            )
+            </isNotNull>
+            <!-- Mod QC#60261 end -->
+            ORDER BY
+                IF.SEGMENT_ID
+               ,IF.UNIT_ID
+               ,IF.SEGMENT_ID
+        ) MAIN
+        ,MRP_INFO MI
+        WHERE
+            MI.GLBL_CMPY_CD(+) = #glblCmpyCd#
+        AND MI.MRP_PLN_NM(+)   = MAIN.MRP_PLN_NM
+        AND MI.MDSE_CD(+)      = MAIN.MDSE_CD
+        AND MI.RTL_WH_CD(+)    = MAIN.RTL_WH_CD
+        AND MI.RTL_SWH_CD(+)   = MAIN.RTL_SWH_CD
+        AND MI.MRP_INFO_RGTN_STS_CD(+)  = #rgtnStsCd#
+        AND MI.EZCANCELFLAG(+) = '0'
+    </statement>
+
+    <statement id="checkMrpInfo" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            MI.MRP_INFO_PK
+        FROM
+            MRP_INFO MI
+        WHERE
+            MI.GLBL_CMPY_CD = #glblCmpyCd#
+        AND MI.MDSE_CD      = #mdseCd#
+        AND MI.RTL_WH_CD    = #rtlWhCd#
+        AND MI.RTL_SWH_CD   = #rtlSwhCd#
+        AND MI.MRP_INFO_RGTN_STS_CD  = #rgtnStsCd#
+        AND MI.MRP_PLN_NM  != #mrpPlnNm#
+        AND MI.EZCANCELFLAG = '0'
+    </statement>
+
+    <statement id="findMrpPlan" parameterClass="Map" resultClass="Map">
+        SELECT
+                MRP.MRP_INFO_PK
+               ,MRP.RPLSH_DLY_FLG
+               ,MRP.RPLSH_MON_FLG
+               ,MRP.RPLSH_TUE_FLG
+               ,MRP.RPLSH_WED_FLG
+               ,MRP.RPLSH_THU_FLG
+               ,MRP.RPLSH_FRI_FLG
+        FROM   ( SELECT
+                         MI.MRP_INFO_PK           AS MRP_INFO_PK
+                         ,MI.RPLSH_DLY_FLG         AS RPLSH_DLY_FLG
+                         ,MI.RPLSH_MON_FLG         AS RPLSH_MON_FLG
+                         ,MI.RPLSH_TUE_FLG         AS RPLSH_TUE_FLG
+                         ,MI.RPLSH_WED_FLG         AS RPLSH_WED_FLG
+                         ,MI.RPLSH_THU_FLG         AS RPLSH_THU_FLG
+                         ,MI.RPLSH_FRI_FLG         AS RPLSH_FRI_FLG
+                  FROM
+                          MRP_INFO    MI
+                  WHERE   MI.GLBL_CMPY_CD = #glblCmpyCd#
+                  AND     MI.EZCANCELFLAG = '0'
+                  AND     MI.MRP_PLN_NM = #mrpPlnNm#
+                  AND     MI.MRP_INFO_RGTN_STS_CD = #mrpInfoRgtnStsCd#
+                  ORDER BY 
+                          MI.MRP_PLN_NM
+                         ,MI.MDSE_CD
+                         ,MI.RTL_WH_CD
+               ) MRP
+        WHERE ROWNUM = 1
+    </statement>
+
+    <!-- Mod QC#60261 start -->
+    <statement id="findIFDataForTech" parameterClass="Map" resultClass="Map">
+        SELECT
+            MAIN.*
+           ,MI.MRP_INFO_PK
+        FROM(
+            SELECT
+                AMV.MDSE_CD
+               ,IF.MIN_INVTY_QTY
+               ,IF.MAX_INVTY_QTY
+               ,RW.DEF_SRC_RTL_WH_CD AS RTL_WH_CD
+               ,RW.DEF_SRC_RTL_SWH_CD AS RTL_SWH_CD
+               ,WO.WH_OWNR_CD
+               ,RW.RTL_WH_CATG_CD
+               ,TPWRX.RTL_WH_CD || ' PARTS' AS MRP_PLN_NM
+               ,IF.WH_RG_CD
+               ,IF.MDSE_CD AS IF_MDSE_CD
+               ,IF.RTL_WH_CD AS IF_RTL_WH_CD
+               ,TPWRX.RTL_WH_CD AS DEST_RTL_WH_CD
+            FROM
+                NPAI2300_01         IF
+               ,TRD_PTNR_WH_RG_XREF TPWRX
+               ,ALL_MDSE_V          AMV
+               ,RTL_WH              RW
+               ,WH_OWNR             WO
+            WHERE
+                IF.INTERFACE_ID                         = #interfaceId#
+            AND IF.TRANSACTION_ID                       = #transactionId#
+            AND TPWRX.GLBL_CMPY_CD(+)                   = #glblCmpyCd#
+            AND IF.WH_RG_CD                             = TPWRX.TRD_PTNR_WH_RG_NM(+)
+            AND IF.RTL_WH_CD                            = TPWRX.RTL_WH_CD(+)
+            AND AMV.GLBL_CMPY_CD(+)                     = #glblCmpyCd#
+            AND IF.MDSE_CD                              = AMV.MDSE_CD(+)
+            AND TPWRX.GLBL_CMPY_CD                      = RW.GLBL_CMPY_CD(+)
+            AND TPWRX.RTL_WH_CD                         = RW.RTL_WH_CD(+)
+            AND RW.GLBL_CMPY_CD                         = WO.GLBL_CMPY_CD(+)
+            AND RW.WH_OWNR_CD                           = WO.WH_OWNR_CD(+)
+            AND IF.EZCANCELFLAG(+)                      = '0'
+            AND TPWRX.EZCANCELFLAG(+)                   = '0'
+            AND RW.EZCANCELFLAG(+)                      = '0'
+            AND WO.EZCANCELFLAG(+)                      = '0'
+            <isNotNull property="rtlWhCatgList">
+            AND EXISTS(
+                SELECT
+                    1
+                FROM
+                    RTL_WH CHK_RW
+                WHERE
+                    CHK_RW.GLBL_CMPY_CD = #glblCmpyCd#
+                AND CHK_RW.RTL_WH_CD = IF.RTL_WH_CD
+                <iterate property="rtlWhCatgList" var="rtlWhCatgList[]" open="AND CHK_RW.RTL_WH_CATG_CD IN ( " close=" )" conjunction=",">
+                #rtlWhCatgList[]#
+                </iterate>
+            )
+            </isNotNull>
+          ORDER BY
+                IF.SEGMENT_ID
+               ,IF.UNIT_ID
+               ,IF.SEGMENT_ID
+        ) MAIN
+        ,MRP_INFO MI
+        WHERE
+            MI.GLBL_CMPY_CD(+) =#glblCmpyCd#
+        AND MI.MRP_PLN_NM(+)   = MAIN.MRP_PLN_NM
+        AND MI.MDSE_CD(+)      = MAIN.MDSE_CD
+        AND MI.SRC_RTL_WH_CD(+)    = MAIN.RTL_WH_CD
+        AND MI.SRC_RTL_SWH_CD(+)   = MAIN.RTL_SWH_CD
+        AND MI.MRP_INFO_RGTN_STS_CD(+)  = #rgtnStsCd#
+        AND MI.EZCANCELFLAG(+) = '0'
+    </statement>
+
+    <statement id="checkMrpInfoForTech" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            MI.MRP_INFO_PK
+        FROM
+            MRP_INFO MI
+        WHERE
+            MI.GLBL_CMPY_CD         = #glblCmpyCd#
+        AND MI.MDSE_CD              = #mdseCd#
+        AND MI.SRC_RTL_WH_CD       != #srcRtlWhCd#
+        AND MI.MRP_INFO_RGTN_STS_CD = #rgtnStsCd#
+        AND MI.MRP_PLN_NM           = #mrpPlnNm#
+        AND MI.EZCANCELFLAG         = '0'
+    </statement>
+    <!-- Mod QC#60261 end -->
+</sqlMap>

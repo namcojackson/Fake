@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NLEB005001">
+
+    <statement id="getTargetDsAssetMstr" parameterClass="Map">
+        SELECT
+                DA.DS_ASSET_MSTR_PK         AS DS_ASSET_MSTR_PK
+               ,TO_NUMBER(DA.DEPC_MTH_NUM)  AS DEPC_MTH_NUM
+               ,NVL(DA.DEPC_CNT, 0)         AS DEPC_CNT
+               ,DA.CUR_VAL_AMT              AS CUR_VAL_AMT
+               ,DA.FIRST_DEPC_YR_MTH        AS FIRST_DEPC_YR_MTH
+               ,DA.LAST_DEPC_YR_MTH         AS LAST_DEPC_YR_MTH
+               ,NVL(DA.RSDL_VAL_AMT,0)      AS RSDL_VAL_AMT
+               ,DA.DEPC_RE_START_DT         AS DEPC_RE_START_DT
+               ,MONTHS_BETWEEN(
+                    TO_DATE(#batchYrMth#, 'YYYYMM')
+                   ,TO_DATE(DA.LAST_DEPC_YR_MTH, 'YYYYMM')
+                )                           AS LAST_BATCH_MTH
+               ,MONTHS_BETWEEN(
+                    TO_DATE(#batchYrMth#, 'YYYYMM')
+                   ,TO_DATE(DA.FIRST_DEPC_YR_MTH, 'YYYYMM')
+                )                           AS FIRST_BATCH_MTH
+               ,MONTHS_BETWEEN(
+                    TO_DATE(#batchYrMth#, 'YYYYMM')
+                   ,TO_DATE(TO_CHAR(TO_DATE(DA.DEPC_RE_START_DT, 'YYYYMMDD'), 'YYYYMM'), 'YYYYMM')
+                )                           AS RESTART_BATCH_MTH
+                <!-- Add 01/21/2016 -->
+               ,DA.PRNT_DS_ASSET_MSTR_PK
+        FROM
+                DS_ASSET_MSTR  DA
+               ,ASSET_TP       AT
+        WHERE
+                DA.GLBL_CMPY_CD   = #glblCmpyCd#
+        <iterate property="assetStsCdList" var="assetStsCdList[]" open="AND DA.ASSET_STS_CD IN (" close=")" conjunction=",">
+            #assetStsCdList[]#
+        </iterate>
+        AND     DA.ACTV_ASSET_FLG = #actvAssetFlg#
+        AND     DA.CUR_VAL_AMT &gt; NVL(DA.RSDL_VAL_AMT,0)
+        AND     TO_DATE(DA.FIRST_DEPC_YR_MTH, 'YYYYMM') &lt;= TO_DATE(#batchYrMth#, 'YYYYMM')
+        AND     (
+                    DA.LAST_DEPC_YR_MTH IS NULL
+                 OR TO_DATE(DA.LAST_DEPC_YR_MTH, 'YYYYMM') &lt; TO_DATE(#batchYrMth#, 'YYYYMM')
+                )
+        AND     (
+                    DA.DEPC_RE_START_DT IS NULL
+                 OR TO_DATE(TO_CHAR(TO_DATE(DA.DEPC_RE_START_DT, 'YYYYMMDD'), 'YYYYMM'), 'YYYYMM') &lt;= TO_DATE(#batchYrMth#, 'YYYYMM')
+                )
+        AND     DA.EZCANCELFLAG   = '0'
+        AND     AT.GLBL_CMPY_CD   = DA.GLBL_CMPY_CD
+        AND     AT.ASSET_TP_CD    = DA.ASSET_TP_CD
+        AND     (   AT.DEPC_LOC_TP_CD = #depcLocTpBoth#
+                 OR (
+                         AT.DEPC_LOC_TP_CD = #depcLocTpCust#
+                     AND DA.SVC_MACH_MSTR_PK IS NOT NULL
+                    )
+                 OR (
+                         AT.DEPC_LOC_TP_CD = #depcLocTpWh#
+                     AND DA.SVC_MACH_MSTR_PK IS NULL
+                    )
+                )
+        AND     AT.EZCANCELFLAG   = '0'
+        ORDER BY
+                DA.PRNT_DS_ASSET_MSTR_PK
+    </statement>
+    
+    <statement id="getAcctMthCtrlDt" parameterClass="Map" resultClass="Map">
+    SELECT NEXT_RUN_DT
+         , ACCT_YR_MTH
+    FROM   ACCT_MTH_CTRL
+    WHERE  GLBL_CMPY_CD     = #glblCmpyCd#
+    AND    ACCT_MTH_CTRL_CD = #acctMthCtrlCd#
+    AND    EZCANCELFLAG     = '0'
+    </statement>
+
+    <statement id="getAmount" parameterClass="Map" resultClass="Map">
+        SELECT NVL(SUM(DAM.INIT_BOOK_AMT), 0)   AS INIT_BOOK_AMT
+             , NVL(SUM(DAM.CUR_VAL_AMT) , 0)    AS CUR_VAL_AMT 
+        FROM DS_ASSET_MSTR DAM 
+        WHERE 
+             DAM.GLBL_CMPY_CD            = #glblCmpyCd#
+        AND  DAM.PRNT_DS_ASSET_MSTR_PK   = #prntDsAssetMstrPk#
+        AND  DAM.EZCANCELFLAG = '0'
+    </statement>
+
+</sqlMap>

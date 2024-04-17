@@ -1,0 +1,226 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NWZC135001">
+
+    <typeAlias alias="SPLY_INFOTMsg" type="business.db.SPLY_INFOTMsg"/>
+    <typeAlias alias="DIST_DTLTMsg" type="business.db.DIST_DTLTMsg"/>
+    <typeAlias alias="ATP_INFOTMsg" type="business.db.ATP_INFOTMsg"/>
+
+    <statement id="getSplyInfo" parameterClass="Map" resultMap="result.SPLY_INFOTMsg">
+
+        SELECT
+             SIW.STOCK_FLG
+            ,SIW.MDSE_CD
+            ,SIW.INBD_VIS_EVENT_CD
+            ,SIW.ETA_OR_ETD_DT
+            ,SIW.IMPT_INV_NUM 
+            ,SIW.VND_INV_DO_NUM
+            ,SIW.IMPT_CNTNR_NUM
+            ,SIW.SPLY_INFO_PK
+            ,SIW.AVAL_QTY
+        FROM
+        (   SELECT
+                  '1' AS STOCK_FLG
+                 ,SI.MDSE_CD
+                 ,SI.INBD_VIS_EVENT_CD
+                 ,SI.ETA_OR_ETD_DT
+                 ,SI.IMPT_INV_NUM 
+                 ,SI.VND_INV_DO_NUM
+                 ,SI.IMPT_CNTNR_NUM
+                 ,SI.SPLY_INFO_PK
+                 ,SI.AVAL_QTY
+            FROM
+                 SPLY_INFO SI
+            WHERE
+                    SI.GLBL_CMPY_CD      = #glblCmpyCd#
+                AND SI.INVTY_LOC_CD      = #invtyLocCd#
+                AND SI.STK_STS_CD        = #stkStsCd#
+                AND SI.IMPT_INV_NUM      = #stock#
+                <isEqual property="ordTakeFlg" compareValue="N">
+                AND SI.MDSE_CD           = #mdseCd#
+                </isEqual>
+                <isEqual property="ordTakeFlg" compareValue="Y">
+                AND SUBSTR(SI.MDSE_CD,1,8) = #mdseCd#
+                </isEqual>
+                AND SI.EZCANCELFLAG      = '0'
+<!-- ADD START 2013/04/05 WDS#R-OM005-001 -->
+                AND EXISTS (
+                    SELECT  *
+                    FROM    WH W
+                    WHERE   SI.GLBL_CMPY_CD    = W.GLBL_CMPY_CD
+                      AND   SI.INVTY_LOC_CD    = W.WH_CD
+                      AND   W.EZCANCELFLAG     = '0'
+                      AND   W.WH_SYS_TP_CD
+                      <iterate property="whSysTpList" var="whSysTpCd[]" open="IN (" close=")" conjunction=", ">
+                            #whSysTpCd[]#
+                      </iterate>
+                )
+<!-- ADD END   2013/04/05 WDS#R-OM005-001 -->
+            UNION ALL
+            SELECT
+                  '2' AS STOCK_FLG
+                 ,SI.MDSE_CD
+                 ,SI.INBD_VIS_EVENT_CD
+                 ,SI.ETA_OR_ETD_DT
+                 ,SI.IMPT_INV_NUM 
+                 ,SI.VND_INV_DO_NUM
+                 ,SI.IMPT_CNTNR_NUM
+                 ,SI.SPLY_INFO_PK
+                 ,SI.AVAL_QTY
+            FROM
+                 SPLY_INFO SI
+            WHERE
+                    SI.GLBL_CMPY_CD      = #glblCmpyCd#
+                AND SI.INVTY_LOC_CD      = #invtyLocCd#
+                AND SI.STK_STS_CD        = #stkStsCd#
+                AND (SI.IMPT_INV_NUM      &lt;&gt; #stock#
+                OR   SI.IMPT_INV_NUM IS NULL)
+                <isEqual property="ordTakeFlg" compareValue="N">
+                AND SI.MDSE_CD           = #mdseCd#
+                </isEqual>
+                <isEqual property="ordTakeFlg" compareValue="Y">
+                AND SUBSTR(SI.MDSE_CD,1,8) = #mdseCd#
+                </isEqual>
+                AND SI.EZCANCELFLAG      = '0'
+<!-- ADD START 2013/04/05 WDS#R-OM005-001 -->
+                AND EXISTS (
+                    SELECT  *
+                    FROM    WH W
+                    WHERE   SI.GLBL_CMPY_CD    = W.GLBL_CMPY_CD
+                      AND   SI.INVTY_LOC_CD    = W.WH_CD
+                      AND   W.EZCANCELFLAG     = '0'
+                      AND   W.WH_SYS_TP_CD
+                      <iterate property="whSysTpList" var="whSysTpCd[]" open="IN (" close=")" conjunction=", ">
+                            #whSysTpCd[]#
+                      </iterate>
+                )
+<!-- ADD END   2013/04/05 WDS#R-OM005-001 -->
+        ) SIW
+        ORDER BY 
+             SIW.MDSE_CD
+            ,SIW.STOCK_FLG
+            ,SIW.ETA_OR_ETD_DT
+            ,SIW.SPLY_INFO_PK
+
+    </statement>
+
+	<statement id="getDistAvalQty" parameterClass="Map" resultMap="result.DIST_DTLTMsg">
+		
+		SELECT
+			 DD.DIST_PK
+			,DD.DIST_TM_FRAME_NUM
+			,DD.DIST_PLN_NUM
+			,DD.DIST_AVAL_QTY
+		FROM 
+			DIST_DTL           DD
+		WHERE
+			    DD.GLBL_CMPY_CD     = #glblCmpyCd#
+			AND DD.DIST_PLN_NUM     = #distPlnNum#
+			AND DD.DIST_STRU_SEG_PK = #distStruSegPk#
+			AND DD.EZCANCELFLAG     = '0'
+			AND EXISTS
+					 (	SELECT *
+						FROM 
+							DIST_PLN_DTL DPD
+						WHERE 
+							    DPD.GLBL_CMPY_CD        = DD.GLBL_CMPY_CD
+							AND	DPD.DIST_PK             = DD.DIST_PK  	
+							AND	DPD.DIST_TM_FRAME_NUM   = DD.DIST_TM_FRAME_NUM
+							AND	DPD.DIST_PLN_NUM        = DD.DIST_PLN_NUM  	
+							AND (DPD.MDSE_CD            = #mdseCd# 
+			 					OR DPD.ORD_TAKE_MDSE_CD = SUBSTR(#mdseCd#, 1, 8))
+							AND (DPD.INVTY_LOC_CD       = #invtyLocCd#
+			 					OR DPD.INVTY_LOC_CD IS NULL)
+							AND DPD.DIST_PLN_STS_CD     = #distPlnStsCdSubmit#  	
+							AND DPD.EZCANCELFLAG        = '0'
+					 )
+			AND EXISTS
+					 (	SELECT *
+						FROM 
+							DIST_PLN_TM_FRAME DPF
+						WHERE 
+							    DPF.GLBL_CMPY_CD          = DD.GLBL_CMPY_CD
+							AND	DPF.DIST_PLN_NUM          = DD.DIST_PLN_NUM  	
+							AND	DPF.DIST_TM_FRAME_NUM     = DD.DIST_TM_FRAME_NUM  	
+							AND DPF.TM_FRAME_THRU_DT  &gt;= #psdDt#
+							AND DPF.EZCANCELFLAG          = '0'
+					 )
+		ORDER BY
+			 DD.DIST_PK
+			,DD.DIST_TM_FRAME_NUM
+			,DD.DIST_PLN_NUM
+        	
+			
+		
+	</statement>
+	
+	<statement id="getAtpInfo" parameterClass="Map" resultMap="result.ATP_INFOTMsg">
+		
+		SELECT
+			 AI.ATP_INFO_PK
+			 ,AI.MDSE_CD
+			 ,AI.ALLOC_QTY
+			 ,AI.INBD_VIS_EVENT_CD 
+    		 ,AI.IMPT_INV_NUM 
+    		 ,AI.VND_INV_DO_NUM 
+    		 ,AI.IMPT_CNTNR_NUM 
+    		 ,AI.WH_ETA_DT 
+		FROM 
+			 ATP_INFO AI
+		WHERE
+			    AI.GLBL_CMPY_CD      = #glblCmpyCd#
+			AND AI.DIST_PK           = #distPk#
+			AND AI.DIST_TM_FRAME_NUM = #distTmFrameNum#
+			AND AI.TRX_HDR_NUM       IS NULL
+			AND AI.TRX_LINE_NUM		 IS NULL
+			AND AI.TRX_LINE_SUB_NUM	 IS NULL
+			AND AI.WH_ETA_DT         &lt;&gt; #tbdDt#
+			<isNotEqual property="mdseTpCd" compareValue="2">
+			AND AI.INVTY_LOC_CD      = #invtyLocCd#
+			</isNotEqual>
+			<isEqual property="ordTakeFlg" compareValue="N">
+			AND AI.MDSE_CD	         = #mdseCd#
+			</isEqual>
+			<isEqual property="ordTakeFlg" compareValue="Y">
+			AND SUBSTR(AI.MDSE_CD,1,8) = #mdseCd#
+			</isEqual>
+			AND AI.EZCANCELFLAG      = '0'
+		ORDER BY 
+			CASE WHEN AI.IMPT_INV_NUM  = #stock# THEN
+				'0'
+			ELSE
+				'1'
+			END
+			,AI.WH_ETA_DT 
+		
+	</statement>
+
+	<resultMap id="result.SPLY_INFOTMsg" class="SPLY_INFOTMsg">
+		<result property="mdseCd"   			column="MDSE_CD"				javaType="EZDTStringItem"/>
+		<result property="inbdVisEventCd"   	column="INBD_VIS_EVENT_CD"		javaType="EZDTStringItem"/>
+		<result property="etaOrEtdDt"   		column="ETA_OR_ETD_DT"			javaType="EZDTStringItem"/>
+		<result property="imptInvNum"   		column="IMPT_INV_NUM"			javaType="EZDTStringItem"/>
+		<result property="vndInvDoNum"   		column="VND_INV_DO_NUM"			javaType="EZDTStringItem"/>
+		<result property="imptCntnrNum"   		column="IMPT_CNTNR_NUM"			javaType="EZDTStringItem"/>
+		<result property="splyInfoPk"   		column="SPLY_INFO_PK"			javaType="EZDTBigDecimalItem"/>
+		<result property="avalQty"   			column="AVAL_QTY"				javaType="EZDTBigDecimalItem"/>
+	</resultMap>	
+	
+	<resultMap id="result.DIST_DTLTMsg" class="DIST_DTLTMsg">
+		<result property="distPk"   			column="DIST_PK"				javaType="EZDTBigDecimalItem"/>
+		<result property="distTmFrameNum"   	column="DIST_TM_FRAME_NUM"		javaType="EZDTStringItem"/>
+		<result property="distPlnNum"   		column="DIST_PLN_NUM"			javaType="EZDTStringItem"/>
+		<result property="distAvalQty"   		column="DIST_AVAL_QTY"			javaType="EZDTBigDecimalItem"/>
+	</resultMap>	
+	
+	<resultMap id="result.ATP_INFOTMsg" class="ATP_INFOTMsg">
+		<result property="atpInfoPk"   			column="ATP_INFO_PK"			javaType="EZDTBigDecimalItem"/>
+		<result property="mdseCd"   			column="MDSE_CD"			    javaType="EZDTStringItem"/>
+		<result property="allocQty"   			column="ALLOC_QTY"				javaType="EZDTBigDecimalItem"/>
+		<result property="inbdVisEventCd"   	column="INBD_VIS_EVENT_CD"		javaType="EZDTStringItem"/>
+		<result property="imptInvNum"   	    column="IMPT_INV_NUM"			javaType="EZDTStringItem"/>
+		<result property="vndInvDoNum"      	column="VND_INV_DO_NUM"			javaType="EZDTStringItem"/>
+		<result property="imptCntnrNum"   	    column="IMPT_CNTNR_NUM"			javaType="EZDTStringItem"/>
+		<result property="whEtaDt"   	        column="WH_ETA_DT"				javaType="EZDTStringItem"/>
+	</resultMap>	
+	
+</sqlMap>

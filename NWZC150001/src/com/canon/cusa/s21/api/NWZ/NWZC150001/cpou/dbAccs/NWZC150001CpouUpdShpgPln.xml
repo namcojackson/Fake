@@ -1,0 +1,361 @@
+<sqlMap namespace="NWZC150001CpouUpdShpgPln">
+
+    <statement id="getMaxShpgPlnDplyLineNum" parameterClass="Map" resultClass="String">
+        SELECT 
+                 MAX(TO_NUMBER(NVL(SP.SHPG_PLN_DPLY_LINE_NUM,'0'))) AS MAX_NUM
+        FROM
+                SHPG_PLN SP
+        WHERE
+        <!-- glblCmpyCd -->
+             SP.GLBL_CMPY_CD = #glblCmpyCd#
+         <!-- trxHdrNum -->
+             AND SP.TRX_HDR_NUM = #trxHdrNum#
+         <!-- trxLineNum -->
+             AND SP.TRX_LINE_NUM = #trxLineNum# 
+         <!-- trxLineSubNum -->
+             AND SP.TRX_LINE_SUB_NUM = #trxLineSubNum#
+         <!-- trxSrcTpCd -->
+             AND SP.TRX_SRC_TP_CD = #trxSrcTpCd#
+    </statement>
+
+    <statement id="getDsOrdTpTrxDfn" parameterClass="Map" resultClass="Map">
+        SELECT
+              OTTD.TRX_CD
+            , OTTD.TRX_RSN_CD
+        FROM
+             DS_ORD_TP_TRX_DFN OTTD
+        WHERE
+                OTTD.GLBL_CMPY_CD    =  #glblCmpyCd#
+            AND OTTD.EZCANCELFLAG    =  '0'
+            AND OTTD.DS_ORD_TP_CD    =  #dsOrdTpCd#
+            AND OTTD.DS_ORD_RSN_CD   =  #dsOrdRsnCd#
+            AND OTTD.TRX_CD          IS NOT NULL
+            AND OTTD.TRX_RSN_CD      IS NOT NULL
+            AND (   OTTD.LOC_ROLE_TP_CD  =  '*'
+                 OR OTTD.LOC_ROLE_TP_CD  IN (SELECT LU.LOC_ROLE_TP_CD
+                                               FROM WH W, LOC_USG LU
+                                              WHERE W.GLBL_CMPY_CD     = OTTD.GLBL_CMPY_CD
+                                                AND W.EZCANCELFLAG     = '0'
+                                                AND W.WH_CD            = #invtyLocCd#
+                                                AND LU.GLBL_CMPY_CD    = W.GLBL_CMPY_CD
+                                                AND LU.EZCANCELFLAG    = '0'
+                                                AND LU.PTY_LOC_PK      = W.PTY_LOC_PK
+                                             )
+                 )
+        ORDER BY LOC_ROLE_TP_CD DESC
+    </statement>
+
+    <statement id="getLocRoleTp" parameterClass="Map" resultClass="String">
+        SELECT 
+              LU.LOC_ROLE_TP_CD
+        FROM 
+              WH W
+              ,LOC_USG LU
+        WHERE 
+                W.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND W.EZCANCELFLAG     = '0'
+            AND W.WH_CD            = #invtyLocCd#
+            AND LU.GLBL_CMPY_CD    = W.GLBL_CMPY_CD
+            AND LU.EZCANCELFLAG    = '0'
+            AND LU.PTY_LOC_PK      = W.PTY_LOC_PK
+            <!-- START ADD D.Yanagisawa [QC#2565(Reopen)] -->
+            AND LU.LOC_ROLE_TP_CD  = #locRoleTpCd#
+            <!-- END   ADD D.Yanagisawa [QC#2565(Reopen)] -->
+    </statement>
+
+    <!-- START ADD T.Aoi [QC#19111] -->
+    <statement id="getSetShpgStsCd" parameterClass="Map" resultClass="String">
+        SELECT
+              SH.SHPG_STS_CD
+        FROM
+              SHPG_PLN        SH
+        WHERE
+                SH.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND SH.SHPG_PLN_NUM          = #shpgPlnNum#
+    </statement>
+    <!-- End   ADD T.Aoi [QC#19111] -->
+
+    <!-- 2019/08/15 S21_NA#52620 Add Start -->
+    <statement id="exixtsPRApproved" parameterClass="Map" resultClass="BigDecimal">
+    <!-- 2019/11/26 S21_NA#54846 Del Start
+        SELECT
+            COUNT(*) CNT
+        FROM
+            SHPG_PLN          SP
+          , PRCH_REQ          PR
+          , PRCH_REQ_DTL      PRD
+          , PRCH_REQ_APVL_STS PRAS
+        WHERE
+            SP.GLBL_CMPY_CD           = #glblCmpyCd#
+        AND SP.SHPG_PLN_NUM           = #shpgPlanNum#
+        AND SP.EZCANCELFLAG           = '0'
+        AND SP.GLBL_CMPY_CD           = PRD.GLBL_CMPY_CD
+        AND SP.SHPG_PLN_NUM           = PRD.SHPG_PLN_NUM
+        AND PRD.PRCH_REQ_LINE_STS_CD  &lt;&gt; #prchReqLineSts#
+        AND PRD.EZCANCELFLAG          = '0'
+        AND PRD.GLBL_CMPY_CD          = PR.GLBL_CMPY_CD
+        AND PRD.PRCH_REQ_NUM          = PR.PRCH_REQ_NUM
+        AND PR.PRCH_REQ_STS_CD        &lt;&gt; #prchReqSts#
+        AND PR.EZCANCELFLAG           = '0'
+        AND PR.GLBL_CMPY_CD           = PRAS.GLBL_CMPY_CD
+        AND PR.PRCH_REQ_APVL_STS_CD   = PRAS.PRCH_REQ_APVL_STS_CD
+        AND PRAS.PRCH_REQ_APVL_FLG    = #prchReqApvlFlg#
+        AND PRAS.EZCANCELFLAG         = '0'
+        2019/11/26 S21_NA#54846 Del End -->
+     
+     <!-- 2019/11/26 S21_NA#54846 Add Start -->
+         SELECT 
+             COUNT(*) CNT
+         FROM 
+             SHPG_PLN SP
+         WHERE
+                 SP.GLBL_CMPY_CD     = #glblCmpyCd#
+             AND SP.SHPG_PLN_NUM     = #shpgPlanNum#
+             AND SP.EZCANCELFLAG     = '0'
+             AND (
+                 EXISTS (
+                     SELECT
+                         1
+                     FROM 
+                         PRCH_REQ PR
+                        ,PRCH_REQ_DTL      PRD
+                        ,PRCH_REQ_APVL_STS PRAS
+                 WHERE
+                         PRD.GLBL_CMPY_CD        = #glblCmpyCd#
+                     AND PRD.SHPG_PLN_NUM        = SP.SHPG_PLN_NUM
+                     AND PRD.EZCANCELFLAG        = '0'
+                     
+                     AND PRD.GLBL_CMPY_CD        = PR.GLBL_CMPY_CD
+                     AND PRD.PRCH_REQ_NUM        = PR.PRCH_REQ_NUM
+                     AND PR.EZCANCELFLAG         = '0'
+                     
+                     AND PR.GLBL_CMPY_CD         = PRAS.GLBL_CMPY_CD
+                     AND PR.PRCH_REQ_APVL_STS_CD = PRAS.PRCH_REQ_APVL_STS_CD
+                     AND PRAS.PRCH_REQ_APVL_FLG  = #prchReqApvlFlg#
+                     AND PRAS.EZCANCELFLAG = '0'
+
+                     AND PR.PRCH_REQ_STS_CD      &lt;&gt; #prchReqSts#
+                     AND PRD.PRCH_REQ_LINE_STS_CD &lt;&gt; #prchReqLineSts#
+                     AND NOT EXISTS (
+                         SELECT
+                             1
+                         FROM 
+                             PO_DTL PD
+                         WHERE
+                                 PD.GLBL_CMPY_CD = PRD.GLBL_CMPY_CD
+                             AND PD.PO_ORD_NUM   = PRD.PO_ORD_NUM
+                             AND PD.EZCANCELFLAG = '0'
+                     )
+                 )
+                 OR EXISTS (
+                     SELECT
+                         1
+                     FROM 
+                         PO_DTL PD
+                     WHERE
+                             PD.GLBL_CMPY_CD     = SP.GLBL_CMPY_CD
+                         AND PD.SHPG_PLN_NUM     = SP.SHPG_PLN_NUM
+                         AND PD.PO_STS_CD        &lt;&gt; #poStsCancel#
+                         AND PD.EZCANCELFLAG     = '0'
+                 )
+                 <!-- 2023/12/21 QC#63378 Add Start -->
+                 <isNotNull property="isSetItem">
+                 OR EXISTS (--Search PO Req SET child from SET parent
+                     SELECT
+                         1
+                     FROM 
+                         SHPG_PLN CMP_SP
+                        ,PRCH_REQ PR
+                        ,PRCH_REQ_DTL      PRD
+                        ,PRCH_REQ_APVL_STS PRAS
+                     WHERE
+                         CMP_SP.GLBL_CMPY_CD     = SP.GLBL_CMPY_CD
+                     AND CMP_SP.SET_SHPG_PLN_NUM = SP.SHPG_PLN_NUM
+                     AND CMP_SP.EZCANCELFLAG     = '0'
+
+                     AND PRD.GLBL_CMPY_CD        = CMP_SP.GLBL_CMPY_CD
+                     AND PRD.SHPG_PLN_NUM        = CMP_SP.SHPG_PLN_NUM
+                     AND PRD.EZCANCELFLAG        = '0'
+                     
+                     AND PRD.GLBL_CMPY_CD        = PR.GLBL_CMPY_CD
+                     AND PRD.PRCH_REQ_NUM        = PR.PRCH_REQ_NUM
+                     AND PR.EZCANCELFLAG         = '0'
+                     
+                     AND PR.GLBL_CMPY_CD         = PRAS.GLBL_CMPY_CD
+                     AND PR.PRCH_REQ_APVL_STS_CD = PRAS.PRCH_REQ_APVL_STS_CD
+                     AND PRAS.PRCH_REQ_APVL_FLG  = #prchReqApvlFlg#
+                     AND PRAS.EZCANCELFLAG = '0'
+
+                     AND PR.PRCH_REQ_STS_CD      &lt;&gt; #prchReqSts#
+                     AND PRD.PRCH_REQ_LINE_STS_CD &lt;&gt; #prchReqLineSts#
+                 )
+                 OR EXISTS (--Search PO Req SET parent from SET child
+                     SELECT
+                         1
+                     FROM 
+                         SHPG_PLN PARENT_SP
+                        ,SHPG_PLN CMP_SP
+                        ,PRCH_REQ PR
+                        ,PRCH_REQ_DTL      PRD
+                        ,PRCH_REQ_APVL_STS PRAS
+                     WHERE
+                         PARENT_SP.GLBL_CMPY_CD  = SP.GLBL_CMPY_CD
+                     AND PARENT_SP.SHPG_PLN_NUM  = SP.SET_SHPG_PLN_NUM
+                     AND PARENT_SP.EZCANCELFLAG  = '0'
+
+                     AND PARENT_SP.GLBL_CMPY_CD  = CMP_SP.GLBL_CMPY_CD
+                     AND PARENT_SP.SHPG_PLN_NUM  = CMP_SP.SET_SHPG_PLN_NUM
+                     AND CMP_SP.EZCANCELFLAG     = '0'
+
+                     AND PRD.GLBL_CMPY_CD        = CMP_SP.GLBL_CMPY_CD
+                     AND PRD.SHPG_PLN_NUM        = CMP_SP.SHPG_PLN_NUM
+                     AND PRD.EZCANCELFLAG        = '0'
+                     
+                     AND PRD.GLBL_CMPY_CD        = PR.GLBL_CMPY_CD
+                     AND PRD.PRCH_REQ_NUM        = PR.PRCH_REQ_NUM
+                     AND PR.EZCANCELFLAG         = '0'
+                     
+                     AND PR.GLBL_CMPY_CD         = PRAS.GLBL_CMPY_CD
+                     AND PR.PRCH_REQ_APVL_STS_CD = PRAS.PRCH_REQ_APVL_STS_CD
+                     AND PRAS.PRCH_REQ_APVL_FLG  = #prchReqApvlFlg#
+                     AND PRAS.EZCANCELFLAG       = '0'
+
+                     AND PR.PRCH_REQ_STS_CD      &lt;&gt; #prchReqSts#
+                     AND PRD.PRCH_REQ_LINE_STS_CD &lt;&gt; #prchReqLineSts#
+                 )
+                 OR EXISTS (--Search PO SET child from SET parent
+                     SELECT
+                         1
+                     FROM
+                         SHPG_PLN CMP_SP
+                        ,PO_DTL PD
+                     WHERE
+                         CMP_SP.GLBL_CMPY_CD     = SP.GLBL_CMPY_CD
+                     AND CMP_SP.SET_SHPG_PLN_NUM = SP.SHPG_PLN_NUM
+                     AND CMP_SP.EZCANCELFLAG     = '0'
+
+                     AND PD.GLBL_CMPY_CD         = CMP_SP.GLBL_CMPY_CD
+                     AND PD.SHPG_PLN_NUM         = CMP_SP.SHPG_PLN_NUM
+                     AND PD.PO_STS_CD            &lt;&gt; #poStsCancel#
+                     AND PD.EZCANCELFLAG         = '0'
+                 )
+                 OR EXISTS (--Search PO SET parent from SET child
+                     SELECT
+                         1
+                     FROM
+                         SHPG_PLN PARENT_SP
+                        ,SHPG_PLN CMP_SP
+                        ,PO_DTL PD
+                     WHERE
+                         PARENT_SP.GLBL_CMPY_CD  = SP.GLBL_CMPY_CD
+                     AND PARENT_SP.SHPG_PLN_NUM  = SP.SET_SHPG_PLN_NUM
+                     AND PARENT_SP.EZCANCELFLAG  = '0'
+
+                     AND PARENT_SP.GLBL_CMPY_CD  = CMP_SP.GLBL_CMPY_CD
+                     AND PARENT_SP.SHPG_PLN_NUM  = CMP_SP.SET_SHPG_PLN_NUM
+                     AND CMP_SP.EZCANCELFLAG     = '0'
+
+                     AND PD.GLBL_CMPY_CD         = CMP_SP.GLBL_CMPY_CD
+                     AND PD.SHPG_PLN_NUM         = CMP_SP.SHPG_PLN_NUM
+                     AND PD.PO_STS_CD            &lt;&gt; #poStsCancel#
+                     AND PD.EZCANCELFLAG         = '0'
+                 )
+                 </isNotNull>
+                 <!-- 2023/12/21 QC#63378 Add End -->
+             )
+
+    </statement>
+    <!-- 2019/08/15 S21_NA#52620 Add End -->
+
+    <!-- 2019/08/21 S21_NA#52932 Add Start -->
+    <statement id="getSetMaxShpgStsCd" parameterClass="Map" resultClass="String">
+        SELECT
+               MAX(SH.SHPG_STS_CD)
+        FROM
+              SHPG_PLN        SH
+        WHERE
+                SH.GLBL_CMPY_CD            = #glblCmpyCd#
+            AND SH.SET_SHPG_PLN_NUM        = #setShpgPlnNum#
+            AND SH.SHPG_STS_CD NOT IN ('25','37','39','49','99')
+    </statement>
+    <!-- 2019/08/21 S21_NA#52932 Add End -->
+    <!-- 2019/08/21 S21_NA#54720 Add Start -->
+    <statement id="getOpenPr" parameterClass="Map" resultClass="Map">
+        SELECT
+                 PR.PRCH_REQ_NUM
+                ,PRD.PRCH_REQ_LINE_NUM
+                ,PRD.PRCH_REQ_LINE_SUB_NUM
+        FROM
+                 PRCH_REQ     PR
+                ,PRCH_REQ_DTL PRD
+                ,PRCH_REQ_STS PRS
+                ,PRCH_REQ_APVL_STS PRAS
+                ,PRCH_REQ_LINE_STS PRLS
+        WHERE
+                PRD.GLBL_CMPY_CD = #glblCmpyCd#
+            AND PRD.SHPG_PLN_NUM = #shpgPlnNum#
+            AND PRD.EZCANCELFLAG = '0'
+    
+            AND PRD.GLBL_CMPY_CD = PR.GLBL_CMPY_CD
+            AND PRD.PRCH_REQ_NUM = PR.PRCH_REQ_NUM
+            AND PRD.EZCANCELFLAG = PR.EZCANCELFLAG
+    
+            AND PR.GLBL_CMPY_CD = PRS.GLBL_CMPY_CD
+            AND PR.PRCH_REQ_STS_CD = PRS.PRCH_REQ_STS_CD
+            AND PRS.OPEN_STS_FLG = #openY#
+            AND PR.EZCANCELFLAG = PRS.EZCANCELFLAG
+    
+            AND PR.GLBL_CMPY_CD = PRS.GLBL_CMPY_CD
+            AND PR.PRCH_REQ_APVL_STS_CD = PRAS.PRCH_REQ_APVL_STS_CD
+            AND PRAS.PRCH_REQ_APVL_FLG = #approveN#
+            AND PR.EZCANCELFLAG = PRAS.EZCANCELFLAG
+    
+            AND PRD.GLBL_CMPY_CD = PRLS.GLBL_CMPY_CD
+            AND PRD.PRCH_REQ_LINE_STS_CD = PRLS.PRCH_REQ_LINE_STS_CD
+            AND PRLS.APVL_STS_FLG = #approveN#
+            AND PRLS.OPEN_STS_FLG = #openY#
+            AND PRD.EZCANCELFLAG = PRLS.EZCANCELFLAG
+  
+
+    </statement>
+    <!-- 2019/08/21 S21_NA#54720 Add End -->
+
+    <!-- 2019/11/27 QC#52339 Add Start -->
+    <statement id="getServiceMachineMaster" parameterClass="Map" resultClass="Map">
+        SELECT
+             SMM.SVC_MACH_MSTR_PK   SVC_MACH_MSTR_PK
+            ,SMM.SVC_MACH_QTY       SVC_MACH_QTY
+            ,CD.DS_ORD_POSN_NUM     DS_ORD_POSN_NUM
+        FROM
+            CPO_DTL           CD
+           ,DS_CPO_CONFIG     DCC
+           ,SVC_MACH_MSTR     SMM
+           ,SVC_MACH_MSTR_STS SMMS
+        WHERE
+            CD.GLBL_CMPY_CD           = #glblCmpyCd#
+        AND CD.CPO_ORD_NUM            = #cpoOrdNum#
+        AND CD.CPO_DTL_LINE_NUM       = #cpoDtlLineNum#
+        AND CD.CPO_DTL_LINE_SUB_NUM   = #CpoDtlLineSubNum#
+        AND CD.EZCANCELFLAG           = '0'
+        AND CD.GLBL_CMPY_CD           = DCC.GLBL_CMPY_CD
+        AND CD.DS_CPO_CONFIG_PK       = DCC.DS_CPO_CONFIG_PK
+        AND DCC.EZCANCELFLAG          = '0'
+        AND DCC.GLBL_CMPY_CD          = SMM.GLBL_CMPY_CD
+        AND DCC.SVC_CONFIG_MSTR_PK    = SMM.SVC_CONFIG_MSTR_PK
+        AND SMM.EZCANCELFLAG          = '0'
+        AND SMM.GLBL_CMPY_CD          = CD.GLBL_CMPY_CD
+        AND SMM.CPO_ORD_NUM           = CD.CPO_ORD_NUM
+        AND SMM.CPO_DTL_LINE_NUM      = CD.CPO_DTL_LINE_NUM
+        AND SMM.CPO_DTL_LINE_SUB_NUM  = CD.CPO_DTL_LINE_SUB_NUM
+        AND SMM.SVC_MACH_MSTR_STS_CD IN 
+        <iterate property="machMstrStsList" var="machMstrSts[]" open="(" close=")" conjunction=",">
+            #machMstrSts[]#
+        </iterate>
+        AND SMM.GLBL_CMPY_CD          = SMMS.GLBL_CMPY_CD
+        AND SMM.SVC_MACH_MSTR_STS_CD  = SMMS.SVC_MACH_MSTR_STS_CD
+        AND SMMS.EZCANCELFLAG         = '0'
+        ORDER BY
+            SMMS.SVC_MACH_MSTR_STS_SORT_NUM, SMM.SVC_MACH_MSTR_PK
+    </statement>
+    <!-- 2019/11/27 QC#52339 Add End -->
+</sqlMap>

@@ -1,0 +1,359 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NMZC270001">
+
+    <statement id="getDuplicateTrtyRule" parameterClass="Map" resultClass="Map">
+        SELECT
+            TR.TRTY_RULE_PK TRTY_RULE_PK
+        FROM
+            TRTY_RULE TR
+        WHERE
+            TR.GLBL_CMPY_CD           = #glblCmpyCd#
+        AND TR.EZCANCELFLAG           = '0'
+        AND TR.TRTY_RULE_TP_CD        = #trtyRuleTpCd#
+        AND TR.TRTY_RULE_OPRD_TP_CD   = #trtyRuleOprdTpCd#
+        AND TR.TRTY_RULE_FROM_VAL_TXT = #trtyRuleFromValTxt#
+        AND    (TR.TRTY_RULE_THRU_VAL_TXT IS NULL
+            OR TR.TRTY_RULE_THRU_VAL_TXT = #trtyRuleThruValTxt#)
+        AND TR.EFF_FROM_DT            &lt;= #slsDt#
+        AND    (TR.EFF_THRU_DT IS NULL 
+            OR  TR.EFF_THRU_DT &gt;= #slsDt#)
+        AND TR.ORG_CD                 != #orgCd#
+        AND ROWNUM = 1
+    </statement>
+    
+    <statement id="getTrtyRuleForRangeOverlapCheck" parameterClass="Map" resultClass="Map">
+        SELECT
+            TR.TRTY_RULE_OPRD_TP_CD   TRTY_RULE_OPRD_TP_CD
+          , TR.TRTY_RULE_FROM_VAL_TXT TRTY_RULE_FROM_VAL_TXT
+          , TR.TRTY_RULE_THRU_VAL_TXT TRTY_RULE_THRU_VAL_TXT
+          , DOU.ORG_NM                ORG_NM
+          , TR.TRTY_RULE_LOGIC_TP_CD  TRTY_RULE_LOGIC_TP_CD
+          , TR.ORG_CD                 ORG_CD
+          ,TR.EFF_FROM_DT
+          ,TR.EFF_THRU_DT
+        FROM
+            DS_ORG_UNIT DOU
+          , TRTY_RULE   TR
+          , ORG_STRU_TP OST
+        WHERE
+            DOU.GLBL_CMPY_CD   = #glblCmpyCd#
+        AND DOU.EZCANCELFLAG   = '0'
+        AND DOU.ORG_STRU_TP_CD = #orgStruTpCd#
+        AND DOU.TRTY_GRP_TP_CD = #trtyGrpTpCd#
+        AND DOU.TRTY_TP_CD     = #trtyTpCd#
+        AND DOU.FIRST_ORG_CD   = #firstOrgCd#
+        AND DOU.ORG_CD         != #orgCd#
+        AND DOU.GNRN_TP_CD     IN(#gnrnTpCurrent#, #gnrnTpFuture#)
+        <!-- 2020/03/31 QC#56405 Add Start -->
+        AND EXISTS (
+                SELECT
+                    1
+                FROM
+                    DS_ORG_RELN DOR
+                WHERE
+                        DOU.GLBL_CMPY_CD = DOR.GLBL_CMPY_CD
+                    AND DOU.ORG_CD = DOR.ORG_CD
+                    AND DOR.GNRN_TP_CD IN (#gnrnTpCurrent#, #gnrnTpFuture#)
+                    AND DOU.EZCANCELFLAG = '0'
+                )
+       <!-- 2020/03/31 QC#56405 Add Start -->
+                        
+        AND DOU.GLBL_CMPY_CD   = OST.GLBL_CMPY_CD
+        AND OST.EZCANCELFLAG   = '0'
+        AND DOU.ORG_STRU_TP_CD = OST.ORG_STRU_TP_CD
+        AND OST.TRTY_STRU_FLG  = 'Y'
+        
+        AND DOU.GLBL_CMPY_CD   = TR.GLBL_CMPY_CD
+        AND TR.EZCANCELFLAG    = '0'
+        AND DOU.ORG_CD         = TR.ORG_CD
+        AND DOU.ORG_STRU_TP_CD = TR.ORG_STRU_TP_CD
+        AND TR.TRTY_RULE_TP_CD = #trtyRuleTpCd#
+        AND (TR.EFF_THRU_DT    &gt;= #trtyRuleEffFromDt#
+            OR TR.EFF_THRU_DT  IS NULL)
+       <isNotNull property="trtyRuleEffThruDt">
+        AND TR.EFF_FROM_DT     &lt;= #trtyRuleEffThruDt#
+       </isNotNull>
+       <!-- QC#11638 -->
+        AND TR.TRTY_RULE_LOGIC_TP_CD = #trtyRuleLogicTp_OR#
+        ORDER BY
+            TR.ORG_CD
+           ,TR.TRTY_RULE_PK
+    </statement>
+    
+    <statement id="ssmGetOrgNmParam" parameterClass="Map" resultClass="Map">
+        SELECT
+           DOU.ORG_NM ORG_NM
+        FROM
+           DS_ORG_UNIT DOU
+         , ORG_STRU_TP OST
+        WHERE
+            DOU.GLBL_CMPY_CD   = #glblCmpyCd#
+        AND DOU.EZCANCELFLAG   = '0'
+        AND DOU.ORG_STRU_TP_CD = #orgStruTpCd#
+        AND DOU.TRTY_GRP_TP_CD = #trtyGrpTpCd#
+        AND DOU.TRTY_TP_CD     = #trtyTpCd#
+        AND DOU.FIRST_ORG_CD   = #firstOrgCd#
+        AND DOU.ORG_CD         = #orgCd#
+        AND DOU.GNRN_TP_CD     IN(#gnrnTpCurrent#, #gnrnTpFuture#)
+        
+        AND DOU.GLBL_CMPY_CD   = OST.GLBL_CMPY_CD
+        AND OST.EZCANCELFLAG   = '0'
+        AND DOU.ORG_STRU_TP_CD = OST.ORG_STRU_TP_CD
+        AND OST.TRTY_STRU_FLG  = 'Y'
+        AND ROWNUM = 1
+    </statement>
+    <statement id="getDuplicateTerritoryId" parameterClass="Map" resultClass="Map">
+        WITH RULE_B AS (
+            <iterate property="trtyRuleBeanList" var="elem[]" open="" close="" conjunction="UNION ALL">
+            SELECT
+                 #elem[].trtyRuleTpCd#       AS TRTY_RULE_TP_CD
+                ,#elem[].trtyRuleFromValTxt# AS TRTY_RULE_FROM_VAL_TXT
+                ,#elem[].trtyRuleOprdTpCd#   AS TRTY_RULE_OPRD_TP_CD
+                <isNotNull property='elem[].trtyRuleThruValTxt'>
+                ,#elem[].trtyRuleThruValTxt# AS TRTY_RULE_THRU_VAL_TXT
+                </isNotNull>
+                <isNull property='elem[].trtyRuleThruValTxt'>
+                ,''                          AS TRTY_RULE_THRU_VAL_TXT
+                </isNull>
+            FROM
+                DUAL
+            </iterate>
+        )
+
+        SELECT
+            A.ORG_CD                  AS ORG_CD
+            ,A.TRTY_RULE_PK           AS TRTY_RULE_PK
+            ,A.TRTY_RULE_TP_CD        AS TRTY_RULE_TP_CD 
+            ,A.TRTY_RULE_OPRD_TP_CD   AS TRTY_RULE_OPRD_TP_CD
+            ,A.TRTY_RULE_FROM_VAL_TXT AS TRTY_RULE_FROM_VAL_TXT
+            ,A.TRTY_RULE_THRU_VAL_TXT AS TRTY_RULE_THRU_VAL_TXT
+            <!-- QC#11728 -->
+            ,DOU.ORG_NM
+            <!-- QC#11638 -->
+            ,A.EFF_FROM_DT
+            ,A.EFF_THRU_DT
+            ,A.TRTY_RULE_LOGIC_TP_CD
+        FROM
+            TRTY_RULE   A
+          , DS_ORG_UNIT DOU
+          , RULE_B      B
+        WHERE
+            A.GLBL_CMPY_CD          =  #glblCmpyCd#
+        AND A.ORG_CD                != #orgCd#
+        AND A.EZCANCELFLAG          =  0
+
+        AND A.GLBL_CMPY_CD          =  DOU.GLBL_CMPY_CD
+        AND A.ORG_CD                =  DOU.ORG_CD
+        AND DOU.ORG_STRU_TP_CD      =  #orgStruTpCd#
+        AND DOU.TRTY_GRP_TP_CD      =  #trtyGrpTpCd#
+        AND DOU.TRTY_TP_CD          =  #trtyTpCd#
+        AND DOU.FIRST_ORG_CD        =  #firstOrgCd#
+        AND DOU.GNRN_TP_CD          IN  (#gnrnTpCurrent#, #gnrnTpFuture#)
+        AND DOU.EZCANCELFLAG        =  0
+        <!-- 2020/03/31 QC#56405 Add Start -->
+        AND EXISTS (
+                SELECT
+                    1
+                FROM
+                    DS_ORG_RELN DOR
+                WHERE
+                        DOU.GLBL_CMPY_CD = DOR.GLBL_CMPY_CD
+                    AND DOU.ORG_CD = DOR.ORG_CD
+                    AND DOR.GNRN_TP_CD IN (#gnrnTpCurrent#, #gnrnTpFuture#)
+                    AND DOU.EZCANCELFLAG = '0'
+                )
+       <!-- 2020/03/31 QC#56405 Add Start -->
+
+        <isNotNull property = 'logicTpCd'>
+        AND (
+                A.TRTY_RULE_LOGIC_TP_CD = #logicTpCd#
+            OR  A.TRTY_RULE_LOGIC_TP_CD IS NULL
+        )
+        </isNotNull>
+        <isNull property = 'logicTpCd'>
+        AND A.TRTY_RULE_LOGIC_TP_CD IS NULL
+        </isNull>
+        AND B.TRTY_RULE_TP_CD            =  A.TRTY_RULE_TP_CD
+        AND B.TRTY_RULE_OPRD_TP_CD       =  A.TRTY_RULE_OPRD_TP_CD
+        AND B.TRTY_RULE_FROM_VAL_TXT     =  A.TRTY_RULE_FROM_VAL_TXT
+        AND (
+                B.TRTY_RULE_THRU_VAL_TXT =  A.TRTY_RULE_THRU_VAL_TXT
+            OR  B.TRTY_RULE_THRU_VAL_TXT IS NULL
+            )
+        <!-- QC#11638
+        AND A.EFF_FROM_DT                    &lt;=  #slsDt#
+         -->
+        AND (A.EFF_THRU_DT                   &gt;=  #slsDt#
+            OR A.EFF_THRU_DT                 IS NULL)
+        ORDER BY
+            A.ORG_CD
+    </statement>
+
+    <statement id="getOverlapTrtyRule" parameterClass="Map" resultClass="Map">
+         SELECT
+             DISTINCT ORG_CD
+          ,  ORG_NM
+          ,  TRTY_RULE_LOGIC_TP_CD
+          ,  TRTY_RULE_FROM_VAL_TXT
+          ,  TRTY_RULE_THRU_VAL_TXT
+          ,  TRTY_RULE_OPRD_TP_CD
+         FROM
+            (
+             SELECT
+                 A.ORG_CD
+              ,  DOU.ORG_NM
+              ,  A.TRTY_RULE_LOGIC_TP_CD
+              ,  A.TRTY_RULE_FROM_VAL_TXT
+              ,  A.TRTY_RULE_THRU_VAL_TXT
+              ,  A.TRTY_RULE_OPRD_TP_CD
+             FROM
+                TRTY_RULE   A
+              , DS_ORG_UNIT DOU
+             WHERE 
+                 A.GLBL_CMPY_CD                       =  #glblCmpyCd#
+             AND A.ORG_CD                            !=  #orgCd#
+             AND A.EZCANCELFLAG                       =  0
+             AND A.EFF_FROM_DT                    &lt;=  #slsDt#
+             AND NVL(A.EFF_THRU_DT, #maxEffThruDt#)  &gt;=  #slsDt#
+             AND A.TRTY_RULE_TP_CD                    =  #trtyRuleTp_postCd#
+             AND A.TRTY_RULE_OPRD_TP_CD               =  #trtyRuleOprdTp_Equal#
+             AND (
+                   ( A.TRTY_RULE_FROM_VAL_TXT     &gt;=  #trtyRuleFromVal_FirstFiveDigits#
+                     AND A.TRTY_RULE_FROM_VAL_TXT &lt;=  #trtyRuleThruVal_FirstFiveDigits#
+                   )
+                 OR
+                   ( A.TRTY_RULE_FROM_VAL_TXT     &gt;=  #trtyRuleFromVal_FullDigits#
+                     AND A.TRTY_RULE_FROM_VAL_TXT &lt;=  #trtyRuleThruVal_FullDigits#
+                   )
+                 )
+             AND A.GLBL_CMPY_CD                       =  DOU.GLBL_CMPY_CD
+             AND A.ORG_CD                             =  DOU.ORG_CD
+             AND DOU.ORG_STRU_TP_CD                   =  #orgStruTpCd#
+             AND DOU.TRTY_GRP_TP_CD                   =  #trtyGrpTpCd#
+             AND DOU.TRTY_TP_CD                       =  #trtyTpCd#
+             AND DOU.FIRST_ORG_CD                     =  #firstOrgCd#
+             AND DOU.GNRN_TP_CD                      IN  (#gnrnTpCurrent#, #gnrnTpFuture#)
+             AND DOU.EZCANCELFLAG                     =  0
+
+            ) UNION ALL (
+            <!-- START 2018/06/01 Hd.Sugawara [QC#24293,DEL] -->
+            <!-- SELECT -->
+            <!--     A.ORG_CD -->
+            <!--  ,  DOU.ORG_NM -->
+            <!--  ,  A.TRTY_RULE_LOGIC_TP_CD -->
+            <!--  ,  A.TRTY_RULE_FROM_VAL_TXT -->
+            <!--  ,  A.TRTY_RULE_THRU_VAL_TXT -->
+            <!--  ,  A.TRTY_RULE_OPRD_TP_CD -->
+            <!-- FROM -->
+            <!--     TRTY_RULE A -->
+            <!--  ,  DS_ORG_UNIT DOU -->
+            <!-- WHERE  -->
+            <!--     A.GLBL_CMPY_CD                      =  #glblCmpyCd# -->
+            <!-- AND A.ORG_CD                           !=  #orgCd# -->
+            <!-- AND A.EZCANCELFLAG                      =  0 -->
+            <!-- AND A.EFF_FROM_DT                   &lt;=  #slsDt# -->
+            <!-- AND NVL(A.EFF_THRU_DT, #maxEffThruDt#)  &gt;=  #slsDt# -->
+            <!-- AND A.TRTY_RULE_TP_CD                   =  #trtyRuleTp_postCd# -->
+            <!-- AND A.TRTY_RULE_OPRD_TP_CD              =  #trtyRuleOprdTp_Like# -->
+            <!-- AND -->
+            <!--   ( A.TRTY_RULE_FROM_VAL_TXT         LIKE  #likeTrtyRuleFromVal# -->
+            <!--   OR -->
+            <!--     A.TRTY_RULE_FROM_VAL_TXT         LIKE  #likeTrtyRuleThruVal# -->
+            <!--   ) -->
+            <!-- AND A.GLBL_CMPY_CD                      =  DOU.GLBL_CMPY_CD -->
+            <!-- AND A.ORG_CD                            =  DOU.ORG_CD -->
+            <!-- AND DOU.ORG_STRU_TP_CD                  =  #orgStruTpCd# -->
+            <!-- AND DOU.TRTY_GRP_TP_CD                  =  #trtyGrpTpCd# -->
+            <!-- AND DOU.TRTY_TP_CD                      =  #trtyTpCd# -->
+            <!-- AND DOU.FIRST_ORG_CD                    =  #firstOrgCd# -->
+            <!-- AND DOU.GNRN_TP_CD                     IN  (#gnrnTpCurrent#, #gnrnTpFuture#) -->
+            <!-- AND DOU.EZCANCELFLAG                    =  0 -->
+
+           <!-- ) UNION ALL ( -->
+            <!-- END 2018/06/01 Hd.Sugawara [QC#24293,DEL] -->
+            SELECT
+                A.ORG_CD
+             ,  DOU.ORG_NM
+             ,  A.TRTY_RULE_LOGIC_TP_CD
+             ,  A.TRTY_RULE_FROM_VAL_TXT
+             ,  A.TRTY_RULE_THRU_VAL_TXT
+             ,  A.TRTY_RULE_OPRD_TP_CD
+            FROM
+                TRTY_RULE A
+             ,  DS_ORG_UNIT DOU
+            WHERE 
+                A.GLBL_CMPY_CD                      =  #glblCmpyCd#
+            AND A.ORG_CD                           !=  #orgCd#
+            AND A.EZCANCELFLAG                      =  0
+            AND A.EFF_FROM_DT                   &lt;=  #slsDt#
+            AND NVL(A.EFF_THRU_DT, #maxEffThruDt#)  &gt;=  #slsDt#
+            AND A.TRTY_RULE_TP_CD                   =  #trtyRuleTp_postCd#
+            AND A.TRTY_RULE_OPRD_TP_CD              =  #trtyRuleOprdTp_Between#
+            AND A.ORG_CD NOT IN
+                (
+                    SELECT
+                        TR1.ORG_CD
+                    FROM
+                        TRTY_RULE TR1
+                    WHERE
+                        TR1.GLBL_CMPY_CD                      =  #glblCmpyCd#
+                    AND TR1.EZCANCELFLAG                      =  0
+                    AND TR1.TRTY_RULE_TP_CD                   =  #trtyRuleTp_postCd#
+                    AND TR1.TRTY_RULE_OPRD_TP_CD              =  #trtyRuleOprdTp_Between#
+                    AND (
+                            (   TR1.TRTY_RULE_FROM_VAL_TXT &gt;  #trtyRuleThruVal_FullDigits#
+                            AND TR1.TRTY_RULE_FROM_VAL_TXT &gt;  #trtyRuleThruVal_FullDigits#)
+                        OR
+                            (   TR1.TRTY_RULE_FROM_VAL_TXT &gt;  #trtyRuleThruVal_FirstFiveDigits#
+                            AND TR1.TRTY_RULE_FROM_VAL_TXT &gt;  #trtyRuleThruVal_FirstFiveDigits#)
+                        )
+                )
+            AND A.ORG_CD NOT IN
+                (
+                    SELECT
+                        TR2.ORG_CD
+                    FROM
+                        TRTY_RULE TR2
+                    WHERE 
+                        TR2.GLBL_CMPY_CD                      =  #glblCmpyCd#
+                    AND TR2.EZCANCELFLAG                      =  0
+                    AND TR2.TRTY_RULE_TP_CD                   =  #trtyRuleTp_postCd#
+                    AND TR2.TRTY_RULE_OPRD_TP_CD              =  #trtyRuleOprdTp_Between#
+                    AND (
+                           (   TR2.TRTY_RULE_THRU_VAL_TXT  &lt;  #trtyRuleFromVal_FullDigits#
+                           AND TR2.TRTY_RULE_THRU_VAL_TXT  &lt;  #trtyRuleFromVal_FullDigits#)
+                        OR
+                           (   TR2.TRTY_RULE_THRU_VAL_TXT  &lt;  #trtyRuleFromVal_FirstFiveDigits#
+                           AND TR2.TRTY_RULE_THRU_VAL_TXT  &lt;  #trtyRuleFromVal_FirstFiveDigits#)
+                        )
+                )
+            AND A.GLBL_CMPY_CD                      =  DOU.GLBL_CMPY_CD
+            AND A.ORG_CD                            =  DOU.ORG_CD
+            AND DOU.ORG_STRU_TP_CD                  =  #orgStruTpCd#
+            AND DOU.TRTY_GRP_TP_CD                  =  #trtyGrpTpCd#
+            AND DOU.TRTY_TP_CD                      =  #trtyTpCd#
+            AND DOU.FIRST_ORG_CD                    =  #firstOrgCd#
+            AND DOU.GNRN_TP_CD                     IN  (#gnrnTpCurrent#, #gnrnTpFuture#)
+            AND DOU.EZCANCELFLAG                    =  0
+           )
+    </statement>
+
+    <statement id="getTrtyRule" parameterClass="Map" resultClass="Map">
+        SELECT
+            A.TRTY_RULE_FROM_VAL_TXT
+         ,  A.TRTY_RULE_THRU_VAL_TXT
+         ,  A.TRTY_RULE_OPRD_TP_CD
+         ,  A.TRTY_RULE_LOGIC_TP_CD
+        FROM
+            TRTY_RULE A
+        WHERE 
+            A.ORG_CD                           =  #orgCd#
+        AND A.GLBL_CMPY_CD                     =  #glblCmpyCd#
+        AND A.TRTY_RULE_TP_CD                  =  #trtyRuleTp_postCd#
+        AND A.EFF_FROM_DT                  &lt;=  #slsDt#
+        AND NVL(A.EFF_THRU_DT, #maxEffThruDt#) &gt;=  #slsDt#
+        AND A.EZCANCELFLAG                     =  0
+        ORDER BY A.TRTY_RULE_LOGIC_TP_CD
+    </statement>
+
+</sqlMap>

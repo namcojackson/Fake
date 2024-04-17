@@ -1,0 +1,79 @@
+/*
+ * Copyright (c) 2013 Canon USA Inc. All rights reserved.
+ * Original Author: AUTO generated File : S21WDS CodeTable Generator Tool
+ * Company: Canon USA Inc.
+ * Date Generated:2015/08/07 5:37:04
+ */
+package com.canon.cusa.s21.framework.ZYP.constant.cdtable;
+
+/**
+ * <p>
+ * This interface provides the logical code names as constants for VND_PMT_TERM table.
+ * </p>
+ *
+ * @author $Author$
+ * @version $Revision$
+ */
+public interface VND_PMT_TERM {
+
+    String L_OR_C_AT_SIGHT = "A000A";
+    String L_OR_C_30_DAYS_AFTER_B_OR_L_DATE = "A030B";
+    String L_OR_C_60_DAYS_AFTER_B_OR_L_DATE = "A060B";
+    String L_OR_C_90_DAYS_AFTER_B_OR_L_DATE = "A090B";
+    String L_OR_C_120_DAYS_AFTER_B_OR_L_DATE = "A120B";
+    String L_OR_C_150_DAYS_AFTER_B_OR_L_DATE = "A150B";
+    String L_OR_C_180_DAYS_AFTER_B_OR_L_DATE = "A180B";
+    String L_OR_C_AT_SIGHT_2 = "AA000";
+    String L_OR_C_30_DAYS_AFTER_B_OR_L_DATE_2 = "AB030";
+    String L_OR_C_60_DAYS_AFTER_B_OR_L_DATE_2 = "AB060";
+    String L_OR_C_90_DAYS_AFTER_B_OR_L_DATE_2 = "AB090";
+    String L_OR_C_100_DAYS_AFTER_B_OR_L_DATE = "AB100";
+    String REMITTANCE_CHECK_30_DAYS_AFTER_B_OR_L_DATE = "B030B";
+    String REMITTANCE_CHECK_45_DAYS_AFTER_B_OR_L_DATE = "B045B";
+    String REMITTANCE_CHECK_60_DAYS_AFTER_B_OR_L_DATE = "B060B";
+    String REMITTANCE_CHECK_90_DAYS_AFTER_B_OR_L_DATE = "B090B";
+    String REMITTANCE_CHECK_100_DAYS_AFTER_B_OR_L_DATE = "B100B";
+    String REMITTANCE_CHECK_110_DAYS_AFTER_B_OR_L_DATE = "B110B";
+    String REMITTANCE_CHECK_120_DAYS_AFTER_B_OR_L_DATE = "B120B";
+    String REMITTANCE_CHECK_150_DAYS_AFTER_B_OR_L_DATE = "B150B";
+    String REMITTANCE_CHECK_180_DAYS_AFTER_B_OR_L_DATE = "B180B";
+    String REMITTANCE_CHECK_405_DAYS_AFTER_B_OR_L_DATE = "B405B";
+    String REMITTANCE_AT_SIGHT = "BA000";
+    String REMITTANCE_30_DAYS_AFTER_B_OR_L_DATE = "BB030";
+    String REMITTANCE_31_DAYS_AFTER_B_OR_L_DATE = "BB031";
+    String REMITTANCE_45_DAYS_AFTER_B_OR_L_DATE = "BB045";
+    String REMITTANCE_60_DAYS_AFTER_B_OR_L_DATE = "BB060";
+    String REMITTANCE_75_DAYS_AFTER_B_OR_L_DATE = "BB075";
+    String REMITTANCE_80_DAYS_AFTER_B_OR_L_DATE = "BB080";
+    String REMITTANCE_90_DAYS_AFTER_B_OR_L_DATE = "BB090";
+    String REMITTANCE_100_DAYS_AFTER_B_OR_L_DATE = "BB100";
+    String NET120_DAYS = "BB120";
+    String REMITTANCE_180_DAYS_AFTER_B_OR_L_DATE = "BB180";
+    String REMITTANCE_405_DAYS_AFTER_B_OR_L_DATE = "BB405";
+    String REMITTANCE_IN_ADVANCE = "BC000";
+    String CASH_ON_DELIVERY = "C000E";
+    String D_OR_A_30_DAYS_AFTER_B_OR_L_DATE = "C030B";
+    String D_OR_A_60_DAYS_AFTER_B_OR_L_DATE = "C060B";
+    String D_OR_A_90_DAYS_AFTER_B_OR_L_DATE = "C090B";
+    String D_OR_A_100_DAYS_AFTER_B_OR_L_DATE = "C100B";
+    String D_OR_A_120_DAYS_AFTER_B_OR_L_DATE = "C120B";
+    String D_OR_A_130_DAYS_AFTER_B_OR_L_DATE = "C130B";
+    String D_OR_A_150_DAYS_AFTER_B_OR_L_DATE = "C150B";
+    String D_OR_A_180_DAYS_AFTER_B_OR_L_DATE = "C180B";
+    String D_OR_A_30_DAYS_AFTER_B_OR_L_DATE_2 = "CB030";
+    String D_OR_A_60_DAYS_AFTER_B_OR_L_DATE_2 = "CB060";
+    String D_OR_A_90_DAYS_AFTER_B_OR_L_DATE_2 = "CB090";
+    String D_OR_A_100_DAYS_AFTER_B_OR_L_DATE_2 = "CB100";
+    String D_OR_P = "E000B";
+    String D_OR_P_AT_SITE = "EA000";
+    String BY_DEPOSIT = "J000B";
+    String CASH_IN_ADVANCE = "J000C";
+    String CASH_ON_DELIVERY_2 = "J000E";
+    String CASH_IN_ADVANCE_2 = "JC000";
+    String SEM_CORBERTURA_CAMBIAL = "X120B";
+    String AS_ARRANGED = "YY000";
+    String WITHOUT_PAYMENT = "Z000Z";
+    String FREE_OF_CHARGE = "ZZ000";
+    String FROM_CLA = "F125B";
+
+}

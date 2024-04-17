@@ -1,0 +1,1049 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NSBL0010Query">
+
+    <typeAlias alias="NSBL0010_ASMsg"    type="business.blap.NSBL0010.NSBL0010_ASMsg"/>
+
+    <statement id="getSvcTask"  parameterClass="Map" resultMap="result.NSBL0010_ASMsg">
+        WITH TASK_V AS (
+            SELECT
+               <isNotNull property="bizMsg.xxChkBox_L1">
+               DISTINCT
+               </isNotNull>
+                ST.GLBL_CMPY_CD
+               ,ST.EZUPTIME
+               ,ST.EZUPTIMEZONE
+<!-- START 2017/01/05 N.Arai [QC#13901-2, MOD] -->
+<!--           ,ST.TECH_CD          -->
+               ,CASE WHEN FV.SVC_ASG_TP_CD = #notAllowed# THEN NULL
+                ELSE FV.SVC_ASG_TECH_CD END  AS TECH_CD
+<!-- END 2017/01/05 N.Arai [QC#13901-2, MOD] -->
+               ,ST.ORG_LAYER_NUM
+               ,ST.ORG_CD
+               ,ST.MDL_NM
+               ,ST.SVC_CALL_PRTY_CD
+               ,ST.DS_SVC_CALL_TP_CD
+               ,ST.SVC_PBLM_SYMP_TP_CD
+               ,ST.SER_NUM
+               ,ST.ORIG_SVC_CALL_PRTY_CD
+               ,ST.MACH_DOWN_FLG
+               ,ST.SVC_BILL_TP_CD
+               ,ST.SVC_TASK_RCV_DT
+               ,ST.SVC_TASK_RCV_TM
+               ,ST.SVC_TASK_RCV_TZ
+               ,ST.CUST_AVAL_FROM_HOUR_MN
+               ,ST.CUST_AVAL_TO_HOUR_MN
+               ,ST.SVC_RSP_TM_MN_AOT
+               ,ST.SVC_RSP_TM_NUM
+               ,ST.SVC_TASK_NUM
+               ,ST.SHIP_TO_CUST_CD
+               ,ST.FSR_NUM
+               ,ST.SVC_CR_HLD_FLG
+               ,ST.SVC_MACH_MSTR_PK
+               ,NVL(FV.TECH_ACPT_FLG, 'N')                   AS TECH_ACPT_FLG
+               ,FV.TECH_SCHD_FROM_DT
+               ,FV.TECH_SCHD_FROM_TM
+               ,FV.TECH_SCHD_TO_DT
+               ,FV.TECH_SCHD_TO_TM
+               ,FV.TECH_SCHD_TZ
+               ,FV.FSR_VISIT_NUM
+               ,FV.TECH_ACPT_DT
+               ,FV.TECH_ACPT_TM
+               ,FV.FSR_VISIT_ETA_DT
+               ,FV.FSR_VISIT_ETA_TM
+               ,FV.EZUPTIME AS EZUPTIME_FV
+               ,FV.EZUPTIMEZONE AS EZUPTIMEZONE_FV
+               ,NVL(FV.SCHD_DISPT_EML_FLG, 'Y')              AS SCHD_DISPT_EML_FLG
+               ,FV.FSR_VISIT_STS_CD
+               ,ST.SVC_TASK_STS_CD
+               ,ST.MDSE_CD
+<!-- START 2016/11/29 N.Arai [QC#13901, MOD] -->
+               ,FS.FSR_STS_CD
+<!-- END 2016/11/29 N.Arai [QC#13901, MOD] -->
+               ,NVL((
+                        SELECT
+                            TPC.TECH_AVAL_FLG
+                        FROM
+                            TECH_PSN_CAL     TPC
+                        WHERE
+                            TPC.GLBL_CMPY_CD            = ST.GLBL_CMPY_CD
+                        AND TPC.TECH_CD                 = ST.TECH_CD
+                        AND TPC.TECH_EFF_FROM_DT    &lt;= #currSysDt#
+<!-- START 2016/10/27 N.Arai [QC#14840, MOD] -->
+                        AND NVL(TPC.TECH_EFF_THRU_DT,#currSysDt#)   &gt;= #currSysDt#
+                        AND TPC.TECH_EFF_FROM_DT
+                            || TPC.TECH_EFF_FROM_TM &lt;= #currSysDtTm#
+<!--                        AND TPC.TECH_EFF_THRU_DT
+                            || TPC.TECH_EFF_THRU_TM &gt;= #currSysDtTm#     -->
+                        AND (CASE
+                                WHEN TPC.TECH_EFF_THRU_DT IS NULL THEN #currSysDtTm#
+                                WHEN TPC.TECH_EFF_THRU_TM IS NULL THEN #currSysDtTm#
+                                ELSE TPC.TECH_EFF_THRU_DT || TPC.TECH_EFF_THRU_TM
+                            END)     &gt;= #currSysDtTm#
+<!-- END 2016/10/27 N.Arai [QC#14840, MOD] -->
+                        AND TPC.EZCANCELFLAG            = '0'
+                        AND ROWNUM                      = 1
+                    )
+                   ,CASE
+                        WHEN EXISTS(
+                            SELECT
+                                *
+                            FROM
+                                TECH_MSTR TM
+                               ,CAL       C
+                            WHERE
+                                TM.GLBL_CMPY_CD   = ST.GLBL_CMPY_CD
+                            AND TM.GLBL_CMPY_CD   = C.GLBL_CMPY_CD
+                            AND TM.TECH_TOC_CD    = ST.TECH_CD
+                            AND TM.CAL_TP_CD      = C.CAL_TP_CD
+                            AND (
+                                (
+                                        TM.FIRST_TECH_WRK_FROM_TM &lt;= #currSysTm#
+                                    AND TM.FIRST_TECH_WRK_THRU_TM &gt;= #currSysTm#
+                                ) OR (
+                                        TM.SCD_TECH_WRK_FROM_TM   &lt;= #currSysTm#
+                                    AND TM.SCD_TECH_WRK_THRU_TM   &gt;= #currSysTm#
+                                )
+                            )
+                            AND C.CAL_DT          = #currSysDt#
+                            AND C.DT_ATTRB_CD     = #dtAttrbCd#
+                            AND C.DT_ATTRB_VAL_CD = #dtAttrbValCd#
+                            AND TM.EZCANCELFLAG   = '0'
+                            AND C.EZCANCELFLAG    = '0'
+                            <!-- START 2016/12/14 K.Kojima [QC#15653,ADD] -->
+                            AND EXISTS(
+                                SELECT
+                                    1
+                                FROM
+                                     ORG_FUNC_ASG     OFA
+                                    ,TOC              T
+                                    ,ORG_FUNC_ROLE_TP OFRT
+                                WHERE
+                                        OFA.GLBL_CMPY_CD                  = TM.GLBL_CMPY_CD
+                                    AND OFA.PSN_CD                        = TM.TECH_TOC_CD
+                                    AND OFA.EFF_FROM_DT               &lt;= #slsDt#
+                                    AND NVL(OFA.EFF_THRU_DT, #maxDt#) &gt;= #slsDt#
+                                    AND OFA.GLBL_CMPY_CD                  = T.GLBL_CMPY_CD
+                                    AND OFA.TOC_CD                        = T.TOC_CD
+                                    AND T.GLBL_CMPY_CD                    = OFRT.GLBL_CMPY_CD
+                                    AND T.ORG_FUNC_ROLE_TP_CD             = OFRT.ORG_FUNC_ROLE_TP_CD
+                                    AND OFRT.TECH_MSTR_REQ_FLG            = #flgY#
+                                    AND OFRT.ACTV_FLG                     = #flgY#
+                                    AND OFA.EZCANCELFLAG                  = '0'
+                                    AND T.EZCANCELFLAG                    = '0'
+                                    AND OFRT.EZCANCELFLAG                 = '0'
+                            )
+                            <!-- END 2016/12/14 K.Kojima [QC#15653,ADD] -->
+                        )
+                        THEN 'Y'
+                        WHEN EXISTS(
+                            SELECT
+                                *
+                            FROM
+                                TECH_BAK_SCHD TBS
+                               ,MDSE          MD
+                            WHERE
+                                TBS.GLBL_CMPY_CD         = ST.GLBL_CMPY_CD
+                            AND ST.GLBL_CMPY_CD          = MD.GLBL_CMPY_CD(+)
+                            AND TBS.TECH_CD              = ST.TECH_CD
+                            AND ST.MDSE_CD               = MD.MDSE_CD(+)
+                            AND TBS.TECH_BAK_TP_CD       = #techBakTpCd#
+                            AND TBS.TECH_BAK_DT          = #currSysDt#
+                            AND TBS.TECH_BAK_FROM_TM &lt;= #currSysTm#
+                            AND TBS.TECH_BAK_THRU_TM &gt;= #currSysTm#
+                            AND (
+                                (
+                                        TBS.ASG_PROD_CTRL_LAYER_NUM = '0'
+                                    AND TBS.ZEROTH_PROD_CTRL_CD     = MD.ZEROTH_PROD_CTRL_CD
+                                ) OR (
+                                        TBS.ASG_PROD_CTRL_LAYER_NUM = '1'
+                                    AND TBS.FIRST_PROD_CTRL_CD      = MD.FIRST_PROD_CTRL_CD
+                                ) OR (
+                                        TBS.ASG_PROD_CTRL_LAYER_NUM = '2'
+                                    AND TBS.SCD_PROD_CTRL_CD        = MD.SCD_PROD_CTRL_CD
+                                ) OR (
+                                        TBS.ASG_PROD_CTRL_LAYER_NUM = '3'
+                                    AND TBS.THIRD_PROD_CTRL_CD      = MD.THIRD_PROD_CTRL_CD
+                                ) OR (
+                                        TBS.ASG_PROD_CTRL_LAYER_NUM = '4'
+                                    AND TBS.FRTH_PROD_CTRL_CD       = MD.FRTH_PROD_CTRL_CD
+                                ) OR (
+                                        TBS.ASG_PROD_CTRL_LAYER_NUM = '5'
+                                    AND TBS.FIFTH_PROD_CTRL_CD      = MD.FIFTH_PROD_CTRL_CD
+                                ) OR (
+                                        TBS.ASG_PROD_CTRL_LAYER_NUM = '6'
+                                    AND TBS.SIXTH_PROD_CTRL_CD      = MD.SIXTH_PROD_CTRL_CD
+                                ) OR (
+                                        TBS.ASG_PROD_CTRL_LAYER_NUM = '7'
+                                    AND TBS.SVNTH_PROD_CTRL_CD      = MD.SVNTH_PROD_CTRL_CD
+                                ) OR (
+                                        TBS.ASG_PROD_CTRL_LAYER_NUM = '99'
+                                    AND TBS.MDSE_CD                 = MD.MDSE_CD
+                                ) OR (
+                                    TBS.MDL_NM                      = ST.MDL_NM
+                                ) OR (
+                                    TBS.MDL_GRP_NM                  = ST.MDL_GRP_NM
+                                )
+                            )
+                            AND TBS.EZCANCELFLAG      = '0'
+                            AND MD.EZCANCELFLAG(+)    = '0'
+                        )
+                        THEN 'Y'
+                        ELSE 'N'
+                    END
+                )                               AS TECH_AVAL_FLG
+               ,(
+                    SELECT
+                        STST.SVC_PBLM_SYMP_TP_NM
+                    FROM
+                        SVC_PBLM_SYMP_TP STST
+                    WHERE
+                        STST.GLBL_CMPY_CD        = ST.GLBL_CMPY_CD
+                    AND STST.SVC_PBLM_SYMP_TP_CD = ST.SVC_PBLM_SYMP_TP_CD
+                    AND STST.EZCANCELFLAG        = '0'
+                    AND ROWNUM                   = 1
+                )                               AS SVC_PBLM_SYMP_TP_NM
+               ,(
+                    SELECT
+                        STC.LOC_NM
+                    FROM
+                        SHIP_TO_CUST STC
+                    WHERE
+                        STC.GLBL_CMPY_CD    = ST.GLBL_CMPY_CD
+                    AND STC.SHIP_TO_CUST_CD = ST.SHIP_TO_CUST_CD
+                    AND STC.EZCANCELFLAG    = '0'
+                    AND ROWNUM              = 1
+                 )                         AS LOC_NM
+               ,(
+                    SELECT
+                        DSTS.SVC_TASK_STS_NM
+                    FROM
+                        SVC_TASK_STS DSTS
+                    WHERE
+                        DSTS.GLBL_CMPY_CD    = ST.GLBL_CMPY_CD
+                    AND DSTS.SVC_TASK_STS_CD = NVL(FV.FSR_VISIT_STS_CD, ST.SVC_TASK_STS_CD)
+                    AND DSTS.EZCANCELFLAG    = '0'
+                    AND ROWNUM               = 1
+                )                              AS SVC_TASK_STS_NM
+               ,CASE
+                    WHEN EXISTS (
+                        SELECT
+                            *
+                        FROM
+                            SVC_MEMO SM
+                        WHERE
+                            SM.GLBL_CMPY_CD     = ST.GLBL_CMPY_CD
+                        AND SM.SVC_TASK_NUM     = ST.SVC_TASK_NUM
+                        AND SM.EZCANCELFLAG     = '0'
+                    )
+                    THEN 'Y'
+                    WHEN EXISTS (
+                        SELECT
+                            *
+                        FROM
+                            SVC_MEMO SM
+                        WHERE
+                            SM.GLBL_CMPY_CD     = ST.GLBL_CMPY_CD
+                        AND SM.FSR_NUM          = ST.FSR_NUM
+                        AND SM.EZCANCELFLAG     = '0'
+                    )
+                    THEN 'Y'
+                    WHEN EXISTS (
+                        SELECT
+                            *
+                        FROM
+                            SVC_MEMO SM
+                           ,SVC_TASK S
+                        WHERE
+                            SM.GLBL_CMPY_CD     = ST.GLBL_CMPY_CD
+                        AND SM.GLBL_CMPY_CD     = S.GLBL_CMPY_CD
+                        AND SM.SVC_TASK_NUM     = S.SVC_TASK_NUM
+                        AND S.FSR_NUM           = ST.FSR_NUM
+                        AND SM.EZCANCELFLAG     = '0'
+                        AND S.EZCANCELFLAG      = '0'
+                    )
+                    THEN 'Y'
+                    ELSE 'N'
+                END AS SVC_MEMO_FLG
+               ,''    AS CO_FLG
+               ,CASE WHEN EXISTS (
+                        SELECT
+                            DM.XS_VISIT_CNT
+                        FROM
+                            DS_MDL        DM
+                           ,MDL_NM        MN
+                           ,SVC_MACH_MSTR SMM
+                        WHERE
+                            ST.GLBL_CMPY_CD      = DM.GLBL_CMPY_CD
+                        AND ST.GLBL_CMPY_CD      = MN.T_GLBL_CMPY_CD
+                        AND ST.GLBL_CMPY_CD      = SMM.GLBL_CMPY_CD
+                        AND SMM.SVC_MACH_MSTR_PK = ST.SVC_MACH_MSTR_PK
+                        AND DM.XS_INTVL_DAYS_AOT IS NOT NULL
+                        AND DM.XS_VISIT_CNT   &gt; 0
+                        AND DM.XS_VISIT_CNT   &lt; (
+                                SELECT
+                                    COUNT(*)
+                                FROM
+                                    FSR F
+                                WHERE
+                                    F.GLBL_CMPY_CD     = ST.GLBL_CMPY_CD
+                                AND F.SVC_MACH_MSTR_PK = ST.SVC_MACH_MSTR_PK
+                                AND F.FSR_STS_CD       = #stsComplete#
+                                AND F.FSR_CPLT_DT  &gt;= TO_CHAR(TO_DATE(#currSysDt#, 'YYYYMMDD') - NVL(DM.XS_INTVL_DAYS_AOT, 0), 'YYYYMMDD')
+                                AND F.FSR_CPLT_DT  &lt;= #currSysDt#
+                                AND F.EZCANCELFLAG     = '0'
+                            )
+                        AND DM.MDL_ID            = MN.T_MDL_ID
+                        AND MN.T_MDL_NM          = ST.MDL_NM
+                        AND DM.EZCANCELFLAG      = '0'
+                        AND MN.EZCANCELFLAG      = '0'
+                        AND SMM.EZCANCELFLAG     = '0'
+                    )
+                    THEN 'Y'
+                    ELSE 'N'
+                END AS EX_VISIT_FLG
+<!-- START 2016/11/29 N.Arai [QC#13901, MOD] -->
+               ,MM.FLD_SVC_BR_CD            AS FLD_SVC_BR_CD
+               ,MM.SVC_BY_LINE_BIZ_TP_CD    AS SVC_BY_LINE_BIZ_TP_CD
+               ,BR.SVC_CONTR_BR_DESC_TXT    AS SVC_CONTR_BR_DESC_TXT
+               <isNotNull property="bizMsg.xxChkBox_L1">
+<!--
+               ,CASE
+                    WHEN ST.SVC_MACH_MSTR_PK IS NOT NULL
+                        THEN
+                            MM.CTRY_CD
+                    WHEN ST.SO_NUM IS NOT NULL
+                        THEN
+                            SP.SHIP_TO_CTRY_CD
+                    ELSE
+                            SC.CTRY_CD
+                END   AS CTRY_CD
+               ,CASE
+                    WHEN ST.SVC_MACH_MSTR_PK IS NOT NULL
+                        THEN
+                            MM.POST_CD
+                    WHEN ST.SO_NUM IS NOT NULL
+                        THEN
+                            SP.SHIP_TO_POST_CD
+                    ELSE
+                            SC.POST_CD
+                END   AS POST_CD
+-->
+               ,SC.CTRY_CD  AS CTRY_CD
+               ,SC.POST_CD  AS POST_CD
+               </isNotNull>
+               <isNull property="bizMsg.xxChkBox_L1">
+               ,NULL  AS CTRY_CD
+               ,NULL  AS POST_CD
+               </isNull>
+<!-- START 2016/12/01 N.Arai [QC#14204, ADD] -->
+               ,ST.EZINTIME         AS XX_REC_HIST_CRAT_TS
+               ,ST.EZINUSERID       AS XX_REC_HIST_CRAT_BY_NM
+               ,ST.EZUPTIME         AS XX_REC_HIST_UPD_TS
+               ,ST.EZUPUSERID       AS XX_REC_HIST_UPD_BY_NM
+               ,ST.EZTABLEID        AS XX_REC_HIST_TBL_NM
+<!-- END 2016/12/01 N.Arai [QC#14204, ADD] -->
+            FROM
+                SVC_TASK      ST
+               ,FSR_VISIT     FV
+               ,FSR           FS
+               ,SVC_MACH_MSTR MM
+               ,SVC_CONTR_BR  BR
+               <isNotNull property="bizMsg.xxChkBox_L1">
+               ,SHPG_PLN      SP
+               ,SHIP_TO_CUST  SC
+               </isNotNull>
+            WHERE
+                ST.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND ST.GLBL_CMPY_CD          = FV.GLBL_CMPY_CD(+)
+            AND ST.SVC_TASK_NUM          = FV.SVC_TASK_NUM(+)
+            AND ST.FSR_NUM               = FV.FSR_NUM(+)
+            AND ST.GLBL_CMPY_CD          = FS.GLBL_CMPY_CD(+)
+            AND ST.FSR_NUM               = FS.FSR_NUM(+)
+            AND ST.EZCANCELFLAG          = '0'
+            AND FV.EZCANCELFLAG(+)       = '0'
+            AND FS.EZCANCELFLAG(+)       = '0'
+            <isNotNull property="bizMsg.svcTaskNum">
+            AND ST.SVC_TASK_NUM       LIKE #bizMsg.svcTaskNum#
+            </isNotNull>
+            <isNotNull property="bizMsg.fsrNum">
+            AND ST.FSR_NUM            LIKE #bizMsg.fsrNum#
+            </isNotNull>
+            <isNotNull property="bizMsg.techCd">
+            AND ST.TECH_CD            LIKE #bizMsg.techCd#
+            </isNotNull>
+            <isNotNull property="bizMsg.dsSvcCallTpCd_H3">
+            AND ST.DS_SVC_CALL_TP_CD     = #bizMsg.dsSvcCallTpCd_H3#
+            </isNotNull>
+            <isNotNull property="bizMsg.svcBillTpCd_H3">
+            AND ST.SVC_BILL_TP_CD        = #bizMsg.svcBillTpCd_H3#
+            </isNotNull>
+            <isNotNull property="bizMsg.svcTaskRcvDt_H1">
+            AND ST.SVC_TASK_RCV_DT   &gt;= #bizMsg.svcTaskRcvDt_H1#
+            </isNotNull>
+            <isNotNull property="bizMsg.svcTaskRcvDt_H2">
+            AND ST.SVC_TASK_RCV_DT   &lt;= #bizMsg.svcTaskRcvDt_H2#
+            </isNotNull>
+            <isNotNull property="bizMsg.shipToCustCd">
+            AND ST.SHIP_TO_CUST_CD       = #bizMsg.shipToCustCd#
+            </isNotNull>
+            <isNotNull property="bizMsg.mdlNm">
+            AND ST.MDL_NM                = #bizMsg.mdlNm#
+            </isNotNull>
+            <isNotNull property="bizMsg.techSchdFromDt">
+            AND FV.TECH_SCHD_FROM_DT     = #bizMsg.techSchdFromDt#
+            </isNotNull>
+            <isNotNull property="bizMsg.fsrVisitNum">
+            AND FV.FSR_VISIT_NUM         = #bizMsg.fsrVisitNum#
+            </isNotNull>
+            <isNotNull property="serchFsrVisit">
+<!--        <iterate property="svcTaskStsCdList" var="svcTaskStsCd[]" open="AND NVL(FV.FSR_VISIT_STS_CD, ST.SVC_TASK_STS_CD) IN (" conjunction= "," close=")">  -->
+                <iterate property="svcTaskStsCdList" var="svcTaskStsCd[]" open="AND FV.FSR_VISIT_STS_CD IN (" conjunction= "," close=")">
+                    #svcTaskStsCd[]#
+                </iterate>
+<!--        <iterate property="expSvcTaskStsCdList" var="expSvcTaskStsCd[]" open="AND NVL(FV.FSR_VISIT_STS_CD, ST.SVC_TASK_STS_CD) NOT IN (" conjunction= "," close=")">    -->
+                <iterate property="expSvcTaskStsCdList" var="expSvcTaskStsCd[]" open="AND FV.FSR_VISIT_STS_CD NOT IN (" conjunction= "," close=")">
+                    #expSvcTaskStsCd[]#
+                </iterate>
+            </isNotNull>
+
+            <isNotNull property="serchSvcTask">
+                <iterate property="svcTaskStsCdList" var="svcTaskStsCd[]" open="AND ST.SVC_TASK_STS_CD IN (" conjunction= "," close=")">
+                    #svcTaskStsCd[]#
+                </iterate>
+                <iterate property="expSvcTaskStsCdList" var="expSvcTaskStsCd[]" open="AND ST.SVC_TASK_STS_CD NOT IN (" conjunction= "," close=")">
+                    #expSvcTaskStsCd[]#
+                </iterate>
+            </isNotNull>
+
+            <isNotNull property="serchFsr">
+                <iterate property="svcTaskStsCdList" var="svcTaskStsCd[]" open="AND FS.FSR_STS_CD IN (" conjunction= "," close=")">
+                    #svcTaskStsCd[]#
+                </iterate>
+                <iterate property="expSvcTaskStsCdList" var="expSvcTaskStsCd[]" open="AND FS.FSR_STS_CD NOT IN (" conjunction= "," close=")">
+                    #expSvcTaskStsCd[]#
+                </iterate>
+            </isNotNull>
+
+            <isNotNull property="serchFsrVisitAndSvcTask">
+                <iterate property="svcTaskStsCdList" var="svcTaskStsCd[]" open="AND (FV.FSR_VISIT_STS_CD IN (" conjunction= "," close=")">
+                    #svcTaskStsCd[]#
+                </iterate>
+                <iterate property="svcTaskStsCdList" var="svcTaskStsCd[]" open="OR ST.SVC_TASK_STS_CD IN (" conjunction= "," close="))">
+                    #svcTaskStsCd[]#
+                </iterate>
+                <iterate property="expSvcTaskStsCdList" var="expSvcTaskStsCd[]" open="AND (FV.FSR_VISIT_STS_CD NOT IN (" conjunction= "," close=")">
+                    #expSvcTaskStsCd[]#
+                </iterate>
+                <iterate property="expSvcTaskStsCdList" var="expSvcTaskStsCd[]" open="OR ST.SVC_TASK_STS_CD NOT IN (" conjunction= "," close="))">
+                    #expSvcTaskStsCd[]#
+                </iterate>
+            </isNotNull>
+
+            <isNotNull property="serchFsrVisitAndFsr">
+                <iterate property="svcTaskStsCdList" var="svcTaskStsCd[]" open="AND (FV.FSR_VISIT_STS_CD IN (" conjunction= "," close=")">
+                    #svcTaskStsCd[]#
+                </iterate>
+                <iterate property="svcTaskStsCdList" var="svcTaskStsCd[]" open="OR FS.FSR_STS_CD IN (" conjunction= "," close="))">
+                    #svcTaskStsCd[]#
+                </iterate>
+                <iterate property="expSvcTaskStsCdList" var="expSvcTaskStsCd[]" open="AND (FV.FSR_VISIT_STS_CD NOT IN (" conjunction= "," close=")">
+                    #expSvcTaskStsCd[]#
+                </iterate>
+                <iterate property="expSvcTaskStsCdList" var="expSvcTaskStsCd[]" open="OR FS.FSR_STS_CD NOT IN (" conjunction= "," close="))">
+                    #expSvcTaskStsCd[]#
+                </iterate>
+            </isNotNull>
+
+            <isNotNull property="serchSvcTaskAndFsr">
+                <iterate property="svcTaskStsCdList" var="svcTaskStsCd[]" open="AND (ST.SVC_TASK_STS_CD IN (" conjunction= "," close=")">
+                    #svcTaskStsCd[]#
+                </iterate>
+                <iterate property="svcTaskStsCdList" var="svcTaskStsCd[]" open="OR FS.FSR_STS_CD IN (" conjunction= "," close="))">
+                    #svcTaskStsCd[]#
+                </iterate>
+                <iterate property="expSvcTaskStsCdList" var="expSvcTaskStsCd[]" open="AND (ST.SVC_TASK_STS_CD NOT IN (" conjunction= "," close=")">
+                    #expSvcTaskStsCd[]#
+                </iterate>
+                <iterate property="expSvcTaskStsCdList" var="expSvcTaskStsCd[]" open="OR FS.FSR_STS_CD NOT IN (" conjunction= "," close="))">
+                    #expSvcTaskStsCd[]#
+                </iterate>
+            </isNotNull>
+
+
+            <isNotNull property="serchAll">
+                <iterate property="svcTaskStsCdList" var="svcTaskStsCd[]" open="AND (FV.FSR_VISIT_STS_CD IN (" conjunction= "," close=")">
+                    #svcTaskStsCd[]#
+                </iterate>
+                <iterate property="svcTaskStsCdList" var="svcTaskStsCd[]" open="OR ST.SVC_TASK_STS_CD IN (" conjunction= "," close=")">
+                    #svcTaskStsCd[]#
+                </iterate>
+                <iterate property="svcTaskStsCdList" var="svcTaskStsCd[]" open="OR FS.FSR_STS_CD IN (" conjunction= "," close="))">
+                    #svcTaskStsCd[]#
+                </iterate>
+                <iterate property="expSvcTaskStsCdList" var="expSvcTaskStsCd[]" open="AND (FV.FSR_VISIT_STS_CD NOT IN (" conjunction= "," close=")">
+                    #expSvcTaskStsCd[]#
+                </iterate>
+                <iterate property="expSvcTaskStsCdList" var="expSvcTaskStsCd[]" open="OR ST.SVC_TASK_STS_CD NOT IN (" conjunction= "," close=")">
+                    #expSvcTaskStsCd[]#
+                </iterate>
+                <iterate property="expSvcTaskStsCdList" var="expSvcTaskStsCd[]" open="OR FS.FSR_STS_CD NOT IN (" conjunction= "," close="))">
+                    #expSvcTaskStsCd[]#
+                </iterate>
+            </isNotNull>
+
+<!-- START 2017/01/05 N.Arai [QC#13901-2, MOD] -->
+            <isNotNull property="bizMsg.xxChkBox_HO">
+<!--        AND ST.SVC_CR_HLD_FLG           = #bizMsg.xxChkBox_HO#  -->
+            AND EXISTS (
+                SELECT
+                    *
+                FROM
+                    SVC_TASK_HLD STH
+                    ,SVC_TASK_HLD_RSN RSN
+                WHERE
+                        ST.GLBL_CMPY_CD         = STH.GLBL_CMPY_CD
+                    AND ST.SVC_TASK_NUM         = STH.SVC_TASK_NUM
+                    AND STH.EZCANCELFLAG        = '0'
+                    AND STH.SVC_TASK_REL_FLG    = 'N'
+                    AND STH.GLBL_CMPY_CD        = RSN.GLBL_CMPY_CD
+                    AND STH.SVC_TASK_HLD_RSN_CD = RSN.SVC_TASK_HLD_RSN_CD
+                    AND RSN.EZCANCELFLAG        = '0'
+                    <!-- mod start 2018/07/19 QC#27143 -->
+                    <!-- START 2022/07/20 L.Mandanas [QC#60316, MOD] -->
+                    <!-- AND RSN.SVC_TASK_HLD_RSN_CD IN (#creditProfile#, #overDue#) -->
+                    AND RSN.SVC_TASK_HLD_RSN_CD IN (#creditProfile#, #overDue#, #creditLimit#)
+                    <!-- END 2022/07/20 L.Mandanas [QC#60316, MOD] -->
+                    <!-- mod end 2018/07/19 QC#27143 -->
+            )
+            </isNotNull>
+<!-- END 2017/01/05 N.Arai [QC#13901-2, MOD] -->
+            <isNotNull property="bizMsg.xxChkBox_DW">
+            AND ST.MACH_DOWN_FLG         = #bizMsg.xxChkBox_DW#
+            </isNotNull>
+            AND ST.GLBL_CMPY_CD     = MM.GLBL_CMPY_CD(+)
+            AND ST.SVC_MACH_MSTR_PK = MM.SVC_MACH_MSTR_PK(+)
+            AND MM.GLBL_CMPY_CD     = BR.GLBL_CMPY_CD(+)
+            AND MM.FLD_SVC_BR_CD    = BR.SVC_CONTR_BR_CD(+)
+            <isNotNull property="bizMsg.svcContrBrCd">
+            AND MM.FLD_SVC_BR_CD    = #bizMsg.svcContrBrCd#
+            </isNotNull>
+            <isNotNull property="bizMsg.svcByLineBizTpCd_H">
+            AND MM.SVC_BY_LINE_BIZ_TP_CD = #bizMsg.svcByLineBizTpCd_H#
+            </isNotNull>
+            AND MM.EZCANCELFLAG(+)  = '0'
+            AND BR.EZCANCELFLAG(+)  = '0'
+            <isNotNull property="bizMsg.xxChkBox_L1">
+            AND ST.GLBL_CMPY_CD     = SP.GLBL_CMPY_CD(+)
+            AND ST.GLBL_CMPY_CD     = SC.GLBL_CMPY_CD(+)
+            AND ST.SO_NUM           = SP.SO_NUM(+)
+            AND ST.SHIP_TO_CUST_CD  = SC.SHIP_TO_CUST_CD(+)
+            AND SP.EZCANCELFLAG(+)  = '0'
+            AND SC.EZCANCELFLAG(+)  = '0'
+            </isNotNull>
+            ORDER BY
+                ST.SVC_TASK_NUM
+               ,FV.FSR_VISIT_NUM
+        )
+        SELECT
+            V.GLBL_CMPY_CD
+           ,V.EZUPTIME
+           ,V.EZUPTIMEZONE
+           ,V.TECH_CD
+<!--
+           ,V.ORG_LAYER_NUM
+           ,V.ORG_CD
+           ,V.ORG_NM
+-->
+           ,V.FLD_SVC_BR_CD
+           ,V.SVC_BY_LINE_BIZ_TP_CD
+           ,V.SVC_CONTR_BR_DESC_TXT
+<!-- END 2016/11/29 N.Arai [QC#13901, MOD] -->
+           ,V.MDL_NM
+           ,V.SVC_CALL_PRTY_CD
+           ,V.DS_SVC_CALL_TP_CD
+           ,V.SVC_PBLM_SYMP_TP_CD
+           ,V.SER_NUM
+           ,V.ORIG_SVC_CALL_PRTY_CD
+           ,V.MACH_DOWN_FLG
+           ,V.SVC_BILL_TP_CD
+           ,V.SVC_TASK_RCV_DT
+           ,V.SVC_TASK_RCV_TM
+           ,V.SVC_TASK_RCV_TZ
+           ,V.CUST_AVAL_FROM_HOUR_MN
+           ,V.CUST_AVAL_TO_HOUR_MN
+           ,V.SVC_RSP_TM_MN_AOT
+           ,V.SVC_RSP_TM_NUM
+           ,V.SVC_TASK_NUM
+           ,V.SHIP_TO_CUST_CD
+           ,V.FSR_NUM
+           ,V.SVC_CR_HLD_FLG
+           ,V.SVC_MACH_MSTR_PK
+           ,V.TECH_ACPT_FLG
+           ,V.TECH_SCHD_FROM_DT
+           ,V.TECH_SCHD_FROM_TM
+           ,V.TECH_SCHD_TO_DT
+           ,V.TECH_SCHD_TO_TM
+           ,V.TECH_SCHD_TZ
+           ,V.FSR_VISIT_NUM
+           ,V.TECH_ACPT_DT
+           ,V.TECH_ACPT_TM
+           ,V.FSR_VISIT_ETA_DT
+           ,V.FSR_VISIT_ETA_TM
+           ,V.EZUPTIME_FV
+           ,V.EZUPTIMEZONE_FV
+           ,V.SCHD_DISPT_EML_FLG
+           ,V.TECH_AVAL_FLG
+           ,V.SVC_PBLM_SYMP_TP_NM
+           ,V.LOC_NM
+           ,V.SVC_TASK_STS_NM
+           ,NVL(V.FSR_VISIT_STS_CD, V.SVC_TASK_STS_CD) AS SVC_TASK_STS_CD
+           ,V.SVC_MEMO_FLG
+           ,V.CO_FLG
+           ,V.EX_VISIT_FLG
+           ,V.MDSE_CD
+           ,V.CTRY_CD
+           ,V.POST_CD
+           <isNotNull property="downloadFlg">
+           ,(   SELECT
+                    DS_SVC_CALL_TP_NM
+                FROM
+                    DS_SVC_CALL_TP TP
+                WHERE
+                    TP.GLBL_CMPY_CD      = V.GLBL_CMPY_CD
+                AND TP.DS_SVC_CALL_TP_CD = V.DS_SVC_CALL_TP_CD
+                AND TP.EZCANCELFLAG      = '0'
+            ) AS DS_SVC_CALL_TP_NM
+           ,(   SELECT
+                    SVC_BILL_TP_NM
+                FROM
+                    SVC_BILL_TP TP
+                WHERE
+                    TP.GLBL_CMPY_CD      = V.GLBL_CMPY_CD
+                AND TP.SVC_BILL_TP_CD    = V.DS_SVC_CALL_TP_CD
+                AND TP.EZCANCELFLAG      = '0'
+            ) AS SVC_BILL_TP_NM
+           ,TO_CHAR(TO_DATE(V.TECH_SCHD_FROM_DT, 'yyyymmdd'), #csvDtFormat#) AS XX_DT_TM_A1
+           ,TO_CHAR(TO_DATE(V.TECH_SCHD_FROM_TM, 'hh24miss'), #csvTmFormat#) AS XX_DT_TM_A2
+           ,TO_CHAR(TO_DATE(V.TECH_SCHD_TO_DT, 'yyyymmdd'),   #csvDtFormat#) AS XX_DT_TM_A3
+           ,TO_CHAR(TO_DATE(V.TECH_SCHD_TO_TM, 'hh24miss'),   #csvTmFormat#) AS XX_DT_TM_A4
+           ,TO_CHAR(TO_DATE(V.SVC_TASK_RCV_DT, 'yyyymmdd'),   #csvDtFormat#) AS XX_DT_TM_A5
+           ,TO_CHAR(TO_DATE(V.SVC_TASK_RCV_TM, 'hh24miss'),   #csvTmFormat#) AS XX_DT_TM_A6
+           </isNotNull>
+<!-- START 2016/12/01 N.Arai [QC#14204, ADD] -->
+           ,V.XX_REC_HIST_CRAT_TS
+           ,V.XX_REC_HIST_CRAT_BY_NM
+           ,V.XX_REC_HIST_UPD_TS
+           ,V.XX_REC_HIST_UPD_BY_NM
+           ,V.XX_REC_HIST_TBL_NM
+<!-- END 2016/12/01 N.Arai [QC#14204, ADD] -->
+        FROM
+            TASK_V V
+           ,FSR_VISIT_TASK FVT
+        WHERE
+            V.GLBL_CMPY_CD                = FVT.GLBL_CMPY_CD(+)
+        AND V.SVC_TASK_NUM                = FVT.SVC_TASK_NUM(+)
+        AND V.FSR_NUM                     = FVT.FSR_NUM(+)
+        AND V.FSR_VISIT_NUM               = FVT.FSR_VISIT_NUM(+)
+        AND FVT.EZCANCELFLAG(+)           = '0'
+        AND NOT (
+                V.FSR_VISIT_STS_CD       != #stsComplete#
+            AND V.SVC_TASK_STS_CD         = #stsComplete#
+            AND V.FSR_NUM                IS NOT NULL
+        )
+        AND NOT (
+                V.FSR_VISIT_STS_CD        = #stsComplete#
+            AND (
+                    FVT.SVC_TASK_NUM     IS NULL
+                OR  FVT.SVC_TASK_CPLT_FLG = #flgN#
+            )
+            AND V.FSR_NUM                IS NOT NULL
+        )
+        AND ROWNUM                    &lt;= #rowNum#
+<!-- START 2016/11/29 N.Arai [QC#13901, MOD] -->
+<!--
+        <isNotNull property="bizMsg.xxChkBox_EX">
+        AND V.EX_VISIT_FLG = #bizMsg.xxChkBox_EX#
+        </isNotNull>
+-->
+<!-- END 2016/11/29 N.Arai [QC#13901, MOD] -->
+    </statement>
+
+    <statement id="checkTechMstr"  parameterClass="Map" resultClass="String">
+        SELECT
+            TM.TECH_TOC_CD
+        FROM
+            TECH_MSTR TM
+        WHERE
+            TM.GLBL_CMPY_CD = #glblCmpyCd#
+        AND TM.TECH_TOC_CD  = #techCd#
+        AND TM.EZCANCELFLAG = '0'
+        AND ROWNUM          = 1
+        <!-- START 2016/12/14 K.Kojima [QC#15653,ADD] -->
+        AND EXISTS(
+            SELECT
+                1
+            FROM
+                 ORG_FUNC_ASG     OFA
+                ,TOC              T
+                ,ORG_FUNC_ROLE_TP OFRT
+            WHERE
+                    OFA.GLBL_CMPY_CD                  = TM.GLBL_CMPY_CD
+                AND OFA.PSN_CD                        = TM.TECH_TOC_CD
+                AND OFA.EFF_FROM_DT               &lt;= #slsDt#
+                AND NVL(OFA.EFF_THRU_DT, #maxDt#) &gt;= #slsDt#
+                AND OFA.GLBL_CMPY_CD                  = T.GLBL_CMPY_CD
+                AND OFA.TOC_CD                        = T.TOC_CD
+                AND T.GLBL_CMPY_CD                    = OFRT.GLBL_CMPY_CD
+                AND T.ORG_FUNC_ROLE_TP_CD             = OFRT.ORG_FUNC_ROLE_TP_CD
+                AND OFRT.TECH_MSTR_REQ_FLG            = #flgY#
+                AND OFRT.ACTV_FLG                     = #flgY#
+                AND OFA.EZCANCELFLAG                  = '0'
+                AND T.EZCANCELFLAG                    = '0'
+                AND OFRT.EZCANCELFLAG                 = '0'
+        )
+        <!-- END 2016/12/14 K.Kojima [QC#15653,ADD] -->
+    </statement>
+
+    <statement id="checkTechTngHist" parameterClass="Map" resultClass="String">
+        WITH HIST_V AS (
+            <!-- START 2017/08/04 U.Kim [QC#19084, MOD] -->
+            <!-- SELECT -->
+            <!--     TTH.TECH_TNG_HIST_ACTV_FLG -->
+            <!-- FROM -->
+            <!--     SVC_TASK      ST -->
+            <!--    ,TECH_TNG_HIST TTH -->
+            <!--    ,MDSE          MD -->
+            <!-- WHERE -->
+            <!--     ST.GLBL_CMPY_CD            = #glblCmpyCd# -->
+            <!-- AND ST.GLBL_CMPY_CD            = TTH.GLBL_CMPY_CD -->
+            <!-- AND ST.GLBL_CMPY_CD            = MD.GLBL_CMPY_CD(+) -->
+            <!-- AND ST.SVC_TASK_NUM            = #svcTaskNum# -->
+            <!-- AND TTH.TECH_CD                = #techCd# -->
+            <!-- AND ST.MDSE_CD                 = MD.MDSE_CD(+) -->
+            <!-- AND ( -->
+            <!--     ( -->
+            <!--             TTH.ASG_PROD_CTRL_LAYER_NUM = '0' -->
+            <!--         AND TTH.ZEROTH_PROD_CTRL_CD     = MD.ZEROTH_PROD_CTRL_CD -->
+            <!--     ) OR ( -->
+            <!--             TTH.ASG_PROD_CTRL_LAYER_NUM = '1' -->
+            <!--         AND TTH.FIRST_PROD_CTRL_CD      = MD.FIRST_PROD_CTRL_CD -->
+            <!--     ) OR ( -->
+            <!--             TTH.ASG_PROD_CTRL_LAYER_NUM = '2' -->
+            <!--         AND TTH.SCD_PROD_CTRL_CD        = MD.SCD_PROD_CTRL_CD -->
+            <!--     ) OR ( -->
+            <!--             TTH.ASG_PROD_CTRL_LAYER_NUM = '3' -->
+            <!--         AND TTH.THIRD_PROD_CTRL_CD      = MD.THIRD_PROD_CTRL_CD -->
+            <!--     ) OR ( -->
+            <!--             TTH.ASG_PROD_CTRL_LAYER_NUM = '4' -->
+            <!--         AND TTH.FRTH_PROD_CTRL_CD       = MD.FRTH_PROD_CTRL_CD -->
+            <!--     ) OR ( -->
+            <!--             TTH.ASG_PROD_CTRL_LAYER_NUM = '5' -->
+            <!--         AND TTH.FIFTH_PROD_CTRL_CD      = MD.FIFTH_PROD_CTRL_CD -->
+            <!--     ) OR ( -->
+            <!--             TTH.ASG_PROD_CTRL_LAYER_NUM = '6' -->
+            <!--         AND TTH.SIXTH_PROD_CTRL_CD      = MD.SIXTH_PROD_CTRL_CD -->
+            <!--     ) OR ( -->
+            <!--             TTH.ASG_PROD_CTRL_LAYER_NUM = '7' -->
+            <!--         AND TTH.SVNTH_PROD_CTRL_CD      = MD.SVNTH_PROD_CTRL_CD -->
+            <!--     ) OR ( -->
+            <!--             TTH.ASG_PROD_CTRL_LAYER_NUM = '99' -->
+            <!--         AND TTH.MDSE_CD                 = MD.MDSE_CD -->
+            <!--     ) OR ( -->
+            <!--         TTH.MDL_NM                      = ST.MDL_NM -->
+            <!--     ) OR ( -->
+            <!--         TTH.MDL_GRP_NM                  = ST.MDL_GRP_NM -->
+            <!--     ) -->
+            <!-- ) -->
+            <!-- AND ST.EZCANCELFLAG       = '0' -->
+            <!-- AND TTH.EZCANCELFLAG      = '0' -->
+            <!-- AND MD.EZCANCELFLAG(+)    = '0' -->
+            <!-- ORDER BY -->
+            <!--     TTH.MDSE_CD    NULLS LAST -->
+            <!--    ,TTH.MDL_NM     NULLS LAST -->
+            <!--    ,TTH.MDL_GRP_NM NULLS LAST -->
+            <!--    ,TTH.ASG_PROD_CTRL_LAYER_NUM DESC NULLS LAST -->
+            SELECT
+                 TTH.TECH_TNG_HIST_ACTV_FLG
+            FROM
+                 SVC_TASK        ST
+                ,SVC_MACH_MSTR   SMM
+                ,SVC_CONFIG_MSTR SCM
+                ,DS_MDL          DM
+                ,TECH_TNG_HIST   TTH
+            WHERE
+                    ST.GLBL_CMPY_CD                   = #glblCmpyCd#
+                AND ST.SVC_TASK_NUM                   = #svcTaskNum#
+                AND ST.EZCANCELFLAG                   = '0'
+                AND ST.GLBL_CMPY_CD                   = SMM.GLBL_CMPY_CD
+                AND ST.SVC_MACH_MSTR_PK               = SMM.SVC_MACH_MSTR_PK
+                AND SMM.EZCANCELFLAG                  = '0'
+                AND SMM.GLBL_CMPY_CD                  = SCM.GLBL_CMPY_CD
+                AND SMM.SVC_CONFIG_MSTR_PK            = SCM.SVC_CONFIG_MSTR_PK
+                AND SCM.EZCANCELFLAG                  = '0'
+                AND SCM.GLBL_CMPY_CD                  = DM.GLBL_CMPY_CD
+                AND SCM.MDL_ID                        = DM.MDL_ID
+                AND DM.EZCANCELFLAG                   = '0'
+                AND DM.GLBL_CMPY_CD                   = TTH.GLBL_CMPY_CD
+                AND DM.SVC_SKILL_NUM                  = TTH.SVC_SKILL_NUM
+                AND TTH.TECH_CD                       = #techCd#
+                AND TTH.EFF_FROM_DT               &lt;= #slsDt#
+                AND NVL(TTH.EFF_THRU_DT, #slsDt#) &gt;= #slsDt#
+                AND TTH.EZCANCELFLAG                  = '0'
+            ORDER BY
+                TTH.TECH_TNG_HIST_ACTV_FLG DESC NULLS LAST
+            <!-- END 2017/08/04 U.Kim [QC#19084, MOD] -->
+        )
+        SELECT
+            TECH_TNG_HIST_ACTV_FLG
+        FROM
+            HIST_V
+        WHERE
+            ROWNUM                = 1
+    </statement>
+
+    <statement id="checkSvcNonPrfTech"  parameterClass="Map" resultClass="String">
+<!-- START 2015/11/18 T.Harada [CSA,ADD] -->
+        SELECT
+            SNPT.NON_PRF_TECH_CD
+        FROM
+            SVC_NON_PRF_TECH SNPT
+        WHERE
+            SNPT.GLBL_CMPY_CD     = #glblCmpyCd#
+        AND SNPT.SVC_MACH_MSTR_PK = #svcMachMstrPk#
+        AND SNPT.NON_PRF_TECH_CD  = #techCd#
+<!-- START 2016/10/27 N.Arai [QC#14840, MOD] -->
+        AND NVL(SNPT.EFF_THRU_DT,#currSysDt#)    &gt;= #currSysDt#
+<!-- END 2016/10/27 N.Arai [QC#14840, MOD] -->
+        AND SNPT.EZCANCELFLAG     = '0'
+        AND ROWNUM                = 1
+<!-- END 2015/11/18 T.Harada [CSA,ADD] -->
+    </statement>
+
+    <statement id="getSvcTaskStsList" parameterClass="Map" resultClass="Map">
+        SELECT
+            STS.SVC_TASK_STS_CD
+           ,STS.SVC_TASK_STS_NM
+        FROM
+            SVC_TASK_STS STS
+        WHERE
+            STS.GLBL_CMPY_CD    = #glblCmpyCd#
+        AND STS.SVC_TASK_STS_CD NOT IN
+            <iterate property="rejStsList" var="svcTaskStsCd[]" open="(" conjunction= "," close=")">
+                #svcTaskStsCd[]#
+            </iterate>
+        AND STS.EZCANCELFLAG    = '0'
+        ORDER BY
+            SVC_TASK_STS_SORT_NUM
+    </statement>
+
+    <statement id="getMsgFlg" parameterClass="Map" resultClass="String">
+        SELECT
+            'Y'
+        FROM
+            SVC_MEMO SM
+           ,SVC_TASK ST
+        WHERE
+            SM.GLBL_CMPY_CD     = #glblCmpyCd#
+        AND SM.GLBL_CMPY_CD     = ST.GLBL_CMPY_CD
+        AND ST.SVC_TASK_NUM     = #svcTaskNum#
+        AND (
+                SM.SVC_TASK_NUM     = ST.SVC_TASK_NUM
+             OR SM.FSR_NUM          = ST.FSR_NUM
+             OR SM.SVC_TASK_NUM    IN (
+                    SELECT
+                        SVC_TASK_NUM
+                    FROM
+                        SVC_TASK S
+                    WHERE
+                        S.GLBL_CMPY_CD = ST.GLBL_CMPY_CD
+                    AND S.FSR_NUM      = ST.FSR_NUM
+                    AND S.EZCANCELFLAG = '0'
+                )
+            )
+        AND SM.EZCANCELFLAG     = '0'
+        AND ST.EZCANCELFLAG     = '0'
+        AND ROWNUM              = 1
+    </statement>
+
+    <statement id="getFsrVisitByLtstFlg" parameterClass="Map" resultClass="Map">
+        SELECT
+            FV.FSR_NUM
+           ,FV.FSR_VISIT_NUM
+           ,FV.TECH_ACPT_FLG
+           ,FV.TECH_ACPT_DT
+           ,FV.TECH_ACPT_TM
+        FROM
+            FSR_VISIT           FV
+        WHERE
+            FV.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND FV.FSR_NUM             = #fsrNum#
+        AND FV.FSR_VISIT_LTST_FLG  = #fsrVisitLtstFlg#
+        AND FV.EZCANCELFLAG        = '0'
+    </statement>
+
+    <statement id="getFsrVisitByContinuousCall" parameterClass="Map" resultClass="Map">
+        SELECT
+            PFV.SVC_CALL_CPLT_TP_CD
+        FROM
+            FSR_VISIT CFV
+            ,FSR_VISIT PFV
+        WHERE
+                CFV.EZCANCELFLAG       = '0'
+            AND CFV.GLBL_CMPY_CD       = #glblCmpyCd#
+            AND CFV.FSR_NUM            = #fsrNum#
+            AND CFV.FSR_VISIT_STS_CD   = #fsrVisitStsCd#
+            AND PFV.EZCANCELFLAG       = '0'
+            AND CFV.GLBL_CMPY_CD       = PFV.GLBL_CMPY_CD
+            AND CFV.FSR_NUM            = PFV.FSR_NUM
+            AND CFV.PREV_FSR_VISIT_NUM = PFV.FSR_VISIT_NUM
+    </statement>
+
+<!-- START 2016/11/29 N.Arai [QC#13901, MOD] -->
+    <statement id="getSvcBillTpList" parameterClass="Map" resultClass="Map">
+        SELECT
+                  SBT.SVC_BILL_TP_CD
+                , SBT.SVC_BILL_TP_DESC_TXT
+            FROM
+                SVC_BILL_TP SBT
+            WHERE
+                    SBT.GLBL_CMPY_CD = #glblCmpyCd#
+                AND SBT.EZCANCELFLAG  = '0'
+            ORDER BY
+                  SBT.SVC_BILL_TP_SORT_NUM
+    </statement>
+
+    <statement id="getEnabledStatus" parameterClass="Map" resultClass="Map">
+        SELECT
+             NVL(SUM(CASE WHEN STS.FSR_VISIT_STS_ENBL_FLG = 'Y' THEN 1 ELSE 0 END), 0) AS FSR_VISIT_SERCH_CNT
+            ,NVL(SUM(CASE WHEN STS.SVC_TASK_STS_ENBL_FLG  = 'Y' THEN 1 ELSE 0 END), 0) AS SVC_TASK_SERCH_CNT
+            ,NVL(SUM(CASE WHEN STS.FSR_STS_ENBL_FLG       = 'Y' THEN 1 ELSE 0 END), 0) AS FSR_SERCH_CNT
+        FROM
+            SVC_TASK_STS STS
+        WHERE
+                STS.GLBL_CMPY_CD  = #glblCmpyCd#
+            AND STS.EZCANCELFLAG  = '0'
+            <iterate property="svcTaskStsCdList" var="svcTaskStsCd[]" open="AND STS.SVC_TASK_STS_CD IN (" conjunction= "," close=")">
+                #svcTaskStsCd[]#
+            </iterate>
+            <iterate property="expSvcTaskStsCdList" var="expSvcTaskStsCd[]" open="AND STS.SVC_TASK_STS_CD NOT IN (" conjunction= "," close=")">
+                #expSvcTaskStsCd[]#
+            </iterate>
+    </statement>
+<!-- END 2016/11/29 N.Arai [QC#13901, MOD] -->
+
+<!-- START 2017/01/05 N.Arai [QC#13901-2, MOD] -->
+    <statement id="getSvcLineBiz" parameterClass="Map" resultClass="Map">
+        SELECT
+             A.LINE_BIZ_TP_CD       LINE_BIZ_TP_CD
+            ,A.LINE_BIZ_TP_DESC_TXT LINE_BIZ_TP_DESC_TXT
+        FROM
+             LINE_BIZ_TP          A
+            ,AVAL_LINE_BIZ_TP_SRC B
+        WHERE
+                A.GLBL_CMPY_CD      = #glblCmpyCd#
+            AND A.EZCANCELFLAG      = '0'
+            AND A.GLBL_CMPY_CD      = B.GLBL_CMPY_CD
+            AND A.LINE_BIZ_TP_CD    = B.LINE_BIZ_TP_CD
+            AND B.SYS_SRC_CD        = #sysSrcCd#
+            AND B.EZCANCELFLAG      = '0'
+        ORDER BY
+            A.LINE_BIZ_TP_SORT_NUM
+    </statement>
+<!-- END 2017/01/05 N.Arai [QC#13901-2, MOD] -->
+
+    <resultMap id="result.NSBL0010_ASMsg"  class="NSBL0010_ASMsg">
+        <result property="techCd_A"              column="TECH_CD"                javaType="EZDSStringItem"/>
+<!-- START 2016/11/29 N.Arai [QC#13901, MOD] -->
+<!--
+        <result property="orgLayerNum_A"         column="ORG_LAYER_NUM"          javaType="EZDSBigDecimalItem"/>
+        <result property="orgCd_A"               column="ORG_CD"                 javaType="EZDSStringItem"/>
+        <result property="orgNm_A"               column="ORG_NM"                 javaType="EZDSStringItem"/>
+-->
+        <result property="svcContrBrCd_A"        column="FLD_SVC_BR_CD"          javaType="EZDSStringItem"/>
+        <result property="svcContrBrDescTxt_A"   column="SVC_CONTR_BR_DESC_TXT"  javaType="EZDSStringItem"/>
+        <result property="svcByLineBizTpCd_A"    column="SVC_BY_LINE_BIZ_TP_CD"  javaType="EZDSStringItem"/>
+        <result property="mdseCd_A"              column="MDSE_CD"                javaType="EZDSStringItem"/>
+<!-- END 2016/11/29 N.Arai [QC#13901, MOD] -->
+        <result property="mdlNm_A"               column="MDL_NM"                 javaType="EZDSStringItem"/>
+        <result property="svcCallPrtyCd_A"       column="SVC_CALL_PRTY_CD"       javaType="EZDSStringItem"/>
+        <result property="dsSvcCallTpCd_A"       column="DS_SVC_CALL_TP_CD"      javaType="EZDSStringItem"/>
+        <result property="svcPblmSympTpCd_A"     column="SVC_PBLM_SYMP_TP_CD"    javaType="EZDSStringItem"/>
+        <result property="serNum_A"              column="SER_NUM"                javaType="EZDSStringItem"/>
+        <result property="origSvcCallPrtyCd_A"   column="ORIG_SVC_CALL_PRTY_CD"  javaType="EZDSStringItem"/>
+        <result property="machDownFlg_A"         column="MACH_DOWN_FLG"          javaType="EZDSStringItem"/>
+        <result property="svcBillTpCd_A"         column="SVC_BILL_TP_CD"         javaType="EZDSStringItem"/>
+        <result property="svcTaskRcvDt_A"        column="SVC_TASK_RCV_DT"        javaType="EZDSStringItem"/>
+        <result property="svcTaskRcvTm_A"        column="SVC_TASK_RCV_TM"        javaType="EZDSStringItem"/>
+        <result property="svcTaskRcvTz_A"        column="SVC_TASK_RCV_TZ"        javaType="EZDSStringItem"/>
+        <result property="custAvalFromHourMn_A"  column="CUST_AVAL_FROM_HOUR_MN" javaType="EZDSStringItem"/>
+        <result property="custAvalToHourMn_A"    column="CUST_AVAL_TO_HOUR_MN"   javaType="EZDSStringItem"/>
+        <result property="svcRspTmMnAot_A"       column="SVC_RSP_TM_MN_AOT"      javaType="EZDSBigDecimalItem"/>
+        <result property="svcRspTmNum_A"         column="SVC_RSP_TM_NUM"         javaType="EZDSBigDecimalItem"/>
+        <result property="svcTaskNum_A"          column="SVC_TASK_NUM"           javaType="EZDSStringItem"/>
+        <result property="shipToCustCd_A"        column="SHIP_TO_CUST_CD"        javaType="EZDSStringItem"/>
+        <result property="fsrNum_A"              column="FSR_NUM"                javaType="EZDSStringItem"/>
+        <result property="svcCrHldFlg_A"         column="SVC_CR_HLD_FLG"         javaType="EZDSStringItem"/>
+        <result property="svcMachMstrPk_A"       column="SVC_MACH_MSTR_PK"       javaType="EZDSBigDecimalItem"/>
+        <result property="techAcptFlg_A"         column="TECH_ACPT_FLG"          javaType="EZDSStringItem"/>
+        <result property="techSchdFromDt_A"      column="TECH_SCHD_FROM_DT"      javaType="EZDSStringItem"/>
+        <result property="techSchdFromTm_A"      column="TECH_SCHD_FROM_TM"      javaType="EZDSStringItem"/>
+        <result property="techSchdToDt_A"        column="TECH_SCHD_TO_DT"        javaType="EZDSStringItem"/>
+        <result property="techSchdToTm_A"        column="TECH_SCHD_TO_TM"        javaType="EZDSStringItem"/>
+        <result property="techSchdTz_A"          column="TECH_SCHD_TZ"           javaType="EZDSStringItem"/>
+        <result property="fsrVisitNum_A"         column="FSR_VISIT_NUM"          javaType="EZDSStringItem"/>
+        <result property="techAcptDt_A"          column="TECH_ACPT_DT"           javaType="EZDSStringItem"/>
+        <result property="techAcptTm_A"          column="TECH_ACPT_TM"           javaType="EZDSStringItem"/>
+        <result property="fsrVisitEtaDt_A"       column="FSR_VISIT_ETA_DT"       javaType="EZDSStringItem"/>
+        <result property="fsrVisitEtaTm_A"       column="FSR_VISIT_ETA_TM"       javaType="EZDSStringItem"/>
+        <result property="ezUpTime_FV"           column="EZUPTIME_FV"            javaType="EZDSStringItem"/>
+        <result property="ezUpTimeZone_FV"       column="EZUPTIMEZONE_FV"        javaType="EZDSStringItem"/>
+        <result property="schdDisptEmlFlg_A"     column="SCHD_DISPT_EML_FLG"     javaType="EZDSStringItem"/>
+        <result property="techAvalFlg_A"         column="TECH_AVAL_FLG"          javaType="EZDSStringItem"/>
+        <result property="svcPblmSympTpNm_A"     column="SVC_PBLM_SYMP_TP_NM"    javaType="EZDSStringItem"/>
+        <result property="locNm_A"               column="LOC_NM"                 javaType="EZDSStringItem"/>
+        <result property="svcTaskStsCd_A"        column="SVC_TASK_STS_CD"        javaType="EZDSStringItem"/>
+        <result property="svcTaskStsNm_A"        column="SVC_TASK_STS_NM"        javaType="EZDSStringItem"/>
+        <result property="xxBtnFlg_AM"           column="SVC_MEMO_FLG"           javaType="EZDSStringItem"/>
+        <result property="xxBtnFlg_AC"           column="CO_FLG"                 javaType="EZDSStringItem"/>
+        <result property="xxBtnFlg_AE"           column="EX_VISIT_FLG"           javaType="EZDSStringItem"/>
+        <result property="ctryCd_A"              column="CTRY_CD"                javaType="EZDSStringItem"/>
+        <result property="postCd_A"              column="POST_CD"                javaType="EZDSStringItem"/>
+        <result property="glblCmpyCd_A"          column="GLBL_CMPY_CD"           javaType="EZDSStringItem"/>
+        <result property="ezUpTime_A"            column="EZUPTIME"               javaType="EZDSStringItem"/>
+        <result property="ezUpTimeZone_A"        column="EZUPTIMEZONE"           javaType="EZDSStringItem"/>
+<!-- START 2016/12/01 N.Arai [QC#14204, ADD] -->
+        <result property="xxRecHistCratTs_A1"    column="XX_REC_HIST_CRAT_TS"    javaType="EZDSStringItem"/>
+        <result property="xxRecHistCratByNm_A1"  column="XX_REC_HIST_CRAT_BY_NM" javaType="EZDSStringItem"/>
+        <result property="xxRecHistUpdTs_A1"     column="XX_REC_HIST_UPD_TS"     javaType="EZDSStringItem"/>
+        <result property="xxRecHistUpdByNm_A1"   column="XX_REC_HIST_UPD_BY_NM"  javaType="EZDSStringItem"/>
+        <result property="xxRecHistTblNm_A1"     column="XX_REC_HIST_TBL_NM"     javaType="EZDSStringItem"/>
+        <result property="xxRecHistCratTs_A2"    column="XX_REC_HIST_CRAT_TS"    javaType="EZDSStringItem"/>
+        <result property="xxRecHistCratByNm_A2"  column="XX_REC_HIST_CRAT_BY_NM" javaType="EZDSStringItem"/>
+        <result property="xxRecHistUpdTs_A2"     column="XX_REC_HIST_UPD_TS"     javaType="EZDSStringItem"/>
+        <result property="xxRecHistUpdByNm_A2"   column="XX_REC_HIST_UPD_BY_NM"  javaType="EZDSStringItem"/>
+        <result property="xxRecHistTblNm_A2"     column="XX_REC_HIST_TBL_NM"     javaType="EZDSStringItem"/>
+        <result property="xxRecHistCratTs_A3"    column="XX_REC_HIST_CRAT_TS"    javaType="EZDSStringItem"/>
+        <result property="xxRecHistCratByNm_A3"  column="XX_REC_HIST_CRAT_BY_NM" javaType="EZDSStringItem"/>
+        <result property="xxRecHistUpdTs_A3"     column="XX_REC_HIST_UPD_TS"     javaType="EZDSStringItem"/>
+        <result property="xxRecHistUpdByNm_A3"   column="XX_REC_HIST_UPD_BY_NM"  javaType="EZDSStringItem"/>
+        <result property="xxRecHistTblNm_A3"     column="XX_REC_HIST_TBL_NM"     javaType="EZDSStringItem"/>
+        <result property="xxRecHistCratTs_A4"    column="XX_REC_HIST_CRAT_TS"    javaType="EZDSStringItem"/>
+        <result property="xxRecHistCratByNm_A4"  column="XX_REC_HIST_CRAT_BY_NM" javaType="EZDSStringItem"/>
+        <result property="xxRecHistUpdTs_A4"     column="XX_REC_HIST_UPD_TS"     javaType="EZDSStringItem"/>
+        <result property="xxRecHistUpdByNm_A4"   column="XX_REC_HIST_UPD_BY_NM"  javaType="EZDSStringItem"/>
+        <result property="xxRecHistTblNm_A4"     column="XX_REC_HIST_TBL_NM"     javaType="EZDSStringItem"/>
+        <result property="xxRecHistCratTs_A5"    column="XX_REC_HIST_CRAT_TS"    javaType="EZDSStringItem"/>
+        <result property="xxRecHistCratByNm_A5"  column="XX_REC_HIST_CRAT_BY_NM" javaType="EZDSStringItem"/>
+        <result property="xxRecHistUpdTs_A5"     column="XX_REC_HIST_UPD_TS"     javaType="EZDSStringItem"/>
+        <result property="xxRecHistUpdByNm_A5"   column="XX_REC_HIST_UPD_BY_NM"  javaType="EZDSStringItem"/>
+        <result property="xxRecHistTblNm_A5"     column="XX_REC_HIST_TBL_NM"     javaType="EZDSStringItem"/>
+        <result property="xxRecHistCratTs_A6"    column="XX_REC_HIST_CRAT_TS"    javaType="EZDSStringItem"/>
+        <result property="xxRecHistCratByNm_A6"  column="XX_REC_HIST_CRAT_BY_NM" javaType="EZDSStringItem"/>
+        <result property="xxRecHistUpdTs_A6"     column="XX_REC_HIST_UPD_TS"     javaType="EZDSStringItem"/>
+        <result property="xxRecHistUpdByNm_A6"   column="XX_REC_HIST_UPD_BY_NM"  javaType="EZDSStringItem"/>
+        <result property="xxRecHistTblNm_A6"     column="XX_REC_HIST_TBL_NM"     javaType="EZDSStringItem"/>
+<!-- END 2016/12/01 N.Arai [QC#14204, ADD] -->
+    </resultMap>
+
+</sqlMap>

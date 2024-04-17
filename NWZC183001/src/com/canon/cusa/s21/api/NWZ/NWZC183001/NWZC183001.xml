@@ -1,0 +1,551 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sqlMap namespace="NWZC183001">
+
+    <statement id="queryCpoDtl" parameterClass="Map" resultClass="Map">
+        SELECT 
+             CD.CPO_ORD_NUM
+          ,  CD.CPO_DTL_LINE_NUM
+          ,  CD.CPO_DTL_LINE_SUB_NUM
+        FROM
+             CPO_DTL CD
+        WHERE
+             CD.CPO_ORD_NUM          =      #ordNum#
+        AND  CD.ORD_LINE_STS_CD      NOT IN (#close# , #cancel#)
+        AND  CD.GLBL_CMPY_CD         =      #glblCmpyCd#
+        AND  CD.EZCANCELFLAG         =      0
+    </statement>
+
+    <statement id="queryDsCpoDtl" parameterClass="Map" resultClass="Map">
+        SELECT
+               DCC.CPO_ORD_NUM
+             , DCC.DS_CPO_CONFIG_PK
+             , DCII.DS_CPO_ISTL_INFO_PK
+        FROM
+               DS_CPO_CONFIG DCC
+             , DS_CPO_ISTL_INFO DCII
+        WHERE DCC.GLBL_CMPY_CD     = #glblCmpyCd#
+        AND   DCC.EZCANCELFLAG     = '0'
+        AND   DCC.CPO_ORD_NUM      = #ordNum#
+        AND   DCC.CONFIG_CATG_CD   = #outbound#
+        AND   DCC.GLBL_CMPY_CD     = DCII.GLBL_CMPY_CD(+)
+        AND   DCC.EZCANCELFLAG     = DCII.EZCANCELFLAG(+)
+        AND   DCC.CPO_ORD_NUM      = DCII.CPO_ORD_NUM(+)
+        AND   DCC.DS_CPO_CONFIG_PK = DCII.DS_CPO_CONFIG_PK(+)
+        ORDER BY DCC.DS_ORD_POSN_NUM
+    </statement>
+
+    <statement id="queryDelyInfoHeader" parameterClass="Map" resultClass="Map">
+        SELECT
+               DCC.CPO_ORD_NUM
+             , DCC.DS_CPO_CONFIG_PK
+             , DCDI.DS_CPO_DELY_INFO_PK
+             , DCC.SHIP_TO_CTRY_CD      <!-- QC#18460 ADD -->
+             , DCC.SHIP_TO_POST_CD      <!-- QC#18460 ADD -->
+        FROM 
+               DS_CPO_CONFIG DCC
+             , DS_CPO_DELY_INFO DCDI
+        WHERE DCC.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND   DCC.EZCANCELFLAG        = '0'
+        AND   DCC.CPO_ORD_NUM         = #ordNum#
+        <!-- 2019/01/25 QC#30005 Del Start -->
+        <!-- 2017/06/29 QC#19218 Add Start -->
+        <!-- AND   DCC.DROP_SHIP_FLG       = #dropShipFlg# -->
+        <!-- 2017/06/29 QC#19218 Add End -->
+        <!-- 2019/01/25 QC#30005 Del End -->
+        AND   DCC.SHIP_TO_CUST_LOC_CD = (SELECT
+                                             ADD_SHIP_TO_CUST_CD
+                                         FROM
+                                             CPO
+                                         WHERE
+                                             CPO.GLBL_CMPY_CD = DCC.GLBL_CMPY_CD
+                                         AND CPO.CPO_ORD_NUM  = DCC.CPO_ORD_NUM
+                                         AND CPO.EZCANCELFLAG = '0')
+        AND   DCC.GLBL_CMPY_CD     = DCDI.GLBL_CMPY_CD(+)
+        AND   DCC.EZCANCELFLAG     = DCDI.EZCANCELFLAG(+)
+        AND   DCC.CPO_ORD_NUM      = DCDI.CPO_ORD_NUM(+)
+        AND   DCC.DS_CPO_CONFIG_PK = DCDI.DS_CPO_CONFIG_PK(+)
+        ORDER BY DCC.CONFIG_CATG_CD DESC 
+               , DCC.DS_ORD_POSN_NUM ASC
+    </statement>
+
+    <!-- S21_NA#26188 20180719 Del Start -->
+    <!--
+    <statement id="queryDelyInfoNoHeader" parameterClass="Map" resultClass="Map">
+        SELECT
+               DCC.CPO_ORD_NUM
+             , DCC.DS_CPO_CONFIG_PK
+             , DCDI.DS_CPO_DELY_INFO_PK
+             , DCDI.DS_DELY_TP_CD
+             , DCDI.RDD_DT
+             , DCDI.OPS_FROM_HOUR_MN
+             , DCDI.OPS_TO_HOUR_MN
+             , DCDI.LOAD_DOCK_AVAL_FLG
+             , DCDI.STAIR_CRAW_REQ_FLG
+             , DCDI.STAIR_CRAW_NUM
+             , DCDI.ELEV_AVAL_FLG
+             , DCDI.DELY_ADDL_CMNT_TXT
+        FROM
+               DS_CPO_CONFIG DCC
+             , DS_CPO_DELY_INFO DCDI
+        WHERE DCC.GLBL_CMPY_CD = #glblCmpyCd#
+        AND   DCC.EZCANCELFLAG = '0'
+        AND   DCC.CPO_ORD_NUM  = #ordNum#
+        AND   NOT EXISTS(
+                SELECT 1
+                FROM   DS_CPO_DELY_INFO DI
+                WHERE DCC.GLBL_CMPY_CD     = DI.GLBL_CMPY_CD
+                AND   DCC.EZCANCELFLAG     = DI.EZCANCELFLAG
+                AND   DCC.CPO_ORD_NUM      = DI.CPO_ORD_NUM
+                AND   DCC.DS_CPO_CONFIG_PK = DI.DS_CPO_CONFIG_PK
+        )
+        AND   DCC.SHIP_TO_CUST_LOC_CD = (SELECT
+                                             ADD_SHIP_TO_CUST_CD
+                                         FROM
+                                             CPO
+                                         WHERE
+                                             CPO.GLBL_CMPY_CD = DCC.GLBL_CMPY_CD
+                                         AND CPO.CPO_ORD_NUM  = DCC.CPO_ORD_NUM
+                                         AND CPO.EZCANCELFLAG = '0')
+        AND   DCC.GLBL_CMPY_CD = DCDI.GLBL_CMPY_CD
+        AND   DCC.EZCANCELFLAG = DCDI.EZCANCELFLAG
+        AND   DCC.CPO_ORD_NUM  = DCDI.CPO_ORD_NUM
+        AND   DCDI.DS_CPO_CONFIG_PK IS NULL
+        ORDER BY DCC.CONFIG_CATG_CD DESC 
+               , DCC.DS_ORD_POSN_NUM ASC
+    </statement>
+    -->
+    <!-- S21_NA#26188 20180719 Del End -->
+
+    <statement id="queryIstlInfoHeader" parameterClass="Map" resultClass="Map">
+        SELECT 
+               DCC.CPO_ORD_NUM
+             , DCC.DS_CPO_CONFIG_PK
+             , DCII.DS_CPO_ISTL_INFO_PK
+             , DCC.SHIP_TO_CTRY_CD      <!-- QC#18460 ADD -->
+             , DCC.SHIP_TO_POST_CD      <!-- QC#18460 ADD -->
+        FROM 
+               DS_CPO_CONFIG DCC
+             , DS_CPO_ISTL_INFO DCII
+        WHERE DCC.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND   DCC.EZCANCELFLAG        = '0'
+        AND   DCC.CPO_ORD_NUM         = #ordNum#
+        <!-- 2019/01/25 QC#30005 Del Start -->
+        <!-- 2017/06/29 QC#19218 Add Start -->
+        <!-- AND   DCC.DROP_SHIP_FLG       = #dropShipFlg# -->
+        <!-- 2017/06/29 QC#19218 Add End -->
+        <!-- 2019/01/25 QC#30005 Del End -->
+        AND   DCC.SHIP_TO_CUST_LOC_CD = (SELECT
+                                             ADD_SHIP_TO_CUST_CD
+                                         FROM
+                                             CPO
+                                         WHERE
+                                             CPO.GLBL_CMPY_CD = DCC.GLBL_CMPY_CD
+                                         AND CPO.CPO_ORD_NUM  = DCC.CPO_ORD_NUM
+                                         AND CPO.EZCANCELFLAG = '0')
+        AND   DCC.GLBL_CMPY_CD     = DCII.GLBL_CMPY_CD(+)
+        AND   DCC.EZCANCELFLAG     = DCII.EZCANCELFLAG(+)
+        AND   DCC.CPO_ORD_NUM      = DCII.CPO_ORD_NUM(+)
+        AND   DCC.DS_CPO_CONFIG_PK = DCII.DS_CPO_CONFIG_PK(+)
+        ORDER BY DCC.CONFIG_CATG_CD DESC 
+               , DCC.DS_ORD_POSN_NUM ASC
+    </statement>
+
+    <!-- S21_NA#26188 20180719 Del Start -->
+    <!--
+    <statement id="queryIstlInfoNoHeader" parameterClass="Map" resultClass="Map">
+        SELECT
+               DCC.CPO_ORD_NUM
+             , DCC.DS_CPO_CONFIG_PK
+             , DCII.DS_CPO_ISTL_INFO_PK
+             , DCII.ISTL_DIV_CD
+             , DCII.ISTL_TECH_CD
+             , DCII.RQST_ISTL_DT
+             , DCII.RQST_ISTL_TM
+             , DCII.ISTL_ADDL_CMNT_TXT
+             , DCII.SVC_ISTL_RULE_NUM
+        FROM
+               DS_CPO_CONFIG DCC
+             , DS_CPO_ISTL_INFO DCII
+        WHERE DCC.GLBL_CMPY_CD = #glblCmpyCd#
+        AND   DCC.EZCANCELFLAG = '0'
+        AND   DCC.CPO_ORD_NUM  =  #ordNum#
+        AND   NOT EXISTS(
+                SELECT 1
+                FROM   DS_CPO_ISTL_INFO II
+                WHERE DCC.GLBL_CMPY_CD     = II.GLBL_CMPY_CD
+                AND   DCC.EZCANCELFLAG     = II.EZCANCELFLAG
+                AND   DCC.CPO_ORD_NUM      = II.CPO_ORD_NUM
+                AND   DCC.DS_CPO_CONFIG_PK = II.DS_CPO_CONFIG_PK
+        )
+        AND   DCC.SHIP_TO_CUST_LOC_CD = (SELECT
+                                             ADD_SHIP_TO_CUST_CD
+                                         FROM
+                                             CPO
+                                         WHERE
+                                             CPO.GLBL_CMPY_CD = DCC.GLBL_CMPY_CD
+                                         AND CPO.CPO_ORD_NUM  = DCC.CPO_ORD_NUM
+                                         AND CPO.EZCANCELFLAG = '0')
+        AND   DCC.GLBL_CMPY_CD = DCII.GLBL_CMPY_CD
+        AND   DCC.EZCANCELFLAG = DCII.EZCANCELFLAG
+        AND   DCC.CPO_ORD_NUM  = DCII.CPO_ORD_NUM
+        AND   DCII.DS_CPO_CONFIG_PK IS NULL
+        ORDER BY DCC.CONFIG_CATG_CD DESC 
+               , DCC.DS_ORD_POSN_NUM ASC
+    </statement>
+    -->
+    <!-- S21_NA#26188 20180719 Del End -->
+
+    <statement id="querySiteSrvyInfoHeader" parameterClass="Map" resultClass="Map">
+        SELECT 
+               DCC.CPO_ORD_NUM
+             , DCC.DS_CPO_CONFIG_PK
+             , DSS.DS_SITE_SRVY_PK
+             , DCC.SHIP_TO_CTRY_CD      <!-- QC#18460 ADD -->
+             , DCC.SHIP_TO_POST_CD      <!-- QC#18460 ADD -->
+        FROM 
+               DS_CPO_CONFIG DCC
+             , DS_SITE_SRVY DSS
+        WHERE DCC.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND   DCC.EZCANCELFLAG        = '0'
+        AND   DCC.CPO_ORD_NUM         = #ordNum#
+        <!-- 2019/01/25 QC#30005 Del Start -->
+        <!-- 2017/06/29 QC#19218 Add Start -->
+        <!-- AND   DCC.DROP_SHIP_FLG       = #dropShipFlg# -->
+        <!-- 2017/06/29 QC#19218 Add End -->
+        <!-- 2019/01/25 QC#30005 Del End -->
+        AND   DCC.SHIP_TO_CUST_LOC_CD = (SELECT
+                                             ADD_SHIP_TO_CUST_CD
+                                         FROM
+                                             CPO
+                                         WHERE
+                                             CPO.GLBL_CMPY_CD = DCC.GLBL_CMPY_CD
+                                         AND CPO.CPO_ORD_NUM  = DCC.CPO_ORD_NUM
+                                         AND CPO.EZCANCELFLAG = '0')
+        AND   DCC.GLBL_CMPY_CD     = DSS.GLBL_CMPY_CD(+)
+        AND   DCC.EZCANCELFLAG     = DSS.EZCANCELFLAG(+)
+        AND   DCC.CPO_ORD_NUM      = DSS.CPO_ORD_NUM(+)
+        AND   DCC.DS_CPO_CONFIG_PK = DSS.DS_CPO_CONFIG_PK(+)
+        ORDER BY DCC.CONFIG_CATG_CD DESC 
+               , DCC.DS_ORD_POSN_NUM ASC
+    </statement>
+
+    <!-- S21_NA#26188 20180719 Del Start -->
+    <!--
+    <statement id="querySiteSrvyInfoNoHeader" parameterClass="Map" resultClass="Map">
+        SELECT
+               DCC.CPO_ORD_NUM
+             , DCC.DS_CPO_CONFIG_PK
+             , DSS.DS_SITE_SRVY_PK
+             , DSS.CMPY_INFO_APT_BLDG_NM
+             , DSS.CMPY_INFO_FL_NM
+             , DSS.CMPY_INFO_DEPT_NM
+             , DSS.OTSD_STEP_NUM
+             , DSS.INSD_STEP_NUM
+             , DSS.FLGT_STAIR_NUM
+             , DSS.ELEV_AVAL_FROM_HOUR_MN
+             , DSS.ELEV_AVAL_TO_HOUR_MN
+             , DSS.ELEV_CTAC_TEL_NUM
+             , DSS.ELEV_WDT
+             , DSS.ELEV_DEPTH_NUM
+             , DSS.ELEV_CTAC_PSN_NM
+             , DSS.ELEV_CAP_WT
+             , DSS.ELEV_DOOR_HGT
+             , DSS.ELEV_DOOR_WDT
+             , DSS.STAIR_AND_LDG_WDT
+             , DSS.CRDR_WDT
+             , DSS.DOOR_WDT
+             , DSS.LOAD_DOCK_AVAL_FLG
+             , DSS.LOAD_DOCK_HGT
+             , DSS.BLDG_ENT_DOOR_HGT
+             , DSS.BLDG_ENT_DOOR_WDT
+             , DSS.LOAD_DOCK_AVAL_FROM_HOUR_MN
+             , DSS.LOAD_DOCK_AVAL_TO_HOUR_MN
+             , DSS.CARR_DELY_TM_HOUR_MN
+             , DSS.DELY_TRNSP_OPT_CD
+             , DSS.SITE_SRVY_ADDL_CMNT_TXT
+             , DSS.STAIR_CRAW_REQ_FLG
+             , DSS.ELEV_AVAL_FLG
+             , DSS.ELEV_APPT_REQ_FLG
+             , DSS.ELEV_PROT_REQ_FLG
+             , DSS.LOAD_DOCK_AVAL_FLG
+             , DSS.TRCTR_AND_TRAIL_ACCS_FLG
+        FROM
+               DS_CPO_CONFIG DCC
+             , DS_SITE_SRVY DSS
+        WHERE DCC.GLBL_CMPY_CD = #glblCmpyCd#
+        AND   DCC.EZCANCELFLAG = '0'
+        AND   DCC.CPO_ORD_NUM  = #ordNum#
+        AND   NOT EXISTS(
+                SELECT 1
+                FROM   DS_SITE_SRVY SS
+                WHERE DCC.GLBL_CMPY_CD     = SS.GLBL_CMPY_CD
+                AND   DCC.EZCANCELFLAG     = SS.EZCANCELFLAG
+                AND   DCC.CPO_ORD_NUM      = SS.CPO_ORD_NUM
+                AND   DCC.DS_CPO_CONFIG_PK = SS.DS_CPO_CONFIG_PK
+        )
+        AND   DCC.SHIP_TO_CUST_LOC_CD = (SELECT
+                                             ADD_SHIP_TO_CUST_CD
+                                         FROM
+                                             CPO
+                                         WHERE
+                                             CPO.GLBL_CMPY_CD = DCC.GLBL_CMPY_CD
+                                         AND CPO.CPO_ORD_NUM  = DCC.CPO_ORD_NUM
+                                         AND CPO.EZCANCELFLAG = '0')
+        AND   DCC.GLBL_CMPY_CD = DSS.GLBL_CMPY_CD
+        AND   DCC.EZCANCELFLAG = DSS.EZCANCELFLAG
+        AND   DCC.CPO_ORD_NUM  = DSS.CPO_ORD_NUM
+        AND   DSS.DS_CPO_CONFIG_PK IS NULL
+        ORDER BY DCC.CONFIG_CATG_CD DESC 
+               , DCC.DS_ORD_POSN_NUM ASC
+    </statement>
+    -->
+    <!-- S21_NA#26188 20180719 Del End -->
+
+    <statement id="queryCtacPsnInfoForDelete" parameterClass="Map" resultClass="Map">
+        SELECT 
+               DCC.CPO_ORD_NUM
+             , DCC.DS_CPO_CONFIG_PK
+             , DCCP.DS_CPO_CTAC_PSN_PK
+        FROM 
+               DS_CPO_CONFIG DCC
+             , DS_CPO_CTAC_PSN DCCP
+        WHERE DCC.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND   DCC.EZCANCELFLAG        = '0'
+        AND   DCC.CPO_ORD_NUM         = #ordNum#
+        <!-- 2019/01/25 QC#30005 Del Start -->
+        <!-- 2017/06/29 QC#19218 Add Start -->
+        <!-- AND   DCC.DROP_SHIP_FLG       = #dropShipFlg# -->
+        <!-- 2017/06/29 QC#19218 Add End -->
+        <!-- 2019/01/25 QC#30005 Del End -->
+        AND   DCC.SHIP_TO_CUST_LOC_CD = (SELECT
+                                             ADD_SHIP_TO_CUST_CD
+                                         FROM
+                                             CPO
+                                         WHERE
+                                             CPO.GLBL_CMPY_CD = DCC.GLBL_CMPY_CD
+                                         AND CPO.CPO_ORD_NUM  = DCC.CPO_ORD_NUM
+                                         AND CPO.EZCANCELFLAG = '0')
+        AND   DCC.GLBL_CMPY_CD     = DCCP.GLBL_CMPY_CD
+        AND   DCC.EZCANCELFLAG     = DCCP.EZCANCELFLAG
+        AND   DCC.CPO_ORD_NUM      = DCCP.CPO_ORD_NUM
+        AND   DCC.DS_CPO_CONFIG_PK = DCCP.DS_CPO_CONFIG_PK
+        ORDER BY DCC.CONFIG_CATG_CD DESC 
+               , DCC.DS_ORD_POSN_NUM ASC
+    </statement>
+
+    <!-- S21_NA#26188 20180719 Del Start -->
+    <!--
+    <statement id="queryCtacPsnInfoNoHeader" parameterClass="Map" resultClass="Map">
+        SELECT
+               DCC.CPO_ORD_NUM
+             , DCC.DS_CPO_CONFIG_PK
+             , DCCP.CTAC_PSN_PK
+             , DCCP.CTAC_PSN_TP_CD
+             , DCCP.CTAC_PSN_FIRST_NM
+             , DCCP.CTAC_PSN_LAST_NM
+             , DCCP.CTAC_PSN_EML_ADDR
+             , DCCP.CTAC_PSN_TEL_NUM
+             , DCCP.CTAC_PSN_FAX_NUM
+             , DCCP.CTAC_PSN_SORT_NUM
+             , DCCP.CTAC_PSN_EXTN_NUM
+             , DCCP.CTAC_CUST_REF_TP_CD
+        FROM
+               DS_CPO_CONFIG DCC
+             , DS_CPO_CTAC_PSN DCCP
+        WHERE DCC.GLBL_CMPY_CD = #glblCmpyCd#
+        AND   DCC.EZCANCELFLAG = '0'
+        AND   DCC.CPO_ORD_NUM  = #ordNum#
+        AND   NOT EXISTS(
+                SELECT 1
+                FROM  DS_CPO_CTAC_PSN CP
+                WHERE DCC.GLBL_CMPY_CD     = CP.GLBL_CMPY_CD
+                AND   DCC.EZCANCELFLAG     = CP.EZCANCELFLAG
+                AND   DCC.CPO_ORD_NUM      = CP.CPO_ORD_NUM
+                AND   DCC.DS_CPO_CONFIG_PK = CP.DS_CPO_CONFIG_PK
+        )
+        AND   DCC.SHIP_TO_CUST_LOC_CD = (SELECT
+                                             ADD_SHIP_TO_CUST_CD
+                                         FROM
+                                             CPO
+                                         WHERE
+                                             CPO.GLBL_CMPY_CD = DCC.GLBL_CMPY_CD
+                                         AND CPO.CPO_ORD_NUM  = DCC.CPO_ORD_NUM
+                                         AND CPO.EZCANCELFLAG = '0')
+        AND   DCC.GLBL_CMPY_CD = DCCP.GLBL_CMPY_CD
+        AND   DCC.EZCANCELFLAG = DCCP.EZCANCELFLAG
+        AND   DCC.CPO_ORD_NUM  = DCCP.CPO_ORD_NUM
+        AND   DCCP.DS_CPO_CONFIG_PK IS NULL
+        ORDER BY DCC.CONFIG_CATG_CD DESC 
+               , DCC.DS_ORD_POSN_NUM ASC
+    </statement>
+    -->
+    <!-- S21_NA#26188 20180719 Del End -->
+
+    <statement id="querySvcIstlFlgByConfig" parameterClass="Map" resultClass="Map">
+        SELECT
+               CD.CPO_ORD_NUM
+             , CD.CPO_DTL_LINE_NUM
+             , CD.CPO_DTL_LINE_SUB_NUM
+             , SIR.SVC_CUST_ISTL_FLG
+        FROM   DS_CPO_ISTL_INFO DCII
+             , DS_CPO_CONFIG    DCC
+             , CPO_DTL          CD
+             , SVC_ISTL_RULE    SIR
+        WHERE DCII.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND   DCII.EZCANCELFLAG        = '0'
+        AND   DCII.CPO_ORD_NUM         = #ordNum#
+        AND   DCII.DS_CPO_CONFIG_PK    = #dsCpoConfigPk#
+        AND   DCII.GLBL_CMPY_CD        = DCC.GLBL_CMPY_CD
+        AND   DCII.EZCANCELFLAG        = DCC.EZCANCELFLAG
+        AND   DCII.DS_CPO_CONFIG_PK    = DCC.DS_CPO_CONFIG_PK
+        AND   DCC.CONFIG_CATG_CD       = #outbound#
+        AND   DCC.GLBL_CMPY_CD         = CD.GLBL_CMPY_CD
+        AND   DCC.EZCANCELFLAG         = CD.EZCANCELFLAG
+        AND   DCC.CPO_ORD_NUM          = CD.CPO_ORD_NUM
+        AND   DCC.DS_CPO_CONFIG_PK     = CD.DS_CPO_CONFIG_PK
+        AND   CD.ORD_LINE_STS_CD NOT IN (#close# , #cancel#)
+        AND   DCII.GLBL_CMPY_CD        = SIR.GLBL_CMPY_CD
+        AND   DCII.EZCANCELFLAG        = SIR.EZCANCELFLAG
+        AND   DCII.SVC_ISTL_RULE_NUM   = SIR.SVC_ISTL_RULE_NUM
+    </statement>
+
+    <statement id="querySvcIstlFlgByHeader" parameterClass="Map" resultClass="Map">
+        SELECT
+               CD.CPO_ORD_NUM
+             , CD.CPO_DTL_LINE_NUM
+             , CD.CPO_DTL_LINE_SUB_NUM
+             , SIR.SVC_CUST_ISTL_FLG
+        FROM   DS_CPO_ISTL_INFO DCII
+             , CPO_DTL          CD
+             , SVC_ISTL_RULE    SIR
+        WHERE DCII.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND   DCII.EZCANCELFLAG        = '0'
+        AND   DCII.CPO_ORD_NUM         = #ordNum#
+        AND   DCII.DS_CPO_CONFIG_PK    IS NULL
+        AND   DCII.GLBL_CMPY_CD        = CD.GLBL_CMPY_CD
+        AND   DCII.EZCANCELFLAG        = CD.EZCANCELFLAG
+        AND   DCII.CPO_ORD_NUM         = CD.CPO_ORD_NUM
+        AND   NOT EXISTS (
+                SELECT 1 FROM DS_CPO_ISTL_INFO X
+                WHERE X.GLBL_CMPY_CD         = CD.GLBL_CMPY_CD
+                AND   X.EZCANCELFLAG         = CD.EZCANCELFLAG
+                AND   X.DS_CPO_CONFIG_PK     = CD.DS_CPO_CONFIG_PK
+              )
+        AND   CD.ORD_LINE_STS_CD NOT IN (#close# , #cancel#)
+        AND   DCII.GLBL_CMPY_CD        = SIR.GLBL_CMPY_CD
+        AND   DCII.EZCANCELFLAG        = SIR.EZCANCELFLAG
+        AND   DCII.SVC_ISTL_RULE_NUM   = SIR.SVC_ISTL_RULE_NUM
+    </statement>
+    
+    <!-- 2017/06/29 QC#19218 Add Start -->
+    <statement id="getDsCpoConfig" parameterClass="Map" resultClass="Map">
+        SELECT
+               DCC.DS_CPO_CONFIG_PK
+        FROM
+               DS_CPO_CONFIG DCC
+             , CPO           C
+        WHERE DCC.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND   DCC.CPO_ORD_NUM         = #ordNum#
+        <!-- 2019/01/25 QC#30005 Del Start -->
+        <!-- AND   DCC.DROP_SHIP_FLG       = #dropShipFlg# -->
+        <!-- 2019/01/25 QC#30005 Del End -->
+        AND   DCC.EZCANCELFLAG        = '0'
+        AND   DCC.GLBL_CMPY_CD        = C.GLBL_CMPY_CD
+        AND   DCC.CPO_ORD_NUM         = C.CPO_ORD_NUM
+        AND   DCC.SHIP_TO_CUST_LOC_CD = C.ADD_SHIP_TO_CUST_CD
+        AND   C.EZCANCELFLAG          = '0'
+    </statement>
+    <!-- 2017/06/29 QC#19218 Add End -->
+    
+    <!-- 2018/01/09 QC#18460 Add Start -->
+    <statement id ="searchWithOrdNum" parameterClass="Map"  resultClass="Map">
+        SELECT 
+            DCV.ADD_SHIP_TO_POST_CD
+           ,DCV.ADD_SHIP_TO_CTRY_CD
+        FROM 
+            CPO_V      DCV
+        WHERE 
+            DCV.EZCANCELFLAG    = '0'
+        AND DCV.GLBL_CMPY_CD    = #glblCmpyCd#
+        AND DCV.CPO_ORD_NUM     = #cpoOrdNum#
+    </statement>
+    
+    <statement id ="searchWithConfPk" parameterClass="Map"  resultClass="Map">
+        SELECT 
+            DCC.SHIP_TO_POST_CD
+           ,DCC.SHIP_TO_CTRY_CD
+        FROM 
+            DS_CPO_CONFIG      DCC
+        WHERE 
+            DCC.EZCANCELFLAG      = '0'
+        AND DCC.GLBL_CMPY_CD      = #glblCmpyCd#
+        AND DCC.DS_CPO_CONFIG_PK  = #dsCpoConfigPk#
+    </statement>
+    <!-- 2018/01/09 QC#18460 Add End -->
+
+    <!-- 2019/12/19 QC#54229 Add Start -->
+    <statement id ="getInboundConfig" parameterClass="Map"  resultClass="Map">
+        SELECT
+            DCC.DS_CPO_CONFIG_PK
+           ,DSS.DS_SITE_SRVY_PK
+           ,DCCP.DS_CPO_CTAC_PSN_PK
+        FROM
+            DS_CPO_CONFIG      DCC
+           ,DS_SITE_SRVY       DSS
+           ,DS_CPO_CTAC_PSN    DCCP
+        WHERE
+            DCC.GLBL_CMPY_CD      = #glblCmpyCd#
+        AND DCC.CPO_ORD_NUM       = #cpoOrdNum#
+        AND DCC.CONFIG_CATG_CD    = #configCatgCd#
+        AND DCC.EZCANCELFLAG      = '0'
+        AND DCC.GLBL_CMPY_CD      = DSS.GLBL_CMPY_CD(+)
+        AND DCC.DS_CPO_CONFIG_PK  = DSS.DS_CPO_CONFIG_PK(+)
+        AND DSS.EZCANCELFLAG(+)   = '0'
+        AND DCC.GLBL_CMPY_CD      = DCCP.GLBL_CMPY_CD(+)
+        AND DCC.DS_CPO_CONFIG_PK  = DCCP.DS_CPO_CONFIG_PK(+)
+        AND DCCP.EZCANCELFLAG(+)  = '0'
+        AND EXISTS (
+            SELECT 1 FROM DS_CPO_RTRN_DTL DCRD
+            WHERE DCC.GLBL_CMPY_CD      = DCRD.GLBL_CMPY_CD
+            AND   DCC.CPO_ORD_NUM       = DCRD.CPO_ORD_NUM
+            AND   DCC.DS_CPO_CONFIG_PK  = DCRD.DS_CPO_CONFIG_PK
+            <iterate property="rtrnLineStsCdList" var="rtrnLineStsCd[]" open=" AND DCRD.RTRN_LINE_STS_CD NOT IN (" close=")" conjunction=",">
+                #rtrnLineStsCd[]#
+            </iterate>
+            AND   DCRD.EZCANCELFLAG=0
+        )
+        ORDER BY DCC.DS_ORD_POSN_NUM
+        
+    </statement>
+
+    <statement id ="getOutboundConfig" parameterClass="Map"  resultClass="Map">
+        SELECT
+            DCC_O.DS_CPO_CONFIG_PK
+        FROM
+            DS_CPO_CONFIG      DCC_I
+           ,DS_CPO_CONFIG      DCC_O
+        WHERE
+            DCC_I.GLBL_CMPY_CD          = #glblCmpyCd#
+        AND DCC_I.CPO_ORD_NUM           = #cpoOrdNum#
+        AND DCC_I.DS_CPO_CONFIG_PK      = #dsCpoConfigPk#
+        AND DCC_I.EZCANCELFLAG          = '0'
+        AND DCC_I.GLBL_CMPY_CD          = DCC_O.GLBL_CMPY_CD
+        AND DCC_I.CPO_ORD_NUM           = DCC_O.CPO_ORD_NUM
+        AND DCC_I.SHIP_TO_CUST_ACCT_CD  = DCC_O.SHIP_TO_CUST_ACCT_CD
+        AND DCC_I.SHIP_TO_CUST_LOC_CD   = DCC_O.SHIP_TO_CUST_LOC_CD
+        AND DCC_O.CONFIG_CATG_CD        = #configCatgCd#
+        AND DCC_O.EZCANCELFLAG          = '0'
+        AND EXISTS (
+            SELECT 1 FROM CPO_DTL CD
+            WHERE DCC_O.GLBL_CMPY_CD      = CD.GLBL_CMPY_CD
+            AND   DCC_O.CPO_ORD_NUM       = CD.CPO_ORD_NUM
+            AND   DCC_O.DS_CPO_CONFIG_PK  = CD.DS_CPO_CONFIG_PK
+            <iterate property="ordLineStstCdList" var="ordLineStstCd[]" open=" AND CD.ORD_LINE_STS_CD NOT IN (" close=")" conjunction=",">
+                #ordLineStstCd[]#
+            </iterate>
+            AND   CD.EZCANCELFLAG=0
+        )
+        ORDER BY DCC_O.DS_ORD_POSN_NUM
+    </statement>
+    <!-- 2019/12/19 QC#54229 Add End -->
+</sqlMap>

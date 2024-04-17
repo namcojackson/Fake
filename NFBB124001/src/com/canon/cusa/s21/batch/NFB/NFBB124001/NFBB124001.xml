@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sqlMap namespace="NFBB124001">
+
+    <statement id="SELECT_CUSA_VND" parameterClass="Map" resultClass="Map">
+        SELECT
+            INV_VND_CD
+        ,   MAX(SPLY_COA_CMPY_CD)        SPLY_COA_CMPY_CD
+        ,   MAX(SPLY_COA_BR_CD)          SPLY_COA_BR_CD
+        ,   MAX(SPLY_COA_CC_CD)          SPLY_COA_CC_CD
+        ,   MAX(SPLY_COA_ACCT_CD)        SPLY_COA_ACCT_CD
+        ,   MAX(SPLY_COA_PROD_CD)        SPLY_COA_PROD_CD
+        ,   MAX(SPLY_COA_CH_CD)          SPLY_COA_CH_CD
+        ,   MAX(SPLY_COA_AFFL_CD)        SPLY_COA_AFFL_CD
+        ,   MAX(SPLY_COA_PROJ_CD)        SPLY_COA_PROJ_CD
+        ,   MAX(SPLY_COA_EXTN_CD)        SPLY_COA_EXTN_CD
+        FROM
+            VND
+        WHERE
+            GLBL_CMPY_CD = #glblCmpyCd#
+        AND INV_VND_CD   = #cusaApVndCd#
+        AND EZCANCELFLAG = '0'
+        GROUP BY
+            INV_VND_CD
+    </statement>
+
+    <statement id="SELECT_AP_INV_ROSS" parameterClass="Map" resultClass="Map">
+        SELECT
+            AIR.RTL_INV_NUM                                             RTL_INV_NUM
+        ,   AIR.RTL_INV_LINE_NUM                                        RTL_INV_LINE_NUM
+        <!-- start 2016/09/29 QC#14798 MOD -->
+        ,   AIR.RTL_INV_CHRG_TP_CD                                      MDSE_CD
+        <!-- end 2016/09/29 QC#14798 MOD -->
+        ,   SUM(NVL(AIR.SHIP_QTY,0))                                    SHIP_QTY
+        ,   SUM(NVL(AIR.SHIP_QTY,0) * NVL(AIR.DEAL_GRS_UNIT_PRC_AMT,0)) AC_INV_JRNL_COST_AMT
+        ,   MAX(AIR.SER_NUM)                                            SER_NUM
+        ,   MAX(AIR.RTL_INV_APVL_DT)                                    INV_DT
+        ,   MAX(RDSTC.COA_CMPY_CD)                                      COA_CMPY_CD
+        ,   MAX(RDSTC.COA_BR_CD)                                        COA_BR_CD
+        ,   MAX(NVL(RDA.COA_CC_CD,RDSTC.COA_CC_CD))                     COA_CC_CD
+        ,   MAX(RDSTC.COA_ACCT_CD)                                      COA_ACCT_CD
+        ,   MAX(NVL(M.COA_PROD_CD,RDSTC.COA_PROD_CD))                   COA_PROD_CD
+        ,   MAX(RDSTC.COA_CH_CD)                                        COA_CH_CD
+        ,   MAX(RDSTC.COA_AFFL_CD)                                      COA_AFFL_CD
+        ,   MAX(NVL(RDA.COA_PROJ_CD,RDSTC.COA_PROJ_CD))                 COA_PROJ_CD
+        ,   MAX(RDSTC.COA_EXTN_CD)                                      COA_EXTN_CD
+        ,   MAX(RDSTC.SELL_TO_CUST_CD)                                  RDSTC_SELL_TO_CUST_CD
+        <!-- start 2016/09/29 QC#14798 ADD -->
+        ,   MAX(AIR.RTL_INV_CHRG_TP_DESC_TXT)                           MDSE_DESC_SHORT_TXT
+<!-- QC#20316(Sol#202) START-->
+        ,   LPAD(TO_CHAR(ROW_NUMBER() OVER (PARTITION BY AIR.RTL_INV_NUM ORDER BY AIR.RTL_INV_NUM, AIR.RTL_INV_LINE_NUM)), 4, '0')
+                                                                        AP_VND_INV_LINE_NUM
+        ,   LPAD(TO_CHAR(ROW_NUMBER() OVER (PARTITION BY AIR.RTL_INV_NUM ,AIR.RTL_INV_LINE_NUM ORDER BY AIR.RTL_INV_NUM, AIR.RTL_INV_LINE_NUM, AIR.RTL_INV_CHRG_TP_CD)), 3, '0')
+                                                                        CM_INV_ACCT_DIST_LINE_NUM
+<!-- QC#20316(Sol#202) END-->
+        <!-- end 2016/09/29 QC#14798 ADD -->
+        <!-- start 2017/12/19 QC#23022 ADD -->
+        ,   MAX(AIR.RTL_DIV_CD)                                         RTL_DIV_CD
+        ,   MAX(AIR.SELL_TO_CUST_CD)                                    SELL_TO_CUST_CD
+        ,   MAX(AIR.ITRL_RTL_SMRY_INV_NUM)                              ITRL_RTL_SMRY_INV_NUM
+        <!-- end   2017/12/19 QC#23022 ADD -->
+        FROM
+            AP_INV_ROSS          AIR
+        ,   ROSS_DLR_SELL_TO_COA RDSTC
+        ,   MDSE                 M
+        ,   ROSS_DLR_ACCT        RDA
+        WHERE
+            AIR.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND AIR.EZCANCELFLAG        = '0'
+        AND NOT EXISTS
+                (
+<!-- QC#20316(Sol#202) START-->
+                    SELECT
+                        1
+                    FROM
+                        CM_AP_INV_HDR CAIH
+                    WHERE
+                        CAIH.GLBL_CMPY_CD      = AIR.GLBL_CMPY_CD
+                    AND CAIH.AP_VND_CD         = #cusaApVndCd#
+                    AND CAIH.AP_VND_INV_NUM    = AIR.RTL_INV_NUM
+                    AND CAIH.AP_VND_INV_SQ_NUM = #apVndInvSqNum#
+                    AND CAIH.EZCANCELFLAG      = '0'
+<!-- QC#20316(Sol#202) END-->
+                )
+        AND AIR.GLBL_CMPY_CD             = RDSTC.GLBL_CMPY_CD(+)
+        AND AIR.SELL_TO_CUST_CD          = RDSTC.SELL_TO_CUST_CD(+)
+        AND RDSTC.EZCANCELFLAG(+)        = '0'
+        AND AIR.GLBL_CMPY_CD             = M.GLBL_CMPY_CD(+)
+        AND AIR.MDSE_CD                  = M.MDSE_CD(+)
+        AND M.EZCANCELFLAG(+)            = '0'
+        AND AIR.GLBL_CMPY_CD             = RDA.GLBL_CMPY_CD(+)
+        AND AIR.RTL_INV_CHRG_TP_DESC_TXT = RDA.RTL_INV_CHRG_TP_DESC_TXT(+)
+        AND RDA.EZCANCELFLAG(+)          = '0'
+        GROUP BY
+            AIR.RTL_INV_NUM
+<!-- QC#20316(Sol#202) START-->
+        ,   AIR.RTL_INV_LINE_NUM
+        <!-- start 2016/09/29 QC#14798 MOD -->
+        ,   AIR.RTL_INV_CHRG_TP_CD
+        <!-- end 2016/09/29 QC#14798 MOD -->
+<!-- QC#20316(Sol#202) END-->
+        ORDER BY
+            AIR.RTL_INV_NUM
+<!-- QC#20316(Sol#202) START-->
+        ,   AIR.RTL_INV_LINE_NUM
+        <!-- start 2016/09/29 QC#14798 MOD -->
+<!--        ,   AIR.RTL_INV_CHRG_TP_CD-->
+        <!-- end 2016/09/29 QC#14798 MOD -->
+<!-- QC#20316(Sol#202) END-->
+    </statement>
+
+    <statement id="SELECT_AC_INV_JRNL_COST_AMT" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            SUM(NVL(AIR.SHIP_QTY,0) * NVL(AIR.DEAL_GRS_UNIT_PRC_AMT,0)) AC_INV_JRNL_COST_AMT
+        FROM
+            AP_INV_ROSS          AIR
+        WHERE
+            AIR.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND AIR.RTL_INV_NUM         = #cusaApVndCd#
+        AND AIR.EZCANCELFLAG        = '0'
+        GROUP BY
+            AIR.RTL_INV_NUM
+    </statement>
+
+    <statement id="GET_SVC_MACH_MSTR_BY_SER_NUM" parameterClass="Map" resultClass="Map">
+        SELECT
+            MAX(SMM.CPO_ORD_NUM)   CPO_ORD_NUM
+        ,   MAX(SMM.FLD_SVC_BR_CD) FLD_SVC_BR_CD
+        FROM
+            SVC_MACH_MSTR SMM
+        WHERE
+            GLBL_CMPY_CD = #glblCmpyCd#
+        AND CPO_ORD_NUM  IS NOT NULL
+        AND SER_NUM      = #serNum#
+        AND EZCANCELFLAG = '0'
+    </statement>
+
+    <statement id="GET_DS_CPO_SLS_CR" parameterClass="Map" resultClass="Map">
+        SELECT
+            SLS_REP_ROLE_TP_CD
+        ,   SLS_REP_TOC_CD
+        FROM
+            DS_CPO_SLS_CR DCSC
+        WHERE
+            GLBL_CMPY_CD     = #glblCmpyCd#
+        AND CPO_ORD_NUM      = #cpoOrdNum#
+        AND EZCANCELFLAG     = '0'
+    </statement>
+
+    <statement id="SELECT_AP_INV_ROSS_BY_PARTIAL_VALUE" parameterClass="Map" resultClass="Map">
+        SELECT
+            RTL_INV_PK
+        ,   RTL_INV_LINE_PK
+        ,   AP_INV_ROSS_STS_CD
+        FROM
+            AP_INV_ROSS
+        WHERE
+            GLBL_CMPY_CD         = #glblCmpyCd#
+        AND RTL_INV_NUM          = #rtlInvNum#
+<!-- QC#20316(Sol#202) START-->
+        AND RTL_INV_LINE_NUM          = #rtlInvLineNum#
+<!-- QC#20316(Sol#202) END-->
+        AND EZCANCELFLAG         = '0'
+    </statement>
+
+    <statement id="SELECT_PRNT_VND_CD" parameterClass="Map" resultClass="Map">
+        SELECT
+            VD.GLBL_CMPY_CD
+        ,   VD.INV_VND_CD
+        ,   MAX(PV.PRNT_VND_CD)           PRNT_VND_CD
+        FROM
+            PRNT_VND PV
+        ,   VND      VD
+        WHERE
+            PV.GLBL_CMPY_CD   = #glblCmpyCd#
+        AND PV.GLBL_CMPY_CD   = VD.GLBL_CMPY_CD
+        AND PV.PRNT_VND_PK    = VD.PRNT_VND_PK
+        AND VD.INV_VND_CD     = #invVndCd#
+        AND PV.EZCANCELFLAG   = '0'
+        AND VD.EZCANCELFLAG   = '0'
+        GROUP BY
+            VD.GLBL_CMPY_CD
+        ,   VD.INV_VND_CD
+    </statement>
+
+    <statement id="SELECT_VND_DEAL_CCY_CD" parameterClass="Map" resultClass="String">
+        SELECT
+            V.DEAL_CCY_CD
+        FROM
+            VND V
+        WHERE
+            V.GLBL_CMPY_CD = #glblCmpyCd#
+        AND V.VND_CD       = #vndCd#
+        AND V.EZCANCELFLAG = '0'
+    </statement>
+</sqlMap>

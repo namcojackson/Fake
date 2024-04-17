@@ -1,0 +1,456 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NSAB018001">
+<statement id="getSvcAdcvBySerSel" parameterClass="Map" resultClass="Map">
+SELECT
+	SEL.SVC_MACH_MSTR_PK
+,	SEL.SER_NUM
+FROM
+	SVC_ADCV_BY_SER_SEL			SEL
+WHERE
+	SEL.GLBL_CMPY_CD			=	#glblCmpyCd#
+AND	SEL.SER_ADCV_SEL_GRP_NUM	=	#serAdcvSelGrpNum#
+AND	SEL.EZCANCELFLAG			=	'0'
+<!-- START 2020/07/15 [QC#57375, ADD] -->
+<isEqual property="contrExists" compareValue="Y">
+AND EXISTS (
+    SELECT
+        *
+    FROM
+        DS_CONTR_DTL    DCD
+    ,   DS_CONTR_DTL_TP DDT
+    ,   DS_CONTR        DCR
+    WHERE
+        DCD.SVC_MACH_MSTR_PK        =   SEL.SVC_MACH_MSTR_PK
+    AND DCD.GLBL_CMPY_CD            =   SEL.GLBL_CMPY_CD
+    AND DCD.EZCANCELFLAG            =   SEL.EZCANCELFLAG
+    AND DCR.DS_CONTR_PK             =   DCD.DS_CONTR_PK
+    AND DDT.DS_CONTR_DTL_TP_CD      =   DCD.DS_CONTR_DTL_TP_CD
+    AND DDT.GLBL_CMPY_CD            =   DCD.GLBL_CMPY_CD
+    AND DDT.MAIN_UNIT_LINE_FLG      =   'Y'
+    AND DDT.EZCANCELFLAG            =   '0'
+    AND DCR.GLBL_CMPY_CD            =   DCD.GLBL_CMPY_CD
+    AND DCR.EZCANCELFLAG            =   DCD.EZCANCELFLAG
+)
+</isEqual>
+<!-- END 2020/07/15 [QC#57375, DEL] -->
+</statement>
+<statement id="getSvcPhysMtrInfo" parameterClass="Map" resultClass="Map">
+SELECT
+	SMM.SVC_MACH_MSTR_PK
+,	SMM.SER_NUM
+<!--
+,	SMM.EFF_FROM_DT
+,	SMM.EFF_THRU_DT 
+-->
+,	SMM.ISTL_DT
+,	SPM.SVC_PHYS_MTR_PK
+,	SPM.MDL_MTR_LB_CD
+,	MDN.T_MDL_NM				AS	MDL_NM
+FROM
+	SVC_MACH_MSTR				SMM
+,	SVC_PHYS_MTR				SPM
+,	SVC_CONFIG_MSTR				SCM
+,	MDL_NM						MDN
+WHERE
+	SMM.SVC_MACH_MSTR_PK		=	#svcMachMstrPk#
+AND	SMM.GLBL_CMPY_CD			=	#glblCmpyCd#
+AND	SMM.EZCANCELFLAG			=	'0'
+AND	SPM.SVC_MACH_MSTR_PK		=	SMM.SVC_MACH_MSTR_PK
+AND	SPM.GLBL_CMPY_CD			=	SMM.GLBL_CMPY_CD
+AND	SPM.EZCANCELFLAG			=	SMM.EZCANCELFLAG
+AND	SCM.SVC_CONFIG_MSTR_PK		=	SMM.SVC_CONFIG_MSTR_PK
+AND	SCM.GLBL_CMPY_CD			=	SMM.GLBL_CMPY_CD
+AND	SCM.EZCANCELFLAG			=	SMM.EZCANCELFLAG
+AND	MDN.T_MDL_ID				=	SCM.MDL_ID
+AND	MDN.T_GLBL_CMPY_CD			=	SCM.GLBL_CMPY_CD
+AND	MDN.EZCANCELFLAG			=	SCM.EZCANCELFLAG
+</statement>
+<statement id="getSvcPhysMtrReadInfo" parameterClass="Map" resultClass="Map">
+WITH A AS (
+	SELECT
+		PMR.SVC_PHYS_MTR_PK
+	,	PMR.MTR_READ_DT
+	,	NVL(PMR.READ_MTR_CNT, 0)		AS	READ_MTR_CNT
+	,	PMR.SVC_PHYS_MTR_READ_GRP_SQ
+	,	ROW_NUMBER() OVER (
+			PARTITION BY
+				PMR.SVC_PHYS_MTR_PK
+			ORDER BY
+				PMR.MTR_READ_DT					ASC
+			,	PMR.SVC_PHYS_MTR_READ_GRP_SQ	ASC
+		) ROW_NUM
+	<!-- START 2020/07/15 [QC#57375, ADD] -->
+	,  DENSE_RANK() OVER (
+	        PARTITION BY 
+	            PMR.SVC_PHYS_MTR_PK
+	        ORDER BY
+	            PMR.MTR_READ_DT ASC
+	    ) DATE_RANK
+	<!-- END 2020/07/15 [QC#57375, ADD] -->
+	,	PMR.SVC_PHYS_MTR_READ_PK
+	FROM 
+		SVC_PHYS_MTR_READ			PMR
+	WHERE
+		PMR.SVC_PHYS_MTR_PK			=	#svcPhysMtrPk#
+	AND	PMR.GLBL_CMPY_CD			=	#glblCmpyCd#
+	<!-- START QC#28592 2018/10/11 [ADD]-->
+	AND PMR.VLD_MTR_FLG				=	'Y'
+	<!-- END   QC#28592 2018/10/11 [ADD]-->
+    <!-- add start 2020/01/28 QC#55495 -->
+    AND PMR.CARRY_OVER_TP_CD        =   '0'
+    <!-- add end 2020/01/28 QC#55495 -->
+	AND	PMR.EZCANCELFLAG			=	'0'
+	<isNotNull property="effFromDt">
+	AND	PMR.MTR_READ_DT				&gt;=	#effFromDt#
+	</isNotNull>
+	<isNotNull property="effThruDt">
+	AND	PMR.MTR_READ_DT				&lt;=	#effThruDt#
+	</isNotNull>
+    <!-- START 2020/03/03 [QC#56123, ADD] -->
+            <iterate property="dsMtrReadTpGrpCdList" var="dsMtrReadTpGrpCd[]" open="AND PMR.DS_MTR_READ_TP_GRP_CD IN (" conjunction= "," close=")">
+                #dsMtrReadTpGrpCd[]#
+            </iterate>
+    <!-- END   2020/03/03 [QC#56123, ADD] -->
+)
+, B AS (
+	SELECT
+		A.*
+	,	MAX(A.ROW_NUM) OVER (PARTITION BY A.SVC_PHYS_MTR_PK) MAX_ROW_NUM
+	,   MAX(A.DATE_RANK) OVER (PARTITION BY A.SVC_PHYS_MTR_PK) MAX_DATE_RANK
+	,   ROW_NUMBER() OVER (PARTITION BY A.DATE_RANK ORDER BY A.MTR_READ_DT ASC, A.SVC_PHYS_MTR_READ_GRP_SQ ASC) ROW_NUM_WITHIN_DATE
+	FROM
+		A
+)
+, C AS (
+    SELECT
+        B.*
+    ,   MAX(B.ROW_NUM_WITHIN_DATE) OVER (PARTITION BY B.MTR_READ_DT) MAX_ROW_NUM_DATE
+    FROM
+        B
+)
+SELECT
+	*
+FROM
+	C
+WHERE
+<!-- mod start 2020/03/26 QC#56363 -->
+	<isNotNull property="rowNum">
+	C.ROW_NUM IN ($rowNum$, C.MAX_ROW_NUM)
+	</isNotNull>
+	<isNull property="rowNum">
+	<!-- START 2020/07/15 [QC#57375, MOD] -->
+	<!-- B.ROW_NUM IN (B.MAX_ROW_NUM - 1, B.MAX_ROW_NUM) -->
+	C.ROW_NUM = MAX_ROW_NUM OR (C.DATE_RANK = MAX_DATE_RANK - 1 AND C.ROW_NUM_WITHIN_DATE = C.MAX_ROW_NUM_DATE)
+	<!-- END 2020/07/15 [QC#57375, MOD] -->
+	</isNull>
+ORDER BY
+    ROW_NUM
+<!-- mod end 2020/03/26 QC#56363 -->
+</statement>
+<!-- add start 2020/03/26 QC#56363 -->
+<!-- START 2023/10/26 t.aizawa [QC#61996,ADD] -->
+<statement id="getSvcPhysMtrReadInfoForFld" parameterClass="Map" resultClass="Map">
+    WITH LATEST AS (
+        SELECT
+             PMR.SVC_PHYS_MTR_PK
+            ,PMR.MTR_READ_DT
+            ,PMR.READ_MTR_CNT
+            ,PMR.SVC_PHYS_MTR_READ_GRP_SQ
+            ,PMR.SVC_PHYS_MTR_READ_PK
+            ,PMR.SVC_TASK_NUM
+        FROM (
+                SELECT
+                     PMR_W.SVC_PHYS_MTR_PK
+                    ,PMR_W.MTR_READ_DT
+                    ,NVL(PMR_W.READ_MTR_CNT, 0)     AS READ_MTR_CNT
+                    ,PMR_W.SVC_PHYS_MTR_READ_GRP_SQ
+                    ,PMR_W.SVC_PHYS_MTR_READ_PK
+                    ,PMR_W.SVC_TASK_NUM
+                    ,ROW_NUMBER() OVER (
+                        PARTITION BY
+                            PMR_W.SVC_PHYS_MTR_PK
+                        ORDER BY
+                             PMR_W.MTR_READ_DT              DESC
+                            ,PMR_W.SVC_PHYS_MTR_READ_GRP_SQ DESC
+                     ) AS ROW_NUM
+                FROM 
+                    SVC_PHYS_MTR_READ PMR_W
+                WHERE
+                        PMR_W.SVC_PHYS_MTR_PK  = #svcPhysMtrPk#
+                    AND PMR_W.GLBL_CMPY_CD     = #glblCmpyCd#
+                    AND PMR_W.VLD_MTR_FLG      = 'Y'
+                    AND PMR_W.CARRY_OVER_TP_CD = '0'
+                    AND PMR_W.EZCANCELFLAG     = '0'
+                    <isNotNull property="effFromDt">
+                    AND PMR_W.MTR_READ_DT  &gt;= #effFromDt#
+                    </isNotNull>
+                    <isNotNull property="effThruDt">
+                    AND PMR_W.MTR_READ_DT  &lt;= #effThruDt#
+                    </isNotNull>
+                    <iterate property="dsMtrReadTpGrpCdList" var="dsMtrReadTpGrpCd[]" open="AND PMR_W.DS_MTR_READ_TP_GRP_CD IN (" conjunction="," close=")">
+                        #dsMtrReadTpGrpCd[]#
+                    </iterate>
+            ) PMR
+        WHERE
+            PMR.ROW_NUM = 1
+    )
+    ,PREV AS (
+        SELECT
+             PMR.SVC_PHYS_MTR_PK
+            ,PMR.MTR_READ_DT
+            ,PMR.READ_MTR_CNT
+            ,PMR.SVC_PHYS_MTR_READ_GRP_SQ
+            ,PMR.SVC_PHYS_MTR_READ_PK
+            ,PMR.SVC_TASK_NUM
+        FROM (
+                SELECT
+                     PMR_W.SVC_PHYS_MTR_PK
+                    ,PMR_W.MTR_READ_DT
+                    ,NVL(PMR_W.READ_MTR_CNT, 0)     AS READ_MTR_CNT
+                    ,PMR_W.SVC_PHYS_MTR_READ_GRP_SQ
+                    ,PMR_W.SVC_PHYS_MTR_READ_PK
+                    ,PMR_W.SVC_TASK_NUM
+                    ,ROW_NUMBER() OVER (
+                        PARTITION BY
+                            PMR_W.SVC_PHYS_MTR_PK
+                        ORDER BY
+                            <isNotNull property="rowNum">
+                             PMR_W.MTR_READ_DT              ASC
+                            ,PMR_W.SVC_PHYS_MTR_READ_GRP_SQ ASC
+                            </isNotNull>
+                            <isNull property="rowNum">
+                             PMR_W.MTR_READ_DT              DESC
+                            ,PMR_W.SVC_PHYS_MTR_READ_GRP_SQ DESC
+                            </isNull>
+                     ) AS ROW_NUM
+                FROM 
+                     SVC_PHYS_MTR_READ PMR_W
+                    ,LATEST
+                WHERE
+                        PMR_W.SVC_PHYS_MTR_PK     = #svcPhysMtrPk#
+                    AND PMR_W.GLBL_CMPY_CD        = #glblCmpyCd#
+                    AND PMR_W.VLD_MTR_FLG         = 'Y'
+                    AND PMR_W.CARRY_OVER_TP_CD    = '0'
+                    AND PMR_W.EZCANCELFLAG        = '0'
+                    <isNotNull property="effFromDt">
+                    AND PMR_W.MTR_READ_DT     &gt;= #effFromDt#
+                    </isNotNull>
+                    <isNotNull property="effThruDt">
+                    AND PMR_W.MTR_READ_DT     &lt;= #effThruDt#
+                    </isNotNull>
+                    <iterate property="dsMtrReadTpGrpCdList" var="dsMtrReadTpGrpCd[]" open="AND PMR_W.DS_MTR_READ_TP_GRP_CD IN (" conjunction="," close=")">
+                        #dsMtrReadTpGrpCd[]#
+                    </iterate>
+                    AND PMR_W.MTR_READ_DT  &lt;&gt; LATEST.MTR_READ_DT
+                    <!-- START 2023/11/15 t.aizawa [QC#61996,DEL] -->
+                    <!-- AND PMR_W.SVC_TASK_NUM &lt;&gt; LATEST.SVC_TASK_NUM -->
+                    <!-- END   2023/11/15 t.aizawa [QC#61996,DEL] -->
+                    <!-- START 2023/11/15 t.aizawa [QC#61996,ADD] -->
+                    AND (
+                            LATEST.SVC_TASK_NUM       IS NULL
+                        OR  PMR_W.SVC_TASK_NUM        IS NULL
+                        OR  PMR_W.SVC_TASK_NUM  &lt;&gt; LATEST.SVC_TASK_NUM
+                    )
+                    <!-- EMD   2023/11/15 t.aizawa [QC#61996,ADD] -->
+            ) PMR
+        WHERE
+            PMR.ROW_NUM = 1
+    )
+    SELECT
+         TBL.SVC_PHYS_MTR_PK
+        ,TBL.MTR_READ_DT
+        ,TBL.READ_MTR_CNT
+        ,TBL.SVC_PHYS_MTR_READ_GRP_SQ
+        ,TBL.SVC_PHYS_MTR_READ_PK
+    FROM (
+            SELECT
+                 PREV.SVC_PHYS_MTR_PK
+                ,PREV.MTR_READ_DT
+                ,PREV.READ_MTR_CNT
+                ,PREV.SVC_PHYS_MTR_READ_GRP_SQ
+                ,PREV.SVC_PHYS_MTR_READ_PK
+            FROM
+                PREV
+            UNION ALL
+            SELECT
+                 LATEST.SVC_PHYS_MTR_PK
+                ,LATEST.MTR_READ_DT
+                ,LATEST.READ_MTR_CNT
+                ,LATEST.SVC_PHYS_MTR_READ_GRP_SQ
+                ,LATEST.SVC_PHYS_MTR_READ_PK
+            FROM
+                LATEST
+        ) TBL
+    ORDER BY
+         TBL.MTR_READ_DT              ASC
+        ,TBL.SVC_PHYS_MTR_READ_GRP_SQ ASC
+</statement>
+<!-- END   2023/10/26 t.aizawa [QC#61996,ADD] -->
+<statement id="countSvcPhysMtrRead" parameterClass="Map" resultClass="BigDecimal">
+    SELECT
+        COUNT(*)
+    FROM 
+        <!-- START 2023/10/26 t.aizawa [QC#61996,ADD] -->
+        (
+            SELECT
+                 A.MTR_READ_DT
+                ,COUNT(*)
+            FROM
+            <!-- END   2023/10/26 t.aizawa [QC#61996,ADD] -->
+                SVC_PHYS_MTR_READ  A
+            WHERE
+                    A.GLBL_CMPY_CD      = #glblCmpyCd#
+                AND A.EZCANCELFLAG      = '0'
+                AND A.VLD_MTR_FLG       = 'Y'
+                <!-- START 2023/11/15 t.aizawa [QC#61996,ADD] -->
+                AND A.CARRY_OVER_TP_CD  = '0'
+                <!-- END   2023/11/15 t.aizawa [QC#61996,ADD] -->
+                AND A.SVC_PHYS_MTR_PK   = #svcPhysMtrPk#
+                AND A.MTR_READ_DT   &gt;= #effFromDt#
+                <iterate property="dsMtrReadTpGrpCdList" var="dsMtrReadTpGrpCd[]" open="AND A.DS_MTR_READ_TP_GRP_CD IN (" conjunction= "," close=")">
+                    #dsMtrReadTpGrpCd[]#
+                </iterate>
+            <!-- START 2023/10/26 t.aizawa [QC#61996,ADD] -->
+            GROUP BY
+                 A.MTR_READ_DT
+        )
+        <!-- END   2023/10/26 t.aizawa [QC#61996,ADD] -->
+</statement>
+<!-- add end 2020/03/26 QC#56363 -->
+<!-- START 2023/10/26 t.aizawa [QC#61996,ADD] -->
+<statement id="countSvcPhysMtrReadForFld" parameterClass="Map" resultClass="BigDecimal">
+    <!-- START 2023/11/15 t.aizawa [QC#61996,ADD] -->
+    WITH LATEST AS (
+        SELECT
+             PMR.SVC_PHYS_MTR_PK
+            ,PMR.MTR_READ_DT
+            ,PMR.SVC_PHYS_MTR_READ_PK
+            ,PMR.SVC_TASK_NUM
+        FROM (
+                SELECT
+                     PMR_W.SVC_PHYS_MTR_PK
+                    ,PMR_W.MTR_READ_DT
+                    ,PMR_W.SVC_PHYS_MTR_READ_PK
+                    ,NVL(PMR_W.SVC_TASK_NUM, #dummyTaskLatest#) AS SVC_TASK_NUM
+                    ,ROW_NUMBER() OVER (
+                        PARTITION BY
+                            PMR_W.SVC_PHYS_MTR_PK
+                        ORDER BY
+                             PMR_W.MTR_READ_DT              DESC
+                            ,PMR_W.SVC_PHYS_MTR_READ_GRP_SQ DESC
+                     ) AS ROW_NUM
+                FROM 
+                    SVC_PHYS_MTR_READ PMR_W
+                WHERE
+                        PMR_W.GLBL_CMPY_CD        = #glblCmpyCd#
+                    AND PMR_W.EZCANCELFLAG        = '0'
+                    AND PMR_W.VLD_MTR_FLG         = 'Y'
+                    AND PMR_W.CARRY_OVER_TP_CD    = '0'
+                    AND PMR_W.SVC_PHYS_MTR_PK     = #svcPhysMtrPk#
+                    AND PMR_W.MTR_READ_DT     &gt;= #effFromDt#
+                    <iterate property="dsMtrReadTpGrpCdList" var="dsMtrReadTpGrpCd[]" open="AND PMR_W.DS_MTR_READ_TP_GRP_CD IN (" conjunction="," close=")">
+                        #dsMtrReadTpGrpCd[]#
+                    </iterate>
+            ) PMR
+        WHERE
+            PMR.ROW_NUM = 1
+    )
+    <!-- END   2023/11/15 t.aizawa [QC#61996,ADD] -->
+    SELECT
+        COUNT(*)
+    FROM 
+        (
+            <!-- START 2023/11/15 t.aizawa [QC#61996,DEL] -->
+            <!-- SELECT -->
+            <!--      'DF_MTR_READ_DT' AS CNT_TP -->
+            <!--     ,COUNT(*) -->
+            <!-- FROM -->
+            <!--     ( -->
+            <!--         SELECT -->
+            <!--              A.MTR_READ_DT -->
+            <!--             ,COUNT(*) -->
+            <!--         FROM -->
+            <!--             SVC_PHYS_MTR_READ  A -->
+            <!--         WHERE -->
+            <!--                 A.GLBL_CMPY_CD      = #glblCmpyCd# -->
+            <!--             AND A.EZCANCELFLAG      = '0' -->
+            <!--             AND A.VLD_MTR_FLG       = 'Y' -->
+            <!--             AND A.SVC_PHYS_MTR_PK   = #svcPhysMtrPk# -->
+            <!--             AND A.MTR_READ_DT   &gt;= #effFromDt# -->
+            <!--             <iterate property="dsMtrReadTpGrpCdList" var="dsMtrReadTpGrpCd[]" open="AND A.DS_MTR_READ_TP_GRP_CD IN (" conjunction= "," close=")"> -->
+            <!--                 #dsMtrReadTpGrpCd[]# -->
+            <!--             </iterate> -->
+            <!--         GROUP BY -->
+            <!--             A.MTR_READ_DT -->
+            <!--     ) -->
+            <!-- HAVING -->
+            <!--     COUNT(*) &gt; 1 -->
+            <!-- UNION ALL -->
+            <!-- SELECT -->
+            <!--      'DF_SVC_TASK_NUM' AS CNT_TP -->
+            <!--     ,COUNT(*) -->
+            <!-- FROM  -->
+            <!--     ( -->
+            <!--         SELECT -->
+            <!--              A.SVC_TASK_NUM -->
+            <!--             ,COUNT(*) -->
+            <!--         FROM -->
+            <!--             SVC_PHYS_MTR_READ  A -->
+            <!--         WHERE -->
+            <!--                 A.GLBL_CMPY_CD      = #glblCmpyCd# -->
+            <!--             AND A.EZCANCELFLAG      = '0' -->
+            <!--             AND A.VLD_MTR_FLG       = 'Y' -->
+            <!--             AND A.SVC_PHYS_MTR_PK   = #svcPhysMtrPk# -->
+            <!--             AND A.MTR_READ_DT   &gt;= #effFromDt# -->
+            <!--             <iterate property="dsMtrReadTpGrpCdList" var="dsMtrReadTpGrpCd[]" open="AND A.DS_MTR_READ_TP_GRP_CD IN (" conjunction= "," close=")"> -->
+            <!--                 #dsMtrReadTpGrpCd[]# -->
+            <!--             </iterate> -->
+            <!--         GROUP BY -->
+            <!--             A.SVC_TASK_NUM -->
+            <!--     ) -->
+            <!-- HAVING -->
+            <!--     COUNT(*) &gt; 1 -->
+            <!-- EMD   2023/11/15 t.aizawa [QC#61996,DEL] -->
+            <!-- START 2023/11/15 t.aizawa [QC#61996,ADD] -->
+            SELECT
+                 PMR.SVC_PHYS_MTR_PK
+                ,PMR.MTR_READ_DT
+                ,PMR.SVC_PHYS_MTR_READ_PK
+                ,PMR.SVC_TASK_NUM
+            FROM
+                 (
+                    SELECT
+                         PMR_W.SVC_PHYS_MTR_PK
+                        ,PMR_W.MTR_READ_DT
+                        ,PMR_W.SVC_PHYS_MTR_READ_PK
+                        ,NVL(PMR_W.SVC_TASK_NUM, #dummyTaskPrevious#) AS SVC_TASK_NUM
+                    FROM 
+                        SVC_PHYS_MTR_READ PMR_W
+                    WHERE
+                            PMR_W.GLBL_CMPY_CD        = #glblCmpyCd#
+                        AND PMR_W.EZCANCELFLAG        = '0'
+                        AND PMR_W.VLD_MTR_FLG         = 'Y'
+                        AND PMR_W.CARRY_OVER_TP_CD    = '0'
+                        AND PMR_W.SVC_PHYS_MTR_PK     = #svcPhysMtrPk#
+                        AND PMR_W.MTR_READ_DT     &gt;= #effFromDt#
+                        <iterate property="dsMtrReadTpGrpCdList" var="dsMtrReadTpGrpCd[]" open="AND PMR_W.DS_MTR_READ_TP_GRP_CD IN (" conjunction="," close=")">
+                            #dsMtrReadTpGrpCd[]#
+                        </iterate>
+                 ) PMR
+                ,LATEST
+            WHERE
+                    PMR.MTR_READ_DT  &lt;&gt; LATEST.MTR_READ_DT
+                AND PMR.SVC_TASK_NUM &lt;&gt; LATEST.SVC_TASK_NUM
+            UNION ALL
+            SELECT
+                 LATEST.SVC_PHYS_MTR_PK
+                ,LATEST.MTR_READ_DT
+                ,LATEST.SVC_PHYS_MTR_READ_PK
+                ,LATEST.SVC_TASK_NUM
+            FROM
+                LATEST
+            <!-- EMD   2023/11/15 t.aizawa [QC#61996,ADD] -->
+        )
+</statement>
+<!-- END   2023/10/26 t.aizawa [QC#61996,ADD] -->
+</sqlMap>

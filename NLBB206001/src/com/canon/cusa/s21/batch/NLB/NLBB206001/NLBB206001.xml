@@ -1,0 +1,1481 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NLBB206001">
+
+    <!-- ==== Type Aliases ==== -->
+
+    <!-- ==== Result Mapping ==== -->
+
+    <statement id="getIntangibleShpgPlnData" parameterClass="Map">
+        -- 1. for purchase from cusa.
+        SELECT /*+ OPTIMIZER_FEATURES_ENABLE('10.2.0.5') */ 
+            SP.EZUPTIME             AS EZUPTIME
+            ,SP.EZUPTIMEZONE        AS EZUPTIMEZONE
+            ,SP.SHPG_PLN_NUM        AS SHPG_PLN_NUM
+            ,SP.TRX_HDR_NUM         AS TRX_HDR_NUM
+            ,SP.TRX_LINE_NUM        AS TRX_LINE_NUM
+            ,SP.TRX_LINE_SUB_NUM    AS TRX_LINE_SUB_NUM
+            ,SP.MDSE_CD             AS MDSE_CD
+            ,SP.STK_STS_CD          AS STK_STS_CD
+            ,SP.ORD_QTY             AS ORD_QTY
+            ,(
+                SELECT
+                    SO_NUM
+                FROM
+                    SHPG_PLN SP2
+                    ,MDSE M2
+                WHERE
+                    SP.GLBL_CMPY_CD = SP2.GLBL_CMPY_CD
+                    AND SP.TRX_HDR_NUM = SP2.TRX_HDR_NUM
+                    AND SP.SHIP_CPLT_CD = SP2.SHIP_CPLT_CD
+                    <iterate property="shpgStsCdList" var="shpgStsCd[]" open=" AND SP2.SHPG_STS_CD IN (" close=")" conjunction=",">
+                        #shpgStsCd[]#
+                    </iterate>
+
+                    AND SP2.GLBL_CMPY_CD = M2.GLBL_CMPY_CD
+                    AND SP2.MDSE_CD = M2.MDSE_CD
+                    AND M2.INVTY_CTRL_FLG = #flgOnY#
+                    AND SP2.TRX_SRC_TP_CD = #trxSrcTpCd#
+                    AND SP2.EZCANCELFLAG = '0'
+                    AND M2.EZCANCELFLAG = '0'
+                    AND ROWNUM <![CDATA[<=]]> 1
+            )                       AS SO_NUM
+            ,SP.SO_SLP_NUM          AS SO_SLP_NUM
+            ,SP.BOL_NUM             AS BOL_NUM
+            ,SP.CARR_CD             AS CARR_CD
+            ,SP.PRO_NUM             AS PRO_NUM
+            ,SP.SELL_TO_CUST_CD     AS SELL_TO_CUST_CD
+            ,SP.BILL_TO_CUST_CD     AS BILL_TO_CUST_CD
+            ,SP.SHIP_TO_CUST_CD     AS SHIP_TO_CUST_CD
+            ,SP.SHIP_TO_LOC_NM      AS SHIP_TO_LOC_NM
+            ,SP.SLS_REP_TOC_CD      AS SLS_REP_TOC_CD
+            ,M.VND_CD               AS VND_CD
+            ,M.INVTY_CTRL_FLG       AS INVTY_CTRL_FLG
+            ,M.INVTY_VAL_FLG        AS INVTY_VAL_FLG
+            ,M.MDSE_TP_CD           AS MDSE_TP_CD
+            ,SP.SET_SHPG_PLN_NUM    AS SET_SHPG_PLN_NUM
+            ,SP.SET_MDSE_CD         AS SET_MDSE_CD
+            ,SP.SHIP_CPLT_CD        AS SHIP_CPLT_CD
+            ,SP.PO_REQ_FLG          AS PO_REQ_FLG
+            ,CD.EZUPTIME            AS CPO_DTL_EZUPTIME
+            ,CD.EZUPTIMEZONE        AS CPO_DTL_EZUPTIMEZONE
+            ,C.SYS_SRC_CD           AS SYS_SRC_CD
+            ,MT.SRT_NUM             AS SRT_NUM
+            ,'1'                    AS DT_PTN
+            <!-- 2015/9/17 CSA Add Start -->
+            ,CD.DS_CPO_CONFIG_PK   AS DS_CPO_CONFIG_PK
+            ,SP.INVTY_LOC_CD        AS INVTY_LOC_CD
+            <!-- 2015/9/17 CSA Add End -->
+            ,CD.RTL_WH_CD          AS RTL_WH_CD    <!-- QC#16290 add -->
+            <!-- QC#59704 Add Start -->
+            ,SP.SHPG_STS_CD         AS SHPG_STS_CD
+            <!-- QC#59704 Add End -->
+        FROM
+             SHPG_PLN SP
+            ,CPO_DTL CD
+            ,CPO C
+            ,MDSE M
+            ,PO PO
+            ,PRNT_CMPY_VND PCV
+            ,(SELECT
+                GLBL_CMPY_CD
+                ,MDSE_TP_CD
+                ,CASE MDSE_TP_CD
+                    WHEN '1' THEN '1'
+                    WHEN '3' THEN '2'
+                    WHEN '4' THEN '3'
+                    WHEN '2' THEN '4'
+                    ELSE '5'
+                END AS SRT_NUM
+            FROM
+                MDSE_TP
+            WHERE
+                GLBL_CMPY_CD = #glblCmpyCd#
+                AND EZCANCELFLAG = '0') MT
+        WHERE
+            SP.GLBL_CMPY_CD = #glblCmpyCd#
+            <!-- CSA QC#2836 Start -->
+            <!-- 
+            AND SP.SHPG_STS_CD = #shpgStsCdPOPrinted#
+             -->
+            AND SP.SHPG_STS_CD in (#shpgStsCdPOPrinted#, #shpgStsCdShipped#)  -- P/O Printed or Shipped
+            <!-- CSA QC#2836 End -->
+            AND SP.SO_CLOSE_FLG = #flgOffN#
+            AND SP.REV_RECOG_FLG = #flgOffN#
+            AND SP.INVTY_LOC_CD IS NOT NULL
+            AND SP.PO_REQ_FLG = #flgOnY#
+            AND SP.TRX_SRC_TP_CD = #trxSrcTpCd#
+
+            AND SP.GLBL_CMPY_CD = CD.GLBL_CMPY_CD(+)
+            AND SP.TRX_HDR_NUM = CD.CPO_ORD_NUM(+)
+            AND SP.TRX_LINE_NUM = CD.CPO_DTL_LINE_NUM(+)
+            AND SP.TRX_LINE_SUB_NUM = CD.CPO_DTL_LINE_SUB_NUM(+)
+
+            AND SP.GLBL_CMPY_CD = C.GLBL_CMPY_CD
+            AND SP.TRX_HDR_NUM = C.CPO_ORD_NUM
+
+            AND SP.GLBL_CMPY_CD = M.GLBL_CMPY_CD
+            AND SP.MDSE_CD = M.MDSE_CD
+            AND M.INVTY_CTRL_FLG = #flgOffN#
+            <iterate property="mdseTpCdList" var="mdseTpCd[]" open=" AND M.MDSE_TP_CD NOT IN(" close=")" conjunction=",">
+                #mdseTpCd[]#
+            </iterate>
+
+            AND M.GLBL_CMPY_CD = MT.GLBL_CMPY_CD
+            AND M.MDSE_TP_CD   = MT.MDSE_TP_CD
+
+            AND SP.GLBL_CMPY_CD = PO.GLBL_CMPY_CD
+            AND SP.PO_ORD_NUM = PO.PO_ORD_NUM
+            AND PO.PO_STS_CD = #poStsCdClosed#                  -- P/O Closed
+
+            AND SP.GLBL_CMPY_CD = PCV.GLBL_CMPY_CD
+            AND SP.INVTY_LOC_CD = PCV.PRNT_CMPY_VND_CD
+
+            AND NOT EXISTS(
+                SELECT
+                         'X'
+                  FROM
+                         HLD H
+                        ,HLD_PROC_DFN HPD
+                 WHERE
+                         SP.GLBL_CMPY_CD         = H.GLBL_CMPY_CD
+                   AND   SP.TRX_HDR_NUM          = H.CPO_ORD_NUM
+                   AND   H.CPO_DTL_LINE_NUM IS NULL
+                   <!-- QC#57813 Add -->
+                   AND   H.TRX_SRC_TP_CD IS NULL
+                   AND   H.REL_FLG               = #flgOffN#
+                   AND   H.GLBL_CMPY_CD          = HPD.GLBL_CMPY_CD
+                   AND   H.HLD_RSN_CD            = HPD.HLD_RSN_CD
+                   AND   HPD.REL_PNT_SO_PRINT_FLG = #flgOnY#
+                   AND   H.EZCANCELFLAG          = '0'
+                   AND   HPD.EZCANCELFLAG        = '0'
+            )
+
+            AND NOT EXISTS(
+                SELECT
+                         'X'
+                  FROM
+                         HLD H
+                        ,HLD_PROC_DFN HPD
+                 WHERE
+                         SP.GLBL_CMPY_CD         = H.GLBL_CMPY_CD
+                   AND   SP.TRX_HDR_NUM          = H.CPO_ORD_NUM
+                   AND   SP.TRX_LINE_NUM         = H.CPO_DTL_LINE_NUM
+                   AND   SP.TRX_LINE_SUB_NUM     = H.CPO_DTL_LINE_SUB_NUM
+                   AND   H.SHPG_PLN_NUM IS NULL
+                   <!-- QC#57813 Add -->
+                   AND   H.TRX_SRC_TP_CD IS NULL
+                   AND   H.REL_FLG               = #flgOffN#
+                   AND   H.GLBL_CMPY_CD          = HPD.GLBL_CMPY_CD
+                   AND   H.HLD_RSN_CD            = HPD.HLD_RSN_CD
+                   AND   HPD.REL_PNT_SO_PRINT_FLG = #flgOnY#
+                   AND   H.EZCANCELFLAG          = '0'
+                   AND   HPD.EZCANCELFLAG        = '0'
+            )
+
+            AND NOT EXISTS(
+                SELECT
+                         'X'
+                  FROM
+                         HLD H
+                        ,HLD_PROC_DFN HPD
+                 WHERE
+                         SP.GLBL_CMPY_CD         = H.GLBL_CMPY_CD
+                   AND   SP.SHPG_PLN_NUM         = H.SHPG_PLN_NUM
+                   <!-- QC#57813 Add -->
+                   AND   H.TRX_SRC_TP_CD IS NULL
+                   AND   H.REL_FLG               = #flgOffN#
+                   AND   H.GLBL_CMPY_CD          = HPD.GLBL_CMPY_CD
+                   AND   H.HLD_RSN_CD            = HPD.HLD_RSN_CD
+                   AND   HPD.REL_PNT_SO_PRINT_FLG = #flgOnY#
+                   AND   H.EZCANCELFLAG          = '0'
+                   AND   HPD.EZCANCELFLAG        = '0'
+            )
+
+            AND SP.EZCANCELFLAG    = '0'
+            AND CD.EZCANCELFLAG(+) = '0'
+            AND C.EZCANCELFLAG     = '0'
+            AND M.EZCANCELFLAG     = '0'
+            AND PO.EZCANCELFLAG    = '0'
+            AND PCV.EZCANCELFLAG   = '0'
+            <!-- START ADD S.Yamamoto [QC#2484] -->
+            AND SP.CR_CHK_QTY      <![CDATA[ > ]]> 0
+            <!-- END   ADD S.Yamamoto [QC#2484] -->
+
+        UNION ALL
+        -- 2. for intangible related to tangible, without purchasing from CUSA
+        SELECT/*+ OPTIMIZER_FEATURES_ENABLE('10.2.0.5') */ 
+            SP.EZUPTIME             AS EZUPTIME
+            ,SP.EZUPTIMEZONE        AS EZUPTIMEZONE
+            ,SP.SHPG_PLN_NUM        AS SHPG_PLN_NUM
+            ,SP.TRX_HDR_NUM         AS TRX_HDR_NUM
+            ,SP.TRX_LINE_NUM        AS TRX_LINE_NUM
+            ,SP.TRX_LINE_SUB_NUM    AS TRX_LINE_SUB_NUM
+            ,SP.MDSE_CD             AS MDSE_CD
+            ,SP.STK_STS_CD          AS STK_STS_CD
+            ,SP.ORD_QTY             AS ORD_QTY
+            ,(
+                SELECT
+                    SO_NUM
+                FROM
+                    SHPG_PLN SP2
+                    ,MDSE M2
+                WHERE
+                    SP.GLBL_CMPY_CD = SP2.GLBL_CMPY_CD
+                    AND SP.TRX_HDR_NUM = SP2.TRX_HDR_NUM
+                    AND SP.SHIP_CPLT_CD = SP2.SHIP_CPLT_CD
+                    <iterate property="shpgStsCdList" var="shpgStsCd[]" open=" AND SP2.SHPG_STS_CD IN (" close=")" conjunction=",">
+                        #shpgStsCd[]#
+                    </iterate>
+
+                    AND SP2.GLBL_CMPY_CD = M2.GLBL_CMPY_CD
+                    AND SP2.MDSE_CD = M2.MDSE_CD
+                    AND M2.INVTY_CTRL_FLG = #flgOnY#
+                    AND SP2.TRX_SRC_TP_CD = #trxSrcTpCd#
+                    AND SP2.EZCANCELFLAG = '0'
+                    AND M2.EZCANCELFLAG = '0'
+                    AND ROWNUM <![CDATA[<=]]> 1
+            )                       AS SO_NUM
+            ,SP.SO_SLP_NUM          AS SO_SLP_NUM
+            ,SP.BOL_NUM             AS BOL_NUM
+            ,SP.CARR_CD             AS CARR_CD
+            ,SP.PRO_NUM             AS PRO_NUM
+            ,SP.SELL_TO_CUST_CD     AS SELL_TO_CUST_CD
+            ,SP.BILL_TO_CUST_CD     AS BILL_TO_CUST_CD
+            ,SP.SHIP_TO_CUST_CD     AS SHIP_TO_CUST_CD
+            ,SP.SHIP_TO_LOC_NM      AS SHIP_TO_LOC_NM
+            ,SP.SLS_REP_TOC_CD      AS SLS_REP_TOC_CD
+            ,M.VND_CD               AS VND_CD
+            ,M.INVTY_CTRL_FLG       AS INVTY_CTRL_FLG
+            ,M.INVTY_VAL_FLG        AS INVTY_VAL_FLG
+            ,M.MDSE_TP_CD           AS MDSE_TP_CD
+            ,SP.SET_SHPG_PLN_NUM    AS SET_SHPG_PLN_NUM
+            ,SP.SET_MDSE_CD         AS SET_MDSE_CD
+            ,SP.SHIP_CPLT_CD        AS SHIP_CPLT_CD
+            ,SP.PO_REQ_FLG          AS PO_REQ_FLG
+            ,CD.EZUPTIME            AS CPO_DTL_EZUPTIME
+            ,CD.EZUPTIMEZONE        AS CPO_DTL_EZUPTIMEZONE
+            ,C.SYS_SRC_CD           AS SYS_SRC_CD
+            ,MT.SRT_NUM             AS SRT_NUM
+            ,'2'                    AS DT_PTN
+            <!-- 2015/9/17 CSA Add Start -->
+            ,CD.DS_CPO_CONFIG_PK   AS DS_CPO_CONFIG_PK
+            ,SP.INVTY_LOC_CD        AS INVTY_LOC_CD
+            <!-- 2015/9/17 CSA Add End -->
+            ,CD.RTL_WH_CD          AS RTL_WH_CD    <!-- QC#16290 add -->
+            <!-- QC#59704 Add Start -->
+            ,SP.SHPG_STS_CD         AS SHPG_STS_CD
+            <!-- QC#59704 Add End -->
+        FROM
+             SHPG_PLN SP
+            ,CPO_DTL CD
+            ,CPO C
+            ,MDSE M
+            ,(SELECT
+                GLBL_CMPY_CD
+                ,MDSE_TP_CD
+                ,CASE MDSE_TP_CD
+                    WHEN '1' THEN '1'
+                    WHEN '3' THEN '2'
+                    WHEN '4' THEN '3'
+                    WHEN '2' THEN '4'
+                    ELSE '5'
+                END AS SRT_NUM
+            FROM
+                MDSE_TP
+            WHERE
+                GLBL_CMPY_CD = #glblCmpyCd#
+                AND EZCANCELFLAG = '0') MT
+        WHERE
+            SP.GLBL_CMPY_CD = #glblCmpyCd#
+            <!-- CSA QC#2836 Start -->
+            <!-- 
+            AND SP.SHPG_STS_CD = #shpgStsCdValidated#
+             -->
+            AND SP.SHPG_STS_CD in (#shpgStsCdValidated#, #shpgStsCdShipped#)  -- Validated or Shipped
+            <!-- CSA QC#2836 End -->
+            AND SP.SO_CLOSE_FLG = #flgOffN#
+            AND SP.REV_RECOG_FLG = #flgOffN#
+            AND (
+                        SP.INVTY_LOC_CD IS NULL
+                    OR TRIM(SP.INVTY_LOC_CD) = ''
+                )
+            AND SP.PO_REQ_FLG = #flgOffN#
+            AND SP.TRX_SRC_TP_CD = #trxSrcTpCd#
+
+            AND SP.GLBL_CMPY_CD = CD.GLBL_CMPY_CD(+)
+            AND SP.TRX_HDR_NUM = CD.CPO_ORD_NUM(+)
+            AND SP.TRX_LINE_NUM = CD.CPO_DTL_LINE_NUM(+)
+            AND SP.TRX_LINE_SUB_NUM = CD.CPO_DTL_LINE_SUB_NUM(+)
+
+            AND SP.GLBL_CMPY_CD = C.GLBL_CMPY_CD
+            AND SP.TRX_HDR_NUM = C.CPO_ORD_NUM
+
+            AND SP.GLBL_CMPY_CD = M.GLBL_CMPY_CD
+            AND SP.MDSE_CD = M.MDSE_CD
+            AND M.INVTY_CTRL_FLG = #flgOffN#
+            AND M.MDSE_TP_CD <![CDATA[<>]]> #mdseTpCdSet#                   -- omit set parent and BOM header
+
+            AND M.GLBL_CMPY_CD = MT.GLBL_CMPY_CD
+            AND M.MDSE_TP_CD   = MT.MDSE_TP_CD
+
+            AND EXISTS (
+                SELECT
+                    'X'
+                FROM
+                    SHPG_PLN SP2
+                    ,MDSE M2
+                WHERE
+                        SP.GLBL_CMPY_CD = SP2.GLBL_CMPY_CD
+                    AND SP.TRX_SRC_TP_CD = SP2.TRX_SRC_TP_CD
+                    AND SP.TRX_HDR_NUM = SP2.TRX_HDR_NUM
+                    AND SP.SHIP_CPLT_CD = SP2.SHIP_CPLT_CD
+                    <iterate property="shpgStsCdList" var="shpgStsCd[]" open=" AND SP2.SHPG_STS_CD IN  (" close=")" conjunction=",">
+                        #shpgStsCd[]#
+                    </iterate>  <!-- in 38, 50, 58, 60, 90 -->
+                    AND SP2.GLBL_CMPY_CD = M2.GLBL_CMPY_CD
+                    AND SP2.MDSE_CD = M2.MDSE_CD
+                    AND M2.INVTY_CTRL_FLG = #flgOnY#
+                    AND SP2.EZCANCELFLAG = '0'
+                    AND M2.EZCANCELFLAG = '0'
+            )
+
+            AND NOT EXISTS(
+                SELECT
+                         'X'
+                  FROM
+                         HLD H
+                        ,HLD_PROC_DFN HPD
+                 WHERE
+                         SP.GLBL_CMPY_CD         = H.GLBL_CMPY_CD
+                   AND   SP.TRX_HDR_NUM          = H.CPO_ORD_NUM
+                   AND   H.CPO_DTL_LINE_NUM IS NULL
+                   <!-- QC#57813 Add -->
+                   AND   H.TRX_SRC_TP_CD IS NULL
+                   AND   H.REL_FLG               = #flgOffN#
+                   AND   H.GLBL_CMPY_CD          = HPD.GLBL_CMPY_CD
+                   AND   H.HLD_RSN_CD            = HPD.HLD_RSN_CD
+                   AND   HPD.REL_PNT_SO_PRINT_FLG = #flgOnY#
+                   AND   H.EZCANCELFLAG          = '0'
+                   AND   HPD.EZCANCELFLAG        = '0'
+            )
+
+            AND NOT EXISTS(
+                SELECT
+                         'X'
+                  FROM
+                         HLD H
+                        ,HLD_PROC_DFN HPD
+                 WHERE
+                         SP.GLBL_CMPY_CD         = H.GLBL_CMPY_CD
+                   AND   SP.TRX_HDR_NUM          = H.CPO_ORD_NUM
+                   AND   SP.TRX_LINE_NUM         = H.CPO_DTL_LINE_NUM
+                   AND   SP.TRX_LINE_SUB_NUM     = H.CPO_DTL_LINE_SUB_NUM
+                   AND   H.SHPG_PLN_NUM IS NULL
+                   <!-- QC#57813 Add -->
+                   AND   H.TRX_SRC_TP_CD IS NULL
+                   AND   H.REL_FLG               = #flgOffN#
+                   AND   H.GLBL_CMPY_CD          = HPD.GLBL_CMPY_CD
+                   AND   H.HLD_RSN_CD            = HPD.HLD_RSN_CD
+                   AND   HPD.REL_PNT_SO_PRINT_FLG = #flgOnY#
+                   AND   H.EZCANCELFLAG          = '0'
+                   AND   HPD.EZCANCELFLAG        = '0'
+            )
+
+            AND NOT EXISTS(
+                SELECT
+                         'X'
+                  FROM
+                         HLD H
+                        ,HLD_PROC_DFN HPD
+                 WHERE
+                         SP.GLBL_CMPY_CD         = H.GLBL_CMPY_CD
+                   AND   SP.SHPG_PLN_NUM         = H.SHPG_PLN_NUM
+                   <!-- QC#57813 Add -->
+                   AND   H.TRX_SRC_TP_CD IS NULL
+                   AND   H.REL_FLG               = #flgOffN#
+                   AND   H.GLBL_CMPY_CD          = HPD.GLBL_CMPY_CD
+                   AND   H.HLD_RSN_CD            = HPD.HLD_RSN_CD
+                   AND   HPD.REL_PNT_SO_PRINT_FLG = #flgOnY#
+                   AND   H.EZCANCELFLAG          = '0'
+                   AND   HPD.EZCANCELFLAG        = '0'
+            )
+            AND SP.EZCANCELFLAG    = '0'
+            AND CD.EZCANCELFLAG(+) = '0'
+            AND C.EZCANCELFLAG     = '0'
+            AND M.EZCANCELFLAG     = '0'
+            <!-- START ADD S.Yamamoto [QC#2484] -->
+            AND SP.CR_CHK_QTY      <![CDATA[ > ]]> 0
+            <!-- END   ADD S.Yamamoto [QC#2484] -->
+
+        UNION ALL
+        -- 3. for intangible NOT related to tangible, without purchasing from CUSA
+        SELECT/*+ OPTIMIZER_FEATURES_ENABLE('10.2.0.5') */ 
+            SP.EZUPTIME             AS EZUPTIME
+            ,SP.EZUPTIMEZONE        AS EZUPTIMEZONE
+            ,SP.SHPG_PLN_NUM        AS SHPG_PLN_NUM
+            ,SP.TRX_HDR_NUM         AS TRX_HDR_NUM
+            ,SP.TRX_LINE_NUM        AS TRX_LINE_NUM
+            ,SP.TRX_LINE_SUB_NUM    AS TRX_LINE_SUB_NUM
+            ,SP.MDSE_CD             AS MDSE_CD
+            ,SP.STK_STS_CD          AS STK_STS_CD
+            ,SP.ORD_QTY             AS ORD_QTY
+            ,SP.SO_NUM              AS SO_NUM
+            ,SP.SO_SLP_NUM          AS SO_SLP_NUM
+            ,SP.BOL_NUM             AS BOL_NUM
+            ,SP.CARR_CD             AS CARR_CD
+            ,SP.PRO_NUM             AS PRO_NUM
+            ,SP.SELL_TO_CUST_CD     AS SELL_TO_CUST_CD
+            ,SP.BILL_TO_CUST_CD     AS BILL_TO_CUST_CD
+            ,SP.SHIP_TO_CUST_CD     AS SHIP_TO_CUST_CD
+            ,SP.SHIP_TO_LOC_NM      AS SHIP_TO_LOC_NM
+            ,SP.SLS_REP_TOC_CD      AS SLS_REP_TOC_CD
+            ,M.VND_CD               AS VND_CD
+            ,M.INVTY_CTRL_FLG       AS INVTY_CTRL_FLG
+            ,M.INVTY_VAL_FLG        AS INVTY_VAL_FLG
+            ,M.MDSE_TP_CD           AS MDSE_TP_CD
+            ,SP.SET_SHPG_PLN_NUM    AS SET_SHPG_PLN_NUM
+            ,SP.SET_MDSE_CD         AS SET_MDSE_CD
+            ,SP.SHIP_CPLT_CD        AS SHIP_CPLT_CD
+            ,SP.PO_REQ_FLG          AS PO_REQ_FLG
+            ,CD.EZUPTIME            AS CPO_DTL_EZUPTIME
+            ,CD.EZUPTIMEZONE        AS CPO_DTL_EZUPTIMEZONE
+            ,C.SYS_SRC_CD           AS SYS_SRC_CD
+            ,MT.SRT_NUM             AS SRT_NUM
+            ,'3'                    AS DT_PTN
+            <!-- 2015/9/17 CSA Add Start -->
+            ,CD.DS_CPO_CONFIG_PK   AS DS_CPO_CONFIG_PK
+            ,SP.INVTY_LOC_CD        AS INVTY_LOC_CD
+            <!-- 2015/9/17 CSA Add End -->
+            ,CD.RTL_WH_CD          AS RTL_WH_CD    <!-- QC#16290 add -->
+            <!-- QC#59704 Add Start -->
+            ,SP.SHPG_STS_CD         AS SHPG_STS_CD
+            <!-- QC#59704 Add End -->
+        FROM
+             SHPG_PLN SP
+            ,CPO_DTL CD
+            ,CPO C
+            ,MDSE M
+            ,(SELECT
+                GLBL_CMPY_CD
+                ,MDSE_TP_CD
+                ,CASE MDSE_TP_CD
+                    WHEN '1' THEN '1'
+                    WHEN '3' THEN '2'
+                    WHEN '4' THEN '3'
+                    WHEN '2' THEN '4'
+                    ELSE '5'
+                END AS SRT_NUM
+            FROM
+                MDSE_TP
+            WHERE
+                GLBL_CMPY_CD = #glblCmpyCd#
+                AND EZCANCELFLAG = '0') MT
+        WHERE
+            SP.GLBL_CMPY_CD = #glblCmpyCd#
+            <!-- CSA QC#2836 Start -->
+            <!-- 
+            AND SP.SHPG_STS_CD = #shpgStsCdValidated#
+             -->
+            AND SP.SHPG_STS_CD in (#shpgStsCdValidated#, #shpgStsCdShipped#)  -- Validated or Shipped
+            <!-- CSA QC#2836 End -->
+            AND SP.SO_CLOSE_FLG = #flgOffN#
+            AND SP.REV_RECOG_FLG = #flgOffN#
+            AND (
+                        SP.INVTY_LOC_CD IS NULL
+                    OR TRIM(SP.INVTY_LOC_CD) = ''
+                )
+            AND SP.PO_REQ_FLG = #flgOffN#
+            AND SP.TRX_SRC_TP_CD = #trxSrcTpCd#
+
+            AND SP.GLBL_CMPY_CD = CD.GLBL_CMPY_CD(+)
+            AND SP.TRX_HDR_NUM = CD.CPO_ORD_NUM(+)
+            AND SP.TRX_LINE_NUM = CD.CPO_DTL_LINE_NUM(+)
+            AND SP.TRX_LINE_SUB_NUM = CD.CPO_DTL_LINE_SUB_NUM(+)
+
+            AND SP.GLBL_CMPY_CD = C.GLBL_CMPY_CD
+            AND SP.TRX_HDR_NUM = C.CPO_ORD_NUM
+
+            AND SP.GLBL_CMPY_CD = M.GLBL_CMPY_CD
+            AND SP.MDSE_CD = M.MDSE_CD
+            AND M.INVTY_CTRL_FLG = #flgOffN#
+            AND M.MDSE_TP_CD <![CDATA[<>]]> #mdseTpCdSet#                       -- omit set parent and BOM header
+
+            AND M.GLBL_CMPY_CD = MT.GLBL_CMPY_CD
+            AND M.MDSE_TP_CD   = MT.MDSE_TP_CD
+
+            AND NOT EXISTS (
+                SELECT
+                    'X'
+                FROM
+                    SHPG_PLN SP2
+                    ,MDSE M2
+                WHERE
+                        SP.GLBL_CMPY_CD = SP2.GLBL_CMPY_CD
+                    AND SP.TRX_SRC_TP_CD = SP2.TRX_SRC_TP_CD
+                    AND SP.TRX_HDR_NUM = SP2.TRX_HDR_NUM
+                    AND SP.SHIP_CPLT_CD = SP2.SHIP_CPLT_CD
+                    AND SP2.GLBL_CMPY_CD = M2.GLBL_CMPY_CD
+                    AND SP2.MDSE_CD = M2.MDSE_CD
+                    AND M2.INVTY_CTRL_FLG = #flgOnY#
+                     AND SP2.SHPG_STS_CD <![CDATA[<>]]> #shpgStsCdCancelled#     <!-- 2013/08/30 Defect#1845 add -->
+                    AND SP2.EZCANCELFLAG = '0'
+                    AND M2.EZCANCELFLAG = '0'
+            )
+
+            AND NOT EXISTS(
+                SELECT
+                         'X'
+                  FROM
+                         HLD H
+                        ,HLD_PROC_DFN HPD
+                 WHERE
+                         SP.GLBL_CMPY_CD         = H.GLBL_CMPY_CD
+                   AND   SP.TRX_HDR_NUM          = H.CPO_ORD_NUM
+                   AND   H.CPO_DTL_LINE_NUM IS NULL
+                   <!-- QC#57813 Add -->
+                   AND   H.TRX_SRC_TP_CD IS NULL
+                   AND   H.REL_FLG               = #flgOffN#
+                   AND   H.GLBL_CMPY_CD          = HPD.GLBL_CMPY_CD
+                   AND   H.HLD_RSN_CD            = HPD.HLD_RSN_CD
+                   AND   HPD.REL_PNT_SO_PRINT_FLG = #flgOnY#
+                   AND   H.EZCANCELFLAG          = '0'
+                   AND   HPD.EZCANCELFLAG        = '0'
+            )
+
+            AND NOT EXISTS(
+                SELECT
+                         'X'
+                  FROM
+                         HLD H
+                        ,HLD_PROC_DFN HPD
+                 WHERE
+                         SP.GLBL_CMPY_CD         = H.GLBL_CMPY_CD
+                   AND   SP.TRX_HDR_NUM          = H.CPO_ORD_NUM
+                   AND   SP.TRX_LINE_NUM         = H.CPO_DTL_LINE_NUM
+                   AND   SP.TRX_LINE_SUB_NUM     = H.CPO_DTL_LINE_SUB_NUM
+                   AND   H.SHPG_PLN_NUM IS NULL
+                   <!-- QC#57813 Add -->
+                   AND   H.TRX_SRC_TP_CD IS NULL
+                   AND   H.REL_FLG               = #flgOffN#
+                   AND   H.GLBL_CMPY_CD          = HPD.GLBL_CMPY_CD
+                   AND   H.HLD_RSN_CD            = HPD.HLD_RSN_CD
+                   AND   HPD.REL_PNT_SO_PRINT_FLG = #flgOnY#
+                   AND   H.EZCANCELFLAG          = '0'
+                   AND   HPD.EZCANCELFLAG        = '0'
+            )
+
+            AND NOT EXISTS(
+                SELECT
+                         'X'
+                  FROM
+                         HLD H
+                        ,HLD_PROC_DFN HPD
+                 WHERE
+                         SP.GLBL_CMPY_CD         = H.GLBL_CMPY_CD
+                   AND   SP.SHPG_PLN_NUM         = H.SHPG_PLN_NUM
+                   <!-- QC#57813 Add -->
+                   AND   H.TRX_SRC_TP_CD IS NULL
+                   AND   H.REL_FLG               = #flgOffN#
+                   AND   H.GLBL_CMPY_CD          = HPD.GLBL_CMPY_CD
+                   AND   H.HLD_RSN_CD            = HPD.HLD_RSN_CD
+                   AND   HPD.REL_PNT_SO_PRINT_FLG = #flgOnY#
+                   AND   H.EZCANCELFLAG          = '0'
+                   AND   HPD.EZCANCELFLAG        = '0'
+            )
+            AND SP.EZCANCELFLAG    = '0'
+            AND CD.EZCANCELFLAG(+) = '0'
+            AND C.EZCANCELFLAG     = '0'
+            AND M.EZCANCELFLAG     = '0'
+            <!-- START ADD S.Yamamoto [QC#2484] -->
+            AND SP.CR_CHK_QTY      <![CDATA[ > ]]> 0
+            <!-- END   ADD S.Yamamoto [QC#2484] -->
+
+        UNION ALL
+        -- 4. for Set parent, all related component is intangible, without purchasing from CUSA
+        SELECT/*+ OPTIMIZER_FEATURES_ENABLE('10.2.0.5') */ 
+            SP.EZUPTIME             AS EZUPTIME
+            ,SP.EZUPTIMEZONE        AS EZUPTIMEZONE
+            ,SP.SHPG_PLN_NUM        AS SHPG_PLN_NUM
+            ,SP.TRX_HDR_NUM         AS TRX_HDR_NUM
+            ,SP.TRX_LINE_NUM        AS TRX_LINE_NUM
+            ,SP.TRX_LINE_SUB_NUM    AS TRX_LINE_SUB_NUM
+            ,SP.MDSE_CD             AS MDSE_CD
+            ,SP.STK_STS_CD          AS STK_STS_CD
+            ,SP.ORD_QTY             AS ORD_QTY
+            ,SP.SO_NUM              AS SO_NUM
+            ,SP.SO_SLP_NUM          AS SO_SLP_NUM
+            ,SP.BOL_NUM             AS BOL_NUM
+            ,SP.CARR_CD             AS CARR_CD
+            ,SP.PRO_NUM             AS PRO_NUM
+            ,SP.SELL_TO_CUST_CD     AS SELL_TO_CUST_CD
+            ,SP.BILL_TO_CUST_CD     AS BILL_TO_CUST_CD
+            ,SP.SHIP_TO_CUST_CD     AS SHIP_TO_CUST_CD
+            ,SP.SHIP_TO_LOC_NM      AS SHIP_TO_LOC_NM
+            ,SP.SLS_REP_TOC_CD      AS SLS_REP_TOC_CD
+            ,M.VND_CD               AS VND_CD
+            ,M.INVTY_CTRL_FLG       AS INVTY_CTRL_FLG
+            ,M.INVTY_VAL_FLG        AS INVTY_VAL_FLG
+            ,M.MDSE_TP_CD           AS MDSE_TP_CD
+            ,SP.SET_SHPG_PLN_NUM    AS SET_SHPG_PLN_NUM
+            ,SP.SET_MDSE_CD         AS SET_MDSE_CD
+            ,SP.SHIP_CPLT_CD        AS SHIP_CPLT_CD
+            ,SP.PO_REQ_FLG          AS PO_REQ_FLG
+            ,CD.EZUPTIME            AS CPO_DTL_EZUPTIME
+            ,CD.EZUPTIMEZONE        AS CPO_DTL_EZUPTIMEZONE
+            ,C.SYS_SRC_CD           AS SYS_SRC_CD
+            ,MT.SRT_NUM             AS SRT_NUM
+            ,'4'                    AS DT_PTN
+            <!-- 2015/9/17 CSA Add Start -->
+            ,CD.DS_CPO_CONFIG_PK   AS DS_CPO_CONFIG_PK
+            ,SP.INVTY_LOC_CD        AS INVTY_LOC_CD
+            <!-- 2015/9/17 CSA Add End -->
+            ,CD.RTL_WH_CD          AS RTL_WH_CD    <!-- QC#16290 add -->
+            <!-- QC#59704 Add Start -->
+            ,SP.SHPG_STS_CD         AS SHPG_STS_CD
+            <!-- QC#59704 Add End -->
+        FROM
+             SHPG_PLN SP
+            ,CPO_DTL CD
+            ,CPO C
+            ,MDSE M
+            ,(SELECT
+                GLBL_CMPY_CD
+                ,MDSE_TP_CD
+                ,CASE MDSE_TP_CD
+                    WHEN '1' THEN '1'
+                    WHEN '3' THEN '2'
+                    WHEN '4' THEN '3'
+                    WHEN '2' THEN '4'
+                    ELSE '5'
+                END AS SRT_NUM
+            FROM
+                MDSE_TP
+            WHERE
+                GLBL_CMPY_CD = #glblCmpyCd#
+                AND EZCANCELFLAG = '0') MT
+        WHERE
+            SP.GLBL_CMPY_CD = #glblCmpyCd#
+            <!-- CSA QC#2836 Start -->
+            <!-- 
+            AND SP.SHPG_STS_CD = #shpgStsCdValidated#
+             -->
+            AND SP.SHPG_STS_CD in (#shpgStsCdValidated#, #shpgStsCdShipped#)  -- Validated or Shipped
+            <!-- CSA QC#2836 End -->
+            AND SP.SO_CLOSE_FLG = #flgOffN#
+            AND SP.REV_RECOG_FLG = #flgOffN#
+            AND (
+                        SP.INVTY_LOC_CD IS NULL
+                    OR TRIM(SP.INVTY_LOC_CD) = ''
+                )
+            AND SP.PO_REQ_FLG = #flgOffN#
+            AND SP.TRX_SRC_TP_CD = #trxSrcTpCd#
+
+            AND SP.GLBL_CMPY_CD = CD.GLBL_CMPY_CD(+)
+            AND SP.TRX_HDR_NUM = CD.CPO_ORD_NUM(+)
+            AND SP.TRX_LINE_NUM = CD.CPO_DTL_LINE_NUM(+)
+            AND SP.TRX_LINE_SUB_NUM = CD.CPO_DTL_LINE_SUB_NUM(+)
+
+            AND SP.GLBL_CMPY_CD = C.GLBL_CMPY_CD
+            AND SP.TRX_HDR_NUM = C.CPO_ORD_NUM
+
+            AND SP.GLBL_CMPY_CD = M.GLBL_CMPY_CD
+            AND SP.MDSE_CD = M.MDSE_CD
+            AND M.INVTY_CTRL_FLG = #flgOffN#
+            AND M.MDSE_TP_CD = #mdseTpCdSet#                        -- set parent
+
+            AND M.GLBL_CMPY_CD = MT.GLBL_CMPY_CD
+            AND M.MDSE_TP_CD   = MT.MDSE_TP_CD
+
+            AND NOT EXISTS (
+                SELECT
+                    'X'
+                FROM
+                    SHPG_PLN SP2
+                    ,MDSE M2
+                WHERE
+                        SP.GLBL_CMPY_CD = SP2.GLBL_CMPY_CD
+                    AND SP.TRX_HDR_NUM = SP2.TRX_HDR_NUM
+                    AND SP.SHPG_PLN_NUM = SP2.SET_SHPG_PLN_NUM
+                    AND SP2.GLBL_CMPY_CD = M2.GLBL_CMPY_CD
+                    AND SP2.MDSE_CD = M2.MDSE_CD
+                    AND M2.INVTY_CTRL_FLG = #flgOnY#
+                    AND SP2.EZCANCELFLAG = '0'
+                    AND M2.EZCANCELFLAG = '0'
+            )
+
+            AND NOT EXISTS (
+                SELECT
+                    'X'
+                FROM
+                    SHPG_PLN SP3
+                WHERE
+                        SP.GLBL_CMPY_CD = SP3.GLBL_CMPY_CD
+                    AND SP.TRX_HDR_NUM = SP3.TRX_HDR_NUM
+                    AND SP.SHPG_PLN_NUM = SP3.SET_SHPG_PLN_NUM
+                    AND SP3.PO_REQ_FLG = #flgOnY#
+                    AND SP3.EZCANCELFLAG = '0'
+            )
+
+            AND NOT EXISTS(
+                SELECT
+                         'X'
+                  FROM
+                         HLD H
+                        ,HLD_PROC_DFN HPD
+                 WHERE
+                         SP.GLBL_CMPY_CD         = H.GLBL_CMPY_CD
+                   AND   SP.TRX_HDR_NUM          = H.CPO_ORD_NUM
+                   AND   H.CPO_DTL_LINE_NUM IS NULL
+                   <!-- QC#57813 Add -->
+                   AND   H.TRX_SRC_TP_CD IS NULL
+                   AND   H.REL_FLG               = #flgOffN#
+                   AND   H.GLBL_CMPY_CD          = HPD.GLBL_CMPY_CD
+                   AND   H.HLD_RSN_CD            = HPD.HLD_RSN_CD
+                   AND   HPD.REL_PNT_SO_PRINT_FLG = #flgOnY#
+                   AND   H.EZCANCELFLAG          = '0'
+                   AND   HPD.EZCANCELFLAG        = '0'
+            )
+
+            AND NOT EXISTS(
+                SELECT
+                         'X'
+                  FROM
+                         HLD H
+                        ,HLD_PROC_DFN HPD
+                 WHERE
+                         SP.GLBL_CMPY_CD         = H.GLBL_CMPY_CD
+                   AND   SP.TRX_HDR_NUM          = H.CPO_ORD_NUM
+                   AND   SP.TRX_LINE_NUM         = H.CPO_DTL_LINE_NUM
+                   AND   SP.TRX_LINE_SUB_NUM     = H.CPO_DTL_LINE_SUB_NUM
+                   AND   H.SHPG_PLN_NUM IS NULL
+                   <!-- QC#57813 Add -->
+                   AND   H.TRX_SRC_TP_CD IS NULL
+                   AND   H.REL_FLG               = #flgOffN#
+                   AND   H.GLBL_CMPY_CD          = HPD.GLBL_CMPY_CD
+                   AND   H.HLD_RSN_CD            = HPD.HLD_RSN_CD
+                   AND   HPD.REL_PNT_SO_PRINT_FLG = #flgOnY#
+                   AND   H.EZCANCELFLAG          = '0'
+                   AND   HPD.EZCANCELFLAG        = '0'
+            )
+
+            AND NOT EXISTS(
+                SELECT
+                         'X'
+                  FROM
+                         HLD H
+                        ,HLD_PROC_DFN HPD
+                 WHERE
+                         SP.GLBL_CMPY_CD         = H.GLBL_CMPY_CD
+                   AND   SP.SHPG_PLN_NUM         = H.SHPG_PLN_NUM
+                   <!-- QC#57813 Add -->
+                   AND   H.TRX_SRC_TP_CD IS NULL
+                   AND   H.REL_FLG               = #flgOffN#
+                   AND   H.GLBL_CMPY_CD          = HPD.GLBL_CMPY_CD
+                   AND   H.HLD_RSN_CD            = HPD.HLD_RSN_CD
+                   AND   HPD.REL_PNT_SO_PRINT_FLG = #flgOnY#
+                   AND   H.EZCANCELFLAG          = '0'
+                   AND   HPD.EZCANCELFLAG        = '0'
+            )
+            AND SP.EZCANCELFLAG    = '0'
+            AND CD.EZCANCELFLAG(+) = '0'
+            AND C.EZCANCELFLAG     = '0'
+            AND M.EZCANCELFLAG     = '0'
+            <!-- START ADD S.Yamamoto [QC#2484] -->
+            AND SP.CR_CHK_QTY      <![CDATA[ > ]]> 0
+            <!-- END   ADD S.Yamamoto [QC#2484] -->
+
+        UNION ALL
+        -- 5. for Set parent, all related component is intangible, purchasing from CUSA
+        SELECT/*+ OPTIMIZER_FEATURES_ENABLE('10.2.0.5') */ 
+            SP.EZUPTIME             AS EZUPTIME
+            ,SP.EZUPTIMEZONE        AS EZUPTIMEZONE
+            ,SP.SHPG_PLN_NUM        AS SHPG_PLN_NUM
+            ,SP.TRX_HDR_NUM         AS TRX_HDR_NUM
+            ,SP.TRX_LINE_NUM        AS TRX_LINE_NUM
+            ,SP.TRX_LINE_SUB_NUM    AS TRX_LINE_SUB_NUM
+            ,SP.MDSE_CD             AS MDSE_CD
+            ,SP.STK_STS_CD          AS STK_STS_CD
+            ,SP.ORD_QTY             AS ORD_QTY
+            ,SP.SO_NUM              AS SO_NUM
+            ,SP.SO_SLP_NUM          AS SO_SLP_NUM
+            ,SP.BOL_NUM             AS BOL_NUM
+            ,SP.CARR_CD             AS CARR_CD
+            ,SP.PRO_NUM             AS PRO_NUM
+            ,SP.SELL_TO_CUST_CD     AS SELL_TO_CUST_CD
+            ,SP.BILL_TO_CUST_CD     AS BILL_TO_CUST_CD
+            ,SP.SHIP_TO_CUST_CD     AS SHIP_TO_CUST_CD
+            ,SP.SHIP_TO_LOC_NM      AS SHIP_TO_LOC_NM
+            ,SP.SLS_REP_TOC_CD      AS SLS_REP_TOC_CD
+            ,M.VND_CD               AS VND_CD
+            ,M.INVTY_CTRL_FLG       AS INVTY_CTRL_FLG
+            ,M.INVTY_VAL_FLG        AS INVTY_VAL_FLG
+            ,M.MDSE_TP_CD           AS MDSE_TP_CD
+            ,SP.SET_SHPG_PLN_NUM    AS SET_SHPG_PLN_NUM
+            ,SP.SET_MDSE_CD         AS SET_MDSE_CD
+            ,SP.SHIP_CPLT_CD        AS SHIP_CPLT_CD
+            ,SP.PO_REQ_FLG          AS PO_REQ_FLG
+            ,CD.EZUPTIME            AS CPO_DTL_EZUPTIME
+            ,CD.EZUPTIMEZONE        AS CPO_DTL_EZUPTIMEZONE
+            ,C.SYS_SRC_CD           AS SYS_SRC_CD
+            ,MT.SRT_NUM             AS SRT_NUM
+            ,'5'                    AS DT_PTN
+            <!-- 2015/9/17 CSA Add Start -->
+            ,CD.DS_CPO_CONFIG_PK   AS DS_CPO_CONFIG_PK
+            ,SP.INVTY_LOC_CD        AS INVTY_LOC_CD
+            <!-- 2015/9/17 CSA Add End -->
+            ,CD.RTL_WH_CD          AS RTL_WH_CD    <!-- QC#16290 add -->
+            <!-- QC#59704 Add Start -->
+            ,SP.SHPG_STS_CD         AS SHPG_STS_CD
+            <!-- QC#59704 Add End -->
+        FROM
+             SHPG_PLN SP
+            ,CPO_DTL CD
+            ,CPO C
+            ,MDSE M
+            ,(SELECT
+                GLBL_CMPY_CD
+                ,MDSE_TP_CD
+                ,CASE MDSE_TP_CD
+                    WHEN '1' THEN '1'
+                    WHEN '3' THEN '2'
+                    WHEN '4' THEN '3'
+                    WHEN '2' THEN '4'
+                    ELSE '5'
+                END AS SRT_NUM
+            FROM
+                MDSE_TP
+            WHERE
+                GLBL_CMPY_CD = #glblCmpyCd#
+                AND EZCANCELFLAG = '0') MT
+        WHERE
+            SP.GLBL_CMPY_CD = #glblCmpyCd#
+            <!-- CSA QC#2836 Start -->
+            <!-- 
+            AND SP.SHPG_STS_CD = #shpgStsCdSOPrinted#
+             -->
+            AND SP.SHPG_STS_CD in (#shpgStsCdSOPrinted#, #shpgStsCdShipped#)  -- S/O Printed or Shipped
+            <!-- CSA QC#2836 End -->
+            AND SP.SO_CLOSE_FLG = #flgOffN#
+            AND SP.REV_RECOG_FLG = #flgOffN#
+            AND SP.INVTY_LOC_CD IS NOT NULL
+            AND SP.PO_REQ_FLG = #flgOffN#
+            AND SP.TRX_SRC_TP_CD = #trxSrcTpCd#
+
+            AND SP.GLBL_CMPY_CD = CD.GLBL_CMPY_CD(+)
+            AND SP.TRX_HDR_NUM = CD.CPO_ORD_NUM(+)
+            AND SP.TRX_LINE_NUM = CD.CPO_DTL_LINE_NUM(+)
+            AND SP.TRX_LINE_SUB_NUM = CD.CPO_DTL_LINE_SUB_NUM(+)
+
+            AND SP.GLBL_CMPY_CD = C.GLBL_CMPY_CD
+            AND SP.TRX_HDR_NUM = C.CPO_ORD_NUM
+
+            AND SP.GLBL_CMPY_CD = M.GLBL_CMPY_CD
+            AND SP.MDSE_CD = M.MDSE_CD
+            AND M.INVTY_CTRL_FLG = #flgOffN#
+            AND M.MDSE_TP_CD = #mdseTpCdSet#        -- set parent
+
+            AND M.GLBL_CMPY_CD = MT.GLBL_CMPY_CD
+            AND M.MDSE_TP_CD   = MT.MDSE_TP_CD
+
+            AND NOT EXISTS (
+                SELECT
+                    'X'
+                FROM
+                    SHPG_PLN SP2
+                    ,MDSE M2
+                WHERE
+                        SP.GLBL_CMPY_CD = SP2.GLBL_CMPY_CD
+                    AND SP.TRX_HDR_NUM = SP2.TRX_HDR_NUM
+                    AND SP.SHPG_PLN_NUM = SP2.SET_SHPG_PLN_NUM
+                    AND SP2.GLBL_CMPY_CD = M2.GLBL_CMPY_CD
+                    AND SP2.MDSE_CD = M2.MDSE_CD
+                    AND M2.INVTY_CTRL_FLG = #flgOnY#
+                    AND SP2.EZCANCELFLAG = '0'
+                    AND M2.EZCANCELFLAG = '0'
+            )
+
+            AND NOT EXISTS (
+                SELECT
+                    'X'
+                FROM
+                    SHPG_PLN SP3
+                    ,PO PO
+                WHERE
+                        SP.GLBL_CMPY_CD = SP3.GLBL_CMPY_CD
+                    AND SP.TRX_HDR_NUM = SP3.TRX_HDR_NUM
+                    AND SP.SHPG_PLN_NUM = SP3.SET_SHPG_PLN_NUM
+                    AND SP3.PO_REQ_FLG = #flgOnY#
+                    AND SP3.GLBL_CMPY_CD = PO.GLBL_CMPY_CD
+                    AND SP3.PO_ORD_NUM = PO.PO_ORD_NUM
+                    AND PO.PO_STS_CD <![CDATA[<>]]> #poStsCdClosed#         -- PO Closed
+                    AND SP3.EZCANCELFLAG = '0'
+            )
+
+            AND EXISTS (
+                SELECT
+                    'X'
+                FROM
+                    SHPG_PLN SP4
+                    ,PRNT_CMPY_VND PCV
+                WHERE
+                        SP.GLBL_CMPY_CD = SP4.GLBL_CMPY_CD
+                    AND SP.TRX_HDR_NUM = SP4.TRX_HDR_NUM
+                    AND SP.SHPG_PLN_NUM = SP4.SET_SHPG_PLN_NUM
+                    AND SP4.PO_REQ_FLG = #flgOnY#
+                    AND SP4.GLBL_CMPY_CD = PCV.GLBL_CMPY_CD
+                    AND SP4.INVTY_LOC_CD = PCV.PRNT_CMPY_VND_CD
+                    AND SP4.EZCANCELFLAG = '0'
+                    AND PCV.EZCANCELFLAG = '0'
+            )
+            AND NOT EXISTS(
+                SELECT
+                         'X'
+                  FROM
+                         HLD H
+                        ,HLD_PROC_DFN HPD
+                 WHERE
+                         SP.GLBL_CMPY_CD         = H.GLBL_CMPY_CD
+                   AND   SP.TRX_HDR_NUM          = H.CPO_ORD_NUM
+                   AND   H.CPO_DTL_LINE_NUM IS NULL
+                   <!-- QC#57813 Add -->
+                   AND   H.TRX_SRC_TP_CD IS NULL
+                   AND   H.REL_FLG               = #flgOffN#
+                   AND   H.GLBL_CMPY_CD          = HPD.GLBL_CMPY_CD
+                   AND   H.HLD_RSN_CD            = HPD.HLD_RSN_CD
+                   AND   HPD.REL_PNT_SO_PRINT_FLG = #flgOnY#
+                   AND   H.EZCANCELFLAG          = '0'
+                   AND   HPD.EZCANCELFLAG        = '0'
+            )
+
+            AND NOT EXISTS(
+                SELECT
+                         'X'
+                  FROM
+                         HLD H
+                        ,HLD_PROC_DFN HPD
+                 WHERE
+                         SP.GLBL_CMPY_CD         = H.GLBL_CMPY_CD
+                   AND   SP.TRX_HDR_NUM          = H.CPO_ORD_NUM
+                   AND   SP.TRX_LINE_NUM         = H.CPO_DTL_LINE_NUM
+                   AND   SP.TRX_LINE_SUB_NUM     = H.CPO_DTL_LINE_SUB_NUM
+                   AND   H.SHPG_PLN_NUM IS NULL
+                   <!-- QC#57813 Add -->
+                   AND   H.TRX_SRC_TP_CD IS NULL
+                   AND   H.REL_FLG               = #flgOffN#
+                   AND   H.GLBL_CMPY_CD          = HPD.GLBL_CMPY_CD
+                   AND   H.HLD_RSN_CD            = HPD.HLD_RSN_CD
+                   AND   HPD.REL_PNT_SO_PRINT_FLG = #flgOnY#
+                   AND   H.EZCANCELFLAG          = '0'
+                   AND   HPD.EZCANCELFLAG        = '0'
+            )
+
+            AND NOT EXISTS(
+                SELECT
+                         'X'
+                  FROM
+                         HLD H
+                        ,HLD_PROC_DFN HPD
+                 WHERE
+                         SP.GLBL_CMPY_CD         = H.GLBL_CMPY_CD
+                   AND   SP.SHPG_PLN_NUM         = H.SHPG_PLN_NUM
+                   <!-- QC#57813 Add -->
+                   AND   H.TRX_SRC_TP_CD IS NULL
+                   AND   H.REL_FLG               = #flgOffN#
+                   AND   H.GLBL_CMPY_CD          = HPD.GLBL_CMPY_CD
+                   AND   H.HLD_RSN_CD            = HPD.HLD_RSN_CD
+                   AND   HPD.REL_PNT_SO_PRINT_FLG = #flgOnY#
+                   AND   H.EZCANCELFLAG          = '0'
+                   AND   HPD.EZCANCELFLAG        = '0'
+            )
+            AND SP.EZCANCELFLAG    = '0'
+            AND CD.EZCANCELFLAG(+) = '0'
+            AND C.EZCANCELFLAG     = '0'
+            AND M.EZCANCELFLAG     = '0'
+            <!-- START ADD S.Yamamoto [QC#2484] -->
+            AND SP.CR_CHK_QTY      <![CDATA[ > ]]> 0
+            <!-- END   ADD S.Yamamoto [QC#2484] -->
+
+        ORDER BY
+            TRX_HDR_NUM
+            ,SRT_NUM
+            ,TRX_LINE_NUM
+            ,TRX_LINE_SUB_NUM
+            ,SHPG_PLN_NUM
+    </statement>
+    <statement  id="getMaxSoSlpNum" parameterClass="Map" resultClass="Map">
+        SELECT
+            SP.SO_NUM
+            ,MAX(SP.SO_SLP_NUM) AS MAX_SO_SLP_NUM
+        FROM
+            SHPG_PLN SP
+        WHERE
+            SP.GLBL_CMPY_CD = #glblCmpyCd#
+            AND SP.SO_NUM = #soNum#
+            AND SP.TRX_SRC_TP_CD = #trxSrcTpCd#
+            AND SP.EZCANCELFLAG = '0'
+        GROUP BY
+            SP.SO_NUM
+    </statement>
+    <statement  id="isShippedCompletion" parameterClass="Map" resultClass="Map">
+        SELECT
+              COUNT(SP.GLBL_CMPY_CD)               AS SHPG_PLN_CNT
+             ,SUM(DECODE(SP.SHPG_STS_CD,'38',1,0)) AS SHPG_STS_CD_CMP_CNT
+        FROM
+            SHPG_PLN SP
+        WHERE
+            SP.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND SP.TRX_HDR_NUM      = #trxHdrNum#
+            AND SP.TRX_LINE_NUM     = #trxLineNum#
+            AND SP.TRX_LINE_SUB_NUM = #trxLineSubNum#
+            AND SP.TRX_SRC_TP_CD    = #trxSrcTpCd#
+            AND SP.EZCANCELFLAG     = '0'
+    </statement>
+    <statement  id="isOtherComponentHold" parameterClass="Map" resultClass="String">
+        -- CPO LEVEL
+        SELECT
+            'X'
+        FROM
+             SHPG_PLN     SP
+            ,HLD          HL
+            ,HLD_PROC_DFN HP
+        WHERE
+                SP.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND SP.EZCANCELFLAG     = '0'
+            AND SP.TRX_HDR_NUM      = #trxHdrNum#
+            AND SP.SHIP_CPLT_CD     = #shipCpltCd#
+            AND SP.TRX_HDR_NUM      = HL.CPO_ORD_NUM
+            AND HL.CPO_DTL_LINE_NUM IS NULL
+            AND HL.GLBL_CMPY_CD     = SP.GLBL_CMPY_CD
+            AND HL.EZCANCELFLAG     = SP.EZCANCELFLAG
+            AND HL.HLD_RSN_CD       = HP.HLD_RSN_CD
+            AND HL.REL_FLG          = #relFlg#
+            AND HP.REL_PNT_SO_PRINT_FLG = #relPntSoPrintFlg#
+            AND HP.GLBL_CMPY_CD     = HL.GLBL_CMPY_CD
+            AND HP.EZCANCELFLAG     = HL.EZCANCELFLAG
+
+        UNION
+
+        -- CPO DETAIL LEVEL
+        SELECT
+            'X'
+        FROM
+             SHPG_PLN     SP
+            ,HLD          HL
+            ,HLD_PROC_DFN HP
+        WHERE
+                SP.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND SP.EZCANCELFLAG     = '0'
+            AND SP.TRX_HDR_NUM      = #trxHdrNum#
+            AND SP.SHIP_CPLT_CD     = #shipCpltCd#
+            AND SP.TRX_HDR_NUM      = HL.CPO_ORD_NUM
+            AND SP.TRX_LINE_NUM     = HL.CPO_DTL_LINE_NUM
+            AND SP.TRX_LINE_SUB_NUM = HL.CPO_DTL_LINE_SUB_NUM
+            AND HL.SHPG_PLN_NUM IS NULL
+            AND HL.GLBL_CMPY_CD     = SP.GLBL_CMPY_CD
+            AND HL.EZCANCELFLAG     = SP.EZCANCELFLAG
+            AND HL.HLD_RSN_CD       = HP.HLD_RSN_CD
+            AND HL.REL_FLG          = #relFlg#
+            AND HP.REL_PNT_SO_PRINT_FLG = #relPntSoPrintFlg#
+            AND HP.GLBL_CMPY_CD     = HL.GLBL_CMPY_CD
+            AND HP.EZCANCELFLAG     = HL.EZCANCELFLAG
+
+        UNION
+
+        -- SHPG_PLN LEVEL
+        SELECT
+            'X'
+        FROM
+             SHPG_PLN     SP
+            ,HLD          HL
+            ,HLD_PROC_DFN HP
+        WHERE
+                SP.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND SP.EZCANCELFLAG     = '0'
+            AND SP.TRX_HDR_NUM      = #trxHdrNum#
+            AND SP.SHIP_CPLT_CD     = #shipCpltCd#
+            AND SP.SHPG_PLN_NUM     = HL.SHPG_PLN_NUM
+            AND HL.GLBL_CMPY_CD     = SP.GLBL_CMPY_CD
+            AND HL.EZCANCELFLAG     = SP.EZCANCELFLAG
+            AND HL.HLD_RSN_CD       = HP.HLD_RSN_CD
+            AND HL.REL_FLG          = #relFlg#
+            AND HP.REL_PNT_SO_PRINT_FLG = #relPntSoPrintFlg#
+            AND HP.GLBL_CMPY_CD     = HL.GLBL_CMPY_CD
+            AND HP.EZCANCELFLAG     = HL.EZCANCELFLAG
+    </statement>
+    <statement  id="isSetOtheComponentHold" parameterClass="Map" resultClass="String">
+        -- CPO LEVEL
+        SELECT
+            'X'
+        FROM
+             SHPG_PLN     SP
+            ,HLD          HL
+            ,HLD_PROC_DFN HP
+        WHERE
+                SP.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND SP.TRX_HDR_NUM      = #trxHdrNum#
+            <!-- 2013/07/29 R-OM028 Del Start -->
+            <!-- AND SP.SET_SHPG_PLN_NUM = #setShpgPlnNum# -->
+            <!-- 2013/07/29 R-OM028 Del End -->
+            AND SP.GLBL_CMPY_CD     = HL.GLBL_CMPY_CD
+            AND SP.TRX_HDR_NUM      = HL.CPO_ORD_NUM
+            AND HL.CPO_DTL_LINE_NUM IS NULL
+            AND HL.GLBL_CMPY_CD     = HP.GLBL_CMPY_CD
+            AND HL.HLD_RSN_CD       = HP.HLD_RSN_CD
+            AND HL.REL_FLG          = #relFlg#
+            AND HP.REL_PNT_SO_PRINT_FLG = #relPntSoPrintFlg#
+            AND SP.EZCANCELFLAG     = '0'
+            AND HL.EZCANCELFLAG     = '0'
+            AND HP.EZCANCELFLAG     = '0'
+
+        UNION
+
+        -- CPO DETAIL LEVEL
+        SELECT
+            'X'
+        FROM
+             SHPG_PLN     SP
+            ,HLD          HL
+            ,HLD_PROC_DFN HP
+        WHERE
+                SP.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND SP.TRX_HDR_NUM      = #trxHdrNum#
+            <!-- 2013/07/29 R-OM028 Mod Start -->
+            <!-- AND SP.SET_SHPG_PLN_NUM = #setShpgPlnNum# -->
+            AND SP.TRX_LINE_NUM     = #trxLineNum#
+            <!-- 2013/07/29 R-OM028 Mod End -->
+            AND SP.GLBL_CMPY_CD     = HL.GLBL_CMPY_CD
+            AND SP.TRX_HDR_NUM      = HL.CPO_ORD_NUM
+            AND SP.TRX_LINE_NUM     = HL.CPO_DTL_LINE_NUM
+            AND SP.TRX_LINE_SUB_NUM = HL.CPO_DTL_LINE_SUB_NUM
+            AND HL.SHPG_PLN_NUM IS NULL
+            AND HL.GLBL_CMPY_CD     = HP.GLBL_CMPY_CD
+            AND HL.HLD_RSN_CD       = HP.HLD_RSN_CD
+            AND HL.REL_FLG          = #relFlg#
+            AND HP.REL_PNT_SO_PRINT_FLG = #relPntSoPrintFlg#
+            AND SP.EZCANCELFLAG     = '0'
+            AND HL.EZCANCELFLAG     = '0'
+            AND HP.EZCANCELFLAG     = '0'
+
+        UNION
+
+        -- SHPG_PLN LEVEL
+        SELECT
+            'X'
+        FROM
+             SHPG_PLN     SP
+            ,HLD          HL
+            ,HLD_PROC_DFN HP
+        WHERE
+                SP.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND SP.TRX_HDR_NUM      = #trxHdrNum#
+            <!-- 2013/07/29 R-OM028 Add Start -->
+            <!-- AND SP.TRX_LINE_NUM     = #trxLineNum# --> <!-- 2013/08/30 Defect#1845 Del -->
+            <!-- 2013/07/29 R-OM028 Add END -->
+            <!-- 2013/07/29 R-OM028 Del Start -->
+            <!-- AND SP.SET_SHPG_PLN_NUM = #setShpgPlnNum# -->
+            <!-- 2013/07/29 R-OM028 Del End -->
+            <!-- 2013/08/30 Defect#1845 Add Start -->
+            AND SP.SHPG_PLN_NUM IN (
+                SELECT
+                    SHPG_PLN_NUM
+                FROM
+                    SHPG_PLN SP2
+                WHERE
+                    SP.GLBL_CMPY_CD = SP2.GLBL_CMPY_CD
+                    AND SP2.SET_SHPG_PLN_NUM = #targetShpgPlnNum#
+                    AND SP2.EZCANCELFLAG = '0'
+            )
+            <!-- 2013/08/30 Defect#1845 Add End -->
+            AND SP.GLBL_CMPY_CD     = HL.GLBL_CMPY_CD
+            AND SP.SHPG_PLN_NUM     = HL.SHPG_PLN_NUM
+            AND HL.REL_FLG          = #relFlg#
+            AND HL.GLBL_CMPY_CD     = HP.GLBL_CMPY_CD
+            AND HL.HLD_RSN_CD       = HP.HLD_RSN_CD
+            AND HP.REL_PNT_SO_PRINT_FLG = #relPntSoPrintFlg#
+            AND SP.EZCANCELFLAG     = '0'
+            AND HL.EZCANCELFLAG     = '0'
+            AND HP.EZCANCELFLAG     = '0'
+
+<!-- 2013/08/30 Defect#1845 Add Start -->
+        <isNotNull property="chkPrnt">
+            UNION
+            -- SHPG_PLN LEVEL, SET Parent
+            SELECT
+                'X'
+            FROM
+                 SHPG_PLN     SP
+                ,HLD          HL
+                ,HLD_PROC_DFN HP
+            WHERE
+                    SP.GLBL_CMPY_CD     = #glblCmpyCd#
+                AND SP.TRX_HDR_NUM      = #trxHdrNum#
+                AND SP.SHPG_PLN_NUM     = #targetShpgPlnNum#
+                AND SP.GLBL_CMPY_CD     = HL.GLBL_CMPY_CD
+                AND SP.SHPG_PLN_NUM     = HL.SHPG_PLN_NUM
+                AND HL.HLD_RSN_CD       = HP.HLD_RSN_CD
+                AND HL.REL_FLG          = #relFlg#
+                AND HP.REL_PNT_SO_PRINT_FLG = #relPntSoPrintFlg#
+                AND HP.GLBL_CMPY_CD     = HL.GLBL_CMPY_CD
+                AND SP.EZCANCELFLAG     = '0'
+                AND HL.EZCANCELFLAG     = '0'
+                AND HP.EZCANCELFLAG     = '0'
+        </isNotNull>
+<!-- 2013/08/30 Defect#1845 Add End -->
+    </statement>
+    <statement  id="isSetOtherComponentBeforeShipped" parameterClass="Map" resultClass="String">
+        SELECT
+            'X'
+        FROM
+            SHPG_PLN SP
+           ,MDSE     M
+        WHERE
+                SP.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND SP.EZCANCELFLAG     = '0'
+            AND SP.SET_SHPG_PLN_NUM = #setShpgPlnNum#
+            AND SP.SHPG_STS_CD      <![CDATA[<]]> #shpgStsCd#
+            AND SP.GLBL_CMPY_CD     = M.GLBL_CMPY_CD
+            AND SP.EZCANCELFLAG     = M.EZCANCELFLAG
+            AND SP.MDSE_CD          = M.MDSE_CD
+            AND M.INVTY_CTRL_FLG   = #invtyCtrlFlg#
+            AND M.EZCANCELFLAG = '0'
+    </statement>
+    <statement  id="isSetOtherComponentBeforeShippedForSet" parameterClass="Map" resultClass="String">
+        SELECT
+            'X'
+        FROM
+            SHPG_PLN SP
+        WHERE
+                SP.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND SP.EZCANCELFLAG     = '0'
+            AND SP.TRX_HDR_NUM      = #trxHdrNum#
+            AND SP.SET_SHPG_PLN_NUM = #setShpgPlnNum#
+            AND SP.SHPG_STS_CD      <![CDATA[<]]> #shpgStsCd#
+            AND ROWNUM              <![CDATA[<=]]> 1
+    </statement>
+    <statement  id="isNotShippedBomMain" parameterClass="Map" resultClass="String">
+        SELECT
+            'X'
+        FROM
+            CPO_DTL DCD
+            ,SHPG_PLN SP
+        WHERE
+                DCD.GLBL_CMPY_CD         = #glblCmpyCd#
+            AND DCD.CPO_ORD_NUM          = #trxHdrNum#
+            AND DCD.DS_ORD_POSN_NUM      = #dsOrdPosnNum#
+            AND DCD.BASE_CMPT_FLG        = #flgOnY#
+
+            AND DCD.GLBL_CMPY_CD         = SP.GLBL_CMPY_CD
+            AND DCD.CPO_ORD_NUM          = SP.TRX_HDR_NUM
+            AND DCD.CPO_DTL_LINE_NUM     = SP.TRX_LINE_NUM
+            AND DCD.CPO_DTL_LINE_SUB_NUM = SP.TRX_LINE_SUB_NUM
+            <iterate property="shpgStsCdList" var="shpgStsCd[]" open=" AND SP.SHPG_STS_CD NOT IN (" close=")" conjunction=",">
+                #shpgStsCd[]#
+            </iterate>
+            AND DCD.EZCANCELFLAG    = '0'
+            AND SP.EZCANCELFLAG     = '0'
+    </statement>
+    <statement  id="getSetSoNum" parameterClass="Map" resultClass="String">
+        SELECT
+            SP.SO_NUM
+        FROM
+            SHPG_PLN SP
+        WHERE
+            SP.GLBL_CMPY_CD = #glblCmpyCd#
+            AND SP.TRX_HDR_NUM = #trxHdrNum#
+            AND SP.SET_SHPG_PLN_NUM = #setShpgPlnNum#
+            AND SP.EZCANCELFLAG = '0'
+            AND ROWNUM <![CDATA[<=]]> 1
+    </statement>
+
+	<!-- 2015/09/18 CSA Add Start -->
+    <statement  id="getReferenceShippingPlanStatus" parameterClass="Map" resultClass="Map">
+        SELECT
+              SP.SHPG_STS_CD
+             ,SP.SO_NUM <!-- QC#3145 -->
+             ,SP.BOL_NUM
+             ,SP.PRO_NUM
+             ,SP.ACTL_SHIP_DT <!-- QC#12003 -->
+        FROM
+             SHPG_PLN SP
+            ,ALL_MDSE_V AMV
+        WHERE
+                SP.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND SP.TRX_HDR_NUM           = #trxHdrNum#
+            AND SP.TRX_LINE_NUM          = #trxLineNum#
+            AND SP.TRX_LINE_SUB_NUM      = #trxLineSubNum#
+            <iterate property="shpgStsCdList" var="shpgStsCd[]" open=" AND SP.SHPG_STS_CD IN (" close=")" conjunction=",">
+                #shpgStsCd[]#
+            </iterate>
+            AND SP.EZCANCELFLAG          = '0'
+            AND AMV.GLBL_CMPY_CD         = SP.GLBL_CMPY_CD
+            AND AMV.MDSE_CD              = SP.MDSE_CD
+            AND AMV.EZCANCELFLAG         = '0'
+        ORDER BY SP.SHPG_STS_CD DESC
+    </statement>
+    <statement  id="getRefLineInvtyCtrlFlg" parameterClass="Map" resultClass="String">
+        SELECT
+            AMV.INVTY_CTRL_FLG
+        FROM
+              CPO_DTL       CD
+            , ALL_MDSE_V    AMV
+        WHERE
+                CD.GLBL_CMPY_CD         = #glblCmpyCd#
+            AND CD.CPO_ORD_NUM          = #cpoOrdNum#
+            AND CD.CPO_DTL_LINE_NUM     = #cpoDtlLineNum#
+            AND CD.CPO_DTL_LINE_SUB_NUM = #cpoDtlLineSubNum#
+            <!-- QC#5910 add Start -->
+<!-- QC#7528
+            AND CD.INVTY_LOC_CD      NOT IN  -->
+            AND CD.RTL_WH_CD      NOT IN
+            <iterate property="crRebillDummyWhCdList" var="crRebillDummyWhCd[]" open="(" close=" )" conjunction=",">
+                #crRebillDummyWhCd[]#
+            </iterate>
+            <!-- QC#5910 add End -->
+            AND CD.EZCANCELFLAG          = '0'
+            AND AMV.GLBL_CMPY_CD         = CD.GLBL_CMPY_CD
+            AND AMV.MDSE_CD              = CD.MDSE_CD
+            AND AMV.EZCANCELFLAG         = '0'
+    </statement>
+    <statement id="checkBillingHoldTarget" parameterClass="Map" resultClass="Integer">
+		SELECT
+			COUNT(*)
+		FROM
+			 CPO C
+			,DS_CPO_CONFIG DCC
+			,DS_MDL DM
+            <!-- QC#5910 add Start -->
+            ,CPO_DTL    CD
+            <!-- QC#5910 add Start -->
+		WHERE
+			    C.GLBL_CMPY_CD        = #glblCmpyCd#
+			AND C.CPO_ORD_NUM         = #cpoOrdNum#
+			AND C.REV_RECOG_METH_CD   = #revRecogMethCd#
+			AND C.EZCANCELFLAG        = '0'
+			AND DCC.GLBL_CMPY_CD      = C.GLBL_CMPY_CD
+			AND DCC.CPO_ORD_NUM       = C.CPO_ORD_NUM
+			AND DCC.DS_CPO_CONFIG_PK  = #dsCpoConfigPk#
+			AND DCC.EZCANCELFLAG      = '0'
+			AND DM.GLBL_CMPY_CD       = DCC.GLBL_CMPY_CD
+			AND DM.MDL_ID             = DCC.MDL_ID
+			AND DM.SVC_ISTL_REQ_FLG   = #svcIstlReqFlg#
+			AND DM.EZCANCELFLAG       = '0'
+            <!-- QC#5910 add Start -->
+            AND CD.GLBL_CMPY_CD      = DCC.GLBL_CMPY_CD
+            AND CD.CPO_ORD_NUM       = DCC.CPO_ORD_NUM
+            AND CD.DS_CPO_CONFIG_PK  = DCC.DS_CPO_CONFIG_PK
+<!-- QC#7528
+            AND CD.INVTY_LOC_CD      NOT IN -->
+            AND CD.RTL_WH_CD      NOT IN
+            <iterate property="crRebillDummyWhCdList" var="crRebillDummyWhCd[]" open="(" close=" )" conjunction=",">
+                #crRebillDummyWhCd[]#
+            </iterate>
+            AND CD.EZCANCELFLAG       = '0'
+            <!-- QC#5910 add End -->
+            AND EXISTS (
+                SELECT
+                    *
+                FROM
+                     HLD H
+                WHERE
+                        H.GLBL_CMPY_CD  = #glblCmpyCd#
+                    AND H.HLD_RSN_CD    = #hldRsnCd#
+                    AND H.CPO_ORD_NUM   = #cpoOrdNum#
+                    AND H.REL_FLG       = #relFlg#
+                    AND H.EZCANCELFLAG  = '0'
+            )
+            <!-- QC29488 add Start -->
+            AND NOT EXISTS(
+                SELECT
+                    *
+                FROM
+                     HLD H
+                WHERE
+                        H.GLBL_CMPY_CD  = #glblCmpyCd#
+                    AND H.HLD_RSN_CD    = #hldRsnCd#
+                    AND H.CPO_ORD_NUM   = #cpoOrdNum#
+                    AND H.CPO_DTL_LINE_NUM= #cpoOrdLineNum#
+                    AND H.CPO_DTL_LINE_SUB_NUM   = #cpoOrdLineSubNum#
+                    AND H.SHPG_PLN_NUM  = #shpgPlnNum#
+                    AND H.REL_FLG       = #relFlg#
+                    AND H.EZCANCELFLAG  = '0'
+            )
+            <!-- QC29488 add End -->
+    </statement>
+
+	<statement id="checkMachineMasterUpdateTarget" parameterClass="Map" resultClass="BigDecimal">
+		SELECT
+			CD.SVC_MACH_MSTR_PK
+		FROM
+			CPO_DTL CD
+			,SHPG_PLN SP
+			,ALL_MDSE_V AMV
+		WHERE
+			<!-- install base item in same config -->
+			    CD.GLBL_CMPY_CD        =  #glblCmpyCd#
+			AND CD.DS_CPO_CONFIG_PK    =  #dsCpoConfigPk#
+			AND CD.ORD_LINE_STS_CD      != #excludeOrdLineStsCd#
+			AND CD.EZCANCELFLAG         =  '0'
+			AND SP.GLBL_CMPY_CD         =  CD.GLBL_CMPY_CD
+			AND SP.TRX_HDR_NUM          =  CD.CPO_ORD_NUM
+			AND SP.TRX_LINE_NUM         =  CD.CPO_DTL_LINE_NUM
+			AND SP.TRX_LINE_SUB_NUM     =  CD.CPO_DTL_LINE_SUB_NUM
+			AND SP.SHPG_STS_CD          != #excludeShpgStsCd#
+			AND SP.EZCANCELFLAG         =  '0'
+			AND AMV.GLBL_CMPY_CD        =  SP.GLBL_CMPY_CD
+			AND AMV.MDSE_CD             =  SP.MDSE_CD
+			AND AMV.INSTL_BASE_CTRL_FLG =  #instlBaseCtrlFlg#
+			AND AMV.EZCANCELFLAG        =  '0'
+			AND
+				<!-- no tangible item in same config -->
+				NOT EXISTS (
+					SELECT
+						*
+					FROM
+						CPO_DTL CD
+						,SHPG_PLN SP
+						,ALL_MDSE_V AMV
+					WHERE
+						    CD.GLBL_CMPY_CD        =  #glblCmpyCd#
+						AND CD.DS_CPO_CONFIG_PK    =  #dsCpoConfigPk#
+						AND CD.ORD_LINE_STS_CD      != #excludeOrdLineStsCd#
+						AND CD.EZCANCELFLAG         =  '0'
+						AND SP.GLBL_CMPY_CD         =  CD.GLBL_CMPY_CD
+						AND SP.TRX_HDR_NUM          =  CD.CPO_ORD_NUM
+						AND SP.TRX_LINE_NUM         =  CD.CPO_DTL_LINE_NUM
+						AND SP.TRX_LINE_SUB_NUM     =  CD.CPO_DTL_LINE_SUB_NUM
+						AND SP.SHPG_STS_CD          != #excludeShpgStsCd#
+						AND SP.EZCANCELFLAG         =  '0'
+						AND AMV.GLBL_CMPY_CD        =  SP.GLBL_CMPY_CD
+						AND AMV.MDSE_CD             =  SP.MDSE_CD
+						AND AMV.INVTY_CTRL_FLG      =  #invtyCtrlFlg#
+						AND AMV.EZCANCELFLAG        =  '0'
+				)
+	</statement>
+	<!-- 2015/09/18 CSA Add End -->
+
+<!-- CSA QC#2846 Start -->
+    <statement  id="getTangibleCompornentInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+             SP.SO_NUM
+            ,SP.PRO_NUM
+            ,SP.BOL_NUM
+            ,SP.SHPG_STS_CD
+        FROM
+            SHPG_PLN SP
+           ,MDSE     M
+        WHERE
+                SP.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND SP.EZCANCELFLAG     = '0'
+            AND SP.SET_SHPG_PLN_NUM = #setShpgPlnNum#
+            <iterate property="shpgStsCdList" var="shpgStsCd[]" open=" AND SP.SHPG_STS_CD IN (" close=")" conjunction=",">
+                #shpgStsCd[]#
+            </iterate>
+            AND SP.GLBL_CMPY_CD     = M.GLBL_CMPY_CD
+            AND SP.EZCANCELFLAG     = M.EZCANCELFLAG
+            AND SP.MDSE_CD          = M.MDSE_CD
+            AND M.INVTY_CTRL_FLG    = #invtyCtrlFlg#
+            AND M.EZCANCELFLAG = '0'
+            AND ROWNUM <![CDATA[<=]]> 1
+    </statement>
+<!-- CSA QC#2846 End -->
+</sqlMap>

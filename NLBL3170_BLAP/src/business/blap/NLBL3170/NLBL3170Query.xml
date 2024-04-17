@@ -1,0 +1,179 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NLBL3170Query">
+
+    <typeAlias alias="NLBL3170_ASMsg"   type="business.blap.NLBL3170.NLBL3170_ASMsg"/>
+
+    <statement id ="searchProNumList" parameterClass="Map" resultMap="result.NLBL3170_ASMsg">
+    <!-- START 06/18/2020 [QC#56914,ADD] -->
+    SELECT DISTINCT
+        *
+    FROM
+        (
+    <!-- END 06/18/2020 [QC#56914,ADD] -->
+    SELECT
+         SOPNL.MSTR_PRO_NUM                 AS MSTR_PRO_NUM
+        ,SOPNL.PRO_NUM                      AS PRO_NUM
+        ,SOPNL.TRX_LINE_NUM                 AS TRX_LINE_NUM
+        ,SOPNL.WMS_CARR_CD                  AS WMS_CARR_CD
+        ,RW.RTL_WH_NM                       AS RTL_WH_NM 
+        ,SOPNL.PRO_SEND_FLG                 AS PRO_SEND_FLG
+        ,NVL(SO.SO_NUM , SOPNL.TRX_HDR_NUM) AS TRX_HDR_NUM
+    <!-- START 06/18/2020 [QC#56914,ADD] -->
+        ,CU.CARR_TRK_URL                    AS CARR_TRK_URL
+    <!-- END 06/18/2020 [QC#56914,ADD] -->
+    <!-- START 11/18/2020 [QC#57659,ADD] -->
+        ,SOPNL.CARR_ENC_TRK_URL             AS CARR_ENC_TRK_URL
+    <!-- END 11/18/2020 [QC#57659,ADD] -->
+    FROM
+        SHPG_ORD_PRO_NUM_LIST SOPNL
+       ,SHPG_ORD              SO
+       ,RTL_WH                RW
+    <!-- START 06/18/2020 [QC#56914,ADD] -->
+       ,SHPG_PLN              SP
+       ,SHPG_ORD_CONF_DTL     SOCD
+       ,CARR_URL              CU
+    <!-- END 06/18/2020 [QC#56914,ADD] -->
+    WHERE 1=1
+    AND SOPNL.GLBL_CMPY_CD          = #glblCmpyCd#
+    AND SOPNL.EZCANCELFLAG          = '0'
+    AND SOPNL.TRX_HDR_NUM           = #trxHdrNum#
+    AND SOPNL.GLBL_CMPY_CD          = SO.GLBL_CMPY_CD
+    AND SO.EZCANCELFLAG             = '0'
+    AND SOPNL.TRX_HDR_NUM           = SO.SO_NUM
+    AND SO.WH_CD                    = RW.RTL_WH_CD
+    AND SO.GLBL_CMPY_CD             = RW.GLBL_CMPY_CD
+    AND RW.EZCANCELFLAG             = '0'
+    <!-- START 06/18/2020 [QC#56914,ADD] -->
+    AND SOPNL.GLBL_CMPY_CD          = SP.GLBL_CMPY_CD
+    AND SP.EZCANCELFLAG             = '0'
+    AND SOPNL.TRX_HDR_NUM           = SP.SO_NUM
+    AND SOPNL.PRO_NUM               = SP.PRO_NUM
+    AND SP.GLBL_CMPY_CD             = SOCD.GLBL_CMPY_CD
+    AND SOCD.EZCANCELFLAG           = '0'
+    AND SP.SO_NUM                   = SOCD.SO_NUM
+    AND SP.SO_SLP_NUM               = SOCD.SO_SLP_NUM
+    AND CU.GLBL_CMPY_CD(+)          = SOCD.GLBL_CMPY_CD
+    AND CU.EZCANCELFLAG(+)          = '0'
+    AND CU.VND_CD(+)                = SOCD.VND_CD
+    <!-- END 06/18/2020 [QC#56914,ADD] -->
+    ORDER BY 
+        SOPNL.TRX_HDR_NUM        ASC 
+       ,SOPNL.TRX_LINE_NUM       ASC NULLS LAST
+       ,SHPG_ORD_PRO_NUM_LIST_PK ASC
+    <!-- START 06/18/2020 [QC#56914,ADD] -->
+    )
+    <!-- END 06/18/2020 [QC#56914,ADD] -->
+    </statement>
+
+    <statement id ="searchAsnProNumList" parameterClass="Map" resultMap="result.NLBL3170_ASMsg">
+    SELECT
+         NULL                                       AS MSTR_PRO_NUM
+        ,EADW.ASN_PRO_NUM                           AS PRO_NUM
+        ,EADW.ASN_SO_SLP_NUM                        AS TRX_LINE_NUM
+    <!-- START 10/02/2020 [QC#57754,EDIT] -->
+        <!-- START 2022/12/15 R.Azucena [QC#60942,MOD] -->
+        <!-- ,NVL(EADW.ASN_CARR_CD, PD.CARR_CD)          AS WMS_CARR_CD -->
+        ,CASE WHEN RAV.VND_SYS_TP_CD = #parts#
+          AND EADW.ASN_CARR_CD IS NOT NULL THEN
+         (
+              SELECT
+                  TPSXR.CARR_CD
+              FROM
+                  TRD_PTNR_SHPG_X_REF TPSXR
+              WHERE
+                  TPSXR.GLBL_CMPY_CD = #glblCmpyCd#
+              AND TPSXR.TRD_PTNR_SHIP_VIA_CD = EADW.ASN_CARR_CD
+              AND TPSXR.CARR_CD != '*'
+              AND TPSXR.EZCANCELFLAG = '0'
+              AND ROWNUM = 1
+         )
+         ELSE NVL(EADW.ASN_CARR_CD, PD.CARR_CD)
+         END AS WMS_CARR_CD
+         <!-- END 2022/12/15 R.Azucena [QC#60942,MOD] -->
+    <!-- END 10/02/2020 [QC#57754,EDIT] -->
+        ,CASE WHEN RAV.VND_SYS_TP_CD IS NULL THEN EADW.VND_INVTY_LOC_CD
+              WHEN RAV.VND_SYS_TP_CD = #ws# THEN (SELECT EADW.VND_INVTY_LOC_CD || ':' || CWV.LOC_NM FROM CSA_WH_V CWV WHERE CWV.GLBL_CMPY_CD = #cusaGlblCmpyCd# AND EADW.VND_INVTY_LOC_CD = CWV.WH_CD AND CWV.EZCANCELFLAG = '0')
+              WHEN RAV.VND_SYS_TP_CD = #parts# THEN (SELECT EADW.VND_INVTY_LOC_CD || ':' || CPWV.P_NAME_WH FROM CSA_PRT_WH_V CPWV WHERE EADW.VND_INVTY_LOC_CD = CPWV.P_CODE_WH AND CPWV.EZCANCELFLAG = '0')
+              ELSE EADW.VND_INVTY_LOC_CD
+         END AS RTL_WH_NM 
+        ,NULL                                       AS PRO_SEND_FLG
+        ,EAHW.ASN_SO_NUM                            AS TRX_HDR_NUM
+    <!-- START 10/02/2020 [QC#57754,EDIT] -->
+        ,NVL(CU.CARR_TRK_URL,CU_PD.CARR_TRK_URL)    AS CARR_TRK_URL
+    <!-- END 10/02/2020 [QC#57754,EDIT] -->
+    <!-- START 11/20/2020 [QC#57659,ADD] -->
+        ,NULL                                       AS CARR_ENC_TRK_URL
+    <!-- END 11/20/2020 [QC#57659,ADD] -->
+    FROM
+        EDI_ASN_HDR_WRK EAHW
+       ,EDI_ASN_DTL_WRK EADW
+       ,RCV_ASN_VND     RAV
+    <!-- START 06/18/2020 [QC#56914,ADD] -->
+       ,CARR_URL        CU
+    <!-- END 06/18/2020 [QC#56914,ADD] -->
+    <!-- START 10/02/2020 [QC#57754,ADD] -->
+       ,PO_DTL          PD
+       ,CARR_URL        CU_PD
+    <!-- END 10/02/2020 [QC#57754,ADD] -->
+    WHERE 1=1
+    AND EAHW.GLBL_CMPY_CD          = #glblCmpyCd#
+    AND EAHW.EZCANCELFLAG          = '0'
+    AND EAHW.SHIP_FROM_SO_NUM      = #trxHdrNum#
+    AND EAHW.GLBL_CMPY_CD          = EADW.GLBL_CMPY_CD
+    AND EADW.EZCANCELFLAG          = '0'
+    AND EAHW.ASN_SO_NUM            = EADW.ASN_SO_NUM
+    AND RAV.GLBL_CMPY_CD(+)        = EAHW.GLBL_CMPY_CD
+    AND RAV.RCV_ASN_VND_CD(+)      = EAHW.VND_CD
+    AND RAV.EZCANCELFLAG(+)        = '0'
+    <!-- START 06/18/2020 [QC#56914,ADD] -->
+    AND CU.GLBL_CMPY_CD(+)         = EADW.GLBL_CMPY_CD
+    AND CU.VND_CD(+)               = EADW.ASN_CARR_CD
+    AND CU.EZCANCELFLAG(+)         = '0'
+    <!-- END 06/18/2020 [QC#56914,ADD] -->
+    <!-- START 10/02/2020 [QC#57754,ADD] -->
+    AND EADW.GLBL_CMPY_CD          = PD.GLBL_CMPY_CD(+)
+    AND EADW.PO_ORD_NUM            = PD.PO_ORD_NUM(+)
+    AND EADW.PO_ORD_DTL_LINE_NUM   = PD.PO_ORD_DTL_LINE_NUM(+)
+    AND PD.EZCANCELFLAG(+)         = '0'
+    AND PD.GLBL_CMPY_CD            = CU_PD.GLBL_CMPY_CD(+)
+    AND PD.CARR_CD                 = CU_PD.VND_CD(+)
+    AND CU_PD.EZCANCELFLAG(+)      = '0'
+    <!-- END 10/02/2020 [QC#57754,ADD] -->
+    ORDER BY 
+        EADW.ASN_SO_NUM        ASC 
+       ,EADW.ASN_LINE_NUM      ASC
+    </statement>
+
+    <resultMap id="result.NLBL3170_ASMsg"    class="NLBL3170_ASMsg">
+        <result property="mstrProNum_A1"     column="MSTR_PRO_NUM"     javaType="EZDSStringItem"/>
+        <result property="proNum_A1"         column="PRO_NUM"          javaType="EZDSStringItem"/>
+        <result property="trxLineNum_A1"     column="TRX_LINE_NUM"     javaType="EZDSStringItem"/>
+        <result property="wmsCarrCd_A1"      column="WMS_CARR_CD"      javaType="EZDSStringItem"/>
+        <result property="xxMsgTxt_A1"       column="RTL_WH_NM"        javaType="EZDSStringItem"/>
+        <result property="proSendFlg_A1"     column="PRO_SEND_FLG"     javaType="EZDSStringItem"/>
+        <!-- Mod Start 2020/02/19 QC#55897 -->
+        <!-- <result property="trxHdrNum_A1"      column="TRX_HDR_NUM"      javaType="EZDSStringItem"/> -->
+        <result property="xxDplyOrdNum_A1"   column="TRX_HDR_NUM"      javaType="EZDSStringItem"/>
+        <!-- Mod End 2020/02/19 QC#55897 -->
+        <!-- START 06/18/2020 [QC#56914,ADD] -->
+        <result property="carrTrkUrl_A1"     column="CARR_TRK_URL"     javaType="EZDSStringItem"/>
+        <result property="carrTrkUrl_A2"     column="CARR_TRK_URL"     javaType="EZDSStringItem"/>
+        <!-- START 11/18/2020 [QC#57659,ADD] -->
+        <result property="carrEncTrkUrl_A1"     column="CARR_ENC_TRK_URL"     javaType="EZDSStringItem"/>
+        <result property="carrEncTrkUrl_A2"     column="CARR_ENC_TRK_URL"     javaType="EZDSStringItem"/>
+        <!-- END 11/18/2020 [QC#57659,ADD] -->
+        <!-- END 06/18/2020 [QC#56914,ADD] -->
+    </resultMap>
+
+    <statement id="searchShipFromSoNum" parameterClass="Map" resultClass="String">
+    SELECT
+        H.SHIP_FROM_SO_NUM
+    FROM
+        EDI_ASN_HDR_WRK H
+    WHERE H.GLBL_CMPY_CD = #glblCmpyCd#
+    AND H.EZCANCELFLAG   = '0'
+    AND H.ASN_SO_NUM     = #asnSoNum#
+    </statement>
+
+</sqlMap>

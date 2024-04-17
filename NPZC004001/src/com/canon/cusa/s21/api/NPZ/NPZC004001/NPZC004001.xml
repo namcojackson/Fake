@@ -1,0 +1,317 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NPZC004001">
+    <typeAlias alias="PO_DTLTMsg"    type="business.db.PO_DTLTMsg"/>
+
+    <!-- get updated Purchase Order Detail -->
+    <statement id="queryActivePODtlKeyList" parameterClass="Map" resultClass="Map">
+        SELECT
+            PODTL.GLBL_CMPY_CD                AS GLBL_CMPY_CD
+            , PODTL.PO_ORD_NUM                AS PO_ORD_NUM
+            , PODTL.PO_ORD_DTL_LINE_NUM       AS PO_ORD_DTL_LINE_NUM
+            , PODTL.PO_RCV_QTY                AS PO_RCV_QTY
+            , PODTL.PO_BAL_QTY                AS PO_BAL_QTY
+            , PODTL.PO_STS_CD                 AS PO_STS_CD
+            , PO.PO_HDR_STS_CD                AS PO_HDR_STS_CD
+            , PO.PO_APVL_STS_CD               AS PO_APVL_STS_CD
+            , PODTL.PO_INV_QTY                AS PO_INV_QTY
+            , PODTL.PO_INV_BAL_QTY            AS PO_INV_BAL_QTY
+            , DPT.RCV_PO_INV_FLG              AS RCV_PO_INV_FLG
+            , PODTL.PO_MDSE_CMPSN_TP_CD       AS PO_MDSE_CMPSN_TP_CD
+        FROM
+            PO_DTL PODTL
+            , PO PO
+            , MDSE M
+            , DS_PO_TP DPT
+        WHERE
+            PODTL.GLBL_CMPY_CD        = #glblCmpyCd#
+            AND PODTL.PO_ORD_NUM      = #poOrdNum#
+
+            <isNotNull property="poOrdDtlLineNum">
+                AND PODTL.PO_ORD_DTL_LINE_NUM    = #poOrdDtlLineNum#
+            </isNotNull>
+
+            <isNotNull property="mdseCd">
+                AND PODTL.MDSE_CD     = #mdseCd#
+            </isNotNull>
+
+<!-- START 2023/02/21 T.Kuroda [QC#60910, MOD] -->
+            <!-- AND PODTL.PO_STS_CD NOT IN 
+            <iterate property="poStsCds" var="poSts[]" open="( " close=" )" conjunction=",">
+                #poSts[]#
+            </iterate> -->
+            <isNotNull property="poStsCds">
+                AND PODTL.PO_STS_CD NOT IN 
+                <iterate property="poStsCds" var="poSts[]" open="( " close=" )" conjunction=",">
+                    #poSts[]#
+                </iterate>
+            </isNotNull>
+<!-- END   2023/02/21 T.Kuroda [QC#60910, MOD] -->
+
+            AND PODTL.EZCANCELFLAG      = '0'
+            AND PO.EZCANCELFLAG         = '0'
+            AND M.EZCANCELFLAG          = '0'
+            AND DPT.EZCANCELFLAG        = '0'
+            AND M.GLBL_CMPY_CD          = PODTL.GLBL_CMPY_CD
+            AND DPT.GLBL_CMPY_CD        = PODTL.GLBL_CMPY_CD
+            AND PODTL.GLBL_CMPY_CD      = PO.GLBL_CMPY_CD
+            AND PODTL.PO_ORD_NUM        = PO.PO_ORD_NUM
+            AND M.MDSE_CD               = PODTL.MDSE_CD
+            AND PO.DS_PO_TP_CD          = DPT.DS_PO_TP_CD
+    </statement>
+
+    <!-- get Purchase Order Detail main item -->
+    <statement id="queryPoDtlKeyList" parameterClass="EZDMsg" resultClass="Map">
+        SELECT
+              PD.GLBL_CMPY_CD              AS GLBL_CMPY_CD
+            , PD.PO_ORD_NUM                AS PO_ORD_NUM
+            , PD.PO_ORD_DTL_LINE_NUM       AS PO_ORD_DTL_LINE_NUM
+            , PD.PO_STS_CD                 AS PO_STS_CD
+            , PD.MDSE_CD                   AS MDSE_CD
+            , PD.PO_LINE_STS_CD           AS PO_LINE_STS_CD
+        FROM
+              PO_DTL PD
+        WHERE
+                PD.GLBL_CMPY_CD        = #glblCmpyCd#
+            AND PD.PO_ORD_NUM          = #poOrdNum#
+            AND PD.EZCANCELFLAG        = '0'
+    </statement>
+
+	<statement id="checkSetParentLineInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+            A.GLBL_CMPY_CD
+           ,A.PO_ORD_NUM
+           ,A.PARENT_DTL_LINE_NUM
+           ,A.PARENT_PO_STS_CD
+           ,A.PARENT_PO_STS_NM
+           ,A.PARENT_PO_RCV_QTY
+           ,A.PARENT_PO_BAL_QTY
+           ,MIN(TRUNC(A.SUM_CHILD_PO_RCV_QTY / A.MIN_CHILD_QTY)) AS MIN_RCV_SET_QTY
+           ,DPT.RCV_PO_INV_FLG
+           ,MIN(TRUNC(A.SUM_CHILD_PO_INV_QTY / A.MIN_CHILD_QTY)) AS MIN_INV_SET_QTY
+        FROM
+            (
+             SELECT
+                 D.GLBL_CMPY_CD
+                ,D.PO_ORD_NUM
+                ,D.PARENT_DTL_LINE_NUM
+                ,D.PARENT_PO_STS_CD
+                ,D.PARENT_PO_STS_NM
+                ,D.PARENT_PO_QTY
+                ,D.PARENT_PO_RCV_QTY
+                ,D.PARENT_PO_BAL_QTY
+                ,D.CHILD_OLD_PO_ORD_DTL_LINE_NUM
+                ,SUM(D.CHILD_PO_QTY)                 AS  SUM_CHILD_PO_QTY
+                ,SUM(D.CHILD_PO_RCV_QTY)             AS  SUM_CHILD_PO_RCV_QTY
+                ,SUM(D.CHILD_PO_BAL_QTY)             AS  SUM_CHILD_PO_BAL_QTY
+                ,SUM(D.CHILD_PO_QTY) / PARENT_PO_QTY AS  MIN_CHILD_QTY
+                ,SUM(D.CHILD_PO_INV_QTY)             AS  SUM_CHILD_PO_INV_QTY
+             FROM
+                 (
+                  SELECT
+                      CPD.GLBL_CMPY_CD              AS  GLBL_CMPY_CD
+                     ,CPD.PO_ORD_NUM                AS  PO_ORD_NUM
+                      --SET PARENT INFO
+                     ,PPD.PO_ORD_DTL_LINE_NUM       AS  PARENT_DTL_LINE_NUM
+                     ,PPD.PO_STS_CD                 AS  PARENT_PO_STS_CD
+                     ,PPS.PO_STS_DESC_TXT           AS  PARENT_PO_STS_NM
+                     ,PPD.PO_LINE_STS_CD            AS  PARENT_PO_LINE_STS_CD
+                     ,PPLS.PO_LINE_STS_DESC_TXT     AS  PARENT_PO_LINE_STS_NUM
+                     ,PPD.PO_QTY                    AS  PARENT_PO_QTY
+                     ,PPD.PO_RCV_QTY                AS  PARENT_PO_RCV_QTY
+                     ,PPD.PO_BAL_QTY                AS  PARENT_PO_BAL_QTY
+                     ,PPD.MDSE_CD                   AS  PARENT_MDSE_CD
+                     -- SET CHILD INFO
+                     ,CPD.PO_ORD_DTL_LINE_NUM       AS  CHILD_DTL_LINE_NUM
+                     ,CPD.PO_STS_CD                 AS  CHILD_PO_STS_CD
+                     ,CPS.PO_STS_DESC_TXT           AS  CHILD_PO_STS_NM
+                     ,CPD.PO_LINE_STS_CD            AS  CHILD_PO_LINE_STS_CD
+                     ,CPLS.PO_LINE_STS_DESC_TXT     AS  CHILD_PO_LINE_STS_NUM
+                     ,CPD.PO_QTY                    AS  CHILD_PO_QTY
+                     ,CPD.PO_RCV_QTY                AS  CHILD_PO_RCV_QTY
+                     ,CPD.PO_BAL_QTY                AS  CHILD_PO_BAL_QTY
+                     ,CPD.MDSE_CD                   AS  CHILD_MDSE_CD
+                     ,CPD.ORIG_PO_ORD_DTL_LINE_NUM  AS  CHILD_OLD_PO_ORD_DTL_LINE_NUM
+                     ,CPD.PO_INV_QTY                AS CHILD_PO_INV_QTY
+                  FROM
+                      PO_DTL      CPD
+                     ,PO_DTL      PPD
+                     ,PO_STS      CPS
+                     ,PO_LINE_STS CPLS
+                     ,PO_STS      PPS
+                     ,PO_LINE_STS PPLS
+                  WHERE 1=1
+                  AND CPD.GLBL_CMPY_CD             = #glblCmpyCd#
+                  AND CPD.PO_ORD_NUM               = #poOrdNum#
+                  AND CPD.SET_PO_ORD_DTL_LINE_NUM IS NOT NULL
+                  AND CPD.PO_STS_CD                = CPS.PO_STS_CD
+                  AND CPD.PO_LINE_STS_CD           = CPLS.PO_LINE_STS_CD
+                  AND CPD.GLBL_CMPY_CD             = PPD.GLBL_CMPY_CD
+                  AND CPD.PO_ORD_NUM               = PPD.PO_ORD_NUM
+                  AND CPD.SET_PO_ORD_DTL_LINE_NUM  = PPD.PO_ORD_DTL_LINE_NUM
+                  AND PPD.PO_STS_CD                = PPS.PO_STS_CD
+                  AND PPD.PO_LINE_STS_CD           = PPLS.PO_LINE_STS_CD
+                  AND CPD.EZCANCELFLAG             = '0'
+                  AND CPS.EZCANCELFLAG             = '0'
+                  AND CPLS.EZCANCELFLAG            = '0'
+                  AND PPD.EZCANCELFLAG             = '0'
+                  AND PPS.EZCANCELFLAG             = '0'
+                  AND PPLS.EZCANCELFLAG            = '0'
+                  ORDER BY PARENT_DTL_LINE_NUM, CHILD_DTL_LINE_NUM
+                 ) D
+             GROUP BY 
+                 D.PO_ORD_NUM
+                ,D.PARENT_DTL_LINE_NUM
+                ,D.CHILD_OLD_PO_ORD_DTL_LINE_NUM
+                ,D.PARENT_PO_QTY
+                ,D.PARENT_PO_RCV_QTY
+                ,D.PARENT_PO_BAL_QTY
+                ,D.PARENT_PO_STS_CD
+                ,D.PARENT_PO_STS_NM
+                ,D.GLBL_CMPY_CD
+            ) A
+            ,PO        P
+            ,DS_PO_TP  DPT
+        WHERE
+            A.GLBL_CMPY_CD      =  P.GLBL_CMPY_CD
+        AND A.PO_ORD_NUM        =  P.PO_ORD_NUM
+        AND P.GLBL_CMPY_CD      =  DPT.GLBL_CMPY_CD
+        AND P.DS_PO_TP_CD       =  DPT.DS_PO_TP_CD
+        AND P.EZCANCELFLAG      =  '0'
+        AND DPT.EZCANCELFLAG    =  '0'
+        GROUP BY
+            A.PO_ORD_NUM
+           ,A.PARENT_DTL_LINE_NUM
+           ,A.PARENT_PO_STS_CD
+           ,A.PARENT_PO_STS_NM
+           ,A.PARENT_PO_RCV_QTY
+           ,A.PARENT_PO_BAL_QTY
+           ,A.GLBL_CMPY_CD
+           ,DPT.RCV_PO_INV_FLG
+    </statement>
+    <statement id="checkSetParentLineInfoForClose" parameterClass="Map" resultClass="Map">
+        SELECT
+            CPD.GLBL_CMPY_CD              AS  GLBL_CMPY_CD
+           ,CPD.PO_ORD_NUM                AS  PO_ORD_NUM
+            --SET PARENT INFO
+           ,PPD.PO_ORD_DTL_LINE_NUM       AS  PARENT_DTL_LINE_NUM
+           ,PPD.PO_STS_CD                 AS  PARENT_PO_STS_CD
+           ,PPS.PO_STS_DESC_TXT           AS  PARENT_PO_STS_NM
+           ,PPD.PO_LINE_STS_CD            AS  PARENT_PO_LINE_STS_CD
+           ,PPLS.PO_LINE_STS_DESC_TXT     AS  PARENT_PO_LINE_STS_NUM
+           ,PPD.PO_QTY                    AS  PARENT_PO_QTY
+           ,PPD.PO_RCV_QTY                AS  PARENT_PO_RCV_QTY
+           ,PPD.PO_BAL_QTY                AS  PARENT_PO_BAL_QTY
+           ,PPD.MDSE_CD                   AS  PARENT_MDSE_CD
+           -- SET CHILD INFO
+           ,CPD.PO_ORD_DTL_LINE_NUM       AS  CHILD_DTL_LINE_NUM
+           ,CPD.PO_STS_CD                 AS  CHILD_PO_STS_CD
+           ,CPS.PO_STS_DESC_TXT           AS  CHILD_PO_STS_NM
+           ,CPD.PO_LINE_STS_CD            AS  CHILD_PO_LINE_STS_CD
+           ,CPLS.PO_LINE_STS_DESC_TXT     AS  CHILD_PO_LINE_STS_NUM
+           ,CPD.PO_QTY                    AS  CHILD_PO_QTY
+           ,CPD.PO_RCV_QTY                AS  CHILD_PO_RCV_QTY
+           ,CPD.PO_BAL_QTY                AS  CHILD_PO_BAL_QTY
+           ,CPD.MDSE_CD                   AS  CHILD_MDSE_CD
+           ,CPD.ORIG_PO_ORD_DTL_LINE_NUM AS  CHILD_OLD_PO_ORD_DTL_LINE_NUM
+        FROM
+            PO_DTL      CPD
+           ,PO_DTL      PPD
+           ,PO_STS      CPS
+           ,PO_LINE_STS CPLS
+           ,PO_STS      PPS
+           ,PO_LINE_STS PPLS
+        WHERE 1=1
+        AND CPD.GLBL_CMPY_CD               = #glblCmpyCd#
+        AND CPD.PO_ORD_NUM                 = #poOrdNum#
+        AND CPD.SET_PO_ORD_DTL_LINE_NUM IS NOT NULL
+        AND CPD.SET_PO_ORD_DTL_LINE_NUM    = (
+            SELECT 
+                PD.SET_PO_ORD_DTL_LINE_NUM
+            FROM
+                PO_DTL PD
+            WHERE
+                PD.GLBL_CMPY_CD            = CPD.GLBL_CMPY_CD
+                AND PD.PO_ORD_NUM          = CPD.PO_ORD_NUM
+                AND PD.PO_ORD_DTL_LINE_NUM = #poOrdDtlLineNum#
+        )
+        AND CPD.PO_STS_CD                  = CPS.PO_STS_CD
+        AND CPD.PO_LINE_STS_CD             = CPLS.PO_LINE_STS_CD
+        AND CPD.GLBL_CMPY_CD               = PPD.GLBL_CMPY_CD
+        AND CPD.PO_ORD_NUM                 = PPD.PO_ORD_NUM
+        AND CPD.SET_PO_ORD_DTL_LINE_NUM    = PPD.PO_ORD_DTL_LINE_NUM
+        AND PPD.PO_STS_CD                  = PPS.PO_STS_CD
+        AND PPD.PO_LINE_STS_CD             = PPLS.PO_LINE_STS_CD
+        AND CPD.EZCANCELFLAG               = '0'
+        AND CPS.EZCANCELFLAG               = '0'
+        AND CPLS.EZCANCELFLAG              = '0'
+        AND PPD.EZCANCELFLAG               = '0'
+        AND PPS.EZCANCELFLAG               = '0'
+        AND PPLS.EZCANCELFLAG              = '0'
+        ORDER BY 
+            PARENT_DTL_LINE_NUM
+           ,CHILD_DTL_LINE_NUM
+    </statement>
+    
+    <statement id="getSubconRemaindList" parameterClass="Map" resultClass="Map">
+     SELECT
+               R_HDR.RWS_NUM
+              ,R_HDR.RWS_REF_NUM
+              ,R_DTL.RWS_DTL_LINE_NUM
+              ,R_HDR.SYS_SRC_CD
+              ,R_HDR.TRX_ORD_NUM
+              ,R_DTL.TRX_LINE_NUM
+              ,S_DTL.SO_NUM
+              ,S_DTL.SO_SLP_NUM
+              ,S_DTL.MDSE_CD                  AS SHIP_MDSE_CD
+              ,S_DTL.TRX_HDR_NUM              AS INVTY_ORD_NUM
+              ,S_DTL.TRX_LINE_NUM             AS INVTY_ORD_LINE_NUM
+              ,S_DTL.FROM_STK_STS_CD
+              ,S_DTL.SHIP_QTY - R_DTL.RWS_PUT_AWAY_QTY AS REM_QTY
+              ,S_DTL.TO_INVTY_LOC_CD
+              ,PR_DTL.PO_ORD_NUM
+              ,PR_DTL.PO_ORD_DTL_LINE_NUM
+              ,PO_HDR.VND_CD
+      FROM
+               RWS_HDR          R_HDR
+              ,RWS_DTL          R_DTL
+              ,PRCH_REQ_DTL     PR_DTL
+              ,SHPG_ORD_DTL     S_DTL
+              ,PO               PO_HDR
+    WHERE
+               R_HDR.GLBL_CMPY_CD           =  #glblCmpyCd#
+       AND     R_HDR.PO_RCV_TRX_HDR_NUM     =  #poOrdNum#
+       AND     R_HDR.EZCANCELFLAG           =  '0'
+       AND     R_HDR.GLBL_CMPY_CD           =  R_DTL.GLBL_CMPY_CD
+       AND     R_HDR.RWS_NUM                =  R_DTL.RWS_NUM
+       AND     R_DTL.EZCANCELFLAG           =  '0'
+       AND     R_HDR.GLBL_CMPY_CD           =  PR_DTL.GLBL_CMPY_CD
+       AND     R_HDR.PO_RCV_TRX_HDR_NUM     =  PR_DTL.PO_ORD_NUM
+       AND     R_DTL.PO_RCV_TRX_LINE_NUM    =  PR_DTL.PO_ORD_DTL_LINE_NUM
+       AND     R_DTL.PO_RCV_TRX_LINE_NUM    =  #poOrdDtlLineNum#
+       AND     PR_DTL.EZCANCELFLAG          =  '0'
+       AND     PR_DTL.GLBL_CMPY_CD          =  S_DTL.GLBL_CMPY_CD
+       AND     PR_DTL.PRCH_REQ_NUM          =  S_DTL.PRCH_REQ_NUM
+       AND     PR_DTL.PRCH_REQ_LINE_NUM     =  S_DTL.PRCH_REQ_LINE_NUM
+       AND     PR_DTL.PRCH_REQ_LINE_SUB_NUM =  S_DTL.PRCH_REQ_LINE_SUB_NUM
+       AND     S_DTL.EZCANCELFLAG           =  '0'
+       AND     PR_DTL.GLBL_CMPY_CD          =  PO_HDR.GLBL_CMPY_CD
+       AND     PR_DTL.PO_ORD_NUM            =  PO_HDR.PO_ORD_NUM
+       AND     PO_HDR.DS_PO_TP_CD           =  #subContractPO#
+       AND     PO_HDR.EZCANCELFLAG          =  '0'
+       AND NOT EXISTS(
+           SELECT
+               1
+           FROM
+               PO_BIZ_PROC_LOG PBRL
+           WHERE
+               R_HDR.GLBL_CMPY_CD        = PBRL.GLBL_CMPY_CD
+           AND R_HDR.PO_RCV_TRX_HDR_NUM  = PBRL.PO_ORD_NUM
+           AND R_DTL.PO_RCV_TRX_LINE_NUM = PBRL.PO_ORD_DTL_LINE_NUM
+           AND PBRL.PO_LINE_STS_CD      IN (#close#, #cancel#)
+           AND PBRL.EZCANCELFLAG  = '0'
+       )
+     ORDER BY
+               S_DTL.SO_NUM
+              ,S_DTL.SO_SLP_NUM
+    </statement>
+</sqlMap>

@@ -1,0 +1,31 @@
+/*
+* Copyright (c) 2011 Canon USA Inc. All rights reserved.
+* Original Author: AUTO generated File : S21WDS CodeTable Generator Tool
+* Company: Canon USA Inc.
+* Date Generated:2014/02/07 1:20:56
+*/
+package com.canon.cusa.s21.framework.ZYP.constant.cdtable;
+
+/**
+ * <p>
+ * This interface provides the logical code names as constants for APVL_FLOW_TP table.
+ * </p>
+ *
+ * @author $Author$
+ * @version $Revision$
+ */
+public interface APVL_FLOW_TP {
+
+String REQUESTER_GT_ACCOUNT_MANAGER_GT_CREDIT_DEPT_GT_CUSTOMER_MASTER = "NMAP4010";
+String NEW_CUSTOMER_OR_LOCATION_REGISTORATION_BY_CUSTOMER_MASTER = "NMAP4060";
+String REQUESTER_GT_ACCOUNT_MANAGER_GT_CREDIT_DEPT_GT_CUSTOMER_MASTER_2 = "NMAP5010";
+String OTHER_LOCATION_OR_BUSINESS_DATA_CHANGE_1_CSM_GT_RA_GT_ACCT_MGR = "NMAP5030";
+String OTHER_LOCATION_OR_BUSINESS_DATA_CHANGE_2_RA_GT_ACCT_MGR = "NMAP5040";
+String REQUESTER_GT_CREDIT_DEPT_GT_CUSTOMER_MASTER = "NMAP4020";
+String NEW_CUSTOMER_OR_LOCATION_REGISTORATION_BY_MASS_UPLOAD = "NMAP4050";
+String REQUESTER_GT_CREDIT_DEPT_GT_CUSTOMER_MASTER_2 = "NMAP5020";
+String CHANGE_LOCATION_BY_MASS_UPLOAD = "NMAP5050";
+String CHANGE_LOCATION_BY_CUSTOMER_MASTER = "NMAP5060";
+String UPDATE_BU_INFO_IMMEDIATELY = "NMAP5070";
+
+}

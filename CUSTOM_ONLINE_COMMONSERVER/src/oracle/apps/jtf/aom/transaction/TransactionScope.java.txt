@@ -1,0 +1,89 @@
+package oracle.apps.jtf.aom.transaction;
+
+import java.sql.DriverManager;
+import java.sql.Connection;
+import oracle.apps.jtf.base.resources.FrameworkException;
+import java.lang.reflect.Proxy;
+import java.sql.CallableStatement;
+import java.sql.SQLException;
+/*
+ * This is a local version that uses JDBC driver, do not upload to server.
+ */
+public abstract class TransactionScope {
+
+    static Connection conn;
+
+    static {
+        try {
+            Class.forName("oracle.jdbc.OracleDriver");
+//            conn = DriverManager.getConnection("jdbc:oracle:thin:@//edphp027.cusa.canon.com:5701/CBSDEV", "Apps", "RT522NJ5");
+//            conn = DriverManager.getConnection("jdbc:oracle:thin:@//vaoedv10.cusa.canon.com:5601/INITST", "appsview", "icallapps");  // INITST
+//            conn = DriverManager.getConnection("jdbc:oracle:thin:@//vaoedv09.cusa.canon.com:1521/INIDEV", "Apps", "DEVAPPSINI");  // INIDEV
+//            conn = DriverManager.getConnection("jdbc:oracle:thin:@//cbsebs2-scan.cusa.canon.com:1521/CANTST", "appsview", "icallapps");  //CANTST
+//            conn = DriverManager.getConnection("jdbc:oracle:thin:@//vaoedv09.cusa.canon.com:1521/CANDEV", "Apps", "cdv16p777");  //CANDEV
+            conn = DriverManager.getConnection("jdbc:oracle:thin:@//ocedev-scan.cusa.canon.com:1521/CSATST.CUSA.CANON.COM", "S21_CSA_EXTN", "s21csa");	//IT
+        } catch (Exception ex) {
+            ex.printStackTrace();
+        }
+        final Thread mainThread = Thread.currentThread();
+        Runtime.getRuntime().addShutdownHook(new Thread() {
+            public void run() {
+                try {
+                    if (conn != null) {
+                        conn.close();
+                    }
+                    System.out.println("in shutdown hook closed connection." + mainThread.isAlive());
+
+                    mainThread.join(100);
+                } catch (Exception ex) {
+                    ex.printStackTrace();
+                }
+            }
+        });
+
+    }
+
+    static boolean use_proxy = true;
+    static boolean print_dbms_output = false;
+    static{
+        if(use_proxy){
+            ConnectionHandler.init();
+        }
+    }
+
+    public static void setConnection(Connection con) throws TxnException, FrameworkException {
+    	conn=con;
+    }
+    
+    public static Connection getConnection() throws TxnException, FrameworkException {
+        if(print_dbms_output){
+        	TransactionUtil.enableDbmsOutput(conn);
+        }
+        if (use_proxy) {
+            return (Connection) Proxy.newProxyInstance(
+                TransactionScope.class.getClassLoader(),
+                new Class[]{oracle.jdbc.OracleConnection.class},
+                new ConnectionHandler(conn));
+        } else {
+            return conn;
+        }
+    }
+
+	public static Connection nativeConnection(java.sql.Connection conn) {
+		return conn;
+	}
+    
+    public static Connection getNewConnection() throws TxnException, FrameworkException {
+        return getConnection();
+    }
+
+    public static void releaseConnection(Connection c) {
+        System.nanoTime();
+//        System.out.println("in releaseConnection, keep connection open.");
+        if(print_dbms_output){
+        	TransactionUtil.printDbmsOutput(conn);
+        }
+    }
+    
+    
+}

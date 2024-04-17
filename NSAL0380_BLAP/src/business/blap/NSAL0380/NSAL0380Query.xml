@@ -1,0 +1,689 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NSAL0380Query">
+
+    <statement id="getSearchData" parameterClass="Map" resultMap="result.getSearchData">
+<!-- START 2018/12/20 [QC#29636, MOD] -->
+        WITH
+            CON AS (
+                    SELECT
+                         GLBL_CMPY_CD
+                        ,DS_CONTR_PK
+                        ,DS_CONTR_NUM
+                        ,DS_CONTR_CATG_CD
+                        ,DS_CONTR_STS_CD
+                        ,MAX_CONTR_RNW_CNT
+                        <!-- ,MAX_PRC_UP_RATIO -->
+                        ,EZUPTIME
+                        ,EZUPTIMEZONE
+                    FROM
+                        DS_CONTR
+                    WHERE
+                            GLBL_CMPY_CD  = #glblCmpyCd#
+                        <iterate property="dsContrPkList" var="dsContrPk[]" open="AND DS_CONTR_PK IN (" close=")" conjunction=",">
+                            #dsContrPk[]#
+                        </iterate>
+                        AND EZCANCELFLAG  = '0'),
+            DTL AS (
+                    SELECT
+                         DT.GLBL_CMPY_CD
+                        ,DT.DS_CONTR_PK
+                        ,DT.DS_CONTR_DTL_PK
+                        ,DT.PRNT_DS_CONTR_DTL_PK
+                        ,DT.SVC_MACH_MSTR_PK
+                        ,DT.DS_CONTR_DTL_TP_CD
+                        ,DT.CONTR_EFF_FROM_DT
+                        ,DT.CONTR_EFF_THRU_DT
+                        ,DT.MAX_CONTR_RNW_CNT
+                        <!-- ,DT.MAX_PRC_UP_RATIO -->
+                        ,DT.CONTR_RNW_TOT_CNT
+                        ,DT.DS_CONTR_DTL_STS_CD
+                        ,ST.DS_CONTR_CTRL_STS_CD
+                        ,DT.EZUPTIME
+                        ,DT.EZUPTIMEZONE
+                        <!-- Add Start 2019/01/23 QC#29782 -->
+                        ,NVL(DT.DS_CONTR_CRAT_TP_CD, #dsContrCratTp#) AS DS_CONTR_CRAT_TP_CD
+                        ,M.MDSE_DESC_SHORT_TXT
+                        ,SPT.SVC_PGM_TP_SORT_NUM
+                        ,NVL(SMMP.SER_NUM, SMM.SER_NUM) AS SORT_SER_NUM
+                        ,NVL(SMMP.MDSE_CD, SMM.MDSE_CD) AS SORT_MDSE_CD
+                        <!-- Add End 2019/01/23 QC#29782 -->
+                    FROM
+                         DS_CONTR_DTL DT
+                        ,DS_CONTR_DTL_STS_V ST
+                        ,CON
+                        <!-- Add Start 2019/01/23 QC#29782 -->
+                        ,MDSE M
+                        ,SVC_PGM_TP SPT
+                        ,SVC_MACH_MSTR SMM
+                        ,DS_CONTR_DTL DTP
+                        ,SVC_MACH_MSTR SMMP
+                        <!-- Add End 2019/01/23 QC#29782 -->
+                    WHERE
+                            DT.GLBL_CMPY_CD     = CON.GLBL_CMPY_CD
+                        AND DT.DS_CONTR_PK      = CON.DS_CONTR_PK
+                        AND DT.GLBL_CMPY_CD     = ST.GLBL_CMPY_CD
+                        AND DT.DS_CONTR_DTL_PK  = ST.DS_CONTR_DTL_PK
+                        <isNotNull property="dsContrDtlPkList">
+                        <iterate property="dsContrDtlPkList" var="dsContrDtlPk[]" open="AND (DT.DS_CONTR_DTL_PK IN (" close=")" conjunction=",">
+                            #dsContrDtlPk[]#
+                        </iterate>
+                        </isNotNull>
+                        <isNotNull property="dsContrDtlPkList">
+                            OR DT.DS_CONTR_DTL_TP_CD = #dsContrDtlTpCd_Fleet#
+                            OR DT.DS_CONTR_DTL_TP_CD = #dsContrDtlTpCd_Agg#)
+                        </isNotNull>
+                        AND DT.EZCANCELFLAG     = '0'
+                        AND ST.EZCANCELFLAG     = '0'
+                        <!-- Add Start 2019/01/23 QC#29782 -->
+                        AND DT.GLBL_CMPY_CD     = M.GLBL_CMPY_CD(+)
+                        AND DT.SVC_PGM_MDSE_CD  = M.MDSE_CD(+)
+                        AND M.EZCANCELFLAG(+)   = '0'
+                        AND M.GLBL_CMPY_CD      = SPT.GLBL_CMPY_CD(+)
+                        AND M.SVC_PGM_TP_CD     = SPT.SVC_PGM_TP_CD(+)
+                        AND SPT.EZCANCELFLAG(+) = '0'
+                        AND DT.GLBL_CMPY_CD     = SMM.GLBL_CMPY_CD(+)
+                        AND DT.SVC_MACH_MSTR_PK = SMM.SVC_MACH_MSTR_PK(+)
+                        AND SMM.EZCANCELFLAG(+) = '0'
+                        AND DT.GLBL_CMPY_CD         = DTP.GLBL_CMPY_CD(+)
+                        AND DT.PRNT_DS_CONTR_DTL_PK = DTP.DS_CONTR_DTL_PK(+)
+                        AND DTP.EZCANCELFLAG(+)     = '0'
+                        AND DTP.GLBL_CMPY_CD     = SMMP.GLBL_CMPY_CD(+)
+                        AND DTP.SVC_MACH_MSTR_PK = SMMP.SVC_MACH_MSTR_PK(+)
+                        AND SMMP.EZCANCELFLAG(+) = '0'
+                        <!-- Add End 2019/01/23 QC#29782 -->
+                        ),
+            RNW AS (
+                    SELECT
+                         RN.GLBL_CMPY_CD
+                        ,RN.DS_CONTR_PK
+                        ,RN.DS_CONTR_DTL_PK
+                        ,RN.DS_CONTR_RNW_ESCL_PK
+                        ,RN.CONTR_AUTO_RNW_TP_CD
+                        ,RN.RNW_PRC_METH_CD
+                        ,RN.BEF_END_RNW_DAYS_AOT
+                        ,RN.BASE_PRC_UP_RATIO
+                        ,RN.MTR_PRC_UP_RATIO
+                        ,RN.RNW_MAX_PRC_UP_RATIO
+                        ,RN.DS_CONTR_MACH_LVL_NUM
+                        ,RN.DS_CONTR_BASE_USG_NM
+                        ,RN.EZUPTIME
+                        ,RN.EZUPTIMEZONE
+                        ,CASE WHEN NVL(ME.CNT,0) >0 THEN #onY# ELSE '' END AS XX_CNT_DPLY_FLG
+<!-- START 2016/12/02 [QC#14204, ADD] -->
+                        ,RN.EZINTIME
+                        ,RN.EZINUSERID
+                        ,RN.EZUPUSERID
+                        ,RN.EZTABLEID
+<!-- END 2016/12/02 [QC#14204, ADD] -->
+
+                    FROM
+                         DS_CONTR_RNW_ESCL RN
+                        ,CON
+                        ,(
+                         SELECT
+                              SVC_MEMO_TRX_NUM
+                             ,COUNT(*) AS CNT
+                         FROM
+                              SVC_MEMO
+                         WHERE
+                                 SVC_MEMO_TRX_NM = #dsContrRnwEsclPk#
+                             AND GLBL_CMPY_CD    = #glblCmpyCd#
+                             AND EZCANCELFLAG    ='0'
+                         GROUP BY
+                              SVC_MEMO_TRX_NUM
+                             ,SVC_MEMO_TRX_NM) ME
+                    WHERE
+                            RN.GLBL_CMPY_CD            = CON.GLBL_CMPY_CD
+                        AND RN.DS_CONTR_PK             = CON.DS_CONTR_PK
+                        AND RN.DS_CONTR_RNW_ESCL_PK    = ME.SVC_MEMO_TRX_NUM(+)
+                        AND RN.EZCANCELFLAG            = '0'),
+            MAC AS (
+                    SELECT
+                         MA.SVC_MACH_MSTR_PK
+                        ,MA.SER_NUM
+<!-- START 2018/07/19 QC#26859 ADD -->
+                        ,DTL.DS_CONTR_DTL_PK
+<!-- END   2018/07/19 QC#26859 ADD -->
+                    FROM
+                         SVC_MACH_MSTR MA
+                        ,DTL
+                    WHERE
+                            MA.GLBL_CMPY_CD     = DTL.GLBL_CMPY_CD
+                        AND MA.SVC_MACH_MSTR_PK = DTL.SVC_MACH_MSTR_PK
+                        <isNotNull property="serNumFrom">
+                        AND MA.SER_NUM          &gt;= #serNumFrom#
+                        </isNotNull>
+                        <isNotNull property="serNumThru">
+                        AND MA.SER_NUM          &lt;= #serNumThru#
+                        </isNotNull>
+                        <isNotNull property="svcMachMstrPkFrom">
+                        AND MA.SVC_MACH_MSTR_PK  &gt;= #svcMachMstrPkFrom#
+                        </isNotNull>
+                        <isNotNull property="svcMachMstrPkThru">
+                        AND MA.SVC_MACH_MSTR_PK &lt;= #svcMachMstrPkThru#
+                        </isNotNull>
+                        AND MA.EZCANCELFLAG     = '0')
+        SELECT
+             DS_CONTR_PK
+            ,PRNT_DS_CONTR_DTL_PK
+            ,XX_DPLY_BY_CTRL_ANCR_LVL_CD
+            ,DS_CONTR_NUM
+            ,SER_NUM
+            <!-- Add Start 2019/01/23 QC#29782 -->
+            ,VIEW_SVC_MACH_MSTR_PK
+            ,MDSE_DESC_SHORT_TXT
+            <!-- Add End 2019/01/23 QC#29782 -->
+            ,DS_CONTR_BASE_USG_NM
+            ,CONTR_EFF_FROM_DT
+            ,CONTR_EFF_THRU_DT
+            ,CONTR_AUTO_RNW_TP_CD
+            ,RNW_PRC_METH_CD
+            ,BEF_END_RNW_DAYS_AOT
+            ,MAX_CONTR_RNW_CNT
+            <!-- ,MAX_PRC_UP_RATIO -->
+            ,RNW_MAX_PRC_UP_RATIO
+            ,BASE_PRC_UP_RATIO
+            ,MTR_PRC_UP_RATIO
+            ,CONTR_RNW_TOT_CNT
+            ,XX_CNT_DPLY_FLG
+            ,DS_CONTR_RNW_ESCL_PK
+            ,DS_CONTR_DTL_PK
+            ,SVC_MACH_MSTR_PK
+            ,DS_CONTR_CATG_CD
+            ,DS_CONTR_DTL_TP_CD
+            ,DS_CONTR_CTRL_STS_CD_A1
+            ,DS_CONTR_CTRL_STS_CD_A2
+            ,EZUPTIME_CON
+            ,EZUPTIMEZONE_CON
+            ,EZUPTIME_DTL
+            ,EZUPTIMEZONE_DTL
+            ,EZUPTIME_RNW
+            ,EZUPTIMEZONE_RNW
+<!-- START 2016/12/02 [QC#14204, ADD] -->
+            ,XX_REC_HIST_CRAT_TS
+            ,XX_REC_HIST_CRAT_BY_NM
+            ,XX_REC_HIST_UPD_TS
+            ,XX_REC_HIST_UPD_BY_NM
+            ,XX_REC_HIST_TBL_NM
+<!-- END 2016/12/02 [QC#14204, ADD] -->
+        FROM
+            (
+                SELECT
+                     CON1.DS_CONTR_PK           AS DS_CONTR_PK
+                    ,0                          AS PRNT_DS_CONTR_DTL_PK
+                    ,#machLvlNum1#              AS XX_DPLY_BY_CTRL_ANCR_LVL_CD
+                    ,#machLvlNum1#              AS SORT_ORDER
+                    ,CON1.DS_CONTR_NUM          AS DS_CONTR_NUM
+                    ,NULL                       AS SER_NUM
+                    <!-- Add Start 2019/01/23 QC#29782 -->
+                    ,NULL                       AS VIEW_SVC_MACH_MSTR_PK
+                    ,NULL                       AS MDSE_DESC_SHORT_TXT
+                    ,NULL                       AS SVC_PGM_TP_SORT_NUM
+                    ,NULL                       AS DS_CONTR_CRAT_TP_CD
+                    ,NULL                       AS SORT_SER_NUM
+                    ,NULL                       AS SORT_MDSE_CD
+                    <!-- Add End 2019/01/23 QC#29782 -->
+                    ,NULL                       AS DS_CONTR_BASE_USG_NM
+                    ,NULL                       AS CONTR_EFF_FROM_DT
+                    ,NULL                       AS CONTR_EFF_THRU_DT
+                    ,RNW1.CONTR_AUTO_RNW_TP_CD  AS CONTR_AUTO_RNW_TP_CD
+                    ,RNW1.RNW_PRC_METH_CD       AS RNW_PRC_METH_CD
+                    ,RNW1.BEF_END_RNW_DAYS_AOT  AS BEF_END_RNW_DAYS_AOT
+                    ,CON1.MAX_CONTR_RNW_CNT     AS MAX_CONTR_RNW_CNT
+                    <!-- ,CON1.MAX_PRC_UP_RATIO      AS MAX_PRC_UP_RATIO -->
+                    ,RNW1.RNW_MAX_PRC_UP_RATIO  AS RNW_MAX_PRC_UP_RATIO
+                    ,RNW1.BASE_PRC_UP_RATIO     AS BASE_PRC_UP_RATIO
+                    ,RNW1.MTR_PRC_UP_RATIO      AS MTR_PRC_UP_RATIO
+                    ,DTL1.CONTR_RNW_TOT_CNT     AS CONTR_RNW_TOT_CNT
+                    ,RNW1.XX_CNT_DPLY_FLG       AS XX_CNT_DPLY_FLG
+                    ,RNW1.DS_CONTR_RNW_ESCL_PK  AS DS_CONTR_RNW_ESCL_PK
+                    ,NULL                       AS DS_CONTR_DTL_PK
+                    ,NULL                       AS SVC_MACH_MSTR_PK
+                    ,CON1.DS_CONTR_CATG_CD      AS DS_CONTR_CATG_CD
+                    ,NULL                       AS DS_CONTR_DTL_TP_CD
+                    ,RNW1.DS_CONTR_MACH_LVL_NUM AS DS_CONTR_MACH_LVL_NUM
+                    ,CON1.DS_CONTR_STS_CD       AS DS_CONTR_CTRL_STS_CD_A1
+                    ,NULL                       AS DS_CONTR_CTRL_STS_CD_A2
+                    ,CON1.EZUPTIME              AS EZUPTIME_CON
+                    ,CON1.EZUPTIMEZONE          AS EZUPTIMEZONE_CON
+                    ,NULL                       AS EZUPTIME_DTL
+                    ,NULL                       AS EZUPTIMEZONE_DTL
+                    ,RNW1.EZUPTIME              AS EZUPTIME_RNW
+                    ,RNW1.EZUPTIMEZONE          AS EZUPTIMEZONE_RNW
+                    ,NULL                       AS XX_SER_NUM
+<!-- START 2016/12/02 [QC#14204, ADD] -->
+                    ,RNW1.EZINTIME              AS XX_REC_HIST_CRAT_TS
+                    ,RNW1.EZINUSERID            AS XX_REC_HIST_CRAT_BY_NM
+                    ,RNW1.EZUPTIME              AS XX_REC_HIST_UPD_TS
+                    ,RNW1.EZUPUSERID            AS XX_REC_HIST_UPD_BY_NM
+                    ,RNW1.EZTABLEID             AS XX_REC_HIST_TBL_NM
+<!-- END 2016/12/02 [QC#14204, ADD] -->
+<!-- add start 2019/05/30 QC#50566 -->
+                    ,0                          AS SORT_DTL_TP
+<!-- add end 2019/05/30 QC#50566 -->
+                FROM
+                     CON                CON1
+                    ,RNW                RNW1
+                    ,DS_CONTR_STS_V     STS1
+                    ,(SELECT
+                            DTL.DS_CONTR_PK         AS DS_CONTR_PK
+                           ,MAX(CONTR_RNW_TOT_CNT)  AS CONTR_RNW_TOT_CNT
+                      FROM DTL DTL
+                      GROUP BY
+                        DS_CONTR_PK) DTL1
+                WHERE
+                        CON1.DS_CONTR_PK               = DTL1.DS_CONTR_PK(+)
+                    AND CON1.DS_CONTR_PK               = RNW1.DS_CONTR_PK(+)
+                    AND CON1.GLBL_CMPY_CD              = RNW1.GLBL_CMPY_CD(+)
+                    AND RNW1.DS_CONTR_MACH_LVL_NUM(+)  = #machLvlNum1#
+                    AND CON1.DS_CONTR_PK               = STS1.DS_CONTR_PK
+                    AND CON1.GLBL_CMPY_CD              = STS1.GLBL_CMPY_CD
+                    AND STS1.EZCANCELFLAG              = '0'
+                UNION ALL
+                SELECT
+                     CON2.DS_CONTR_PK           AS DS_CONTR_PK
+                    ,CASE 
+                        WHEN DTL2.DS_CONTR_DTL_TP_CD = #dsContrDtlTpCd_Fleet#
+                          OR DTL2.DS_CONTR_DTL_TP_CD = #dsContrDtlTpCd_Agg#   THEN 0
+                        WHEN DTL2.DS_CONTR_DTL_TP_CD = #dsContrDtlTpCd_Acc#   THEN PRNT_DS_CONTR_DTL_PK
+                        ELSE DTL2.DS_CONTR_DTL_PK
+                        END                     AS PRNT_DS_CONTR_DTL_PK
+                    ,#machLvlNum2#              AS XX_DPLY_BY_CTRL_ANCR_LVL_CD
+                    ,CASE
+                        WHEN DTL2.DS_CONTR_DTL_TP_CD = #dsContrDtlTpCd_Acc#   THEN #machLvlNum5#
+                        ELSE #machLvlNum2#
+                        END                     AS SORT_ORDER
+                    ,NULL                       AS DS_CONTR_NUM
+                    ,MAC2.SER_NUM               AS SER_NUM
+                    <!-- Add Start 2019/01/23 QC#29782 -->
+                    ,MAC2.SVC_MACH_MSTR_PK      AS VIEW_SVC_MACH_MSTR_PK
+                    ,DTL2.MDSE_DESC_SHORT_TXT   AS MDSE_DESC_SHORT_TXT
+                    ,DTL2.SVC_PGM_TP_SORT_NUM   AS SVC_PGM_TP_SORT_NUM
+                    ,DTL2.DS_CONTR_CRAT_TP_CD   AS DS_CONTR_CRAT_TP_CD
+                    ,DTL2.SORT_SER_NUM          AS SORT_SER_NUM
+                    ,DTL2.SORT_MDSE_CD          AS SORT_MDSE_CD
+                    <!-- Add End 2019/01/23 QC#29782 -->
+                    ,NULL                       AS DS_CONTR_BASE_USG_NM
+                    ,DTL2.CONTR_EFF_FROM_DT     AS CONTR_EFF_FROM_DT
+                    ,DTL2.CONTR_EFF_THRU_DT     AS CONTR_EFF_THRU_DT
+                    ,RNW2.CONTR_AUTO_RNW_TP_CD  AS CONTR_AUTO_RNW_TP_CD
+                    ,RNW2.RNW_PRC_METH_CD       AS RNW_PRC_METH_CD
+                    ,RNW2.BEF_END_RNW_DAYS_AOT  AS BEF_END_RNW_DAYS_AOT
+                    ,DTL2.MAX_CONTR_RNW_CNT     AS MAX_CONTR_RNW_CNT
+                    <!-- ,DTL2.MAX_PRC_UP_RATIO      AS MAX_PRC_UP_RATIO -->
+                    ,RNW2.RNW_MAX_PRC_UP_RATIO  AS RNW_MAX_PRC_UP_RATIO
+                    ,RNW2.BASE_PRC_UP_RATIO     AS BASE_PRC_UP_RATIO
+                    ,RNW2.MTR_PRC_UP_RATIO      AS MTR_PRC_UP_RATIO
+                    ,DTL2.CONTR_RNW_TOT_CNT     AS CONTR_RNW_TOT_CNT
+                    ,RNW2.XX_CNT_DPLY_FLG       AS XX_CNT_DPLY_FLG
+                    ,RNW2.DS_CONTR_RNW_ESCL_PK  AS DS_CONTR_RNW_ESCL_PK
+                    ,DTL2.DS_CONTR_DTL_PK       AS DS_CONTR_DTL_PK
+                    ,MAC2.SVC_MACH_MSTR_PK      AS SVC_MACH_MSTR_PK
+                    ,CON2.DS_CONTR_CATG_CD      AS DS_CONTR_CATG_CD
+                    ,DTL2.DS_CONTR_DTL_TP_CD    AS DS_CONTR_DTL_TP_CD
+                    ,RNW2.DS_CONTR_MACH_LVL_NUM AS DS_CONTR_MACH_LVL_NUM
+                    ,NULL                       AS DS_CONTR_CTRL_STS_CD_A1
+                    ,DTL2.DS_CONTR_DTL_STS_CD   AS DS_CONTR_CTRL_STS_CD_A2
+                    ,CON2.EZUPTIME              AS EZUPTIME_CON
+                    ,CON2.EZUPTIMEZONE          AS EZUPTIMEZONE_CON
+                    ,DTL2.EZUPTIME              AS EZUPTIME_DTL
+                    ,DTL2.EZUPTIMEZONE          AS EZUPTIMEZONE_DTL
+                    ,RNW2.EZUPTIME              AS EZUPTIME_RNW
+                    ,RNW2.EZUPTIMEZONE          AS EZUPTIMEZONE_RNW
+                    ,MAC2.SER_NUM               AS XX_SER_NUM
+<!-- START 2016/12/02 [QC#14204, ADD] -->
+                    ,RNW2.EZINTIME              AS XX_REC_HIST_CRAT_TS
+                    ,RNW2.EZINUSERID            AS XX_REC_HIST_CRAT_BY_NM
+                    ,RNW2.EZUPTIME              AS XX_REC_HIST_UPD_TS
+                    ,RNW2.EZUPUSERID            AS XX_REC_HIST_UPD_BY_NM
+                    ,RNW2.EZTABLEID             AS XX_REC_HIST_TBL_NM
+<!-- END 2016/12/02 [QC#14204, ADD] -->
+<!-- add start 2019/05/30 QC#50566 -->
+                    ,CASE 
+                        WHEN DTL2.DS_CONTR_DTL_TP_CD = #dsContrDtlTpCd_Fleet#
+                          OR DTL2.DS_CONTR_DTL_TP_CD = #dsContrDtlTpCd_Agg#   THEN 0
+                        ELSE 1
+                     END                        AS SORT_DTL_TP
+<!-- add end 2019/05/30 QC#50566 -->
+                FROM
+                     CON                 CON2
+                    ,DTL                 DTL2
+                    ,MAC                 MAC2
+                    ,RNW                 RNW2
+                WHERE
+                        CON2.DS_CONTR_PK                = DTL2.DS_CONTR_PK
+                    AND CON2.GLBL_CMPY_CD               = DTL2.GLBL_CMPY_CD
+                    AND DTL2.DS_CONTR_DTL_TP_CD         = CASE WHEN CON2.DS_CONTR_CATG_CD = #dsContrCatgCd_Flt# THEN #dsContrDtlTpCd_Fleet#
+                                                               ELSE DTL2.DS_CONTR_DTL_TP_CD END
+                    AND DTL2.SVC_MACH_MSTR_PK           = MAC2.SVC_MACH_MSTR_PK(+)
+<!-- START 2018/07/19 QC#26859 ADD -->
+                    AND DTL2.DS_CONTR_DTL_PK            = MAC2.DS_CONTR_DTL_PK(+)
+<!-- END   2018/07/19 QC#26859 ADD -->
+                    AND CON2.DS_CONTR_PK                = RNW2.DS_CONTR_PK(+)
+                    AND DTL2.DS_CONTR_DTL_PK            = RNW2.DS_CONTR_DTL_PK(+)
+                    AND CON2.GLBL_CMPY_CD               = RNW2.GLBL_CMPY_CD(+)
+                    AND RNW2.DS_CONTR_MACH_LVL_NUM(+)   = #machLvlNum2#
+                UNION ALL
+                SELECT
+                     CON3.DS_CONTR_PK                                       AS DS_CONTR_PK
+                    ,CASE 
+                        WHEN DTL3.DS_CONTR_DTL_TP_CD = #dsContrDtlTpCd_Fleet# THEN 0
+                        WHEN DTL3.DS_CONTR_DTL_TP_CD = #dsContrDtlTpCd_Acc#   THEN PRNT_DS_CONTR_DTL_PK
+                        ELSE DTL3.DS_CONTR_DTL_PK
+                        END                                                 AS PRNT_DS_CONTR_DTL_PK    
+                    ,#machLvlNum3#                                          AS XX_DPLY_BY_CTRL_ANCR_LVL_CD
+                    ,CASE
+                        WHEN DTL3.DS_CONTR_DTL_TP_CD = #dsContrDtlTpCd_Acc#   THEN #machLvlNum6#
+                        ELSE #machLvlNum3#
+                        END                                                 AS SORT_ORDER
+                    ,NULL                                                   AS DS_CONTR_NUM
+                    ,NULL                                                   AS SER_NUM
+                    <!-- Add Start 2019/01/23 QC#29782 -->
+                    ,NULL                                                   AS VIEW_SVC_MACH_MSTR_PK
+                    ,NULL                                                   AS MDSE_DESC_SHORT_TXT
+                    ,DTL3.SVC_PGM_TP_SORT_NUM                               AS SVC_PGM_TP_SORT_NUM
+                    ,DTL3.DS_CONTR_CRAT_TP_CD                               AS DS_CONTR_CRAT_TP_CD
+                    ,DTL3.SORT_SER_NUM                                      AS SORT_SER_NUM
+                    ,DTL3.SORT_MDSE_CD                                      AS SORT_MDSE_CD
+                    <!-- Add End 2019/01/23 QC#29782 -->
+                    ,NVL(RNW3.DS_CONTR_BASE_USG_NM,#dsContrBaseUsgNm_Base#) AS DS_CONTR_BASE_USG_NM
+                    ,NULL                                                   AS CONTR_EFF_FROM_DT
+                    ,NULL                                                   AS CONTR_EFF_THRU_DT
+                    ,RNW3.CONTR_AUTO_RNW_TP_CD                              AS CONTR_AUTO_RNW_TP_CD
+                    ,RNW3.RNW_PRC_METH_CD                                   AS RNW_PRC_METH_CD
+                    ,RNW3.BEF_END_RNW_DAYS_AOT                              AS BEF_END_RNW_DAYS_AOT
+                    ,NULL                                                   AS MAX_CONTR_RNW_CNT
+                    <!-- ,NULL                                                   AS MAX_PRC_UP_RATIO -->
+                    ,RNW3.RNW_MAX_PRC_UP_RATIO                              AS RNW_MAX_PRC_UP_RATIO
+                    ,RNW3.BASE_PRC_UP_RATIO                                 AS BASE_PRC_UP_RATIO
+                    ,RNW3.MTR_PRC_UP_RATIO                                  AS MTR_PRC_UP_RATIO
+                    ,DTL3.CONTR_RNW_TOT_CNT                                 AS CONTR_RNW_TOT_CNT
+                    ,RNW3.XX_CNT_DPLY_FLG                                   AS XX_CNT_DPLY_FLG
+                    ,RNW3.DS_CONTR_RNW_ESCL_PK                              AS DS_CONTR_RNW_ESCL_PK
+                    ,DTL3.DS_CONTR_DTL_PK                                   AS DS_CONTR_DTL_PK
+                    ,MAC3.SVC_MACH_MSTR_PK                                  AS SVC_MACH_MSTR_PK
+                    ,CON3.DS_CONTR_CATG_CD                                  AS DS_CONTR_CATG_CD
+                    ,DTL3.DS_CONTR_DTL_TP_CD                                AS DS_CONTR_DTL_TP_CD
+                    ,NVL(RNW3.DS_CONTR_MACH_LVL_NUM,#machLvlNum3#)          AS DS_CONTR_MACH_LVL_NUM
+                    ,NULL                                                   AS DS_CONTR_CTRL_STS_CD_A1
+                    ,DTL3.DS_CONTR_DTL_STS_CD                               AS DS_CONTR_CTRL_STS_CD_A2
+                    ,CON3.EZUPTIME                                          AS EZUPTIME_CON
+                    ,CON3.EZUPTIMEZONE                                      AS EZUPTIMEZONE_CON
+                    ,DTL3.EZUPTIME                                          AS EZUPTIME_DTL
+                    ,DTL3.EZUPTIMEZONE                                      AS EZUPTIMEZONE_DTL
+                    ,RNW3.EZUPTIME                                          AS EZUPTIME_RNW
+                    ,RNW3.EZUPTIMEZONE                                      AS EZUPTIMEZONE_RNW
+                    ,MAC3.SER_NUM                                           AS XX_SER_NUM
+<!-- START 2016/12/02 [QC#14204, ADD] -->
+                    ,RNW3.EZINTIME                                          AS XX_REC_HIST_CRAT_TS
+                    ,RNW3.EZINUSERID                                        AS XX_REC_HIST_CRAT_BY_NM
+                    ,RNW3.EZUPTIME                                          AS XX_REC_HIST_UPD_TS
+                    ,RNW3.EZUPUSERID                                        AS XX_REC_HIST_UPD_BY_NM
+                    ,RNW3.EZTABLEID                                         AS XX_REC_HIST_TBL_NM
+<!-- END 2016/12/02 [QC#14204, ADD] -->
+<!-- add start 2019/05/30 QC#50566 -->
+                    ,CASE 
+                        WHEN DTL3.DS_CONTR_DTL_TP_CD = #dsContrDtlTpCd_Fleet# THEN 0
+                        ELSE 1
+                     END                                                    AS SORT_DTL_TP
+<!-- add end 2019/05/30 QC#50566 -->
+                FROM
+                     
+                     CON                 CON3
+                    ,DTL                 DTL3
+                    ,MAC                 MAC3
+                    ,RNW                 RNW3
+                WHERE
+                        CON3.DS_CONTR_PK                = DTL3.DS_CONTR_PK
+                    AND CON3.GLBL_CMPY_CD               = DTL3.GLBL_CMPY_CD
+                    AND CON3.DS_CONTR_CATG_CD    &lt;&gt; #dsContrCatgCd_Agg#
+                    AND DTL3.DS_CONTR_DTL_TP_CD         = CASE
+                                                            WHEN CON3.DS_CONTR_CATG_CD = #dsContrCatgCd_Flt# THEN #dsContrDtlTpCd_Fleet#
+                                                            ELSE DTL3.DS_CONTR_DTL_TP_CD END
+                    AND DTL3.SVC_MACH_MSTR_PK           = MAC3.SVC_MACH_MSTR_PK(+)
+<!-- START 2018/07/19 QC#26859 ADD -->
+                    AND DTL3.DS_CONTR_DTL_PK            = MAC3.DS_CONTR_DTL_PK(+)
+<!-- END   2018/07/19 QC#26859 ADD -->
+                    AND CON3.DS_CONTR_PK                = RNW3.DS_CONTR_PK(+)
+                    AND DTL3.DS_CONTR_DTL_PK            = RNW3.DS_CONTR_DTL_PK(+)
+                    AND CON3.GLBL_CMPY_CD               = RNW3.GLBL_CMPY_CD(+)
+                    AND RNW3.DS_CONTR_MACH_LVL_NUM(+)   = #machLvlNum3#
+                    AND RNW3.DS_CONTR_BASE_USG_NM(+)    = #dsContrBaseUsgNm_Base#
+                UNION ALL
+                SELECT
+                     CON4.DS_CONTR_PK                                       AS DS_CONTR_PK
+                    ,CASE 
+                        WHEN DTL4.DS_CONTR_DTL_TP_CD = #dsContrDtlTpCd_Fleet# THEN 0
+                        WHEN DTL4.DS_CONTR_DTL_TP_CD = #dsContrDtlTpCd_Acc#   THEN PRNT_DS_CONTR_DTL_PK
+                        ELSE DTL4.DS_CONTR_DTL_PK
+                        END                                                 AS PRNT_DS_CONTR_DTL_PK
+                    ,#machLvlNum4#                                          AS XX_DPLY_BY_CTRL_ANCR_LVL_CD
+                    ,CASE
+                        WHEN DTL4.DS_CONTR_DTL_TP_CD = #dsContrDtlTpCd_Acc#   THEN #machLvlNum7#
+                        ELSE #machLvlNum4#
+                        END                                                 AS SORT_ORDER
+                    ,NULL                                                   AS DS_CONTR_NUM
+                    ,NULL                                                   AS SER_NUM
+                    <!-- Add Start 2019/01/23 QC#29782 -->
+                    ,NULL                                                   AS VIEW_SVC_MACH_MSTR_PK
+                    ,NULL                                                   AS MDSE_DESC_SHORT_TXT
+                    ,DTL4.SVC_PGM_TP_SORT_NUM                               AS SVC_PGM_TP_SORT_NUM
+                    ,DTL4.DS_CONTR_CRAT_TP_CD                               AS DS_CONTR_CRAT_TP_CD
+                    ,DTL4.SORT_SER_NUM                                      AS SORT_SER_NUM
+                    ,DTL4.SORT_MDSE_CD                                      AS SORT_MDSE_CD
+                    <!-- Add End 2019/01/23 QC#29782 -->
+                    ,NVL(RNW4.DS_CONTR_BASE_USG_NM,#dsContrBaseUsgNm_Use#)  AS DS_CONTR_BASE_USG_NM
+                    ,NULL                                                   AS CONTR_EFF_FROM_DT
+                    ,NULL                                                   AS CONTR_EFF_THRU_DT
+                    ,RNW4.CONTR_AUTO_RNW_TP_CD                              AS CONTR_AUTO_RNW_TP_CD
+                    ,RNW4.RNW_PRC_METH_CD                                   AS RNW_PRC_METH_CD
+                    ,RNW4.BEF_END_RNW_DAYS_AOT                              AS BEF_END_RNW_DAYS_AOT
+                    ,NULL                                                   AS MAX_CONTR_RNW_CNT
+                    <!-- ,NULL                                                   AS MAX_PRC_UP_RATIO -->
+                    ,RNW4.RNW_MAX_PRC_UP_RATIO                              AS RNW_MAX_PRC_UP_RATIO
+                    ,RNW4.BASE_PRC_UP_RATIO                                 AS BASE_PRC_UP_RATIO
+                    ,RNW4.MTR_PRC_UP_RATIO                                  AS MTR_PRC_UP_RATIO
+                    ,DTL4.CONTR_RNW_TOT_CNT                                 AS CONTR_RNW_TOT_CNT
+                    ,RNW4.XX_CNT_DPLY_FLG                                   AS XX_CNT_DPLY_FLG
+                    ,RNW4.DS_CONTR_RNW_ESCL_PK                              AS DS_CONTR_RNW_ESCL_PK
+                    ,DTL4.DS_CONTR_DTL_PK                                   AS DS_CONTR_DTL_PK
+                    ,MAC4.SVC_MACH_MSTR_PK                                  AS SVC_MACH_MSTR_PK
+                    ,CON4.DS_CONTR_CATG_CD                                  AS DS_CONTR_CATG_CD
+                    ,DTL4.DS_CONTR_DTL_TP_CD                                AS DS_CONTR_DTL_TP_CD
+                    ,NVL(RNW4.DS_CONTR_MACH_LVL_NUM,#machLvlNum3#)          AS DS_CONTR_MACH_LVL_NUM
+                    ,NULL                                                   AS DS_CONTR_CTRL_STS_CD_A1
+                    ,DTL4.DS_CONTR_DTL_STS_CD                               AS DS_CONTR_CTRL_STS_CD_A2
+                    ,CON4.EZUPTIME                                          AS EZUPTIME_CON
+                    ,CON4.EZUPTIMEZONE                                      AS EZUPTIMEZONE_CON
+                    ,DTL4.EZUPTIME                                          AS EZUPTIME_DTL
+                    ,DTL4.EZUPTIMEZONE                                      AS EZUPTIMEZONE_DTL
+                    ,RNW4.EZUPTIME                                          AS EZUPTIME_RNW
+                    ,RNW4.EZUPTIMEZONE                                      AS EZUPTIMEZONE_RNW
+                    ,MAC4.SER_NUM                                           AS XX_SER_NUM
+<!-- START 2016/12/02 [QC#14204, ADD] -->
+                    ,RNW4.EZINTIME                                          AS XX_REC_HIST_CRAT_TS
+                    ,RNW4.EZINUSERID                                        AS XX_REC_HIST_CRAT_BY_NM
+                    ,RNW4.EZUPTIME                                          AS XX_REC_HIST_UPD_TS
+                    ,RNW4.EZUPUSERID                                        AS XX_REC_HIST_UPD_BY_NM
+                    ,RNW4.EZTABLEID                                         AS XX_REC_HIST_TBL_NM
+<!-- END 2016/12/02 [QC#14204, ADD] -->
+<!-- add start 2019/05/30 QC#50566 -->
+                    ,CASE 
+                        WHEN DTL4.DS_CONTR_DTL_TP_CD = #dsContrDtlTpCd_Fleet# THEN 0
+                        ELSE 1
+                     END                                                    AS SORT_DTL_TP
+<!-- add end 2019/05/30 QC#50566 -->
+                FROM
+                     CON                 CON4
+                    ,DTL                 DTL4
+                    ,MAC                 MAC4
+                    ,RNW                 RNW4
+                WHERE
+                        CON4.DS_CONTR_PK                = DTL4.DS_CONTR_PK
+                    AND CON4.GLBL_CMPY_CD               = DTL4.GLBL_CMPY_CD
+                    AND CON4.DS_CONTR_CATG_CD    &lt;&gt; #dsContrCatgCd_Agg#
+                    AND DTL4.DS_CONTR_DTL_TP_CD         = CASE
+                                                            WHEN CON4.DS_CONTR_CATG_CD = #dsContrCatgCd_Flt# THEN #dsContrDtlTpCd_Fleet#
+                                                            ELSE DTL4.DS_CONTR_DTL_TP_CD END 
+                    AND DTL4.SVC_MACH_MSTR_PK           = MAC4.SVC_MACH_MSTR_PK(+)
+<!-- START 2018/07/19 QC#26859 ADD -->
+                    AND DTL4.DS_CONTR_DTL_PK            = MAC4.DS_CONTR_DTL_PK(+)
+<!-- END   2018/07/19 QC#26859 ADD -->
+                    AND CON4.DS_CONTR_PK                = RNW4.DS_CONTR_PK(+)
+                    AND DTL4.DS_CONTR_DTL_PK            = RNW4.DS_CONTR_DTL_PK(+)
+                    AND CON4.GLBL_CMPY_CD               = RNW4.GLBL_CMPY_CD(+)
+                    AND RNW4.DS_CONTR_MACH_LVL_NUM(+)   = #machLvlNum3#
+                    AND RNW4.DS_CONTR_BASE_USG_NM(+)    = #dsContrBaseUsgNm_Use#
+                ORDER BY
+                     DS_CONTR_PK                 ASC
+                    ,DS_CONTR_NUM                ASC
+<!-- mod start 2019/05/30 QC#50566 -->
+<!--                    ,PRNT_DS_CONTR_DTL_PK        ASC -->
+                    ,SORT_DTL_TP                 ASC
+                    <!-- Add Start 2019/01/23 QC#29782 -->
+                    ,SORT_SER_NUM                ASC
+                    ,SORT_MDSE_CD                ASC
+                    ,SVC_PGM_TP_SORT_NUM         ASC
+                    ,DS_CONTR_CRAT_TP_CD         ASC
+                    ,PRNT_DS_CONTR_DTL_PK        ASC
+<!-- mod end 2019/05/30 QC#50566 -->
+                    <!-- Add End 2019/01/23 QC#29782 -->
+<!-- START 2017/06/08 [QC#18470, MOD] -->
+<!--                    ,SORT_ORDER                  ASC  -->
+<!--                    ,DS_CONTR_DTL_PK             ASC  -->
+                    ,DS_CONTR_DTL_PK             ASC
+                    ,SORT_ORDER                  ASC
+<!-- START 2017/06/08 [QC#18470, MOD] -->
+            )
+        WHERE
+<!-- mod start 2019/05/30 QC#50566 -->
+<!--               (    DS_CONTR_CATG_CD = #dsContrCatgCd_Flt# -->
+<!--                OR (DS_CONTR_CATG_CD = #dsContrCatgCd_Agg# AND (DS_CONTR_DTL_TP_CD = #dsContrDtlTpCd_Agg# OR SER_NUM IS NOT NULL OR XX_DPLY_BY_CTRL_ANCR_LVL_CD = #machLvlNum1#)) -->
+<!-- START 2017/06/08 [QC#18470, MOD] -->
+<!--                OR (DS_CONTR_CATG_CD &lt;&gt; #dsContrCatgCd_Flt# AND DS_CONTR_CATG_CD &lt;&gt; #dsContrCatgCd_Agg# AND NOT (XX_DPLY_BY_CTRL_ANCR_LVL_CD IN(#machLvlNum2#, #machLvlNum3#, #machLvlNum4#) AND XX_SER_NUM IS NULL))) -->
+<!--                OR (DS_CONTR_CATG_CD &lt;&gt; #dsContrCatgCd_Flt# AND DS_CONTR_CATG_CD &lt;&gt; #dsContrCatgCd_Agg#)) -->
+<!-- START 2017/06/08 [QC#18470, MOD] -->
+<!--            AND ROWNUM &lt;= #rowNum# -->
+<!-- END 2018/12/20 [QC#29636, MOD] -->
+            ROWNUM &lt;= #rowNum#
+<!-- mod end 2019/05/30 QC#50566 -->
+    </statement>
+
+    <statement id="isExistFstData" parameterClass="Map" resultClass="Integer">
+        SELECT
+            COUNT(RE.DS_CONTR_RNW_ESCL_PK)
+        FROM
+            DS_CONTR_RNW_ESCL RE
+        WHERE
+            RE.GLBL_CMPY_CD              = #glblCmpyCd#
+            AND RE.DS_CONTR_PK           = #dsContrPk#
+            AND RE.DS_CONTR_DTL_PK       IS NULL
+            AND RE.DS_CONTR_MACH_LVL_NUM = #machLvlNum1#
+            AND RE.EZCANCELFLAG          = '0'
+    </statement>
+
+    <statement id="isExistScdData" parameterClass="Map" resultClass="Integer">
+        SELECT
+            COUNT(RE.DS_CONTR_RNW_ESCL_PK)
+        FROM
+            DS_CONTR_RNW_ESCL RE
+        WHERE
+            RE.GLBL_CMPY_CD              = #glblCmpyCd#
+            AND RE.DS_CONTR_PK           = #dsContrPk#
+            AND RE.DS_CONTR_DTL_PK       = #dsContrDtlPk#
+            AND RE.DS_CONTR_MACH_LVL_NUM = #machLvlNum2#
+            AND RE.EZCANCELFLAG          = '0'
+    </statement>
+
+    <statement id="isExistTrdData" parameterClass="Map" resultClass="Integer">
+        SELECT
+            COUNT(RE.DS_CONTR_RNW_ESCL_PK)
+        FROM
+            DS_CONTR_RNW_ESCL RE
+        WHERE
+            RE.GLBL_CMPY_CD              = #glblCmpyCd#
+            AND RE.DS_CONTR_PK           = #dsContrPk#
+            AND RE.DS_CONTR_DTL_PK       = #dsContrDtlPk#
+            AND RE.DS_CONTR_MACH_LVL_NUM = #machLvlNum3#
+            AND RE.DS_CONTR_BASE_USG_NM  = #baseUsgNm#
+            AND RE.EZCANCELFLAG          = '0'
+    </statement>
+
+    <typeAlias alias="NSAL0380_ASMsg"  type="business.blap.NSAL0380.NSAL0380_ASMsg"/>
+
+    <resultMap id="result.getSearchData" class="NSAL0380_ASMsg">
+        <result property="dsContrPk_A"             column="DS_CONTR_PK"                 javaType="EZDCBigDecimalItem"/>
+        <result property="prntDsContrDtlPk_A"      column="PRNT_DS_CONTR_DTL_PK"        javaType="EZDCBigDecimalItem"/>
+        <result property="xxDplyByCtrlAncrLvlCd_A" column="XX_DPLY_BY_CTRL_ANCR_LVL_CD" javaType="EZDCStringItem"/>
+        <result property="dsContrNum_A"            column="DS_CONTR_NUM"                javaType="EZDCStringItem"/>
+        <result property="serNum_A"                column="SER_NUM"                     javaType="EZDCStringItem"/>
+        <!-- Add Start 2019/01/23 QC#29782 -->
+        <result property="svcMachMstrPk_A1"        column="VIEW_SVC_MACH_MSTR_PK"       javaType="EZDCBigDecimalItem"/>
+        <result property="mdseDescShortTxt_A"      column="MDSE_DESC_SHORT_TXT"         javaType="EZDCStringItem"/>
+        <!-- Add End 2019/01/23 QC#29782 -->
+        <result property="dsContrBaseUsgNm_A"      column="DS_CONTR_BASE_USG_NM"        javaType="EZDCStringItem"/>
+        <result property="contrEffFromDt_A"        column="CONTR_EFF_FROM_DT"           javaType="EZDCStringItem"/>
+        <result property="contrEffThruDt_A"        column="CONTR_EFF_THRU_DT"           javaType="EZDCStringItem"/>
+        <result property="contrAutoRnwTpCd_A"      column="CONTR_AUTO_RNW_TP_CD"        javaType="EZDCStringItem"/>
+        <result property="rnwPrcMethCd_A"          column="RNW_PRC_METH_CD"             javaType="EZDCStringItem"/>
+        <result property="befEndRnwDaysAot_A"      column="BEF_END_RNW_DAYS_AOT"        javaType="EZDCBigDecimalItem"/>
+        <result property="maxContrRnwCnt_A"        column="MAX_CONTR_RNW_CNT"           javaType="EZDCBigDecimalItem"/>
+<!-- START 2018/12/20 [QC#29636, MOD] -->
+        <!-- <result property="maxPrcUpRatio_A"         column="MAX_PRC_UP_RATIO"            javaType="EZDCBigDecimalItem"/> -->
+        <result property="maxPrcUpRatio_A"         column="RNW_MAX_PRC_UP_RATIO"        javaType="EZDCBigDecimalItem"/>
+<!-- END 2018/12/20 [QC#29636, MOD] -->
+        <result property="basePrcUpRatio_A"        column="BASE_PRC_UP_RATIO"           javaType="EZDCBigDecimalItem"/>
+        <result property="mtrPrcUpRatio_A"         column="MTR_PRC_UP_RATIO"            javaType="EZDCBigDecimalItem"/>
+        <result property="contrRnwTotCnt_A"        column="CONTR_RNW_TOT_CNT"           javaType="EZDCBigDecimalItem"/>
+        <result property="dsContrRnwEsclPk_A"      column="DS_CONTR_RNW_ESCL_PK"        javaType="EZDCBigDecimalItem"/>
+        <result property="xxCntDplyFlg_A"          column="XX_CNT_DPLY_FLG"             javaType="EZDCStringItem"/>
+        <result property="dsContrDtlPk_A"          column="DS_CONTR_DTL_PK"             javaType="EZDCBigDecimalItem"/>
+        <result property="svcMachMstrPk_A"         column="SVC_MACH_MSTR_PK"            javaType="EZDCBigDecimalItem"/>
+        <result property="dsContrCatgCd_A"         column="DS_CONTR_CATG_CD"            javaType="EZDCStringItem"/>
+        <result property="dsContrDtlTpCd_A"        column="DS_CONTR_DTL_TP_CD"          javaType="EZDCStringItem"/>
+        <result property="dsContrCtrlStsCd_A1"     column="DS_CONTR_CTRL_STS_CD_A1"     javaType="EZDCStringItem"/>
+        <result property="dsContrCtrlStsCd_A2"     column="DS_CONTR_CTRL_STS_CD_A2"     javaType="EZDCStringItem"/>
+        <result property="ezUpTimeZone_A1"         column="EZUPTIMEZONE_CON"            javaType="EZDCStringItem"/>
+        <result property="ezUpTime_A1"             column="EZUPTIME_CON"                javaType="EZDCStringItem"/>
+        <result property="ezUpTimeZone_A2"         column="EZUPTIMEZONE_DTL"            javaType="EZDCStringItem"/>
+        <result property="ezUpTime_A2"             column="EZUPTIME_DTL"                javaType="EZDCStringItem"/>
+        <result property="ezUpTimeZone_A3"         column="EZUPTIMEZONE_RNW"            javaType="EZDCStringItem"/>
+        <result property="ezUpTime_A3"             column="EZUPTIME_RNW"                javaType="EZDCStringItem"/>
+<!-- START 2016/12/02 [QC#14204, ADD] -->
+        <result property="xxRecHistCratTs_A"       column="XX_REC_HIST_CRAT_TS"         javaType="EZDCStringItem"/>
+        <result property="xxRecHistCratByNm_A"     column="XX_REC_HIST_CRAT_BY_NM"      javaType="EZDCStringItem"/>
+        <result property="xxRecHistUpdTs_A"        column="XX_REC_HIST_UPD_TS"          javaType="EZDCStringItem"/>
+        <result property="xxRecHistUpdByNm_A"      column="XX_REC_HIST_UPD_BY_NM"       javaType="EZDCStringItem"/>
+        <result property="xxRecHistTblNm_A"        column="XX_REC_HIST_TBL_NM"          javaType="EZDCStringItem"/>
+<!-- END 2016/12/02 [QC#14204, ADD] -->
+    </resultMap>
+
+<!-- START 2017/12/21 M.Kidokoro [QC#22660, ADD] -->
+    <statement id="isExistDiffThruDate" parameterClass="Map" resultClass="Integer">
+        SELECT
+            COUNT(*)
+        FROM
+            DS_CONTR_DTL DCD
+        WHERE
+            DCD.GLBL_CMPY_CD = #glblCmpyCd#
+        AND DCD.DS_CONTR_PK  = #dsContrPk#
+        AND DCD.EZCANCELFLAG = '0'
+        HAVING
+            MIN(DCD.CONTR_EFF_THRU_DT) &lt;&gt; MAX(DCD.CONTR_EFF_THRU_DT)
+    </statement>
+<!-- END 2017/12/21 M.Kidokoro [QC#22660, ADD] -->
+
+<!-- START 2018/08/14 K.Kojima [QC#27179, ADD] -->
+    <statement id="getContrAutoRnwTpForAutoRnw" parameterClass="Map" resultClass="String">
+        SELECT
+            CART.CONTR_AUTO_RNW_TP_CD
+        FROM
+            CONTR_AUTO_RNW_TP CART
+        WHERE
+                CART.GLBL_CMPY_CD = #glblCmpyCd#
+            AND CART.AUTO_RNW_FLG = 'Y'
+            AND CART.EZCANCELFLAG = '0'
+    </statement>
+<!-- END 2018/08/14 K.Kojima [QC#27179, ADD] -->
+</sqlMap>

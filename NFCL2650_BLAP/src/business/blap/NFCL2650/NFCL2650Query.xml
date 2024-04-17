@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NFCL2650Query">
+    <statement id="getAcctNm" parameterClass="Map" resultClass="String">
+        SELECT 
+           DS_ACCT_NM
+        FROM 
+           SELL_TO_CUST
+        WHERE 
+               GLBL_CMPY_CD     = #glblCmpyCd#
+           AND EZCANCELFLAG     = '0'
+           AND SELL_TO_CUST_CD  = #sellToCustCd#
+           AND ROWNUM           = 1
+    </statement>
+
+    <statement id="getBetweenAcctNum" parameterClass="Map" resultClass="String">
+        SELECT 
+           SELL_TO_CUST_CD
+        FROM 
+           SELL_TO_CUST
+        WHERE 
+                 GLBL_CMPY_CD           = #glblCmpyCd#
+             AND EZCANCELFLAG           = '0'
+           <isNotNull property="sellToCustCdFrom">
+           <isNotNull property="sellToCustCdTo">
+             AND SELL_TO_CUST_CD    &gt;= #sellToCustCdFrom# 
+             AND SELL_TO_CUST_CD    &lt;= #sellToCustCdTo#
+           </isNotNull>
+           </isNotNull>
+           <isNotNull property="dsAcctNmFrom">
+           <isNotNull property="dsAcctNmTo">
+             AND DS_ACCT_NM         &gt;= #dsAcctNmFrom# 
+             AND DS_ACCT_NM         &lt;= #dsAcctNmTo#
+           </isNotNull>
+           </isNotNull>
+             AND  ROWNUM            &lt;= #maxNum#
+           
+    </statement>
+
+    <statement id="getAcctCust" parameterClass="Map" resultClass="String">
+        SELECT 
+          SELL_TO_CUST_PK
+        FROM 
+          SELL_TO_CUST
+        WHERE 
+                 GLBL_CMPY_CD     = #glblCmpyCd#
+             AND EZCANCELFLAG     = '0'
+           <isNotNull property="sellToCustCd">
+             AND SELL_TO_CUST_CD  = #sellToCustCd#
+           </isNotNull>
+           <isNotNull property="dsAcctNm">
+             AND DS_ACCT_NM       = #dsAcctNm#
+           </isNotNull>
+             AND ROWNUM           = 1
+    </statement>
+
+    <statement id="getLocNm" parameterClass="Map" resultClass="Map">
+        SELECT
+            BTC.DS_LOC_NM
+           ,BTC.BILL_TO_CUST_CD
+        FROM
+            BILL_TO_CUST BTC
+        WHERE 
+                BTC.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND BTC.LOC_NUM         = #locNum#
+            AND BTC.EZCANCELFLAG    = '0'
+            AND ROWNUM       		= 1
+    </statement>
+
+<!--START   2020/01/16 [QC#55216,ADD]-->
+    <statement id="getStmtNeedAcct" parameterClass="Map" resultClass="String">
+        SELECT DISTINCT
+            STC.SELL_TO_CUST_CD
+        FROM
+            SELL_TO_CUST STC
+           ,BILL_TO_CUST BTC
+        WHERE 
+                STC.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND STC.EZCANCELFLAG    = '0'
+            AND STC.SELL_TO_CUST_CD IN
+                <iterate property="acctNumList" var="acctNumList[]" open="(" close=")" conjunction=",">
+                 #acctNumList[]#
+                </iterate>
+            AND STC.SELL_TO_CUST_CD = BTC.SELL_TO_CUST_CD
+            AND BTC.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND BTC.EZCANCELFLAG    = '0'
+            AND BTC.AR_STMT_FLG = #arStmtFlgY#
+    </statement>
+
+    <statement id="getStmtNeedAcctFromBillTo" parameterClass="Map" resultClass="String">
+        SELECT DISTINCT
+            BTC.BILL_TO_CUST_CD
+        FROM
+            BILL_TO_CUST BTC
+           ,SELL_TO_CUST STC
+        WHERE 
+                BTC.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND BTC.EZCANCELFLAG    = '0'
+            AND BTC.BILL_TO_CUST_CD = #billToCustCd#
+            AND BTC.SELL_TO_CUST_CD = STC.SELL_TO_CUST_CD
+            AND STC.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND STC.EZCANCELFLAG    = '0'
+            AND BTC.AR_STMT_FLG = #arStmtFlgY#
+    </statement>
+
+    <statement id="getCustomerWithInvalidCollector" parameterClass="Map" resultClass="String">
+        SELECT
+             STC.SELL_TO_CUST_CD
+         FROM
+             SELL_TO_CUST STC
+         WHERE 
+                STC.GLBL_CMPY_CD        = #glblCmpyCd#
+           AND STC.EZCANCELFLAG    = '0'
+           AND STC.SELL_TO_CUST_CD IN
+                <iterate property="acctNumList" var="acctNumList[]" open="(" close=")" conjunction=",">
+                 #acctNumList[]#
+                </iterate>
+           AND STC.CLT_PTFO_PK IS NOT NULL
+           AND NOT EXISTS
+                    (SELECT 
+                           1
+                    FROM
+                          CLT_PTFO CP
+                         ,AUTH_PSN AP
+                    WHERE
+                          CP.GLBL_CMPY_CD = #glblCmpyCd#
+                       AND CP.EZCANCELFLAG = '0'
+                       AND CP.CLT_PSN_CD = AP.USR_NM
+                       AND AP.GLBL_CMPY_CD = #glblCmpyCd#
+                       AND AP.EZCANCELFLAG = '0'
+                       AND CP.CLT_PTFO_PK = STC.CLT_PTFO_PK
+                    )
+    </statement>
+ 
+    <statement id="getCustomerWithInvalidCollectorFromBillTo" parameterClass="Map" resultClass="String">
+        SELECT
+             STC.SELL_TO_CUST_CD
+         FROM
+             BILL_TO_CUST BTC
+            ,SELL_TO_CUST STC
+         WHERE 
+                BTC.GLBL_CMPY_CD        = #glblCmpyCd#
+           AND BTC.EZCANCELFLAG    = '0'
+           AND BTC.BILL_TO_CUST_CD = #billToCustCd#
+           AND BTC.SELL_TO_CUST_CD = STC.SELL_TO_CUST_CD
+           AND STC.GLBL_CMPY_CD = #glblCmpyCd#
+           AND STC.EZCANCELFLAG = '0'
+           AND STC.CLT_PTFO_PK IS NOT NULL
+           AND NOT EXISTS
+                    (SELECT 
+                           1
+                    FROM
+                          CLT_PTFO CP
+                         ,AUTH_PSN AP
+                    WHERE
+                          CP.GLBL_CMPY_CD = #glblCmpyCd#
+                       AND CP.EZCANCELFLAG = '0'
+                       AND CP.CLT_PSN_CD = AP.USR_NM
+                       AND AP.GLBL_CMPY_CD = #glblCmpyCd#
+                       AND AP.EZCANCELFLAG = '0'
+                       AND CP.CLT_PTFO_PK = STC.CLT_PTFO_PK
+                    )
+    </statement>
+ <!--END   2020/01/16 [QC#55216,ADD]-->
+</sqlMap>

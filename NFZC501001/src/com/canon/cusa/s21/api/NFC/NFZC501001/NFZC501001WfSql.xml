@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NFZC501001">
+
+    <statement id="WF_FINACE_SQL" parameterClass="Map" resultClass="Map">
+        SELECT
+                #psnNum#                COND_STR_1
+              , AL.LIMIT_AMT            COND_NUM_1
+              , LD.PSN_NUM              VAL_STR_1
+        FROM
+            (
+                SELECT
+                      SP.GLBL_CMPY_CD   GLBL_CMPY_CD
+                    , SP.PSN_NUM        PSN_NUM
+                    , LEVEL             LV
+                FROM
+                <!-- START 2021/11/25 G.Delgado [QC#59332, MOD] -->
+<!--                      S21_PSN           SP-->
+<!--                WHERE-->
+<!--                        SP.EZCANCELFLAG = '0'-->
+<!--                    AND SP.GLBL_CMPY_CD = #glblCmpyCd#-->
+                    (
+                        SELECT
+                              SP.GLBL_CMPY_CD
+                            , SP.EZCANCELFLAG
+                            , SP.PSN_CD
+                            , SP.PSN_NUM
+                            , SP.HR_SUPV_ID
+                        FROM
+                              S21_PSN           SP
+                            , VAR_CHAR_CONST    VCC
+                        WHERE
+                                SP.GLBL_CMPY_CD       = #glblCmpyCd#
+                            AND (
+                                EXISTS (
+                                    SELECT
+                                        1
+                                    FROM
+                                        S21_PSN W
+                                    WHERE
+                                           W.GLBL_CMPY_CD = SP.GLBL_CMPY_CD
+                                       AND W.PSN_CD       = SP.HR_SUPV_ID
+                                       AND W.EZCANCELFLAG = '0'
+                                )
+                                OR SP.PSN_CD = VCC.VAR_CHAR_CONST_VAL
+                                OR SP.HR_SUPV_ID IS NULL
+                            )
+                            AND VCC.GLBL_CMPY_CD      = SP.GLBL_CMPY_CD
+                            AND VCC.VAR_CHAR_CONST_NM = 'NFZC5010_HR_SUPV_ID'
+                            AND SP.EZCANCELFLAG       = '0'
+                            AND VCC.EZCANCELFLAG      = '0'
+                        UNION ALL
+                        SELECT
+                              P.GLBL_CMPY_CD
+                            , P.EZCANCELFLAG
+                            , P.PSN_CD
+                            , P.PSN_NUM
+                            , VCC2.VAR_CHAR_CONST_VAL    AS HR_SUPV_ID
+                        FROM
+                              S21_PSN           P
+                            , VAR_CHAR_CONST    VCC1
+                            , VAR_CHAR_CONST    VCC2
+                        WHERE
+                                P.GLBL_CMPY_CD            = #glblCmpyCd#
+                            AND P.PSN_CD                  = VCC1.VAR_CHAR_CONST_VAL
+                            AND P.HR_SUPV_ID              &lt;&gt; VCC2.VAR_CHAR_CONST_VAL
+                            AND VCC1.GLBL_CMPY_CD         = P.GLBL_CMPY_CD
+                            AND VCC1.VAR_CHAR_CONST_NM    = 'NFZC5010_PSN_CD'
+                            AND VCC2.GLBL_CMPY_CD         = P.GLBL_CMPY_CD
+                            AND VCC2.VAR_CHAR_CONST_NM    = 'NFZC5010_HR_SUPV_ID'
+                            AND P.EZCANCELFLAG            = '0'
+                            AND VCC1.EZCANCELFLAG         = '0'
+                            AND VCC2.EZCANCELFLAG         = '0'
+                    ) SP
+                <!-- END 2021/11/25 G.Delgado [QC#59332, MOD] -->
+                START WITH
+                    SP.PSN_NUM          = #psnNum#
+                CONNECT BY
+                    PRIOR SP.HR_SUPV_ID = SP.PSN_CD
+            ) LD
+            ,
+            (
+                SELECT
+                     GRP.GLBL_CMPY_CD      GLBL_CMPY_CD
+                   , GRP.USR_ID            USER_ID
+                   , COND.COND_VAL_NUM_01  LIMIT_AMT
+                FROM
+                     WF_UTIL_USR_GRP       GRP
+                   , WF_UTIL_COND          COND
+                WHERE
+                       GRP.EZCANCELFLAG    = '0'
+                   AND COND.EZCANCELFLAG   = '0'
+                   AND GRP.GLBL_CMPY_CD    = COND.GLBL_CMPY_CD
+                   AND GRP.WF_BIZ_APP_ID   = COND.WF_BIZ_APP_ID
+                   AND GRP.WF_USR_GRP_NM   = COND.ATTRB_COND_VAL_TXT_01
+                   AND GRP.WF_BIZ_APP_ID   = 'NFWP0002'
+            ) AL
+        WHERE
+            LD.GLBL_CMPY_CD             = AL.GLBL_CMPY_CD
+            AND LD.PSN_NUM              = AL.USER_ID
+            AND AL.LIMIT_AMT         &gt; 0
+        ORDER BY
+            LD.LV
+    </statement>
+</sqlMap>

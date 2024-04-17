@@ -1,0 +1,597 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NFCL3070Query">
+
+    <typeAlias alias="NFCL3070SMsg"              type="business.blap.NFCL3070.NFCL3070SMsg"/>
+    <typeAlias alias="NFCL3070CMsg"              type="business.blap.NFCL3070.NFCL3070CMsg"/>
+    <typeAlias alias="S21_PSNTMsg"               type="business.db.S21_PSNTMsg"/>
+    <typeAlias alias="DS_INVTY_LOC_VTMsg"        type="business.db.DS_INVTY_LOC_VTMsg"/>
+
+    <statement id="getTypeOfCredit" parameterClass="Map" resultClass="Map">
+        SELECT
+             ACP.AR_CR_TP_CD        AS AR_CR_TP_CD
+          ,  ACP.AR_CR_TP_DESC_TXT  AS AR_CR_TP_DESC_TXT
+        FROM
+             AR_CR_TP ACP
+        WHERE
+             ACP.GLBL_CMPY_CD = #glblCmpyCd#
+        AND  ACP.EZCANCELFLAG = 0
+        ORDER BY
+             ACP.AR_CR_TP_SORT_NUM
+    </statement>
+
+    <statement id="getPositionOfInvLine" parameterClass="Map" resultClass="Map">
+        SELECT
+        <!-- START 2018/08/29 [QC#27887,ADD] -->
+        DISTINCT
+        <!-- END 2018/08/29 [QC#27887,ADD] -->
+            IL.INV_LINE_NUM
+         ,  IL.INV_BOL_LINE_NUM
+         <!-- START 2018/08/29 [QC#27887,DEL] -->
+<!--         ,  IL.INV_LINE_SUB_NUM
+         ,  IL.INV_LINE_SUB_TRX_NUM -->
+         <!-- END 2018/08/29 [QC#27887,DEL] -->
+        FROM
+            INV_LINE IL
+        WHERE
+            IL.GLBL_CMPY_CD          = #glblCmpyCd#
+        AND IL.INV_NUM               = #invNum#
+        AND IL.INV_LINE_NUM          = #invLineNum#
+       <isNotNull property="invBolLineNum">
+        AND IL.INV_BOL_LINE_NUM      = #invBolLineNum#
+       </isNotNull>
+       <!-- START 2018/08/29 [QC#27887,DEL] -->
+<!--       <isNotNull property="invLineSubNum">
+        AND IL.INV_LINE_SUB_NUM      = #invLineSubNum#
+       </isNotNull>
+       <isNotNull property="invLineSubTrxNum">
+        AND IL.INV_LINE_SUB_TRX_NUM  = #invLineSubTrxNum#
+       </isNotNull> -->
+       <!-- END 2018/08/29 [QC#27887,DEL] -->
+        AND IL.EZCANCELFLAG          = 0
+    </statement>
+
+    <statement id="getServiceInvMeter" parameterClass="Map" resultClass="Map">
+        SELECT
+            I.INV_TP_CD
+         ,  IL.INV_NUM
+         ,  IL.INV_BOL_LINE_NUM
+         ,  IL.INV_LINE_NUM
+         ,  IL.INV_LINE_SUB_NUM
+         ,  IL.INV_LINE_SUB_TRX_NUM
+         ,  SIL.BLLG_PER_FROM_DT
+         ,  SIL.BLLG_PER_THRU_DT
+         ,  SIL.SER_NUM
+         ,  SIM.MTR_LB_DESC_TXT
+         <!-- START 2019/06/25 [QC#50914,50916, MOD] -->
+         <!-- 
+         ,  SIM.PREV_TOT_COPY_QTY
+         ,  SIM.TOT_COPY_QTY
+         ,  SIM.TEST_COPY_QTY
+         ,  TMS.CONTR_MTR_MULT_RATE
+         -->
+         ,  CASE
+              WHEN MAX(TMS.CONTR_MTR_MULT_RATE) &lt;&gt; MIN(TMS.CONTR_MTR_MULT_RATE)
+              THEN SUM(TMS.START_READ_MTR_CNT * TMS.CONTR_MTR_MULT_RATE)
+              ELSE SUM(TMS.START_READ_MTR_CNT)
+            END AS PREV_TOT_COPY_QTY
+         ,  CASE
+              WHEN MAX(TMS.CONTR_MTR_MULT_RATE) &lt;&gt; MIN(TMS.CONTR_MTR_MULT_RATE)
+              THEN SUM(TMS.END_READ_MTR_CNT * TMS.CONTR_MTR_MULT_RATE)
+              ELSE SUM(TMS.END_READ_MTR_CNT)
+            END AS TOT_COPY_QTY
+         ,  CASE
+              WHEN MAX(TMS.CONTR_MTR_MULT_RATE) &lt;&gt; MIN(TMS.CONTR_MTR_MULT_RATE)
+              THEN SUM(TMS.TEST_MTR_CNT * TMS.CONTR_MTR_MULT_RATE)
+              ELSE SUM(TMS.TEST_MTR_CNT)
+            END AS TEST_COPY_QTY
+         ,  CASE
+              WHEN MAX(TMS.CONTR_MTR_MULT_RATE) &lt;&gt; MIN(TMS.CONTR_MTR_MULT_RATE)
+              THEN NULL
+              ELSE MAX(TMS.CONTR_MTR_MULT_RATE)
+            END AS CONTR_MTR_MULT_RATE
+         <!-- END   2019/06/25 [QC#50914,50916, MOD] -->
+         ,  SIM.COPY_INCL_QTY
+         ,  SIM.BLLG_COPY_QTY
+         ,  SIX.XS_MTR_AMT_RATE
+         ,  SIM.MTR_CHRG_DEAL_AMT
+         ,  SIM.MTR_CHRG_FUNC_AMT
+         ,  SIL.SHIP_TO_CUST_CD
+         ,  SIM.CCY_CD
+         <!-- START 2018/07/11 [QC#26896,ADD] -->
+         ,  SIM.SVC_CONTR_MTR_BLLG_PK
+         ,  SIM.MTR_LB_CD
+         <!-- END 2018/07/11 [QC#26896,ADD] -->
+        FROM
+            INV                  I
+         ,  INV_LINE             IL
+         ,  SVC_INV_LINE         SIL
+         ,  SVC_INV_LINE_MTR     SIM
+         ,  SVC_INV_LINE_XS_MTR  SIX
+         <!-- START 2019/06/05 [QC#50730, ADD] -->
+         ,  DS_CONTR_BLLG_SCHD       DCBS
+         ,  CONTR_PHYS_BLLG_MTR_RELN RLN
+         ,  BLLG_SCHD_TEST_MTR_SMRY  TMS
+         <!-- END   2019/06/05 [QC#50730, ADD] -->
+        WHERE
+            I.GLBL_CMPY_CD              = #glblCmpyCd#
+        AND I.INV_NUM                   = #invNum#
+        AND IL.GLBL_CMPY_CD             = I.GLBL_CMPY_CD
+        AND IL.INV_NUM                  = I.INV_NUM
+        AND SIL.GLBL_CMPY_CD            = IL.GLBL_CMPY_CD
+        AND SIL.SVC_INV_NUM             = IL.INV_NUM
+        AND SIL.SVC_INV_LINE_PK         = IL.SVC_INV_LINE_PK
+        AND SIL.SVC_INV_CHRG_TP_CD      = #meterCharge#
+        AND SIM.GLBL_CMPY_CD            = SIL.GLBL_CMPY_CD
+        AND SIM.SVC_INV_LINE_PK         = SIL.SVC_INV_LINE_PK
+        AND SIX.GLBL_CMPY_CD (+)        = SIM.GLBL_CMPY_CD
+        AND SIX.SVC_INV_LINE_MTR_PK (+) = SIM.SVC_INV_LINE_MTR_PK
+        AND I.EZCANCELFLAG              = '0'
+        AND IL.EZCANCELFLAG             = '0'
+        AND SIL.EZCANCELFLAG            = '0'
+        AND SIM.EZCANCELFLAG            = '0'
+        AND SIX.EZCANCELFLAG (+)        = '0'
+        <!-- START 2019/06/05 [QC#50730, ADD] -->
+        AND SIL.GLBL_CMPY_CD            = DCBS.GLBL_CMPY_CD
+        AND SIL.DS_CONTR_BLLG_SCHD_PK   = DCBS.DS_CONTR_BLLG_SCHD_PK
+        AND DCBS.EZCANCELFLAG           = '0'
+        AND DCBS.GLBL_CMPY_CD           = RLN.GLBL_CMPY_CD
+        AND DCBS.DS_CONTR_BLLG_MTR_PK   = RLN.DS_CONTR_BLLG_MTR_PK
+        AND RLN.BLLBL_FLG               = #flgY#
+        AND RLN.EZCANCELFLAG            = '0'
+        AND RLN.GLBL_CMPY_CD            = TMS.GLBL_CMPY_CD
+        AND RLN.SVC_PHYS_MTR_PK         = TMS.SVC_PHYS_MTR_PK
+        AND DCBS.DS_CONTR_BLLG_SCHD_PK  = TMS.DS_CONTR_BLLG_SCHD_PK
+        AND TMS.EZCANCELFLAG            = '0'
+        <!-- END   2019/06/05 [QC#50730, ADD] -->
+        <!-- START 2019/06/25 [QC#50914,50916, ADD] -->
+        GROUP BY
+            I.INV_TP_CD
+         ,  IL.INV_NUM
+         ,  IL.INV_BOL_LINE_NUM
+         ,  IL.INV_LINE_NUM
+         ,  IL.INV_LINE_SUB_NUM
+         ,  IL.INV_LINE_SUB_TRX_NUM
+         ,  SIL.BLLG_PER_FROM_DT
+         ,  SIL.BLLG_PER_THRU_DT
+         ,  SIL.SER_NUM
+         ,  SIM.MTR_LB_DESC_TXT
+         ,  SIM.COPY_INCL_QTY
+         ,  SIM.BLLG_COPY_QTY
+         ,  SIX.XS_MTR_AMT_RATE
+         ,  SIM.MTR_CHRG_DEAL_AMT
+         ,  SIM.MTR_CHRG_FUNC_AMT
+         ,  SIL.SHIP_TO_CUST_CD
+         ,  SIM.CCY_CD
+         ,  SIM.SVC_CONTR_MTR_BLLG_PK
+         ,  SIM.MTR_LB_CD
+        <!-- END   2019/06/25 [QC#50914,50916, ADD] -->
+        ORDER BY
+            IL.INV_NUM
+         ,  IL.INV_LINE_NUM
+     </statement>
+
+     <statement id="getCITicket" parameterClass="Map" resultClass="Map">
+        SELECT 
+            HDR.TICKET_NUMBER   AS CI_NUMBER
+         ,  HDR.INVOICE_NUMBER  AS INV_NUMBER
+         ,  SUB.NEW_VALUE       AS ADJUST_AMT
+        FROM
+            CANON_E193_CS_HEADERS   HDR
+         ,  CANON_E193_CS_LINES     LN
+         ,  CANON_E193_CS_SUB_LINES SUB
+        WHERE 
+            HDR.INVOICE_NUMBER   =  #ciNumber#
+        AND HDR.TICKET_STATUS    != #close#
+        AND HDR.TICKET_ID        =  LN.TICKET_ID
+        AND LN.LINE_ID           =  SUB.LINE_ID
+        AND SUB.OBJECT_TYPE      =  #objectType#
+        AND ROWNUM               =  #rowNum#
+     </statement>
+
+     <statement id="countAppliedCredit" parameterClass="Map" resultClass="Integer">
+        SELECT
+            COUNT(*)
+        FROM
+            AR_CASH_APP ACA
+         ,  AR_RCPT     AR
+         ,  AR_TRX_BAL  ATB
+        WHERE
+            ACA.GLBL_CMPY_CD     =  #glblCmpyCd#
+        AND ACA.AR_TRX_NUM       != #invNum#
+
+        AND ACA.GLBL_CMPY_CD     =  ATB.GLBL_CMPY_CD
+        AND ACA.AR_TRX_NUM       =  ATB.AR_TRX_NUM
+        AND ATB.AR_TRX_TP_CD     =  #creditMemo#
+
+        AND ACA.GLBL_CMPY_CD     =  AR.GLBL_CMPY_CD
+        AND ACA.RCPT_NUM         =  AR.RCPT_NUM
+        AND EXISTS
+               (
+                 SELECT
+                     1
+                 FROM
+                     AR_CASH_APP A
+                  ,  AR_RCPT     B
+                  ,  AR_TRX_BAL  C
+                 WHERE
+                     A.GLBL_CMPY_CD         =  #glblCmpyCd#
+                 AND A.AR_APPLY_TP_CD       =  #cash#
+                 AND A.AR_SCR_CANC_FLG      =  #flgN#
+
+                 AND A.GLBL_CMPY_CD         =  B.GLBL_CMPY_CD
+                 AND A.RCPT_NUM             =  B.RCPT_NUM
+                 AND B.AR_RCPT_TP_CD        =  #offset#
+
+                 AND A.GLBL_CMPY_CD         =  C.GLBL_CMPY_CD
+                 AND A.AR_TRX_NUM           =  C.AR_TRX_NUM
+                 AND C.AR_TRX_NUM           =  #invNum#
+                 AND C.AR_CASH_APPLY_STS_CD IN (#applied#, #partial#)
+
+                 AND A.EZCANCELFLAG         =  0
+                 AND B.EZCANCELFLAG         =  0
+                 AND C.EZCANCELFLAG         =  0
+               )
+        AND ACA.EZCANCELFLAG     =  0
+        AND AR.EZCANCELFLAG      =  0
+        AND ATB.EZCANCELFLAG     =  0
+     </statement>
+
+     <statement id="getOrigInvValue" parameterClass="Map" resultClass="Map">
+            SELECT
+                  I.BILL_TO_CUST_CD
+                , I.SELL_TO_CUST_CD
+                , I.INV_DT
+                , I.DS_INV_TP_CD
+                , I.DS_BIZ_AREA_CD
+                , I.BILL_TO_CUST_ACCT_CD
+                , I.SLS_REP_TOC_CD
+                , I.LEASE_PRCH_OPT_CD
+                , BTC.LOC_NM
+                , ATB.DEAL_RMNG_BAL_GRS_AMT
+            FROM
+                  INV          I
+                , BILL_TO_CUST BTC
+                , AR_TRX_BAL   ATB
+            WHERE
+                  I.GLBL_CMPY_CD                  = #glblCmpyCd#
+              AND I.INV_NUM                       = #invNum#
+
+              AND I.GLBL_CMPY_CD                  = BTC.GLBL_CMPY_CD
+              AND I.BILL_TO_CUST_CD               = BTC.BILL_TO_CUST_CD
+
+              AND I.GLBL_CMPY_CD                  = ATB.GLBL_CMPY_CD(+)
+              AND I.INV_NUM                       = ATB.AR_TRX_NUM(+)
+              AND ATB.AR_TRX_TP_CD(+)             = #inv#
+
+              AND I.EZCANCELFLAG                  = 0
+              AND BTC.EZCANCELFLAG                = 0
+              AND ATB.EZCANCELFLAG(+)             = 0
+              AND ROWNUM                          = #rowNum#
+     </statement>
+
+     <statement id="getInvLineValue" parameterClass="Map" resultClass="Map">
+            SELECT
+                  IL.INV_NUM
+                , IL.INV_BOL_LINE_NUM
+                , SUM(CASE
+                          WHEN IL.INV_LINE_CATG_CD != #freight# THEN IL.DEAL_GRS_TOT_PRC_AMT
+                          ELSE 0
+                      END) DEAL_GRS_TOT_PRC_AMT
+                , SUM(CASE
+                          WHEN IL.INV_LINE_CATG_CD != #freight# THEN IL.FUNC_GRS_TOT_PRC_AMT
+                          ELSE 0
+                      END) FUNC_GRS_TOT_PRC_AMT
+                , SUM(CASE
+                          WHEN IL.INV_LINE_CATG_CD != #freight# THEN IL.INV_LINE_DEAL_NET_AMT
+                          ELSE 0
+                      END) INV_LINE_DEAL_NET_AMT
+                , SUM(CASE
+                          WHEN IL.INV_LINE_CATG_CD != #freight# THEN IL.INV_LINE_FUNC_NET_AMT
+                          ELSE 0
+                      END) INV_LINE_FUNC_NET_AMT
+                , SUM(IL.INV_LINE_DEAL_TAX_AMT) INV_LINE_DEAL_TAX_AMT
+                , SUM(IL.INV_LINE_FUNC_TAX_AMT) INV_LINE_FUNC_TAX_AMT
+                , SUM(CASE
+                          WHEN IL.INV_LINE_CATG_CD = #freight# THEN IL.INV_LINE_DEAL_TAX_AMT
+                          ELSE 0
+                      END) FRT_DEAL_TAX_AMT
+                , SUM(CASE
+                          WHEN IL.INV_LINE_CATG_CD = #freight# THEN IL.INV_LINE_FUNC_TAX_AMT
+                          ELSE 0
+                      END) FRT_FUNC_TAX_AMT
+                , SUM(DEAL_DISC_UNIT_PRC_AMT)   DEAL_DISC_TOT_PRC_AMT
+                , SUM(FUNC_DISC_UNIT_PRC_AMT)   FUNC_DISC_TOT_PRC_AMT
+            FROM
+                  INV_LINE IL
+            WHERE
+                  IL.GLBL_CMPY_CD                  = #glblCmpyCd#
+              AND IL.INV_NUM                       = #invNum#
+              AND IL.EZCANCELFLAG                  = 0
+            GROUP BY
+                  IL.INV_NUM
+                , IL.INV_BOL_LINE_NUM
+            ORDER BY 
+                  IL.INV_BOL_LINE_NUM
+     </statement>
+
+     <statement id="getInvBolValue" parameterClass="Map" resultClass="Map">
+            SELECT
+                  IB.INV_NUM
+                , SUM(IB.SHIP_DEAL_NET_AMT) SHIP_DEAL_NET_AMT
+                , SUM(IB.SHIP_FUNC_NET_AMT) SHIP_FUNC_NET_AMT
+                , SUM(IB.SHIP_DEAL_SLS_AMT) SHIP_DEAL_SLS_AMT
+                , SUM(IB.SHIP_FUNC_SLS_AMT) SHIP_FUNC_SLS_AMT
+                , SUM(IB.TOT_BOL_DEAL_TAX_AMT) TOT_BOL_DEAL_TAX_AMT
+                , SUM(IB.TOT_BOL_FUNC_TAX_AMT) TOT_BOL_FUNC_TAX_AMT
+                , SUM(IB.SHIP_DEAL_DISC_AMT) SHIP_DEAL_DISC_AMT
+                , SUM(IB.SHIP_FUNC_DISC_AMT) SHIP_FUNC_DISC_AMT
+                , SUM(IB.SHIP_DEAL_FRT_AMT) SHIP_DEAL_FRT_AMT
+                , SUM(IB.SHIP_FUNC_FRT_AMT) SHIP_FUNC_FRT_AMT
+            FROM
+                  INV_BOL IB
+            WHERE
+                  IB.GLBL_CMPY_CD                  = #glblCmpyCd#
+              AND IB.INV_NUM                       = #invNum#
+
+              AND IB.EZCANCELFLAG                  = 0
+            GROUP BY
+                  IB.INV_NUM
+     </statement>
+
+    <statement id="getSalesRepAdress" parameterClass="Map" resultMap="result.getSalesRepAdress">
+        SELECT
+             SP.FIRST_LINE_ADDR
+            ,SP.SCD_LINE_ADDR
+            ,SP.THIRD_LINE_ADDR
+            ,SP.FRTH_LINE_ADDR
+            ,SP.CTY_ADDR
+            ,SP.CNTY_PK
+            ,SP.PROV_NM
+            ,SP.ST_CD
+            ,SP.POST_CD
+            ,SP.CTRY_CD
+            ,SP.GEO_CD
+            ,SP.DS_INSD_CTY_LIMIT_FLG
+        FROM
+             ORG_FUNC_ASG OFA
+            ,S21_PSN SP
+        WHERE
+                OFA.GLBL_CMPY_CD  = #glblCmpyCd#
+            AND OFA.TOC_CD        = #tocCd#
+            AND    OFA.EFF_FROM_DT   &lt;= #invDt#
+            AND NVL(OFA.EFF_THRU_DT,'99991231')   &gt;= #invDt#
+
+            AND SP.GLBL_CMPY_CD   = OFA.GLBL_CMPY_CD
+            AND SP.PSN_CD         = OFA.PSN_CD
+            
+            AND OFA.EZCANCELFLAG  = '0'
+            AND SP.EZCANCELFLAG   = '0'
+    </statement>
+    <resultMap id="result.getSalesRepAdress" class="S21_PSNTMsg">
+        <result property="firstLineAddr"        column="FIRST_LINE_ADDR"        javaType="EZDTStringItem"/>
+        <result property="scdLineAddr"          column="SCD_LINE_ADDR"          javaType="EZDTStringItem"/>
+        <result property="thirdLineAddr"        column="THIRD_LINE_ADDR"        javaType="EZDTStringItem"/>
+        <result property="frthLineAddr"         column="FRTH_LINE_ADDR"         javaType="EZDTStringItem"/>
+        <result property="ctyAddr"              column="CTY_ADDR"               javaType="EZDTStringItem"/>
+        <result property="cntyPk"               column="CNTY_PK"                javaType="EZDTBigDecimalItem"/>
+        <result property="provNm"               column="PROV_NM"                javaType="EZDTStringItem"/>
+        <result property="stCd"                 column="ST_CD"                  javaType="EZDTStringItem"/>
+        <result property="postCd"               column="POST_CD"                javaType="EZDTStringItem"/>
+        <result property="ctryCd"               column="CTRY_CD"                javaType="EZDTStringItem"/>
+        <result property="geoCd"                column="GEO_CD"                 javaType="EZDTStringItem"/>
+        <result property="dsInsdCtyLimitFlg"    column="DS_INSD_CTY_LIMIT_FLG"  javaType="EZDTStringItem"/>
+    </resultMap>
+
+	<statement id="getShipToCustForSvcInv" parameterClass="Map" resultClass="Map">
+		SELECT
+             SC.SHIP_TO_CUST_CD
+            ,SC.LOC_NUM
+            ,SC.CTY_ADDR
+            ,SC.ST_CD
+            ,SC.FIRST_LINE_ADDR
+            ,SC.SCD_LINE_ADDR
+            ,SC.POST_CD
+            ,SC.CTRY_CD
+            ,SI.INV_TP_CD
+        FROM
+            INV            I
+           ,SVC_INV        SI
+           ,SHIP_TO_CUST   SC
+        WHERE
+                I.GLBL_CMPY_CD      = #glblCmpyCd#
+            AND I.INV_NUM           = #invNum#
+            AND I.EZCANCELFLAG      = '0'
+
+            AND SI.GLBL_CMPY_CD      = I.GLBL_CMPY_CD
+            AND SI.SVC_INV_NUM       = I.INV_NUM
+            AND SI.EZCANCELFLAG      = '0'
+
+            AND SC.GLBL_CMPY_CD      = SI.GLBL_CMPY_CD
+            AND SC.SHIP_TO_CUST_CD   = SI.SHIP_TO_CUST_CD
+            AND SC.EZCANCELFLAG      = '0'
+	</statement>
+
+    <statement id="getDsInvtyLoc" parameterClass="Map" resultMap="result.getDsInvtyLoc">
+        SELECT
+             A.FIRST_LINE_ADDR
+            ,A.SCD_LINE_ADDR
+            ,A.CTY_ADDR
+            ,A.CNTY_PK
+            ,A.ST_CD
+            ,A.POST_CD
+            ,A.CTRY_CD
+            ,A.GEO_CD
+        FROM
+             DS_INVTY_LOC_V A
+        WHERE
+                A.GLBL_CMPY_CD = #glblCmpyCd#
+            AND A.INVTY_LOC_CD = #invtyLocCd#
+            AND A.EZCANCELFLAG = '0'
+    </statement>
+    <resultMap id="result.getDsInvtyLoc" class="DS_INVTY_LOC_VTMsg">
+        <result property="firstLineAddr"    column="FIRST_LINE_ADDR"      javaType="EZDTStringItem"/>
+        <result property="scdLineAddr"      column="SCD_LINE_ADDR"        javaType="EZDTStringItem"/>
+        <result property="ctyAddr"          column="CTY_ADDR"             javaType="EZDTStringItem"/>
+        <result property="cntyPk"           column="CNTY_PK"              javaType="EZDTBigDecimalItem"/>
+        <result property="stCd"             column="ST_CD"                javaType="EZDTStringItem"/>
+        <result property="postCd"           column="POST_CD"              javaType="EZDTStringItem"/>
+        <result property="ctryCd"           column="CTRY_CD"              javaType="EZDTStringItem"/>
+        <result property="geoCd"            column="GEO_CD"               javaType="EZDTStringItem"/>
+    </resultMap>
+
+	<statement id="getDsInvLineTaxDtlPk" parameterClass="Map" resultClass="BigDecimal">
+		SELECT
+			DS_INV_LINE_TAX_DTL_PK
+		FROM
+			DS_INV_LINE_TAX_DTL A
+		WHERE
+				A.GLBL_CMPY_CD         = #glblCmpyCd#
+			AND A.INV_NUM              = #invNum#
+			AND A.INV_BOL_LINE_NUM     = #invBolLineNum#
+			AND A.INV_LINE_NUM         = #invLineNum#
+			AND A.INV_LINE_SUB_NUM     = #invLineSubNum#
+			AND A.INV_TRX_LINE_SUB_NUM = #invTrxLineSubNum#
+			AND A.DS_SLS_TAX_TP_CD     = #dsSlsTaxTpCd#
+			AND A.EZCANCELFLAG = '0'
+	</statement>
+
+	<!-- START 2016/08/01 [QC#9192,ADD] -->
+	<statement id="getTaxAreaId" parameterClass="Map" resultClass="String">
+        SELECT
+            TA.TAX_AREA_ID
+        FROM
+            TAX_AREA TA
+        WHERE 
+            TA.GLBL_CMPY_CD = #glblCmpyCd#
+        <isNotNull property="ctyAddr">
+        AND TA.CTY_ADDR     = #ctyAddr#
+        </isNotNull>
+        <isNull property="ctyAddr">
+        AND TA.CTY_ADDR    IS NULL
+        </isNull>
+        <isNotNull property="cntyPk">
+        AND TA.CNTY_PK      = #cntyPk#
+        </isNotNull>
+        <isNull property="cntyPk">
+        AND TA.CNTY_PK     IS NULL
+        </isNull>
+        AND TA.ST_CD        = #stCd#
+        AND TA.EZCANCELFLAG = '0'
+        AND ROWNUM          = 1
+    </statement>
+    <!-- END   2016/08/01 [QC#9192,ADD] -->
+
+    <!-- START 2017/07/18 [QC#19781,ADD] -->
+    <statement id="getSlsRepTocCd" parameterClass="Map" resultClass="String">
+        SELECT
+            DISC.SLS_REP_TOC_CD
+        FROM
+            DS_INV_SLS_CR DISC
+        WHERE 
+            DISC.GLBL_CMPY_CD     = #glblCmpyCd#
+        AND DISC.INV_NUM          = #invNum#
+        AND DISC.EZCANCELFLAG = '0'
+        AND ROWNUM          = 1
+    </statement>
+    <!-- END   2016/08/01 [QC#19781,ADD] -->
+    <!-- START 2018/02/08 [QC#23551,ADD] -->
+    <statement id="getAjeInvAcctDist" parameterClass="Map" resultClass="Map">
+        SELECT
+            AIAD.AJE_INV_ACCT_DIST_PK
+           ,AIAD.INV_NUM
+           ,AIAD.DS_INV_SLS_CR_PK
+           ,AIAD.DR_CR_TP_CD
+           ,AIAD.AJE_LINE_IDX_NUM
+        FROM
+            AJE_INV_ACCT_DIST AIAD
+        WHERE 
+            AIAD.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND AIAD.INV_NUM             = #invNum#
+        AND AIAD.AJE_INV_ACCT_CLS_CD = #dfrdRev#
+        AND AIAD.EZCANCELFLAG        = '0'
+        ORDER BY
+            AIAD.INV_NUM
+           ,AIAD.INV_BOL_LINE_NUM
+           ,AIAD.INV_LINE_NUM
+           ,AIAD.INV_LINE_SUB_NUM
+           ,AIAD.INV_LINE_SUB_TRX_NUM
+           ,AIAD.DS_INV_SLS_CR_PK
+           ,AIAD.PROC_DT
+           ,AIAD.DR_CR_TP_CD
+    </statement>
+    <!-- END 2018/02/08 [QC#23551,ADD] -->
+    <!-- START 2018/05/30 [QC#26299,ADD] -->
+    <statement id="getArCrRebilRsn" parameterClass="Map" resultClass="Map">
+        SELECT
+            ACR.AR_CR_REBIL_RSN_CD
+           ,ACR.AR_CR_REBIL_RSN_NM
+        FROM
+            AR_CR_REBIL_RSN ACR
+        WHERE 
+            ACR.GLBL_CMPY_CD              = #glblCmpyCd#
+        AND ACR.AR_CR_REBIL_RSN_DESC_TXT  = #arCrRebilRsnNm#
+        AND ACR.EZCANCELFLAG              = '0'
+    </statement>
+
+     <statement id="checkCINum" parameterClass="Map" resultClass="Map">
+        SELECT 
+            HDR.TICKET_NUMBER   AS CI_NUMBER
+        FROM
+            CANON_E193_CS_HEADERS HDR
+        WHERE 
+            HDR.TICKET_NUMBER     = #ciNumber#
+        AND HDR.TICKET_STATUS    != #close#
+        <!-- START 2019/03/25 [QC#30904,DEL] -->
+        <!-- START 2018/07/13 [QC#27007,ADD] -->
+        <!-- AND HDR.INVOICE_NUMBER    = #invNum# -->
+        <!-- END 2018/05/30 [QC#27007,ADD] -->
+        <!-- END 2019/03/25 [QC#30904,DEL] -->
+     </statement>
+
+     <statement id="getArCrRebilValue" parameterClass="Map" resultClass="Map">
+        SELECT
+            <!-- START 2020/02/29 [QC#55872,MOD]  -->
+             NVL(SUM(ACR.CR_REBIL_AMT), 0)                                                         CR_REBIL_AMT
+            ,NVL(SUM(CASE WHEN ACR.AR_CR_TP_CD=#receivables# THEN ACR.CR_REBIL_AMT ELSE 0 END), 0) RCV_CR_REBIL_AMT
+            ,NVL(SUM(CASE WHEN ACR.AR_CR_TP_CD=#tax# THEN ACR.CR_REBIL_AMT ELSE 0 END), 0)         TAX_CR_REBIL_AMT
+            ,NVL(SUM(CASE WHEN ACR.AR_CR_TP_CD=#freight# THEN ACR.CR_REBIL_AMT ELSE 0 END), 0)     FRT_CR_REBIL_AMT
+            <!-- END 2020/02/29 [QC#55872,MOD]  -->
+        FROM
+            AR_CR_REBIL ACR
+        WHERE
+            ACR.GLBL_CMPY_CD      = #glblCmpyCd#
+        AND ACR.EZCANCELFLAG      = '0'
+        AND ACR.ORIG_INV_NUM      = #origInvNum#
+        AND ACR.AR_CR_REBIL_TP_CD in (#co#,#cr#)
+        AND ACR.INV_TP_CD         = #cm#
+     </statement>
+    <!-- END 2018/05/30 [QC#26299,ADD] -->
+    <statement id="getSvcPgmMdseCd" parameterClass="Map" resultClass="String">
+        SELECT
+            SIL.SVC_PGM_MDSE_CD
+        FROM
+            SVC_INV_LINE         SIL
+        WHERE
+            SIL.GLBL_CMPY_CD     = #glblCmpyCd#
+        AND SIL.SVC_INV_LINE_PK  = #svcInvLinePk#
+        AND SIL.EZCANCELFLAG     = '0'
+     </statement>
+
+    <!-- START 2019/09/17 S.Takami [QC#53456,ADD] -->
+    <statement id="hasSetParentLine" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            COUNT(*) AS CNT
+        FROM
+            INV_LINE IL
+        WHERE
+                IL.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND IL.INV_NUM               = #invNum#
+            <isNotNull property="invBolLineNum">
+            AND IL.INV_BOL_LINE_NUM      = #invBolLineNum#
+            </isNotNull>
+            AND IL.INV_LINE_NUM          = #invLineNum#
+            AND IL.INV_LINE_SUB_NUM      = #setPrntInvLIneSubNum#
+            AND IL.EZCANCELFLAG          = '0'
+    </statement>
+    <!-- END 2019/09/17 S.Takami [QC#53456,ADD] -->
+</sqlMap>

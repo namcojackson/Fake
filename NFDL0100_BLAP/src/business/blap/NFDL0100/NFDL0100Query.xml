@@ -1,0 +1,267 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NFDL0100Query">
+    <typeAlias alias="NFDL0100_ASMsg"   type="business.blap.NFDL0100.NFDL0100_ASMsg"/>
+
+    <!-- *********************************************************** -->
+    <!-- ********** Bean Definition ******************************** -->
+    <!-- *********************************************************** -->
+
+    <statement id="getPrintInvoiceList" parameterClass="Map" resultMap="result.getPrintInvoiceList">
+        SELECT
+
+            TRX.BILL_TO_CUST_CD                    BILL_TO_CUST_CD_A
+           ,NVL(SI.DS_CONTR_NUM, TRX.CPO_ORD_NUM)  XX_DPLY_TRX_NUM_TXT_A
+            <!-- START 2023/03/07 S.Fujita [QC#61169,MOD] -->
+            <!--  ,TRX.AR_TRX_NUM                         AR_TRX_NUM_A -->
+           ,TRX.AR_TRX_NUM                         AR_CUST_REF_NUM_A
+            <!-- END 2023/03/07 S.Fujita [QC#61169,MOD] -->
+           ,TRX.GRP_INV_NUM                        GRP_INV_NUM_A
+           ,CASE WHEN TRX.AR_TRX_TP_CD = #arTrxTpInv# AND TRX.GRP_INV_NUM IS NOT NULL THEN #docTp01#
+                 WHEN TRX.AR_TRX_TP_CD = #arTrxTpInv# AND TRX.GRP_INV_NUM IS NULL     THEN #docTp02#
+                 WHEN TRX.AR_TRX_TP_CD = #arTrxTpDem#                                 THEN #docTp03#
+                 WHEN TRX.AR_TRX_TP_CD = #arTrxTpCrm#                                 THEN #docTp04#
+            END                                    XX_SCR_ITEM_130_TXT_A
+           ,TRX.DEAL_ORIG_GRS_AMT                  DEAL_ORIG_GRS_AMT_A
+           ,TRX.DEAL_RMNG_BAL_GRS_AMT              DEAL_RMNG_BAL_GRS_AMT_A
+           ,TRX.AR_TRX_DT                          AR_TRX_DT_A
+           ,TRX.INV_DUE_DT                         INV_DUE_DT_A
+           ,CASE WHEN #slsDt# > TRX.INV_DUE_DT THEN TO_NUMBER(TO_DATE(#slsDt#,'YYYYMMDD') - TO_DATE(TRX.INV_DUE_DT,'YYYYMMDD'))
+                 ELSE 0
+            <!-- START 2022/08/03 D.Mamaril [QC#60294,MOD] -->
+            <!-- END                                    PMT_LATE_DAYS_AOT_A -->
+            END                                    DAYS_PAST_DUE_AOT_A
+            <!-- END 2022/08/03 D.Mamaril [QC#60294,MOD] -->
+           ,TRX.CUST_ISS_PO_NUM                    CUST_ISS_PO_NUM_A
+           ,IPC.INV_PRT_CTRL_PK                    INV_PRT_CTRL_PK_A
+           ,IPC.INV_FILE_URL                       INV_FILE_URL_A
+           ,IPC.INV_PRT_CTRL_REC_CD                INV_PRT_CTRL_REC_CD_A
+<!-- CSA ADD Start -->
+           ,IPC.INV_PRT_CTRL_PK                    INV_PRT_CTRL_PK
+<!-- 2019/07/29 QC#51679 Mod Start -->
+<!--           ,(CASE WHEN IPC.INV_FILE_URL IS NULL-->
+<!--                  THEN NVL(IPC.INV_FTP_RQST_NUM, IPC.INV_PRINT_RQST_NUM)-->
+<!--                  ELSE NULL END)                   EIP_RPT_RQST_PK-->
+           ,CASE
+                 WHEN TRX.GRP_INV_NUM IS NOT NULL THEN
+                      CASE 
+                          WHEN IPC2.INV_FILE_URL IS NULL THEN
+                          NVL(IPC2.INV_FTP_RQST_NUM, IPC2.INV_PRINT_RQST_NUM)
+                          ELSE NULL
+                      END
+                 WHEN IPC.INV_FILE_URL IS NULL THEN
+                 NVL(IPC.INV_FTP_RQST_NUM, IPC.INV_PRINT_RQST_NUM)
+                 ELSE NULL
+            END                                    EIP_RPT_RQST_PK
+<!-- 2019/07/29 QC#51679 Mod End -->
+<!-- 2023/02/01 QC#61091 Add Start -->
+           ,CASE
+                 WHEN IPC.INV_FILE_URL IS NULL THEN
+                 NVL(IPC.INV_FTP_RQST_NUM, IPC.INV_PRINT_RQST_NUM)
+                 ELSE NULL
+            END                                    INV_EIP_RPT_RQST_PK
+<!-- 2023/02/01 QC#61091 Add End -->
+<!-- CSA ADD End -->
+           ,IPC.BILL_TO_DS_ACCT_NUM                BILL_TO_DS_ACCT_NUM
+           ,IPC.BILL_TO_DS_ACCT_NM                 BILL_TO_DS_ACCT_NM
+        FROM AR_TRX_BAL   TRX
+            ,SVC_INV      SI
+            ,INV_PRT_CTRL IPC
+<!-- 2019/07/29 QC#51679 Add Start -->
+            ,INV_PRT_CTRL IPC2
+<!-- 2019/07/29 QC#51679 Add End -->
+
+        WHERE TRX.GLBL_CMPY_CD            = #glblCmpyCd#
+
+        <isNotNull property="arTrxTpCdList">
+        AND   TRX.AR_TRX_TP_CD IN (
+          <iterate property="arTrxTpCdList" var="arTrxTpCd[]" open="" close="" conjunction=",">
+               #arTrxTpCd[]#
+          </iterate>
+        )
+        </isNotNull>
+        <isNotNull property="arCashApplyStsCdList">
+        AND   TRX.AR_CASH_APPLY_STS_CD IN (
+          <iterate property="arCashApplyStsCdList" var="arCashApplyStsCd[]" open="" close="" conjunction=",">
+              #arCashApplyStsCd[]#
+          </iterate>
+        )
+        </isNotNull>
+        <isNotNull property="cMsg.billToCustAcctCd_H">
+        AND   TRX.BILL_TO_CUST_ACCT_CD    = #cMsg.billToCustAcctCd_H#
+        </isNotNull>
+        <isNotNull property="cMsg.billToCustCd_H">
+        AND   TRX.BILL_TO_CUST_CD         = #cMsg.billToCustCd_H#
+        </isNotNull>
+        <isNotNull property="cMsg.custIssPoNum_H1">
+        AND   UPPER(TRX.CUST_ISS_PO_NUM)      LIKE '%' || UPPER(#cMsg.custIssPoNum_H1#) || '%' <!-- 2019/03/27 QC#30758 Add 'UPPER' Function -->
+        </isNotNull>
+        <!-- START 2023/03/07 S.Fujita [QC#61169,MOD] -->
+        <!-- <isNotNull property="cMsg.arTrxNum_H1">-->
+        <isNotNull property="cMsg.arCustRefNum_H1">
+        <!-- AND   ( TRX.AR_TRX_NUM           LIKE '%' || #cMsg.arTrxNum_H1# || '%' -->
+        AND   ( TRX.AR_TRX_NUM           LIKE '%' || #cMsg.arCustRefNum_H1# || '%'
+                OR
+              <!-- TRX.GRP_INV_NUM          LIKE '%' || #cMsg.arTrxNum_H1# || '%' -->
+              TRX.GRP_INV_NUM          LIKE '%' || #cMsg.arCustRefNum_H1# || '%'
+        <!-- END 2023/03/07 S.Fujita [QC#61169,MOD] -->
+              )
+        </isNotNull>
+        <isNotNull property="cMsg.billToCustCd_H1">
+        AND   TRX.BILL_TO_CUST_CD      LIKE '%' || #cMsg.billToCustCd_H1# || '%'
+        </isNotNull>
+        <isNotNull property="cMsg.arTrxDt_H1">
+        AND   TRX.AR_TRX_DT         &gt;=    #cMsg.arTrxDt_H1#
+        </isNotNull>
+        <isNotNull property="cMsg.arTrxDt_H2">
+        AND   TRX.AR_TRX_DT         &lt;=   #cMsg.arTrxDt_H2#
+        </isNotNull>
+        AND   TRX.GLBL_CMPY_CD            = SI.GLBL_CMPY_CD(+)
+        AND   TRX.AR_TRX_NUM              = SI.SVC_INV_NUM(+)
+        <isNotNull property="cMsg.xxDplyTrxNumTxt_H1">
+        AND   SI.DS_CONTR_NUM          LIKE '%' || #cMsg.xxDplyTrxNumTxt_H1# || '%'
+        </isNotNull>
+        <isNotNull property="cMsg.serNum_H1">
+        AND   SI.SER_NUM               LIKE '%' || #cMsg.serNum_H1# || '%'
+        </isNotNull>
+        AND   IPC.GLBL_CMPY_CD            = TRX.GLBL_CMPY_CD
+        AND   TRX.EZCANCELFLAG            = '0'
+        AND   SI.EZCANCELFLAG(+)          = '0'
+        AND   IPC.EZCANCELFLAG            = '0'
+        AND   TRX.AR_TRX_NUM              = CASE WHEN IPC.ISTL_PMT_TERM_DTL_NUM IS NULL THEN IPC.INV_NUM
+                                            ELSE IPC.INV_NUM ||'-'|| IPC.ISTL_PMT_TERM_DTL_NUM
+                                            END
+<!-- 2019/07/29 QC#51679 Add Start -->
+        AND TRX.GRP_INV_NUM               = IPC2.CONSL_BILL_NUM(+)
+        AND TRX.GLBL_CMPY_CD              = IPC2.GLBL_CMPY_CD(+)
+        AND IPC2.EZCANCELFLAG(+)          = '0'
+        AND IPC2.INV_PRT_CTRL_REC_CD(+)   = #ipcRecCdBill#
+<!-- 2019/07/29 QC#51679 Add End -->        
+    <!-- START 2023/03/07 S.Fujita [QC#61169,ADD] -->
+    UNION ALL
+        SELECT
+            DISTINCT
+            TRX.BILL_TO_CUST_CD                    BILL_TO_CUST_CD_A
+           ,NVL(SI.DS_CONTR_NUM, TRX.CPO_ORD_NUM)  XX_DPLY_TRX_NUM_TXT_A
+           ,TRX.AR_CUST_REF_NUM                    AR_CUST_REF_NUM_A
+           ,''                                     GRP_INV_NUM_A
+           ,'LF'                                   XX_SCR_ITEM_130_TXT_A
+           ,TRX.DEAL_ORIG_GRS_AMT                  DEAL_ORIG_GRS_AMT_A
+           ,TRX.DEAL_RMNG_BAL_GRS_AMT              DEAL_RMNG_BAL_GRS_AMT_A
+           ,TRX.AR_TRX_DT                          AR_TRX_DT_A
+           ,TRX.INV_DUE_DT                         INV_DUE_DT_A
+           ,CASE WHEN #slsDt# > TRX.INV_DUE_DT THEN TO_NUMBER(TO_DATE(#slsDt#,'YYYYMMDD') - TO_DATE(TRX.INV_DUE_DT,'YYYYMMDD'))
+               ELSE 0
+            END                                    DAYS_PAST_DUE_AOT_A
+           ,TRX.CUST_ISS_PO_NUM                    CUST_ISS_PO_NUM_A
+           ,NULL                                   INV_PRT_CTRL_PK_A
+           ,''                                     INV_FILE_URL_A
+           ,''                                     INV_PRT_CTRL_REC_CD_A
+           ,NULL                                   INV_PRT_CTRL_PK
+           ,ALF.EIP_RPT_RQST_PK                    EIP_RPT_RQST_PK
+           ,ALF.EIP_RPT_RQST_PK                    INV_EIP_RPT_RQST_PK
+           ,STC.SELL_TO_CUST_CD                    BILL_TO_DS_ACCT_NUM
+           ,STC.DS_ACCT_NM                         BILL_TO_DS_ACCT_NM
+        FROM AR_TRX_BAL   TRX
+            ,SVC_INV      SI
+            ,AR_LATE_FEE_TRX_DTL ALF
+            ,SELL_TO_CUST STC
+        WHERE TRX.GLBL_CMPY_CD            = #glblCmpyCd#
+        AND   TRX.BILL_TO_CUST_ACCT_CD    = #cMsg.billToCustAcctCd_H#
+        AND   TRX.AR_TRX_TP_CD    = #arTrxTpDed#
+        AND   TRX.EZCANCELFLAG    = '0'
+
+        <isNotNull property="arCashApplyStsCdList">
+        AND   TRX.AR_CASH_APPLY_STS_CD IN (
+          <iterate property="arCashApplyStsCdList" var="arCashApplyStsCd[]" open="" close="" conjunction=",">
+              #arCashApplyStsCd[]#
+          </iterate>
+        )
+        </isNotNull>
+        <isNotNull property="cMsg.billToCustAcctCd_H">
+        AND   TRX.BILL_TO_CUST_ACCT_CD    = #cMsg.billToCustAcctCd_H#
+        </isNotNull>
+        <isNotNull property="cMsg.billToCustCd_H">
+        AND   TRX.BILL_TO_CUST_CD         = #cMsg.billToCustCd_H#
+        </isNotNull>
+        <isNotNull property="cMsg.custIssPoNum_H1">
+        AND   UPPER(TRX.CUST_ISS_PO_NUM)      LIKE '%' || UPPER(#cMsg.custIssPoNum_H1#) || '%' --> 
+        </isNotNull>
+        <isNotNull property="cMsg.arCustRefNum_H1">
+        AND   ( TRX.AR_CUST_REF_NUM           LIKE '%' || #cMsg.arCustRefNum_H1# || '%'
+            OR
+            TRX.GRP_INV_NUM          LIKE '%' || #cMsg.arCustRefNum_H1# || '%'
+             )
+        </isNotNull>
+        <isNotNull property="cMsg.billToCustCd_H1">
+        AND   TRX.BILL_TO_CUST_CD      LIKE '%' || #cMsg.billToCustCd_H1# || '%'
+        </isNotNull>
+        <isNotNull property="cMsg.arTrxDt_H1">
+        AND   TRX.AR_TRX_DT         &gt;=    #cMsg.arTrxDt_H1#
+        </isNotNull>
+        <isNotNull property="cMsg.arTrxDt_H2">
+        AND   TRX.AR_TRX_DT         &lt;=   #cMsg.arTrxDt_H2#
+        </isNotNull>
+        AND   TRX.GLBL_CMPY_CD            = SI.GLBL_CMPY_CD(+)
+        AND   TRX.AR_TRX_NUM              = SI.SVC_INV_NUM(+)
+        AND   SI.EZCANCELFLAG(+)          = '0'
+        <isNotNull property="cMsg.xxDplyTrxNumTxt_H1">
+        AND   SI.DS_CONTR_NUM          LIKE '%' || #cMsg.xxDplyTrxNumTxt_H1# || '%'
+        </isNotNull>
+        <isNotNull property="cMsg.serNum_H1">
+        AND   SI.SER_NUM               LIKE '%' || #cMsg.serNum_H1# || '%'
+        </isNotNull>
+        AND   TRX.GLBL_CMPY_CD    = ALF.GLBL_CMPY_CD
+        AND   TRX.AR_TRX_BAL_PK   = ALF.AR_TRX_BAL_PK
+        AND   ALF.EZCANCELFLAG    = '0'
+        AND   TRX.GLBL_CMPY_CD    = STC.GLBL_CMPY_CD
+        AND   TRX.BILL_TO_CUST_ACCT_CD = STC.SELL_TO_CUST_CD
+        AND   STC.EZCANCELFLAG    = '0'
+    ORDER BY AR_CUST_REF_NUM_A 
+    <!-- END 2023/03/07 S.Fujita [QC#61169,ADD] -->
+
+    </statement>
+
+    <resultMap id="result.getPrintInvoiceList" class="NFDL0100_ASMsg">
+        <result property="billToCustCd_A"      column="BILL_TO_CUST_CD_A"       javaType="EZDSStringItem"/>
+        <result property="xxDplyTrxNumTxt_A"   column="XX_DPLY_TRX_NUM_TXT_A"   javaType="EZDSStringItem"/>
+        <!-- START 2023/03/07 S.Fujita [QC#61169,MOD] -->
+        <!-- <result property="arTrxNum_A"          column="AR_TRX_NUM_A"            javaType="EZDSStringItem"/> -->
+        <result property="arCustRefNum_A"          column="AR_CUST_REF_NUM_A"            javaType="EZDSStringItem"/>
+        <!-- END 2023/03/07 S.Fujita [QC#61169,MOD] -->
+        <result property="grpInvNum_A"         column="GRP_INV_NUM_A"           javaType="EZDSStringItem"/>
+        <result property="xxScrItem130Txt_A"   column="XX_SCR_ITEM_130_TXT_A"   javaType="EZDSStringItem"/>
+        <result property="dealOrigGrsAmt_A"    column="DEAL_ORIG_GRS_AMT_A"     javaType="EZDSBigDecimalItem"/>
+        <result property="dealRmngBalGrsAmt_A" column="DEAL_RMNG_BAL_GRS_AMT_A" javaType="EZDSBigDecimalItem"/>
+        <result property="arTrxDt_A"           column="AR_TRX_DT_A"             javaType="EZDSDateItem"/>
+        <result property="invDueDt_A"          column="INV_DUE_DT_A"            javaType="EZDSDateItem"/>
+        <!-- START 2022/08/03 D.Mamaril [QC#60294,MOD] -->
+        <!-- <result property="pmtLateDaysAot_A"    column="PMT_LATE_DAYS_AOT_A"     javaType="EZDSBigDecimalItem"/> -->
+        <result property="daysPastDueAot_A"    column="DAYS_PAST_DUE_AOT_A"     javaType="EZDSBigDecimalItem"/>
+        <!-- END 2022/08/03 D.Mamaril [QC#60294,MOD] -->
+        <result property="custIssPoNum_A"      column="CUST_ISS_PO_NUM_A"       javaType="EZDSStringItem"/>
+        <result property="invPrtCtrlPk_A"      column="INV_PRT_CTRL_PK_A"       javaType="EZDSBigDecimalItem"/>
+        <result property="invFileUrl_A"        column="INV_FILE_URL_A"          javaType="EZDSStringItem"/>
+        <result property="invPrtCtrlRecCd_A"   column="INV_PRT_CTRL_REC_CD_A"   javaType="EZDSStringItem"/>
+        <result property="eipRptRqstPk_A"      column="EIP_RPT_RQST_PK"         javaType="EZDSStringItem"/>
+        <!-- 2023/02/01 QC#61091 Add Start -->
+        <result property="eipRptRqstPk_AI"     column="INV_EIP_RPT_RQST_PK"     javaType="EZDSStringItem"/>
+        <!-- 2023/02/01 QC#61091 Add End -->
+        <result property="billToDsAcctNum_A"   column="BILL_TO_DS_ACCT_NUM"     javaType="EZDSStringItem"/>
+        <result property="billToDsAcctNm_A"    column="BILL_TO_DS_ACCT_NM"      javaType="EZDSStringItem"/>
+    </resultMap>
+
+    <statement id="getBillToCustName" parameterClass="Map" resultClass="String">
+        SELECT
+                 BC.LOC_NM
+
+        FROM
+                BILL_TO_CUST  BC
+
+        WHERE   BC.GLBL_CMPY_CD         = #glblCmpyCd#
+        AND     BC.BILL_TO_CUST_CD      = #billToCustCd#
+        AND     BC.EZCANCELFLAG         = '0'
+        AND     ROWNUM                   &lt;= 1
+    </statement>
+
+</sqlMap>

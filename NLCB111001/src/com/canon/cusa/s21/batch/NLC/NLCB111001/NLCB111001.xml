@@ -1,0 +1,319 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NLCB111001">
+
+    <statement id="getABCAnalysisRequest" parameterClass="Map"
+        resultClass="Map">
+        SELECT
+             REQ.ABC_ANLS_RQST_PK
+            ,REQ.ABC_ASG_PK
+        FROM
+            ABC_ANLS_RQST REQ
+        WHERE
+                REQ.GLBL_CMPY_CD         = #GLBL_CMPY_CD#
+            AND REQ.EZCANCELFLAG         = '0'
+            AND REQ.ABC_ANLS_RQST_STS_CD = '0'
+            AND REQ.RQST_LTST_FLG        = 'Y'
+    </statement>
+    <statement id="getABCAnalysisAssignment" parameterClass="Map"
+        resultClass="Map">
+        SELECT
+             ASG.ABC_ASG_PK
+            ,ASG.ABC_ANLS_CLS_NUM
+            ,ASG.MDSE_ITEM_TP_CD
+            ,ASG.EFF_FROM_DT
+            ,ASG.EFF_THRU_DT
+            ,CRIT.ABC_ANLS_COL_TP_CD
+            ,CRIT.INVTY_TRX_HIST_ANLS_FLG
+            ,ASG.EFF_FROM_DT
+            ,ASG.EFF_THRU_DT
+            ,ASG.ABC_ASG_NM
+        FROM
+            ABC_ASG ASG,
+            ABC_ANLS_CRIT CRIT
+        WHERE
+                ASG.GLBL_CMPY_CD      = #GLBL_CMPY_CD#
+            AND ASG.ABC_ASG_PK        = #ABC_ASG_PK#
+            AND ASG.EZCANCELFLAG      = '0'
+            AND ASG.GLBL_CMPY_CD     = CRIT.GLBL_CMPY_CD
+            AND ASG.ABC_ANLS_CRIT_CD = CRIT.ABC_ANLS_CRIT_CD
+            AND CRIT.EZCANCELFLAG     = '0'
+    </statement>
+    <statement id="getABCAnalysisAssignmentWH" parameterClass="Map"
+        resultClass="String">
+        SELECT
+            WH.RTL_WH_CD
+        FROM
+            ABC_ASG_WH WH
+        WHERE
+                WH.GLBL_CMPY_CD = #GLBL_CMPY_CD#
+            AND WH.ABC_ASG_PK   = #ABC_ASG_PK#
+            AND WH.EZCANCELFLAG = '0'
+    </statement>
+    <statement id="getABCAnalysisAssignmentSWH" parameterClass="Map"
+        resultClass="String">
+        SELECT
+            SWH.RTL_SWH_CD
+        FROM
+            ABC_ASG_SWH SWH
+        WHERE
+                SWH.GLBL_CMPY_CD = #GLBL_CMPY_CD#
+            AND SWH.ABC_ASG_PK   = #ABC_ASG_PK#
+            AND SWH.EZCANCELFLAG = '0'
+    </statement>
+    <statement id="getABCAnalysisAssignmentStockStatus" parameterClass="Map"
+        resultClass="String">
+        SELECT
+            STS.STK_STS_CD
+        FROM
+            ABC_ASG_STK_STS STS
+        WHERE
+                STS.GLBL_CMPY_CD = #GLBL_CMPY_CD#
+            AND STS.ABC_ASG_PK = #ABC_ASG_PK#
+            AND STS.EZCANCELFLAG = '0'
+    </statement>
+    <statement id="getInventory" parameterClass="Map"
+        resultClass="Map">
+        SELECT
+             SWH.RTL_WH_CD
+            ,SWH.RTL_SWH_CD
+            ,INV.INVTY_LOC_CD
+            ,INV.STK_STS_CD
+            ,INV.MDSE_CD
+            ,INV.INVTY_QTY
+            ,0 as HIST_INVTY_TRX_QTY
+            ,0 as HIST_INVTY_TRX_REC_CNT
+            ,MDSE.THIS_MTH_TOT_STD_COST_AMT
+        FROM
+             RTL_SWH SWH
+            ,INVTY INV
+            ,ALL_MDSE_V MDSE
+        WHERE
+                SWH.GLBL_CMPY_CD     = #GLBL_CMPY_CD#
+            AND SWH.RTL_WH_CD        = #RTL_WH_CD#
+            <iterate property="swhList" var="rtlSwhCd[]" open="AND SWH.RTL_SWH_CD IN (" close=")" conjunction=",">
+                #rtlSwhCd[]#
+            </iterate>
+            AND SWH.EZCANCELFLAG     = '0'
+            AND SWH.GLBL_CMPY_CD     = INV.GLBL_CMPY_CD
+            AND SWH.INVTY_LOC_CD     = INV.INVTY_LOC_CD
+            AND INV.LOC_STS_CD       = #LOC_STS_CD#
+            <iterate property="stockStatusList" var="stockStatusCd[]" open="AND INV.STK_STS_CD IN (" close=")" conjunction=",">
+                #stockStatusCd[]#
+            </iterate>
+            AND INV.EZCANCELFLAG     = '0'
+            AND INV.GLBL_CMPY_CD     = MDSE.GLBL_CMPY_CD
+            AND INV.MDSE_CD          = MDSE.MDSE_CD
+            AND INV.INVTY_QTY     &gt; 0
+            <isNotNull property="mdseItemTpCd">
+            AND MDSE.MDSE_ITEM_TP_CD = #mdseItemTpCd#
+            </isNotNull>
+            AND MDSE.EZCANCELFLAG    = '0'
+    </statement>
+    <statement id="getHistoricalInventory" parameterClass="Map"
+        resultClass="Map">
+        SELECT
+             SWH.RTL_WH_CD
+            ,SWH.RTL_SWH_CD
+            ,INV.INVTY_LOC_CD
+            ,INV.STK_STS_CD
+            ,INV.MDSE_CD
+            ,0 as INVTY_QTY
+            <isNotEqual property="abcAnlsColTpCd" compareValue="03">
+            ,ABS(SUM(INV.INVTY_TRX_QTY)) AS HIST_INVTY_TRX_QTY
+            ,0 AS HIST_INVTY_TRX_REC_CNT
+            </isNotEqual>
+            <isEqual property="abcAnlsColTpCd" compareValue="03">
+            ,0 AS HIST_INVTY_TRX_QTY
+            ,COUNT(1) AS HIST_INVTY_TRX_REC_CNT
+            </isEqual>
+            ,MDSE.THIS_MTH_TOT_STD_COST_AMT
+        FROM
+             RTL_SWH SWH
+            ,INVTY_TRX INV
+            ,ALL_MDSE_V MDSE
+        WHERE
+                SWH.GLBL_CMPY_CD     = #GLBL_CMPY_CD#
+            AND SWH.RTL_WH_CD        = #RTL_WH_CD#
+            <iterate property="swhList" var="rtlSwhCd[]" open="AND SWH.RTL_SWH_CD IN (" close=")" conjunction=",">
+                #rtlSwhCd[]#
+            </iterate>
+            AND SWH.EZCANCELFLAG     = '0'
+            AND SWH.GLBL_CMPY_CD     = INV.GLBL_CMPY_CD
+            AND SWH.INVTY_LOC_CD     = INV.INVTY_LOC_CD
+            AND INV.LOC_STS_CD = #LOC_STS_CD#
+            <iterate property="stockStatusList" var="stockStatusCd[]" open="AND INV.STK_STS_CD IN (" close=")" conjunction=",">
+                #stockStatusCd[]#
+            </iterate>
+            <isNotNull property="dtCondition">
+            AND INV.INVTY_TRX_DT BETWEEN #EFF_FROM_DT# AND #EFF_THRU_DT#
+            </isNotNull>
+            AND INV.INVTY_TRX_QTY &lt; 0
+            AND INV.EZCANCELFLAG     = '0'
+            AND INV.GLBL_CMPY_CD     = MDSE.GLBL_CMPY_CD
+            AND INV.MDSE_CD          = MDSE.MDSE_CD
+            <isNotNull property="mdseItemTpCd">
+            AND MDSE.MDSE_ITEM_TP_CD = #mdseItemTpCd#
+            </isNotNull>
+            AND MDSE.EZCANCELFLAG    = '0'
+        GROUP BY
+             SWH.RTL_WH_CD
+            ,SWH.RTL_SWH_CD
+            ,INV.INVTY_LOC_CD
+            ,INV.STK_STS_CD
+            ,INV.MDSE_CD
+            ,MDSE.THIS_MTH_TOT_STD_COST_AMT
+    </statement>
+    <statement id="getABCClass"  parameterClass="Map"
+        resultClass="Map">
+        SELECT
+            CLS.ABC_ANLS_CLS_TAG_CD
+            ,CLS.CUM_VAL_ASG_FROM_PCT
+            ,CLS.CUM_VAL_ASG_TO_PCT
+            ,CLS.CYCLE_CNT_FREQ_DAYS_AOT
+        FROM
+            ABC_ANLS_CLS CLS
+        WHERE
+                CLS.GLBL_CMPY_CD     = #GLBL_CMPY_CD#
+            AND CLS.ABC_ANLS_CLS_NUM = #ABC_ANLS_CLS_NUM#
+            AND CLS.EZCANCELFLAG     = '0'
+        ORDER BY
+            CLS.ABC_ANLS_CLS_PRTY_NUM
+    </statement>
+    <statement id="getABCResultDetailGroupByWH"  parameterClass="Map"
+        resultClass="Map">
+        SELECT
+            DTL.RTL_WH_CD
+            <isEqual property="invtryTrxHistAnlsFlg" compareValue="N">
+                <isEqual property="abcAnlsColTpCd" compareValue="01">
+                ,SUM(DTL.CUR_INVTY_QTY) AS ABC_ANLS_VAL_AMT_TOTAL
+                </isEqual>
+                <isEqual property="abcAnlsColTpCd" compareValue="02">
+                ,SUM(DTL.CUR_INVTY_COST_AMT) AS ABC_ANLS_VAL_AMT_TOTAL
+                </isEqual>
+            </isEqual>
+            <isEqual property="invtryTrxHistAnlsFlg" compareValue="Y">
+                <isEqual property="abcAnlsColTpCd" compareValue="01">
+                ,SUM(DTL.HIST_INVTY_TRX_QTY) AS ABC_ANLS_VAL_AMT_TOTAL
+                </isEqual>
+                <isEqual property="abcAnlsColTpCd" compareValue="02">
+                ,SUM(DTL.HIST_INVTY_TRX_COST_AMT) AS ABC_ANLS_VAL_AMT_TOTAL
+                </isEqual>
+                <isEqual property="abcAnlsColTpCd" compareValue="03">
+                ,SUM(DTL.HIST_INVTY_TRX_REC_CNT) AS ABC_ANLS_VAL_AMT_TOTAL
+                </isEqual>
+            </isEqual>
+        FROM
+            ABC_ANLS_RSLT_DTL DTL
+        WHERE
+                DTL.GLBL_CMPY_CD     = #GLBL_CMPY_CD#
+            AND DTL.ABC_ANLS_RQST_PK = #ABC_ANLS_RQST_PK#
+            AND DTL.RTL_WH_CD        = #RTL_WH_CD#
+            AND DTL.EZCANCELFLAG     = '0'
+        GROUP BY
+            DTL.RTL_WH_CD
+    </statement>
+    <statement id="getABCResultGroupByWhMdse"  parameterClass="Map"
+        resultClass="Map">
+        SELECT
+             DTL.RTL_WH_CD
+            ,DTL.MDSE_CD
+            <isEqual property="invtryTrxHistAnlsFlg" compareValue="N">
+                <isEqual property="abcAnlsColTpCd" compareValue="01">
+                ,SUM(DTL.CUR_INVTY_QTY) AS ABC_ANLS_VAL_AMT
+                </isEqual>
+                <isEqual property="abcAnlsColTpCd" compareValue="02">
+                ,SUM(DTL.CUR_INVTY_COST_AMT) AS ABC_ANLS_VAL_AMT
+                </isEqual>
+            </isEqual>
+            <isEqual property="invtryTrxHistAnlsFlg" compareValue="Y">
+                <isEqual property="abcAnlsColTpCd" compareValue="01">
+                ,SUM(DTL.HIST_INVTY_TRX_QTY) AS ABC_ANLS_VAL_AMT
+                </isEqual>
+                <isEqual property="abcAnlsColTpCd" compareValue="02">
+                ,SUM(DTL.HIST_INVTY_TRX_COST_AMT) AS ABC_ANLS_VAL_AMT
+                </isEqual>
+                <isEqual property="abcAnlsColTpCd" compareValue="03">
+                ,SUM(DTL.HIST_INVTY_TRX_REC_CNT) AS ABC_ANLS_VAL_AMT
+                </isEqual>
+            </isEqual>
+        FROM
+            ABC_ANLS_RSLT_DTL DTL
+        WHERE
+                DTL.GLBL_CMPY_CD     = #GLBL_CMPY_CD#
+            AND DTL.ABC_ANLS_RQST_PK = #ABC_ANLS_RQST_PK#
+            AND DTL.RTL_WH_CD        = #RTL_WH_CD#
+            AND DTL.EZCANCELFLAG     = '0'
+        GROUP BY
+             DTL.RTL_WH_CD
+            ,DTL.MDSE_CD
+        ORDER BY
+            <isEqual property="invtryTrxHistAnlsFlg" compareValue="N">
+                <isEqual property="abcAnlsColTpCd" compareValue="01">
+                SUM(DTL.CUR_INVTY_QTY) DESC,
+                </isEqual>
+                <isEqual property="abcAnlsColTpCd" compareValue="02">
+                SUM(DTL.CUR_INVTY_COST_AMT) DESC,
+                </isEqual>
+            </isEqual>
+            <isEqual property="invtryTrxHistAnlsFlg" compareValue="Y">
+                <isEqual property="abcAnlsColTpCd" compareValue="01">
+                SUM(DTL.HIST_INVTY_TRX_QTY) DESC,
+                </isEqual>
+                <isEqual property="abcAnlsColTpCd" compareValue="02">
+                SUM(DTL.HIST_INVTY_TRX_COST_AMT) DESC,
+                </isEqual>
+                <isEqual property="abcAnlsColTpCd" compareValue="03">
+                SUM(DTL.HIST_INVTY_TRX_REC_CNT) DESC,
+                </isEqual>
+            </isEqual>
+            DTL.MDSE_CD
+    </statement>
+
+    <statement id="getABCResultDetailPk"  parameterClass="Map"
+        resultClass="Map">
+        SELECT
+             DTL.ABC_ANLS_RSLT_DTL_PK
+        FROM
+            ABC_ANLS_RSLT_DTL DTL
+        WHERE
+                DTL.GLBL_CMPY_CD     = #GLBL_CMPY_CD#
+            AND DTL.ABC_ANLS_RQST_PK = #ABC_ANLS_RQST_PK#
+            AND DTL.RTL_WH_CD        = #RTL_WH_CD#
+            AND DTL.MDSE_CD          = #MDSE_CD#
+            AND DTL.EZCANCELFLAG     = '0'
+    </statement>
+
+    <statement id="getABCAnalysisResultPK" parameterClass="Map"
+        resultClass="BigDecimal">
+        SELECT
+            RSLT.ABC_ANLS_RSLT_PK
+        FROM
+            ABC_ANLS_RSLT RSLT
+        WHERE
+                RSLT.GLBL_CMPY_CD      = #GLBL_CMPY_CD#
+            AND RSLT.RTL_WH_CD         = #RTL_WH_CD#
+            AND RSLT.MDSE_CD           = #MDSE_CD#
+            AND RSLT.ABC_ANLS_LTST_FLG = 'Y'
+            AND RSLT.EZCANCELFLAG      = '0'
+    </statement>
+    <statement id="getABCAnalysisResultDetailPK" parameterClass="Map"
+        resultClass="BigDecimal">
+        SELECT
+            DTL.ABC_ANLS_RSLT_DTL_PK
+        FROM
+            ABC_ANLS_RSLT_DTL DTL
+        WHERE
+                DTL.GLBL_CMPY_CD     = #GLBL_CMPY_CD#
+            AND DTL.ABC_ANLS_RQST_PK = #ABC_ANLS_RQST_PK#
+            AND DTL.RTL_WH_CD        = #RTL_WH_CD#
+            <isNotNull property="RTL_SWH_CD">
+            AND DTL.RTL_SWH_CD       = #RTL_SWH_CD#
+            </isNotNull>
+            AND DTL.MDSE_CD          = #MDSE_CD#
+            <isNotNull property="STK_STS_CD">
+            AND DTL.STK_STS_CD       = #STK_STS_CD#
+            </isNotNull>
+            AND DTL.EZCANCELFLAG     = '0'
+    </statement>
+
+</sqlMap>

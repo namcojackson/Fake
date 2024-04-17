@@ -1,0 +1,478 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NLBL0060Query">
+
+    <typeAlias alias="NLBL0060SMsg"     type="business.blap.NLBL0060.NLBL0060SMsg"/>
+    <typeAlias alias="NLBL0060_ASMsg"   type="business.blap.NLBL0060.NLBL0060_ASMsg"/>
+    <typeAlias alias="NLBL0060_TSMsg"   type="business.blap.NLBL0060.NLBL0060_TSMsg"/>
+    <typeAlias alias="NLBL0060_XSMsg"   type="business.blap.NLBL0060.NLBL0060_XSMsg"/>
+    <typeAlias alias="NLBL0060_YSMsg"   type="business.blap.NLBL0060.NLBL0060_YSMsg"/>
+    <typeAlias alias="WH_LEAD_TMTMsg"   type="business.db.WH_LEAD_TMTMsg"/>
+    <typeAlias alias="NLBL0060F00FMsg"  type="business.file.NLBL0060F00FMsg"/>
+    
+    
+    <!-- ** 2013/05/13 R-OM025 Inventory Transaction Modify Start
+    <statement id="getWHList" parameterClass="Map" resultClass="Map">
+        SELECT
+                WH_CD
+                ,LOC_NM
+        
+        FROM
+                WH
+        
+        WHERE
+                GLBL_CMPY_CD    = #sMsg.glblCmpyCd_G1#
+            AND EZCANCELFLAG    = '0'
+        <isNotEqual property="sMsg.whCd_G1" compareValue="*">
+            <iterate property="dataSecurityAttrList" var="elem[]" open="AND (" close=")" conjunction="OR">
+                WH_CD = #elem[].value#
+            </iterate>
+        </isNotEqual>
+        ORDER BY
+                WH_CD
+    </statement>
+       ** 2013/05/13 R-OM025 Inventory Transaction Modify End ** -->
+    
+    <statement id="getWHLeadTmList" parameterClass="NLBL0060SMsg" resultMap="result.NLBL0060_ASMsg">
+        SELECT
+                WLT.WH_CD                       AS  WH_CD
+                <!-- 2013/05/13 R-OM025 Inventory Transaction Add Start -->
+                ,(
+                    SELECT 
+                        INVTY_LOC_NM
+                    FROM DS_INVTY_LOC_V V
+                    WHERE 
+                        V.GLBL_CMPY_CD = WLT.GLBL_CMPY_CD 
+                        AND V.INVTY_LOC_CD = WLT.WH_CD 
+                        AND V.EZCANCELFLAG = '0' 
+                        AND ROWNUM = 1
+                ) AS    LOC_NM
+                <!-- 2013/05/13 R-OM025 Inventory Transaction Add End -->
+                ,WLT.EFF_FROM_DT                AS  EFF_FROM_DT
+                ,WLT.EFF_THRU_DT                AS  EFF_THRU_DT
+                ,WLT.SHPG_MODE_CD               AS  SHPG_MODE_CD
+                ,SM.SHPG_MODE_NM                AS  SHPG_MODE_NM
+                ,WLT.SHPG_SVC_LVL_CD            AS  SHPG_SVC_LVL_CD
+                ,SSL.SHPG_SVC_LVL_NM            AS  SHPG_SVC_LVL_NM
+                ,WLT.SHPG_CLO_TM_TS             AS  SHPG_CLO_TM_TS
+                ,CEIL(WLT.PICK_PACK_AOT / 24)   AS  XX_DPLY_LEAD_TM_DAYS_AOT
+                
+                
+        FROM
+                WH_LEAD_TM      WLT
+                ,SHPG_MODE      SM
+                ,SHPG_SVC_LVL   SSL
+
+        WHERE
+            WLT.GLBL_CMPY_CD            =   SM.GLBL_CMPY_CD(+)
+            AND WLT.SHPG_MODE_CD        =   SM.SHPG_MODE_CD(+)
+            AND WLT.GLBL_CMPY_CD        =   SSL.GLBL_CMPY_CD(+)
+            AND WLT.SHPG_SVC_LVL_CD     =   SSL.SHPG_SVC_LVL_CD(+)
+            AND WLT.GLBL_CMPY_CD        =   #glblCmpyCd_G1#
+            AND WLT.EZCANCELFLAG        =   '0'
+            AND SM.EZCANCELFLAG(+)      =   '0'
+            AND SSL.EZCANCELFLAG(+)     =   '0'
+            
+           <!-- ** 2013/05/13 R-OM025 Inventory Transaction Modify Start ** -->
+            <isNotNull property="whCd_S1">
+                AND WLT.WH_CD           =   #whCd_S1#
+            </isNotNull>
+            <isNull property="whCd_S1">
+             <isNotEqual property="whCd_G1" compareValue="*">
+                <iterate property="whCd_H1" var="elem[]" open="AND (" close=")" conjunction="OR">
+                    WLT.WH_CD = #elem[].value#
+                </iterate>
+             </isNotEqual> 
+            </isNull>
+           <!-- ** 2013/05/13 R-OM025 Inventory Transaction Modify End ** -->
+           
+           
+            <isNotNull property="effFromDt_S1">
+                AND (
+                        (           NVL(WLT.EFF_THRU_DT, '99991231') &gt;=   #effFromDt_S1#
+                            AND     NVL(WLT.EFF_THRU_DT, '99991231') &lt;=   #effThruDt_S1#
+                        )
+                        OR
+                        (           WLT.EFF_FROM_DT                  &gt;=   #effFromDt_S1#
+                            AND     WLT.EFF_FROM_DT                  &lt;=   #effThruDt_S1#
+                        )
+                        OR
+                        (           WLT.EFF_FROM_DT                  &gt;=   #effFromDt_S1#
+                            AND     NVL(WLT.EFF_THRU_DT, '99991231') &lt;=   #effThruDt_S1#
+                        )
+                        OR
+                        (           WLT.EFF_FROM_DT                  &lt;=   #effFromDt_S1#
+                            AND     NVL(WLT.EFF_THRU_DT, '99991231') &gt;=   #effThruDt_S1#
+                        )
+                    )
+            </isNotNull>
+
+        ORDER BY
+                WLT.WH_CD
+                ,WLT.EFF_FROM_DT
+                ,WLT.EFF_THRU_DT
+                ,SM.SHPG_MODE_SORT_NUM
+                ,SSL.SHPG_SVC_LVL_SORT_NUM
+    </statement>
+    
+    <resultMap id="result.NLBL0060_ASMsg" class="NLBL0060_ASMsg">
+        <result property="whCd_A1"                  column="WH_CD"                      javaType="EZDSStringItem"/>
+        <result property="locNm_A1"                 column="LOC_NM"                     javaType="EZDSStringItem"/>
+        <result property="effFromDt_A1"             column="EFF_FROM_DT"                javaType="EZDSDateItem"/>
+        <result property="effThruDt_A1"             column="EFF_THRU_DT"                javaType="EZDSDateItem"/>
+        <result property="shpgModeNm_A1"            column="SHPG_MODE_NM"               javaType="EZDSStringItem"/>
+        <result property="shpgSvcLvlNm_A1"          column="SHPG_SVC_LVL_NM"            javaType="EZDSStringItem"/>
+        <result property="shpgCloTmTs_A1"           column="SHPG_CLO_TM_TS"             javaType="EZDSStringItem"/>
+        <result property="xxDplyLeadTmDaysAot_A1"   column="XX_DPLY_LEAD_TM_DAYS_AOT"   javaType="EZDSBigDecimalItem"/>
+        <result property="whCd_A9"                  column="WH_CD"                      javaType="EZDSStringItem"/>
+        <result property="effFromDt_A9"             column="EFF_FROM_DT"                javaType="EZDSDateItem"/>
+        <result property="effThruDt_A9"             column="EFF_THRU_DT"                javaType="EZDSDateItem"/>
+        <result property="shpgModeCd_A9"            column="SHPG_MODE_CD"               javaType="EZDSStringItem"/>
+        <result property="shpgSvcLvlCd_A9"          column="SHPG_SVC_LVL_CD"            javaType="EZDSStringItem"/>
+    </resultMap>
+    
+    
+    <statement id="getWHLeadTmListForSearchSnapshot" parameterClass="NLBL0060SMsg" resultMap="result.NLBL0060_XSMsg">
+        SELECT
+                WLT.WH_CD                   AS  WH_CD
+                ,WLT.EFF_FROM_DT            AS  EFF_FROM_DT
+                ,WLT.SHPG_MODE_CD           AS  SHPG_MODE_CD
+                ,WLT.SHPG_SVC_LVL_CD        AS  SHPG_SVC_LVL_CD
+                ,WLT.EZUPTIME               AS  EZUPTIME
+                ,WLT.EZUPTIMEZONE           AS  EZUPTIMEZONE
+                
+        FROM
+                WH_LEAD_TM      WLT
+
+        WHERE
+                WLT.GLBL_CMPY_CD        =   #glblCmpyCd_G1#
+            AND WLT.EZCANCELFLAG        =   '0'
+            
+        <isNotEqual property="whCd_G1" compareValue="*">
+            <iterate property="whCd_H1" var="elem[]" open="AND (" close=")" conjunction="OR">
+                WLT.WH_CD = #elem[].value#
+            </iterate>
+        </isNotEqual>
+            
+        ORDER BY
+                WLT.WH_CD
+                ,WLT.EFF_FROM_DT
+                ,WLT.SHPG_MODE_CD
+                ,WLT.SHPG_SVC_LVL_CD
+    </statement>
+    
+    <resultMap id="result.NLBL0060_XSMsg" class="NLBL0060_XSMsg">
+        <result property="whCd_X1"                  column="WH_CD"                      javaType="EZDSStringItem"/>
+        <result property="effFromDt_X1"             column="EFF_FROM_DT"                javaType="EZDSDateItem"/>
+        <result property="shpgModeCd_X1"            column="SHPG_MODE_CD"               javaType="EZDSStringItem"/>
+        <result property="shpgSvcLvlCd_X1"          column="SHPG_SVC_LVL_CD"            javaType="EZDSStringItem"/>
+        <result property="shpgCloTmTs_X1"           column="SHPG_CLO_TM_TS"             javaType="EZDSStringItem"/>
+        <result property="ezUpTime_X1"              column="EZUPTIME"                   javaType="EZDSStringItem"/>
+        <result property="ezUpTimeZone_X1"          column="EZUPTIMEZONE"               javaType="EZDSStringItem"/>
+    </resultMap>
+    
+
+    
+    <statement id="getWHLeadTmListForSubmitSnapshot" parameterClass="NLBL0060SMsg" resultMap="result.NLBL0060_YSMsg">
+        SELECT
+                WLT.WH_CD                   AS  WH_CD
+                ,WLT.EFF_FROM_DT            AS  EFF_FROM_DT
+                ,WLT.SHPG_MODE_CD           AS  SHPG_MODE_CD
+                ,WLT.SHPG_SVC_LVL_CD        AS  SHPG_SVC_LVL_CD
+                ,WLT.EZUPTIME               AS  EZUPTIME
+                ,WLT.EZUPTIMEZONE           AS  EZUPTIMEZONE
+                
+        FROM
+                WH_LEAD_TM      WLT
+
+        WHERE
+                WLT.GLBL_CMPY_CD        =   #glblCmpyCd_G1#
+            AND WLT.EZCANCELFLAG        =   '0'
+
+        <isNotEqual property="whCd_G1" compareValue="*">
+            <iterate property="whCd_H1" var="elem[]" open="AND (" close=")" conjunction="OR">
+                WLT.WH_CD = #elem[].value#
+            </iterate>
+        </isNotEqual>
+        ORDER BY
+                WLT.WH_CD
+                ,WLT.EFF_FROM_DT
+                ,WLT.SHPG_MODE_CD
+                ,WLT.SHPG_SVC_LVL_CD
+                
+        FOR UPDATE NOWAIT
+        
+    </statement>
+    
+    <resultMap id="result.NLBL0060_YSMsg" class="NLBL0060_YSMsg">
+        <result property="whCd_Y1"                  column="WH_CD"                      javaType="EZDSStringItem"/>
+        <result property="effFromDt_Y1"             column="EFF_FROM_DT"                javaType="EZDSDateItem"/>
+        <result property="shpgModeCd_Y1"            column="SHPG_MODE_CD"               javaType="EZDSStringItem"/>
+        <result property="shpgSvcLvlCd_Y1"          column="SHPG_SVC_LVL_CD"            javaType="EZDSStringItem"/>
+        <result property="shpgCloTmTs_Y1"           column="SHPG_CLO_TM_TS"             javaType="EZDSStringItem"/>
+        <result property="ezUpTime_Y1"              column="EZUPTIME"                   javaType="EZDSStringItem"/>
+        <result property="ezUpTimeZone_Y1"          column="EZUPTIMEZONE"               javaType="EZDSStringItem"/>
+    </resultMap>
+    
+    
+    <statement id="getWHCnt" parameterClass="Map" resultClass="Integer">
+        SELECT
+                COUNT(GLBL_CMPY_CD)     AS  RESULT_CNT
+        
+        FROM
+                WH_LEAD_TM  WLT
+        
+        WHERE
+                WLT.GLBL_CMPY_CD        =       #glblCmpyCd#
+            AND WLT.WH_CD               =       #whCd#
+            AND WLT.EZCANCELFLAG        =       '0'
+            AND ROWNUM                  &lt;=   1
+            
+    </statement>
+
+
+    <statement id="getWHLeadTmListForUpdateInsert" parameterClass="WH_LEAD_TMTMsg" resultMap="result.WH_LEAD_TMTMsg">
+        SELECT
+                WLT.GLBL_CMPY_CD            AS      GLBL_CMPY_CD
+                ,WLT.WH_CD                  AS      WH_CD
+                ,WLT.SHPG_SVC_LVL_CD        AS      SHPG_SVC_LVL_CD
+                ,WLT.SHPG_MODE_CD           AS      SHPG_MODE_CD
+                ,WLT.EFF_FROM_DT            AS      EFF_FROM_DT
+                ,WLT.EFF_THRU_DT            AS      EFF_THRU_DT
+                ,WLT.SHPG_CLO_TM_TS         AS      SHPG_CLO_TM_TS
+                ,WLT.SHPG_CLO_TM_DESC_TXT   AS      SHPG_CLO_TM_DESC_TXT
+                ,WLT.PICK_PACK_AOT          AS      PICK_PACK_AOT
+                ,WLT.EZTABLEID              AS      EZTABLEID
+                ,WLT.EZCANCELFLAG           AS      EZCANCELFLAG
+                ,WLT.EZINTIME               AS      EZINTIME
+                ,WLT.EZINTIMEZONE           AS      EZINTIMEZONE
+                ,WLT.EZINCOMPANYCODE        AS      EZINCOMPANYCODE
+                ,WLT.EZINUSERID             AS      EZINUSERID
+                ,WLT.EZINAPLID              AS      EZINAPLID
+                ,WLT.EZUPTIME               AS      EZUPTIME
+                ,WLT.EZUPTIMEZONE           AS      EZUPTIMEZONE
+                ,WLT.EZUPCOMPANYCODE        AS      EZUPCOMPANYCODE
+                ,WLT.EZUPUSERID             AS      EZUPUSERID
+                ,WLT.EZUPAPLID              AS      EZUPAPLID
+
+        FROM
+                WH_LEAD_TM  WLT
+        
+        WHERE
+                WLT.GLBL_CMPY_CD                 =       #glblCmpyCd#
+            AND WLT.WH_CD                        =       #whCd#
+            AND WLT.EFF_FROM_DT                  &lt;    #effFromDt#
+            AND NVL(WLT.EFF_THRU_DT, '99991231') &gt;    #effThruDt#
+            AND WLT.EZCANCELFLAG                 =       '0'
+    </statement>
+    
+    
+    <statement id="getWHLeadTmListForUpdate" parameterClass="WH_LEAD_TMTMsg" resultMap="result.WH_LEAD_TMTMsg">
+        SELECT
+                WLT.GLBL_CMPY_CD            AS      GLBL_CMPY_CD
+                ,WLT.WH_CD                  AS      WH_CD
+                ,WLT.SHPG_SVC_LVL_CD        AS      SHPG_SVC_LVL_CD
+                ,WLT.SHPG_MODE_CD           AS      SHPG_MODE_CD
+                ,WLT.EFF_FROM_DT            AS      EFF_FROM_DT
+                ,WLT.EFF_THRU_DT            AS      EFF_THRU_DT
+                ,WLT.SHPG_CLO_TM_TS         AS      SHPG_CLO_TM_TS
+                ,WLT.SHPG_CLO_TM_DESC_TXT   AS      SHPG_CLO_TM_DESC_TXT
+                ,WLT.PICK_PACK_AOT          AS      PICK_PACK_AOT
+                ,WLT.EZTABLEID              AS      EZTABLEID
+                ,WLT.EZCANCELFLAG           AS      EZCANCELFLAG
+                ,WLT.EZINTIME               AS      EZINTIME
+                ,WLT.EZINTIMEZONE           AS      EZINTIMEZONE
+                ,WLT.EZINCOMPANYCODE        AS      EZINCOMPANYCODE
+                ,WLT.EZINUSERID             AS      EZINUSERID
+                ,WLT.EZINAPLID              AS      EZINAPLID
+                ,WLT.EZUPTIME               AS      EZUPTIME
+                ,WLT.EZUPTIMEZONE           AS      EZUPTIMEZONE
+                ,WLT.EZUPCOMPANYCODE        AS      EZUPCOMPANYCODE
+                ,WLT.EZUPUSERID             AS      EZUPUSERID
+                ,WLT.EZUPAPLID              AS      EZUPAPLID
+
+        FROM
+                WH_LEAD_TM  WLT
+        
+        WHERE
+                WLT.GLBL_CMPY_CD                 =       #glblCmpyCd#
+            AND WLT.WH_CD                        =       #whCd#
+            AND WLT.EFF_FROM_DT                  &lt;    #effFromDt#
+            AND NVL(WLT.EFF_THRU_DT, '99991231') &gt;=   #effFromDt#
+            AND WLT.EZCANCELFLAG                 =       '0'
+    </statement>
+    
+    <statement id="getWHLeadTmListForDeleteInsert" parameterClass="WH_LEAD_TMTMsg" resultMap="result.WH_LEAD_TMTMsg">
+        SELECT
+                WLT.GLBL_CMPY_CD            AS      GLBL_CMPY_CD
+                ,WLT.WH_CD                  AS      WH_CD
+                ,WLT.SHPG_SVC_LVL_CD        AS      SHPG_SVC_LVL_CD
+                ,WLT.SHPG_MODE_CD           AS      SHPG_MODE_CD
+                ,WLT.EFF_FROM_DT            AS      EFF_FROM_DT
+                ,WLT.EFF_THRU_DT            AS      EFF_THRU_DT
+                ,WLT.SHPG_CLO_TM_TS         AS      SHPG_CLO_TM_TS
+                ,WLT.SHPG_CLO_TM_DESC_TXT   AS      SHPG_CLO_TM_DESC_TXT
+                ,WLT.PICK_PACK_AOT          AS      PICK_PACK_AOT
+                ,WLT.EZTABLEID              AS      EZTABLEID
+                ,WLT.EZCANCELFLAG           AS      EZCANCELFLAG
+                ,WLT.EZINTIME               AS      EZINTIME
+                ,WLT.EZINTIMEZONE           AS      EZINTIMEZONE
+                ,WLT.EZINCOMPANYCODE        AS      EZINCOMPANYCODE
+                ,WLT.EZINUSERID             AS      EZINUSERID
+                ,WLT.EZINAPLID              AS      EZINAPLID
+                ,WLT.EZUPTIME               AS      EZUPTIME
+                ,WLT.EZUPTIMEZONE           AS      EZUPTIMEZONE
+                ,WLT.EZUPCOMPANYCODE        AS      EZUPCOMPANYCODE
+                ,WLT.EZUPUSERID             AS      EZUPUSERID
+                ,WLT.EZUPAPLID              AS      EZUPAPLID
+
+        FROM
+                WH_LEAD_TM  WLT
+        
+        WHERE
+                WLT.GLBL_CMPY_CD                  =       #glblCmpyCd#
+            AND WLT.WH_CD                         =       #whCd#
+            AND WLT.EFF_FROM_DT                   &lt;=   #effThruDt#
+            AND NVL(WLT.EFF_THRU_DT, '99991231')  &gt;=   #effThruDt#
+            AND WLT.EZCANCELFLAG                  =       '0'
+    </statement>
+    
+    <statement id="getWHLeadTmListForDelete" parameterClass="WH_LEAD_TMTMsg" resultMap="result.WH_LEAD_TMTMsg">
+        SELECT
+                WLT.GLBL_CMPY_CD            AS      GLBL_CMPY_CD
+                ,WLT.WH_CD                  AS      WH_CD
+                ,WLT.SHPG_SVC_LVL_CD        AS      SHPG_SVC_LVL_CD
+                ,WLT.SHPG_MODE_CD           AS      SHPG_MODE_CD
+                ,WLT.EFF_FROM_DT            AS      EFF_FROM_DT
+                ,WLT.EFF_THRU_DT            AS      EFF_THRU_DT
+                ,WLT.SHPG_CLO_TM_TS         AS      SHPG_CLO_TM_TS
+                ,WLT.SHPG_CLO_TM_DESC_TXT   AS      SHPG_CLO_TM_DESC_TXT
+                ,WLT.PICK_PACK_AOT          AS      PICK_PACK_AOT
+                ,WLT.EZTABLEID              AS      EZTABLEID
+                ,WLT.EZCANCELFLAG           AS      EZCANCELFLAG
+                ,WLT.EZINTIME               AS      EZINTIME
+                ,WLT.EZINTIMEZONE           AS      EZINTIMEZONE
+                ,WLT.EZINCOMPANYCODE        AS      EZINCOMPANYCODE
+                ,WLT.EZINUSERID             AS      EZINUSERID
+                ,WLT.EZINAPLID              AS      EZINAPLID
+                ,WLT.EZUPTIME               AS      EZUPTIME
+                ,WLT.EZUPTIMEZONE           AS      EZUPTIMEZONE
+                ,WLT.EZUPCOMPANYCODE        AS      EZUPCOMPANYCODE
+                ,WLT.EZUPUSERID             AS      EZUPUSERID
+                ,WLT.EZUPAPLID              AS      EZUPAPLID
+
+        FROM
+                WH_LEAD_TM  WLT
+        
+        WHERE
+                WLT.GLBL_CMPY_CD                 =       #glblCmpyCd#
+            AND WLT.WH_CD                        =       #whCd#
+            AND WLT.EFF_FROM_DT                  &gt;=   #effFromDt#
+            AND NVL(WLT.EFF_THRU_DT, '99991231') &lt;=   #effThruDt#
+            AND WLT.EZCANCELFLAG                 =       '0'
+    </statement>
+    
+    <resultMap id="result.WH_LEAD_TMTMsg" class="WH_LEAD_TMTMsg">
+        <result property="glblCmpyCd"           column="GLBL_CMPY_CD"           javaType="EZDTStringItem"/>
+        <result property="whCd"                 column="WH_CD"                  javaType="EZDTStringItem"/>
+        <result property="shpgSvcLvlCd"         column="SHPG_SVC_LVL_CD"        javaType="EZDTStringItem"/>
+        <result property="shpgModeCd"           column="SHPG_MODE_CD"           javaType="EZDTStringItem"/>
+        <result property="effFromDt"            column="EFF_FROM_DT"            javaType="EZDTStringItem"/>
+        <result property="effThruDt"            column="EFF_THRU_DT"            javaType="EZDTStringItem"/>
+        <result property="shpgCloTmTs"          column="SHPG_CLO_TM_TS"         javaType="EZDTStringItem"/>
+        <result property="shpgCloTmDescTxt"     column="SHPG_CLO_TM_DESC_TXT"   javaType="EZDTStringItem"/>
+        <result property="pickPackAot"          column="PICK_PACK_AOT"          javaType="EZDTStringItem"/>
+        <result property="ezTableID"            column="EZTABLEID"              javaType="EZDTStringItem"/>
+        <result property="ezCancelFlag"         column="EZCANCELFLAG"           javaType="EZDTStringItem"/>
+        <result property="ezInTime"             column="EZINTIME"               javaType="EZDTStringItem"/>
+        <result property="ezInTimeZone"         column="EZINTIMEZONE"           javaType="EZDTStringItem"/>
+        <result property="ezInCompanyCode"      column="EZINCOMPANYCODE"        javaType="EZDTStringItem"/>
+        <result property="ezInUserID"           column="EZINUSERID"             javaType="EZDTStringItem"/>
+        <result property="ezInAplID"            column="EZINAPLID"              javaType="EZDTStringItem"/>
+        <result property="ezUpTime"             column="EZUPTIME"               javaType="EZDTStringItem"/>
+        <result property="ezUpTimeZone"         column="EZUPTIMEZONE"           javaType="EZDTStringItem"/>
+        <result property="ezUpCompanyCode"      column="EZUPCOMPANYCODE"        javaType="EZDTStringItem"/>
+        <result property="ezUpUserID"           column="EZUPUSERID"             javaType="EZDTStringItem"/>
+        <result property="ezUpAplID"            column="EZUPAPLID"              javaType="EZDTStringItem"/>
+    </resultMap>
+    
+    
+    <statement id="getCSVDownloadData" parameterClass="NLBL0060SMsg" resultMap="result.NLBL0060F00FMsg">
+        SELECT
+                WLT.WH_CD                       AS  WH_CD
+                ,WLT.EFF_FROM_DT                AS  EFF_FROM_DT_TXT
+                ,WLT.EFF_THRU_DT                AS  EFF_THRU_DT_TXT
+                ,SM.SHPG_MODE_NM                AS  SHPG_MODE_NM
+                ,SSL.SHPG_SVC_LVL_NM            AS  SHPG_SVC_LVL_NM
+                ,WLT.SHPG_CLO_TM_TS             AS  SHPG_CLO_TM_TS
+                ,CEIL(WLT.PICK_PACK_AOT / 24)   AS  XX_DPLY_LEAD_TM_DAYS_AOT
+                
+        FROM
+                WH_LEAD_TM      WLT
+                ,SHPG_MODE      SM
+                ,SHPG_SVC_LVL   SSL
+
+        WHERE
+            WLT.GLBL_CMPY_CD            =   SM.GLBL_CMPY_CD(+)
+            AND WLT.SHPG_MODE_CD        =   SM.SHPG_MODE_CD(+)
+            AND WLT.GLBL_CMPY_CD        =   SSL.GLBL_CMPY_CD(+)
+            AND WLT.SHPG_SVC_LVL_CD     =   SSL.SHPG_SVC_LVL_CD(+)
+            AND WLT.GLBL_CMPY_CD        =   #glblCmpyCd_G1#
+            AND WLT.EZCANCELFLAG        =   '0'
+            AND SM.EZCANCELFLAG(+)      =   '0'
+            AND SSL.EZCANCELFLAG(+)     =   '0'
+
+           <!-- ** 2013/05/13 R-OM025 Inventory Transaction Modify Start ** -->
+            <isNotNull property="whCd_S1">
+                AND WLT.WH_CD           =   #whCd_S1#
+            </isNotNull>
+
+            <isNull property="whCd_S1">
+             <isNotEqual property="whCd_G1" compareValue="*">
+                <iterate property="whCd_H1" var="elem[]" open="AND (" close=")" conjunction="OR">
+                    WLT.WH_CD = #elem[].value#
+                </iterate>
+              </isNotEqual> 
+            </isNull>
+           <!-- ** 2013/05/13 R-OM025 Inventory Transaction Modify End ** -->
+           
+            <isNotNull property="effFromDt_S1">
+                AND (
+                        (           NVL(WLT.EFF_THRU_DT, '99991231') &gt;=   #effFromDt_S1#
+                            AND     NVL(WLT.EFF_THRU_DT, '99991231') &lt;=   #effThruDt_S1#
+                        )
+                        OR
+                        (           WLT.EFF_FROM_DT                  &gt;=   #effFromDt_S1#
+                            AND     WLT.EFF_FROM_DT                  &lt;=   #effThruDt_S1#
+                        )
+                        OR
+                        (           WLT.EFF_FROM_DT                  &gt;=   #effFromDt_S1#
+                            AND     NVL(WLT.EFF_THRU_DT, '99991231') &lt;=   #effThruDt_S1#
+                        )
+                        OR
+                        (           WLT.EFF_FROM_DT                  &lt;=   #effFromDt_S1#
+                            AND     NVL(WLT.EFF_THRU_DT, '99991231') &gt;=   #effThruDt_S1#
+                        )
+                    )
+            </isNotNull>
+
+        ORDER BY
+                WLT.WH_CD
+                ,WLT.EFF_FROM_DT
+                ,WLT.EFF_THRU_DT
+                ,SM.SHPG_MODE_SORT_NUM
+                ,SSL.SHPG_SVC_LVL_SORT_NUM
+
+    </statement>
+
+    <resultMap id="result.NLBL0060F00FMsg" class="NLBL0060F00FMsg">
+        <result property="whCd"                 column="WH_CD"                      javaType="EZDFStringItem"/>
+        <result property="moveEffFromDtTxt"     column="EFF_FROM_DT_TXT"            javaType="EZDFStringItem"/>
+        <result property="moveEffThruDtTxt"     column="EFF_THRU_DT_TXT"            javaType="EZDFStringItem"/>
+        <result property="shpgModeNm"           column="SHPG_MODE_NM"               javaType="EZDFStringItem"/>
+        <result property="shpgSvcLvlNm"         column="SHPG_SVC_LVL_NM"            javaType="EZDFStringItem"/>
+        <result property="shpgCloTmTs"          column="SHPG_CLO_TM_TS"             javaType="EZDFStringItem"/>
+        <result property="xxDplyLeadTmDaysAot"  column="XX_DPLY_LEAD_TM_DAYS_AOT"   javaType="EZDFBigDecimalItem"/>
+    </resultMap>
+ 
+</sqlMap>

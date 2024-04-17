@@ -1,0 +1,277 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NFBB126001">
+
+    <statement id="getLeaseBuyoutLine" parameterClass="Map" resultClass="Map">
+        SELECT
+             C.CPO_ORD_NUM
+            ,C.CPO_ORD_TP_CD
+            ,C.CPO_ORD_TS
+            ,C.ADMIN_PSN_CD
+            ,C.DS_ORD_CATG_CD
+            ,CD.CPO_DTL_LINE_NUM
+            ,CD.CPO_DTL_DEAL_NET_AMT
+            ,CD.SHIP_TO_CUST_CD
+            ,CD.SHIP_TO_LOC_NM
+            ,CD.COA_BR_CD
+            ,CD.MDSE_CD
+            ,CD.MDSE_NM
+            ,CD.CPO_DTL_FUNC_NET_AMT
+            ,CD.DS_ORD_LINE_CATG_CD
+            ,CD.SPLY_TP_CD
+            <!-- START 2021/03/23 R.Azucena[QC#58394,MOD] -->
+            <!-- START 2019/08/03 S.Takami [QC#52191,MOD] -->
+            <!-- ,CD.SPLY_NM -->
+            <!-- ,CD.PRNT_VND_NM SPLY_NM -->
+            ,UPPER(CD.PRNT_VND_NM) SPLY_NM
+            <!-- END 2019/08/03 S.Takami [QC#52191,MOD] -->
+            <!-- ,CD.SPLY_FIRST_ADDR -->
+            <!-- ,CD.SPLY_CTY_ADDR -->
+            <!-- ,CD.SPLY_ST_CD -->
+            <!-- ,CD.SPLY_POST_CD -->
+            ,UPPER(CD.SPLY_FIRST_ADDR) SPLY_FIRST_ADDR
+            ,UPPER(CD.SPLY_CTY_ADDR) SPLY_CTY_ADDR
+            ,UPPER(CD.SPLY_ST_CD) SPLY_ST_CD
+            ,UPPER(CD.SPLY_POST_CD) SPLY_POST_CD
+            <!-- END 2021/03/23 R.Azucena[QC#58394,MOD] -->
+            ,I.INV_NUM
+            ,I.ORIG_INV_NUM
+            ,I.ORIG_CPO_ORD_NUM
+            ,I.BILL_TO_CUST_ACCT_CD
+            ,IL.INV_BOL_LINE_NUM
+            ,IL.INV_LINE_NUM
+            ,IL.INV_LINE_SUB_NUM
+            ,IL.INV_LINE_SUB_TRX_NUM
+            ,CB.COA_BR_NM
+            ,CD.DS_ORD_POSN_NUM
+             || '.' || CD.DS_CPO_LINE_NUM
+             || DECODE(CD.DS_CPO_LINE_SUB_NUM, NULL, '', '.' || CD.DS_CPO_LINE_SUB_NUM)
+                     AS DPLY_LINE_NUM
+        FROM
+             CPO          C
+            ,CPO_DTL      CD
+            ,INV_LINE     IL
+            ,INV          I
+            ,COA_BR       CB
+        WHERE
+                C.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND C.GLBL_CMPY_CD          = CD.GLBL_CMPY_CD
+            AND C.CPO_ORD_NUM           = CD.CPO_ORD_NUM
+            AND CD.ORD_LINE_STS_CD      = #ordLineStsCd#
+            AND CD.DS_ORD_LINE_CATG_CD  = #dsOrdLineCatgCd#
+            AND CD.GLBL_CMPY_CD         = IL.GLBL_CMPY_CD
+            AND CD.CPO_ORD_NUM          = IL.CPO_ORD_NUM
+            AND CD.CPO_DTL_LINE_NUM     = IL.CPO_DTL_LINE_NUM
+            AND CD.CPO_DTL_LINE_SUB_NUM = IL.CPO_DTL_LINE_SUB_NUM
+            AND IL.GLBL_CMPY_CD         = I.GLBL_CMPY_CD
+            AND IL.INV_NUM              = I.INV_NUM
+            AND I.FNLZ_INV_FLG          = 'Y'
+            <!-- START 2020/04/09 [QC#56153,ADD] -->
+            AND I.INV_TP_CD             = '1'
+            <!-- START 2020/04/09 [QC#56153,ADD] -->
+            AND CD.GLBL_CMPY_CD         = CB.GLBL_CMPY_CD(+)
+            AND CD.COA_BR_CD            = CB.COA_BR_CD(+)
+            AND C.EZCANCELFLAG          = '0'
+            AND CD.EZCANCELFLAG         = '0'
+            AND IL.EZCANCELFLAG         = '0'
+            AND I.EZCANCELFLAG          = '0'
+            AND CB.EZCANCELFLAG(+)      = '0'
+            AND NOT EXISTS(
+                SELECT
+                    1
+                FROM
+                    AP_LSE_BO_WF_RQST ALBWR
+                WHERE
+                        ALBWR.GLBL_CMPY_CD         = CD.GLBL_CMPY_CD
+                    AND ALBWR.CPO_ORD_NUM          = CD.CPO_ORD_NUM
+                    AND ALBWR.CPO_DTL_LINE_NUM     = CD.CPO_DTL_LINE_NUM
+            <!-- START 2020/04/09 [QC#56153,DEL] -->
+            <!--    AND ALBWR.INV_NUM              = IL.INV_NUM
+                    AND ALBWR.INV_BOL_NUM          = IL.INV_BOL_LINE_NUM
+                    AND ALBWR.INV_LINE_NUM         = IL.INV_LINE_NUM
+                    AND ALBWR.INV_LINE_SUB_NUM     = IL.INV_LINE_SUB_NUM
+                    AND ALBWR.INV_LINE_SUB_TRX_NUM = IL.INV_LINE_SUB_TRX_NUM   -->
+            <!-- START 2020/04/09 [QC#56153,DEL] -->
+                    AND ALBWR.EZCANCELFLAG         = '0'
+            )
+            AND EXISTS(
+                SELECT
+                    1
+                FROM
+                     DS_ORD_LINE_PROC_DFN DOLPD
+                    ,ORD_PROC_TP          OPT
+                WHERE
+                         DOLPD.GLBL_CMPY_CD                     = C.GLBL_CMPY_CD
+                     AND DOLPD.DS_ORD_TP_CD                     = C.DS_ORD_TP_CD
+                     AND DOLPD.DS_ORD_LINE_CATG_CD              = CD.DS_ORD_LINE_CATG_CD
+                     AND DOLPD.EFF_FROM_DT                     &lt;= C.CPO_ORD_TS
+                     AND NVL(DOLPD.EFF_THRU_DT, #limitThruDt#) &gt;= C.CPO_ORD_TS
+                     AND DOLPD.GLBL_CMPY_CD                     = OPT.GLBL_CMPY_CD
+                     AND DOLPD.ORD_PROC_TP_CD                   = OPT.ORD_PROC_TP_CD
+                     AND OPT.EFF_FROM_DT                       &lt;= C.CPO_ORD_TS
+                     AND NVL(OPT.EFF_THRU_DT, #limitThruDt#)   &gt;= C.CPO_ORD_TS
+                     AND OPT.CHK_RQST_PROC_FLG                  = 'Y'
+                     AND DOLPD.EZCANCELFLAG                     = '0'
+                     AND OPT.EZCANCELFLAG                       = '0'
+            )
+            <!-- QC#15838(L3) ADD START -->
+            AND NOT EXISTS(
+                SELECT
+                    1
+                FROM
+                    HLD H
+                WHERE
+                        CD.GLBL_CMPY_CD         = H.GLBL_CMPY_CD
+                    AND CD.CPO_ORD_NUM          = H.CPO_ORD_NUM
+                    AND CD.CPO_DTL_LINE_NUM     = H.CPO_DTL_LINE_NUM
+                    AND CD.CPO_DTL_LINE_SUB_NUM = H.CPO_DTL_LINE_SUB_NUM
+                    AND H.REL_FLG               = 'N'
+                    AND H.EZCANCELFLAG          = '0'
+            )
+            <!-- QC#15838(L3) ADD END  -->
+        ORDER BY
+             CD.CPO_ORD_NUM
+            ,CD.CPO_DTL_LINE_NUM
+            ,IL.INV_NUM
+            ,IL.INV_BOL_LINE_NUM
+            ,IL.INV_LINE_NUM
+            ,IL.INV_LINE_SUB_NUM
+            ,IL.INV_LINE_SUB_TRX_NUM
+    </statement>
+
+    <statement id="getSupplierInfoCFS" parameterClass="Map" resultClass="Map">
+        SELECT
+             PRNT_VND_PK
+            ,PRNT_VND_CD
+            ,VND_PK
+            ,VND_CD
+        FROM
+            (
+                SELECT
+                     PV.PRNT_VND_PK
+                    ,PV.PRNT_VND_CD
+                    ,V.VND_PK
+                    ,V.VND_CD
+                FROM
+                     PRNT_VND PV
+                    ,VND      V
+                WHERE
+                        PV.GLBL_CMPY_CD   = #glblCmpyCd#
+                    AND PV.COA_AFFL_CD    = #coaAfflCd#
+                    AND PV.GLBL_CMPY_CD   = V.GLBL_CMPY_CD
+                    AND PV.PRNT_VND_PK    = V.PRNT_VND_PK
+                    AND PV.EZCANCELFLAG   = '0'
+                    AND V.EZCANCELFLAG    = '0'
+                ORDER BY
+                    PV.PRNT_VND_PK
+                    ,V.VND_PK
+            )
+        WHERE
+            ROWNUM = 1
+    </statement>
+
+    <statement id="getSupplierInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+             PRNT_VND_PK
+            ,PRNT_VND_CD
+            ,VND_PK
+            ,VND_CD
+        FROM
+            (
+                SELECT
+                     PV.PRNT_VND_PK
+                    ,PV.PRNT_VND_CD
+                    ,V.VND_PK
+                    ,V.VND_CD
+                FROM
+                     PRNT_VND PV
+                    ,VND      V
+                WHERE
+                        PV.GLBL_CMPY_CD   = #glblCmpyCd#
+                    AND PV.PRNT_VND_NM    = #prntVndNm#
+                    AND PV.GLBL_CMPY_CD   = V.GLBL_CMPY_CD
+                    AND PV.PRNT_VND_PK    = V.PRNT_VND_PK
+                    AND V.FIRST_LINE_ADDR = #firstLineAddr#
+                    AND V.CTY_ADDR        = #ctyAddr#
+                    AND V.ST_CD           = #stCd#
+                    AND V.POST_CD         = #postCd#
+                    AND PV.EZCANCELFLAG   = '0'
+                    AND V.EZCANCELFLAG    = '0'
+                ORDER BY
+                    PV.PRNT_VND_PK
+                    ,V.VND_PK
+            )
+        WHERE
+            ROWNUM = 1
+    </statement>
+
+    <statement id="chkPrntVnd" parameterClass="Map" resultClass="Map">
+        SELECT
+             PV.PRNT_VND_CD
+            ,PV.PRNT_VND_NM
+            ,PV.PRNT_VND_TP_CD
+            ,PV.TAX_PAYER_ID
+            ,PV.INAC_DT
+            ,PV.TAX_PAYER_RG_NUM
+            ,PV.ARCS_SPLY_NUM
+            ,PV.ARCS_SPLY_ID
+            ,PV.INDY_TP_CD
+            ,PV.MNRTY_OWND_TP_CD
+            ,PV.SPLY_ORG_TP_CD
+            ,PV.SPLY_ONE_TM_FLG
+            ,PV.SM_BIZ_FLG
+            ,PV.WOMEN_OWND_FLG
+            ,PV.PAY_ALONE_FLG
+            ,PV.DISC_TAKE_FLG
+            ,PV.PO_PMT_HLD_FLG
+            ,PV.FD_RPT_FLG
+            ,PV.INC_TAX_TP_CD
+            ,PV.ST_TAX_FLG
+            ,PV.SPLY_RPT_NM
+            ,PV.COA_AFFL_CD
+            ,PV.SPLY_HUB_ZN_CD
+            ,PV.DS_ACCT_NUM
+            ,PV.VND_PMT_TERM_CD
+            ,PV.VND_PMT_TERM_DESC_TXT
+            ,PV.VND_PMT_METH_CD
+            ,PV.PAY_GRP_CD
+        FROM
+             PRNT_VND PV
+        WHERE
+            PV.GLBL_CMPY_CD   = #glblCmpyCd#
+        AND PV.PRNT_VND_NM    = #prntVndNm#
+        AND PV.EZCANCELFLAG   = '0'
+    </statement>
+
+    <statement id="getLocNm" parameterClass="Map" resultClass="String">
+        SELECT
+             V.LOC_NM
+        FROM
+             PRNT_VND PV
+            ,VND V
+        WHERE
+            PV.GLBL_CMPY_CD  = #glblCmpyCd#
+        AND PV.PRNT_VND_CD   = #prntVndCd#
+        AND V.GLBL_CMPY_CD   = PV.GLBL_CMPY_CD
+        AND V.PRNT_VND_PK    = PV.PRNT_VND_PK
+        AND V.LOC_NM         = #locNm#
+        AND PV.EZCANCELFLAG  = '0'
+        AND V.EZCANCELFLAG   = '0'
+    </statement>
+
+    <statement id="getMaxLocNum" parameterClass="Map" resultClass="String">
+        SELECT
+             LPAD(TO_NUMBER(SUBSTR(LOC_NM, 7)) + 1, 9, '0') AS LOC_NM
+        FROM
+             PRNT_VND PV
+            ,VND V
+        WHERE
+            PV.GLBL_CMPY_CD  = #glblCmpyCd#
+        AND PV.PRNT_VND_CD   = #prntVndCd#
+        AND V.GLBL_CMPY_CD   = PV.GLBL_CMPY_CD
+        AND V.PRNT_VND_PK    = PV.PRNT_VND_PK
+        AND REGEXP_LIKE (V.LOC_NM, #locNm#)
+        AND PV.EZCANCELFLAG  = '0'
+        AND V.EZCANCELFLAG   = '0'
+        ORDER BY V.LOC_NM DESC
+    </statement>
+</sqlMap>

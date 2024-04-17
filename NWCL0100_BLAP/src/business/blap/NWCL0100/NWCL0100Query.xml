@@ -1,0 +1,238 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NWCL0100Query">
+
+    <typeAlias alias="NWCL0100SMsg"    type="business.blap.NWCL0100.NWCL0100SMsg"/>
+    <typeAlias alias="NWCL0100_ASMsg"  type="business.blap.NWCL0100.NWCL0100_ASMsg"/>
+    
+    <statement id ="getContractList" parameterClass="Map"  resultMap="result.getContractList">
+        WITH
+            CONT_LIST AS (
+                SELECT
+                     SPC.EZINTIME
+                    ,SPC.EZINUSERID
+                    ,SPC.EZUPTIME
+                    ,SPC.EZUPUSERID
+                    ,SPC.EZUPTIMEZONE
+                    ,SPC.SPLY_PGM_CONTR_PK
+                    ,SPC.BILL_TO_CUST_ACCT_CD
+                    ,SPC.EFF_FROM_DT
+                    ,SPC.EFF_THRU_DT
+                    ,SPC.SPLY_PGM_UNIT_AMT_RATE
+                    ,SPC.SPLY_PGM_MLY_QUOT_QTY
+                    ,SPC.AUTO_DR_CRAT_FLG
+                    ,SPC.CONTR_CRAT_PSN_CD
+                    ,SPC.CONTR_CRAT_DT
+                    ,SPC.CONTR_UPD_PSN_CD
+                    ,SPC.CONTR_UPD_DT
+                    ,ACCT.DS_ACCT_NM
+                    ,SPC.PRC_GRP_PK
+                    ,PG_ACCT.PRC_GRP_NM
+                    ,(  SELECT 
+                            PSN.PSN_CD || '(' || PSN.PSN_FIRST_NM || ' ' || PSN.PSN_LAST_NM || ')'
+                        FROM 
+                            S21_PSN PSN
+                        WHERE 
+                                PSN.GLBL_CMPY_CD                 = SPC.GLBL_CMPY_CD
+                            AND PSN.PSN_CD                       = SPC.CONTR_CRAT_PSN_CD
+                            AND PSN.EZCANCELFLAG                 = '0'
+                    ) CRAT_PSN_NM
+                    ,(  SELECT
+                            PSN.PSN_CD || '(' || PSN.PSN_FIRST_NM || ' ' || PSN.PSN_LAST_NM || ')'
+                        FROM
+                            S21_PSN PSN
+                        WHERE 
+                                PSN.GLBL_CMPY_CD                 = SPC.GLBL_CMPY_CD
+                            AND PSN.PSN_CD                       = SPC.CONTR_UPD_PSN_CD
+                            AND PSN.EZCANCELFLAG                 = '0'
+                    ) UPD_PSN_NM
+                    ,'C' LINK_PROT
+                FROM
+                     SPLY_PGM_CONTR  SPC
+                    ,SELL_TO_CUST    ACCT
+                    ,PRC_GRP PG
+                    ,PRC_GRP PG_ACCT
+                    ,(
+                        SELECT
+                             MIN(PG.PRC_GRP_PK)     AS PRC_GRP_PK
+                            ,PGD.PRC_GRP_FROM_TXT
+                        FROM 
+                             PRC_GRP_DTL     PGD
+                            ,PRC_GRP         PG
+                            ,SPLY_PGM_CONTR  SPC2
+                        WHERE 
+                                SPC2.GLBL_CMPY_CD                = #glblCmpyCd#
+                            <isNotNull property="billToCustCdList"> 
+                            AND SPC2.BILL_TO_CUST_ACCT_CD        IN 
+                                <iterate property="billToCustCdList" var="billToCustCd[]" open="(" close=")" conjunction=",">
+                                #billToCustCd[]#
+                                </iterate>
+                            </isNotNull>
+                            AND SPC2.EZCANCELFLAG                = '0'
+                            
+                            AND PGD.GLBL_CMPY_CD                 = SPC2.GLBL_CMPY_CD
+                            AND PGD.PRC_GRP_FROM_TXT             = SPC2.BILL_TO_CUST_ACCT_CD
+                            AND PGD.PRC_GRP_TRGT_TP_CD           = #prcGrpTrgttpCd#
+                            AND PGD.PRC_GRP_OP_CD                = #prcGrpOpCd#
+                            AND PGD.PRC_GRP_TRGT_ATTRB_CD        = #prcGrpTrgtAttrbCd#
+                            <isNull property="salesDate">
+                            AND PGD.EFF_FROM_DT                  &lt;= NVL(SPC2.EFF_THRU_DT, '99991231')
+                            AND NVL(PGD.EFF_THRU_DT, '99991231') &gt;= SPC2.EFF_FROM_DT
+                            </isNull>
+                            <isNotNull property="salesDate">
+		                    AND PGD.EFF_FROM_DT                   &lt;= #salesDate#
+		                    AND NVL(PGD.EFF_THRU_DT, '99991231')  &gt;= #salesDate#
+		                    </isNotNull>
+                            AND PGD.EZCANCELFLAG                 = '0'
+                            
+                            AND PG.GLBL_CMPY_CD                  = PGD.GLBL_CMPY_CD
+                            AND PG.PRC_GRP_PK                    = PGD.PRC_GRP_PK
+                            AND PG.PRC_GRP_TP_CD                 = #prcGrpTpCd#
+                            AND PG.ACTV_FLG                      = #actvFlg#
+                            <isNull property="salesDate">
+                            AND PG.EFF_FROM_DT                   &lt;= NVL(SPC2.EFF_THRU_DT, '99991231')
+                            AND NVL(PG.EFF_THRU_DT, '99991231')  &gt;= SPC2.EFF_FROM_DT
+                            </isNull>
+                            <isNotNull property="salesDate">
+		                    AND PG.EFF_FROM_DT                   &lt;= #salesDate#
+		                    AND NVL(PG.EFF_THRU_DT, '99991231')  &gt;= #salesDate#
+		                    </isNotNull>
+                            AND PG.EZCANCELFLAG                  = '0'
+                        GROUP BY
+                            PGD.PRC_GRP_FROM_TXT
+                    ) GRP
+                WHERE
+                        SPC.GLBL_CMPY_CD                  = #glblCmpyCd#
+                    <isNotNull property="billToCustCdList"> 
+                    AND SPC.BILL_TO_CUST_ACCT_CD          IN 
+                        <iterate property="billToCustCdList" var="billToCustCd[]" open="(" close=")" conjunction=",">
+                        #billToCustCd[]#
+                        </iterate>
+                    </isNotNull>
+                    <isNotNull property="salesDate">
+                    AND SPC.EFF_FROM_DT                   &lt;= #salesDate#
+                    AND NVL(SPC.EFF_THRU_DT, '99991231')  &gt;= #salesDate#
+                    </isNotNull>
+                    AND SPC.EZCANCELFLAG                  = '0'
+
+                    AND ACCT.GLBL_CMPY_CD                 = SPC.GLBL_CMPY_CD
+                    AND ACCT.SELL_TO_CUST_CD              = SPC.BILL_TO_CUST_ACCT_CD
+                    AND ACCT.EZCANCELFLAG                 = '0'
+
+                    AND GRP.PRC_GRP_FROM_TXT(+)           = SPC.BILL_TO_CUST_ACCT_CD
+
+                    AND PG.GLBL_CMPY_CD(+)                = SPC.GLBL_CMPY_CD
+                    AND PG.PRC_GRP_PK(+)                  = GRP.PRC_GRP_PK
+                    AND PG.EZCANCELFLAG(+)                = '0'
+
+                    AND PG_ACCT.GLBL_CMPY_CD(+)           = SPC.GLBL_CMPY_CD
+                    AND PG_ACCT.PRC_GRP_PK(+)             = SPC.PRC_GRP_PK
+                    AND PG_ACCT.PRC_GRP_TP_CD(+)          = #prcGrpTpCd#
+                    AND PG_ACCT.PRC_GRP_TRX_TP_CD(+)      = #prcGrpTrxTpCd#
+                    AND PG_ACCT.ACTV_FLG(+)               = #actvFlg#
+                    AND PG_ACCT.EZCANCELFLAG(+)           = '0' 
+
+                ORDER BY
+                     SPC.BILL_TO_CUST_ACCT_CD  ASC
+                    ,SPC.EFF_FROM_DT           ASC
+            )
+        SELECT
+                *
+            FROM
+                CONT_LIST
+            WHERE
+                ROWNUM <![CDATA[<=]]> #rowNum#
+    </statement>
+    <resultMap id="result.getContractList"   class="NWCL0100_ASMsg">
+        <result property="billToCustAcctCd_A0"    column="BILL_TO_CUST_ACCT_CD"    javaType="EZDSStringItem"/>
+        <result property="dsAcctNm_A0"            column="DS_ACCT_NM"              javaType="EZDSStringItem"/>
+        <result property="prcGrpPk_A0"            column="PRC_GRP_PK"              javaType="EZDSBigDecimalItem"/>
+        <result property="prcGrpNm_A0"            column="PRC_GRP_NM"              javaType="EZDSStringItem"/>
+        <result property="effFromDt_A0"           column="EFF_FROM_DT"             javaType="EZDSDateItem"/>
+        <result property="effThruDt_A0"           column="EFF_THRU_DT"             javaType="EZDSDateItem"/>
+        <result property="splyPgmUnitAmtRate_A0"  column="SPLY_PGM_UNIT_AMT_RATE"  javaType="EZDSBigDecimalItem"/>
+        <result property="splyPgmMlyQuotQty_A0"   column="SPLY_PGM_MLY_QUOT_QTY"   javaType="EZDSBigDecimalItem"/>
+        <result property="autoDrCratFlg_A0"       column="AUTO_DR_CRAT_FLG"        javaType="EZDSStringItem"/>
+        <result property="contrCratPsnCd_A0"      column="CONTR_CRAT_PSN_CD"       javaType="EZDSStringItem"/>
+        <result property="contrCratDt_A0"         column="CONTR_CRAT_DT"           javaType="EZDSDateItem"/>
+        <result property="contrUpdPsnCd_A0"       column="CONTR_UPD_PSN_CD"        javaType="EZDSStringItem"/>
+        <result property="contrUpdDt_A0"          column="CONTR_UPD_DT"            javaType="EZDSDateItem"/>
+        <result property="xxPsnNm_A0"             column="CRAT_PSN_NM"             javaType="EZDSStringItem"/>
+        <result property="xxPsnNm_A1"             column="UPD_PSN_NM"              javaType="EZDSStringItem"/>
+        <result property="splyPgmContrPk_A0"      column="SPLY_PGM_CONTR_PK"       javaType="EZDSBigDecimalItem"/>
+        <result property="ezUpTime_A0"            column="EZUPTIME"                javaType="EZDSStringItem"/>
+        <result property="ezUpTimeZone_A0"        column="EZUPTIMEZONE"            javaType="EZDSStringItem"/>
+        <result property="xxLinkProt_A0"          column="LINK_PROT"               javaType="EZDSStringItem"/>
+    </resultMap>
+    
+    <statement id="getSavedSearchOptionList" parameterClass="Map" resultClass="Map">
+        SELECT
+                  SSO.SRCH_OPT_PK
+                , SSO.SRCH_OPT_NM
+            FROM
+                SAVE_SRCH_OPT SSO 
+            WHERE
+                SSO.GLBL_CMPY_CD        = #glblCmpyCd#
+                AND SSO.SRCH_OPT_APL_ID = #srchOptAplId#
+                AND SSO.SRCH_OPT_USR_ID = #srchOptUsrId#
+                AND SSO.EZCANCELFLAG    = '0'
+            ORDER BY
+                  SSO.SRCH_OPT_NM
+    </statement>
+
+    <statement id ="getSplyPgmContrByAcctCd" parameterClass="Map" resultClass="Map">
+        SELECT
+                 NULL AS NO
+                ,SPC.SPLY_PGM_CONTR_PK
+                ,SPC.BILL_TO_CUST_ACCT_CD
+                ,SPC.EFF_FROM_DT
+                ,SPC.EFF_THRU_DT
+            FROM
+                 SPLY_PGM_CONTR  SPC
+            WHERE
+                    SPC.GLBL_CMPY_CD          = #glblCmpyCd#
+                AND SPC.BILL_TO_CUST_ACCT_CD  = #billToCustCd#
+                AND SPC.EZCANCELFLAG          = '0'
+            ORDER BY
+                SPC.EFF_FROM_DT ASC
+    </statement>
+
+    <statement id ="countupBillToCustPk" parameterClass="Map" resultClass="BigDecimal">
+        SELECT DISTINCT 
+            COUNT(BILL.BILL_TO_CUST_PK)
+          FROM 
+               SELL_TO_CUST ACCT 
+             , ACCT_LOC LOC 
+             , PTY_LOC_WRK PTY 
+             , BILL_TO_CUST BILL 
+          WHERE 
+              ACCT.GLBL_CMPY_CD = #glblCmpyCd# 
+          AND ACCT.SELL_TO_CUST_CD = #billToCustCd# 
+          AND ACCT.EZCANCELFLAG = '0' 
+          AND ACCT.GLBL_CMPY_CD = LOC.GLBL_CMPY_CD 
+          AND ACCT.SELL_TO_CUST_CD = LOC.DS_ACCT_NUM 
+          AND LOC.EZCANCELFLAG = '0' 
+          AND LOC.GLBL_CMPY_CD = PTY.GLBL_CMPY_CD 
+          AND LOC.PTY_LOC_PK = PTY.PTY_LOC_PK 
+          AND PTY.EZCANCELFLAG = '0' 
+          AND PTY.GLBL_CMPY_CD = BILL.GLBL_CMPY_CD 
+          AND PTY.LOC_NUM = BILL.LOC_NUM 
+          AND BILL.EZCANCELFLAG = '0' 
+          AND ACCT.DS_ACCT_ACTV_CUST_FLG = 'Y' 
+          AND BILL.RGTN_STS_CD = 'P20' 
+    </statement>
+
+    <statement id ="countupPrcGrpPk" parameterClass="Map" resultClass="BigDecimal">
+        SELECT DISTINCT 
+            COUNT(PG.PRC_GRP_PK)
+          FROM 
+               PRC_GRP PG  
+          WHERE 
+              PG.GLBL_CMPY_CD = #glblCmpyCd#  
+          AND PG.PRC_GRP_PK = #prcGrpPk#
+          AND PG.PRC_GRP_TP_CD = #prcGrpTpCd#
+          AND PG.PRC_GRP_TRX_TP_CD = #prcGrpTrxTpCd#
+          AND PG.ACTV_FLG = #actvFlg#
+          AND PG.EZCANCELFLAG = '0'
+    </statement>
+
+</sqlMap>

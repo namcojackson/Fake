@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NLCB115001">
+
+    <statement id="getTrgtYrMth" parameterClass="Map" resultClass="String">
+        SELECT
+            CAL.DWH_TRGT_YR_MTH
+        FROM
+            DMN_RPT_CAL            CAL
+        WHERE 
+            CAL.GLBL_CMPY_CD       = #glblCmpyCd#
+        AND CAL.DWH_TRGT_DT        = #trgtDt#
+        AND CAL.EZCANCELFLAG       = '0'
+    </statement>
+
+    <statement id="getTrgtYrMthRec" parameterClass="Map" resultClass="BigDecimal">
+        SELECT COUNT(1)
+        FROM
+            FCT_MLY_FSR_PRT_USG      PRT
+        WHERE 
+            PRT.GLBL_CMPY_CD         = #glblCmpyCd#
+        AND PRT.DWH_TRGT_YR_MTH      = #trgtYrMth#
+        AND PRT.EZCANCELFLAG         = '0'
+    </statement>
+
+    <statement id="getMainData" parameterClass="Map" resultClass="Map">
+        SELECT
+             USG.FSR_USG_PK                                   AS FCT_MLY_FSR_PRT_USG_PK
+            ,FSR.FSR_NUM
+            ,USG.DS_SVC_CALL_TP_CD
+            ,FSR.FSR_CRAT_DT
+            ,FSR.FSR_CRAT_TM
+            ,FSR.FSR_CPLT_DT
+            ,FSR.FSR_CPLT_TM
+            ,MAC.SVC_CONFIG_MSTR_PK
+            ,NVL(MDL_1.MDL_ID, MDL_2.MDL_ID)                  AS MDL_ID
+            ,FSR.SVC_MACH_MSTR_PK
+            ,FSR.SER_NUM
+            ,USG.SVC_TASK_NUM
+            ,USG.FSR_VISIT_NUM
+            ,USG.PRT_USED_BY_TECH_CD                          AS TECH_CD
+            ,USG.PRT_USED_BY_TECH_LOC_CD
+            ,USG.MDSE_CD
+            ,USG.SVC_PRT_QTY                                  AS FSR_VISIT_USED_PRT_QTY
+            ,USG.SVC_PRT_QTY * MDSE.THIS_MTH_TOT_STD_COST_AMT AS FSR_VISIT_USED_PRT_COST_AMT
+            ,MDSE.THIS_MTH_TOT_STD_COST_AMT                   AS BASE_PRC_AMT
+        FROM
+             FSR             FSR
+            ,FSR_USG         USG
+            ,SVC_TASK        TASK
+            ,SVC_MACH_MSTR   MAC
+            ,MDSE            MDSE
+            ,(
+              SELECT
+                  FSR.FSR_NUM
+                 ,CON.MDL_ID
+              FROM
+                  FSR                         FSR
+                 ,SVC_MACH_MSTR               MAC
+                 ,SVC_CONFIG_MSTR             CON
+              WHERE
+                  FSR.GLBL_CMPY_CD            = #glblCmpyCd#
+              AND FSR.GLBL_CMPY_CD            = MAC.GLBL_CMPY_CD
+              AND FSR.SVC_MACH_MSTR_PK        = MAC.SVC_MACH_MSTR_PK
+              AND MAC.GLBL_CMPY_CD            = CON.GLBL_CMPY_CD
+              AND MAC.SVC_CONFIG_MSTR_PK      = CON.SVC_CONFIG_MSTR_PK
+              AND FSR.EZCANCELFLAG            = '0'
+              AND MAC.EZCANCELFLAG            = '0'
+              AND CON.EZCANCELFLAG            = '0'
+             ) MDL_1
+            ,(
+              SELECT
+                  FSR_NUM
+                 ,MDL_ID
+              FROM
+                  (
+                  SELECT
+                      FSR.FSR_NUM
+                     ,SVC_CONFIG_MSTR_DTL_PK
+                     ,ROW_NUMBER() OVER(PARTITION BY FSR_NUM ORDER BY SVC_CONFIG_MSTR_DTL_PK DESC) ROW_NUM
+                     ,CON.MDL_ID
+                  FROM
+                      FSR                         FSR
+                     ,SVC_CONFIG_MSTR_DTL         CON
+                  WHERE
+                      FSR.GLBL_CMPY_CD            = #glblCmpyCd#
+                  AND FSR.GLBL_CMPY_CD            = CON.GLBL_CMPY_CD
+                  AND FSR.SVC_MACH_MSTR_PK        = CON.SVC_MACH_MSTR_PK
+                  AND FSR.EZCANCELFLAG            = '0'
+                  AND CON.EZCANCELFLAG            = '0'
+                  )
+              WHERE ROW_NUM = 1
+             ) MDL_2
+        WHERE
+            TASK.GLBL_CMPY_CD       = #glblCmpyCd#
+        AND SUBSTR(TASK.SVC_TASK_CPLT_DT, #taskCpltDt1#, #taskCpltDt2#) = #trgtYrMth#
+        AND TASK.SVC_TASK_STS_CD    IN (#taskStsCd1#, #taskStsCd2#, #taskStsCd3#)
+        AND TASK.GLBL_CMPY_CD       = USG.GLBL_CMPY_CD
+        AND TASK.SVC_TASK_NUM       = USG.SVC_TASK_NUM
+        AND USG.GLBL_CMPY_CD        = FSR.GLBL_CMPY_CD
+        AND USG.FSR_NUM             = FSR.FSR_NUM
+        AND USG.GLBL_CMPY_CD        = MDSE.GLBL_CMPY_CD
+        AND USG.MDSE_CD             = MDSE.MDSE_CD
+        AND FSR.GLBL_CMPY_CD        = MAC.GLBL_CMPY_CD
+        AND FSR.SVC_MACH_MSTR_PK    = MAC.SVC_MACH_MSTR_PK
+        AND USG.FSR_NUM             = MDL_1.FSR_NUM(+)
+        AND USG.FSR_NUM             = MDL_2.FSR_NUM(+)
+        AND TASK.EZCANCELFLAG       = '0'
+        AND FSR.EZCANCELFLAG        = '0'
+        AND USG.EZCANCELFLAG        = '0'
+        AND MAC.EZCANCELFLAG        = '0'
+    </statement>
+
+</sqlMap>

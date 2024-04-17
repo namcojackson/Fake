@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sqlMap namespace="NPAB142001">
+
+    <statement id="getReceivingOrderStatus" parameterClass="Map" resultClass="Map">
+        SELECT
+                   NPAI2220.INTERFACE_ID                           AS INTERFACE_ID
+                  ,NPAI2220.TRANSACTION_ID                         AS TRANSACTION_ID
+                  ,NPAI2220.SEGMENT_ID                             AS SEGMENT_ID
+                  ,NPAI2220.UNIT_ID                                AS UNIT_ID
+                  ,NPAI2220.SEQ_NUMBER                             AS SEQ_NUMBER
+                  ,NPAI2220.CVI_ORD_NUM                            AS CVI_ORD_NUM
+                  ,NPAI2220.CVI_ORD_LINE_NUM                       AS CVI_ORD_LINE_NUM
+                  ,NPAI2220.CVI_ORD_SHIP_NUM                       AS CVI_ORD_SHIP_NUM
+                  ,NPAI2220.CVI_VND_CPO_REF_NUM                    AS CVI_VND_CPO_REF_NUM
+                  ,SUBSTR(NPAI2220.CVI_VND_CPO_REF_NUM, 1, 8)      AS VND_ISS_ORD_NUM
+                  ,SUBSTR( SUBSTR(NPAI2220.CVI_VND_CPO_REF_NUM, INSTR(NPAI2220.CVI_VND_CPO_REF_NUM, '-') + 1)  , 1, 10 ) AS VND_ISS_PO_ORD_NUM
+                  ,NPAI2220.CVI_CSA_PO_ORD_NUM                     AS PO_ORD_NUM
+                  ,NPAI2220.CVI_CSA_PO_ORD_DTL_LINE_NUM            AS PO_DTL_LINE_NUM
+                  ,NPAI2220.MDSE_CD                                AS MDSE_CD
+                  ,NPAI2220.SPLY_ITEM_NUM                          AS SPLY_ITEM_NUM
+                  ,NPAI2220.CVI_ORD_QTY                            AS CVI_ORD_QTY
+                  ,NPAI2220.CVI_SHIP_QTY                           AS CVI_SHIP_QTY
+                  ,NPAI2220.CVI_RSD_TS                             AS CVI_RSD_TS
+                  ,NPAI2220.CVI_ETD_TS                             AS CVI_ETD_TS
+                  ,NPAI2220.CVI_SHIP_TS                            AS CVI_SHIP_TS
+                  ,NPAI2220.CVI_SHPG_STS_DESC_TXT                  AS CVI_SHPG_STS_DESC_TXT
+                  ,NPAI2220.CVI_BL_NUM                             AS CVI_BL_NUM
+                  ,NPAI2220.CVI_DELY_NUM                           AS CVI_DELY_NUM
+                  ,NPAI2220.CVI_DELY_LINE_NUM                      AS CVI_DELY_LINE_NUM
+                  ,NPAI2220.CVI_SHIP_METH_DESC_TXT                 AS CVI_SHIP_METH_DESC_TXT
+        FROM
+                   NPAI2220_01  NPAI2220
+        WHERE
+                   NPAI2220.INTERFACE_ID               =  #interfaceId#
+               AND NPAI2220.TRANSACTION_ID             =  #transactionId#
+               AND NPAI2220.EZCANCELFLAG               =  '0'
+
+               AND NOT EXISTS
+                   (SELECT
+                           1
+                   FROM
+                           CVI_ORD_STS_INFO COSI
+                   WHERE
+                           NPAI2220.CVI_ORD_NUM                       = COSI.CVI_ORD_NUM
+                       AND NPAI2220.CVI_ORD_LINE_NUM                  = COSI.CVI_ORD_LINE_NUM
+                       AND NPAI2220.CVI_ORD_SHIP_NUM                  = COSI.CVI_ORD_SHIP_NUM
+                       AND NPAI2220.CVI_SHIP_QTY                      = COSI.CVI_SHIP_QTY
+                       AND NPAI2220.CVI_SHPG_STS_DESC_TXT             = COSI.CVI_SHPG_STS_DESC_TXT
+                       AND NVL(NPAI2220.CVI_ETD_TS, 'X')              = NVL(COSI.CVI_ETD_TS, 'X')
+                       AND NVL(NPAI2220.CVI_BL_NUM, 'X')              = NVL(COSI.CVI_BL_NUM, 'X')
+                       AND NVL(NPAI2220.CVI_DELY_NUM, 'X')            = NVL(COSI.CVI_DELY_NUM, 'X')
+                       AND NVL(NPAI2220.CVI_DELY_LINE_NUM, 'X')       = NVL(COSI.CVI_DELY_LINE_NUM, 'X')
+                       AND NVL(NPAI2220.CVI_SHIP_METH_DESC_TXT, 'X')  = NVL(COSI.CVI_SHIP_METH_DESC_TXT, 'X')
+                       AND COSI.GLBL_CMPY_CD                          = #glblCmpyCd#
+                       AND COSI.EZCANCELFLAG                          = '0'
+                   )
+        ORDER BY
+                   NPAI2220.SEGMENT_ID
+                  ,NPAI2220.UNIT_ID
+                  ,NPAI2220.SEQ_NUMBER
+                  ,NPAI2220.CVI_ORD_NUM
+                  ,NPAI2220.CVI_ORD_LINE_NUM
+                  ,NPAI2220.CVI_ORD_SHIP_NUM
+    </statement>
+
+    <statement id="getPoInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+            PD.PO_ORD_NUM
+           ,PD.SHPG_SVC_LVL_CD
+           ,PD.SHIP_TO_ST_CD
+        FROM
+            PO_DTL PD
+        WHERE
+            PD.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND PD.PO_ORD_NUM          = #poOrdNum#
+        AND PD.PO_ORD_DTL_LINE_NUM = #poOrdDtlLineNum#
+        AND PD.EZCANCELFLAG        = '0'
+    </statement>
+
+    <statement id="getPoAsnLeadTime" parameterClass="Map" resultClass="BigDecimal">
+    SELECT
+        A.DELY_LEAD_AOT
+    FROM (
+        SELECT
+            VSL_ASN.VND_SHIP_LT_PRIORITY
+           ,VSL_ASN.DELY_LEAD_AOT
+        FROM (
+            <!-- priority 1 : VND_CD, ST_CD, METH_NM -->
+            SELECT
+                1 VND_SHIP_LT_PRIORITY
+               ,VSL.DELY_LEAD_AOT
+            FROM
+                VND_SHIP_LT VSL
+            WHERE
+                VSL.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND VSL.VND_CD           = #vndCd#
+            AND VSL.DEST_ST_CD       = #destStCd#
+            AND VSL.VND_SHIP_METH_NM = #ediAsnShipMethTxt#
+            AND VSL.EZCANCELFLAG     = '0'
+            <!-- priority 2 : VND_CD, METH_NM -->
+            UNION
+            SELECT
+                2 VND_SHIP_LT_PRIORITY
+               ,VSL.DELY_LEAD_AOT
+            FROM
+                VND_SHIP_LT VSL
+            WHERE
+                VSL.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND VSL.VND_CD           = #vndCd#
+            AND VSL.DEST_ST_CD       = #ast#
+            AND VSL.VND_SHIP_METH_NM = #ediAsnShipMethTxt#
+            AND VSL.EZCANCELFLAG     = '0'
+            <!-- priority 3 : VND_CD, ST_CD, METH_CD -->
+            UNION
+            SELECT
+                3 VND_SHIP_LT_PRIORITY
+               ,VSL.DELY_LEAD_AOT
+            FROM
+                VND_SHIP_LT VSL
+            WHERE
+                VSL.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND VSL.VND_CD           = #vndCd#
+            AND VSL.DEST_ST_CD       = #destStCd#
+            AND VSL.VND_SHIP_METH_CD = #vndShipMethCd#
+            AND VSL.EZCANCELFLAG     = '0'
+            <!-- priority 4 : VND_CD, METH_CD -->
+            UNION
+            SELECT
+                4 VND_SHIP_LT_PRIORITY
+               ,VSL.DELY_LEAD_AOT
+            FROM
+                VND_SHIP_LT VSL
+            WHERE
+                VSL.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND VSL.VND_CD           = #vndCd#
+            AND VSL.DEST_ST_CD       = #ast#
+            AND VSL.VND_SHIP_METH_CD = #vndShipMethCd#
+            AND VSL.EZCANCELFLAG     = '0'
+            <!-- priority 5 : VND_CD -->
+            UNION
+            SELECT
+                5 VND_SHIP_LT_PRIORITY
+               ,VSL.DELY_LEAD_AOT
+            FROM
+                VND_SHIP_LT VSL
+            WHERE
+                VSL.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND VSL.VND_CD           = #vndCd#
+            AND VSL.DEST_ST_CD       = #ast#
+            AND VSL.VND_SHIP_METH_CD = #ast#
+            AND VSL.EZCANCELFLAG     = '0'
+        ) VSL_ASN
+        ORDER BY
+            VSL_ASN.VND_SHIP_LT_PRIORITY
+    ) A
+    WHERE
+        ROWNUM = 1
+    </statement>
+
+</sqlMap>

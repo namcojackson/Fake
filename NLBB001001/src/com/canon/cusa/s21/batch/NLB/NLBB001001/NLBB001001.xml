@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NLBB001001">
+
+    <!-- ==== Type Aliases ==== -->
+    <typeAlias alias="WH_END_MTHTMsg"  type="business.db.WH_END_MTHTMsg"/>
+
+    <!-- ==== Statement ==== -->
+    <!-- ==== Result Mapping ==== -->
+
+    <statement id="getCalTpCd" parameterClass="Map" resultClass="String">
+        SELECT 
+            C.CAL_TP_CD
+        FROM 
+            CAL C
+            ,CAL_RELN CR
+        WHERE 
+                CR.GLBL_CMPY_CD = #glblCmpyCd#
+            AND CR.CAL_SUB_TP_CD = #calSubTpCd#
+            AND CR.CAL_MULT_CD = #calMultCd#
+            AND C.DT_ATTRB_CD = #dtAttrbCd#
+            AND C.CAL_DT LIKE #calDt#
+            AND C.GLBL_CMPY_CD = CR.GLBL_CMPY_CD
+            AND C.CAL_TP_CD = CR.CAL_TP_CD
+            AND C.EZCANCELFLAG = '0'
+            AND CR.EZCANCELFLAG = '0'    
+    </statement>
+    
+    <statement id="getWhEndMth" parameterClass="Map" resultMap="result.WH_END_MTHTMsg">
+        SELECT
+            WH_CD
+            ,END_MTH_BIZ_DAYS_AOT
+        FROM
+            WH_END_MTH
+        WHERE
+            GLBL_CMPY_CD = #glblCmpyCd#
+            AND EZCANCELFLAG = '0'
+    </statement>
+
+    <resultMap id="result.WH_END_MTHTMsg" class="WH_END_MTHTMsg">
+        <result property="whCd"                    column="WH_CD"                    javaType="EZDTStringItem"/>
+        <result property="endMthBizDaysAot"        column="END_MTH_BIZ_DAYS_AOT"    javaType="EZDTBigDecimalItem"/>
+    </resultMap>
+
+    <statement id="getWhDropTm" parameterClass="Map" resultClass="String">
+        SELECT
+            WH_CD
+        FROM
+            WH_DROP_TM
+        WHERE
+            GLBL_CMPY_CD = #glblCmpyCd#
+            AND #whDropTmTs# BETWEEN FROM_WH_DROP_TM_TS AND TO_WH_DROP_TM_TS
+            <isNotNull property="endOfMonthWhList">
+            AND WH_CD NOT IN
+                <iterate property="endOfMonthWhList" var="endOfMonthWh[]" open="(" close=")" conjunction=",">
+                    #endOfMonthWh[]#
+                </iterate>
+            </isNotNull>
+            AND EZCANCELFLAG = '0'
+    </statement>
+
+    <!-- QC#22517 Update 04/05/2018 -->
+    <statement id="getShpgPln" parameterClass="Map">
+        SELECT
+            MAIN.RTL_WH_CD
+            ,NVL(MAIN.SHIP_TO_CUST_CD, MAIN.SP_SHIP_TO_CUST_CD) AS SHIP_TO_CUST_CD
+            ,COUNT(MAIN.SHPG_PLN_NUM) CNT
+        FROM
+            (
+            SELECT
+                DRW.RTL_WH_CD
+                ,CASE
+                    WHEN STC.LOC_GRP_CD = #locGrpCd# THEN
+                        (SELECT RTL_WH_CD FROM DS_RTL_WH_V WHERE SP.SHIP_TO_CUST_CD = INVTY_LOC_CD
+                                                                 AND GLBL_CMPY_CD    = SP.GLBL_CMPY_CD
+                                                                 AND EZCANCELFLAG    = '0')
+                    ELSE
+                        SP.SHIP_TO_CUST_CD
+                 END SHIP_TO_CUST_CD
+                ,SHPG_PLN_NUM
+                ,SP.SHIP_TO_CUST_CD    AS SP_SHIP_TO_CUST_CD
+            FROM
+                SHPG_PLN SP
+                ,TRX_SRC_TP TST
+                ,DS_RTL_WH_V DRW
+                ,SHIP_TO_CUST STC
+            WHERE
+                SP.GLBL_CMPY_CD         = #glblCmpyCd#
+                AND SP.SHPG_STS_CD      = #shpgStsCd#
+                AND SP.AVAL_SO_QTY      &gt; 0
+                AND SP.EZCANCELFLAG     = '0'
+                <isNotNull property="shpgOrdCratTpCdList">
+                    <iterate property="shpgOrdCratTpCdList" var="shpgOrdCratTpCd[]" open="AND (" close=")" conjunction="OR">
+                        TST.SHPG_ORD_CRAT_TP_CD = #shpgOrdCratTpCd[]#
+                    </iterate>
+                </isNotNull>
+                AND TST.EZCANCELFLAG    = '0'
+                AND SP.GLBL_CMPY_CD     = TST.GLBL_CMPY_CD
+                AND SP.TRX_SRC_TP_CD    = TST.TRX_SRC_TP_CD
+                <isNotNull property="whCdList">
+                    <iterate property="whCdList" var="whCd[]" open="AND (" close=")" conjunction="OR">
+                        DRW.RTL_WH_CD = #whCd[]#
+                    </iterate>
+                </isNotNull>
+                AND SP.GLBL_CMPY_CD     = DRW.GLBL_CMPY_CD
+                AND SP.INVTY_LOC_CD     = DRW.INVTY_LOC_CD
+                AND DRW.EZCANCELFLAG    = '0'
+                AND SP.GLBL_CMPY_CD     = STC.GLBL_CMPY_CD
+                AND SP.SHIP_TO_CUST_CD  = STC.SHIP_TO_CUST_CD
+                AND STC.EZCANCELFLAG    = '0'
+            ) MAIN
+        GROUP BY
+            MAIN.RTL_WH_CD
+            ,NVL(MAIN.SHIP_TO_CUST_CD, MAIN.SP_SHIP_TO_CUST_CD)
+        ORDER BY CNT DESC
+    </statement>
+
+    <statement id="getRteGrp" parameterClass="Map">
+        SELECT
+            RTE_GRP_NUM
+        FROM
+            RTE_GRP
+        WHERE
+            GLBL_CMPY_CD = #glblCmpyCd#
+            AND RTE_STS_CD = #rteStsCd#
+            <isNotNull property="whCdList">
+                <iterate property="whCdList" var="whCd[]" open="AND (" close=")" conjunction="OR">
+                    WH_CD = #whCd[]#
+                </iterate>
+            </isNotNull>
+            AND EZCANCELFLAG = '0'
+    </statement>
+    
+    <!-- START ADD 04/26/2013 R-WH001 -->
+    <statement id="getShpgPlnForTech" parameterClass="Map">
+        SELECT
+            MAIN.RTL_WH_CD
+            ,MAIN.SHIP_TO_CUST_CD
+            ,COUNT(MAIN.SHPG_PLN_NUM) CNT
+        FROM
+            (
+            SELECT
+                DRW.RTL_WH_CD
+                ,CASE
+                    WHEN STC.LOC_GRP_CD = #locGrpCd# THEN
+                        (SELECT RTL_WH_CD FROM DS_RTL_WH_V WHERE SP.SHIP_TO_CUST_CD = INVTY_LOC_CD
+                                                                 AND GLBL_CMPY_CD    = SP.GLBL_CMPY_CD
+                                                                 AND EZCANCELFLAG    = '0')
+                    ELSE
+                        SP.SHIP_TO_CUST_CD
+                 END SHIP_TO_CUST_CD
+                ,SHPG_PLN_NUM
+            FROM
+                SHPG_PLN SP
+                ,TRX_SRC_TP TST
+                ,INVTY_LOC_V ILV
+                ,DS_RTL_WH_V DRW
+                ,SHIP_TO_CUST STC
+            WHERE
+                SP.GLBL_CMPY_CD         = #glblCmpyCd#
+                AND SP.SHPG_STS_CD      = #shpgStsCd#
+                AND SP.GLBL_CMPY_CD     = ILV.GLBL_CMPY_CD
+                AND SP.INVTY_LOC_CD     = ILV.INVTY_LOC_CD
+                AND ILV.INVTY_LOC_TP_CD = #ivtyLocTpCd#
+                AND SP.AVAL_SO_QTY      &gt; 0
+                AND SP.EZCANCELFLAG     = '0'
+                <isNotNull property="shpgOrdCratTpCdList">
+                    <iterate property="shpgOrdCratTpCdList" var="shpgOrdCratTpCd[]" open="AND (" close=")" conjunction="OR">
+                        TST.SHPG_ORD_CRAT_TP_CD = #shpgOrdCratTpCd[]#
+                    </iterate>
+                </isNotNull>
+                AND TST.EZCANCELFLAG    = '0'
+                AND SP.GLBL_CMPY_CD     = TST.GLBL_CMPY_CD
+                AND SP.TRX_SRC_TP_CD    = TST.TRX_SRC_TP_CD
+                AND SP.GLBL_CMPY_CD     = DRW.GLBL_CMPY_CD
+                AND SP.INVTY_LOC_CD     = DRW.INVTY_LOC_CD
+                AND DRW.EZCANCELFLAG    = '0'
+                AND SP.GLBL_CMPY_CD     = STC.GLBL_CMPY_CD
+                AND SP.SHIP_TO_CUST_CD  = STC.SHIP_TO_CUST_CD
+                AND STC.EZCANCELFLAG    = '0'
+                ) MAIN
+        GROUP BY
+            MAIN.RTL_WH_CD
+            ,MAIN.SHIP_TO_CUST_CD
+        ORDER BY CNT DESC
+    </statement>
+    <!-- END MOD 04/26/2013 R-WH001 -->
+
+</sqlMap>

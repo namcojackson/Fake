@@ -1,0 +1,544 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<sqlMap namespace="NMZC600001">
+    <statement id="getAcctInProcAmt" parameterClass="Map" resultClass="Map">
+    SELECT
+        CCR.DS_ACCT_NUM AS DS_ACCT_NUM
+       ,ROUND(NVL(CIAY.SP_IN_PROC_AMT, 0), #aftDeclPntDigitNum#) AS TRX_IN_PROC
+     FROM
+        DS_ACCT_CR_PRFL CCR
+        ,(SELECT 
+             BILL_TO_CUST_ACCT_CD
+            ,SUM(SP_IN_PROC_AMT + CHARGE_AMT + TAX_AMT) AS SP_IN_PROC_AMT
+         FROM 
+             (SELECT
+                  B.SELL_TO_CUST_CD AS BILL_TO_CUST_ACCT_CD
+                ,NVL(SP.SP_TOT_FUNC_NET_AMT, 0) SP_IN_PROC_AMT
+                ,CASE WHEN NOT EXISTS (
+                    SELECT
+                        'X'
+                    FROM
+                        INV_LINE IL
+                    WHERE
+                            IL.GLBL_CMPY_CD         = SP.GLBL_CMPY_CD
+                        AND IL.CPO_ORD_NUM          = SP.TRX_HDR_NUM
+                        AND IL.CPO_DTL_LINE_NUM     = SP.TRX_LINE_NUM
+                        AND IL.CPO_DTL_LINE_SUB_NUM = SP.TRX_LINE_SUB_NUM
+                        AND IL.EZCANCELFLAG         = '0'
+                        )
+                 THEN NVL((
+                    SELECT
+                        SUM(OPCBC.CALC_PRC_AMT_RATE)
+                    FROM
+                        ORD_PRC_CALC_BASE   OPCBC
+                    WHERE
+                            OPCBC.GLBL_CMPY_CD          = SP.GLBL_CMPY_CD
+                        AND OPCBC.CPO_ORD_NUM           = SP.TRX_HDR_NUM
+                        AND OPCBC.CPO_DTL_LINE_NUM      = SP.TRX_LINE_NUM
+                        AND OPCBC.CPO_DTL_LINE_SUB_NUM  = SP.TRX_LINE_SUB_NUM
+                        <!-- 2018/05/22 QC#21841 Mod Start -->
+                        <!-- AND OPCBC.PRC_DTL_GRP_CD       in (#prcDtlGrp_FRT#, #prcDtlGrp_RND1#) -->
+                        AND OPCBC.PRC_DTL_GRP_CD       in (#prcDtlGrp_FRT#, #prcDtlGrp_RND1#, #prcDtlGrp_HNDF#, #prcDtlGrp_FSC#, #prcDtlGrp_SHPF#, #prcDtlGrp_RND2#)
+                        <!-- 2018/05/22 QC#21841 Mod End -->
+                        AND OPCBC.EZCANCELFLAG          = '0'
+                        AND OPCBC.PRC_COND_MAN_DEL_FLG  = #flgN#
+                    GROUP BY
+                        CPO_ORD_NUM, CPO_DTL_LINE_NUM, CPO_DTL_LINE_SUB_NUM), 0)
+                ELSE  0
+                END     CHARGE_AMT
+                ,NVL((
+                    SELECT
+                        SUM(OPCBT.CALC_PRC_AMT_RATE)
+                    FROM
+                        ORD_PRC_CALC_BASE OPCBT
+                    WHERE
+                            OPCBT.GLBL_CMPY_CD          = SP.GLBL_CMPY_CD
+                        AND OPCBT.CPO_ORD_NUM           = SP.TRX_HDR_NUM
+                        AND OPCBT.CPO_DTL_LINE_NUM      = SP.TRX_LINE_NUM
+                        AND OPCBT.CPO_DTL_LINE_SUB_NUM  = SP.TRX_LINE_SUB_NUM
+                        AND OPCBT.PRC_DTL_GRP_CD        = #prcDtlGrp_TAX#
+                        AND OPCBT.EZCANCELFLAG          = '0'
+                    GROUP BY
+                        CPO_ORD_NUM, CPO_DTL_LINE_NUM, CPO_DTL_LINE_SUB_NUM
+                ), 0) * SP.ORD_QTY / CDL.ORD_QTY  TAX_AMT
+              FROM
+                  SHPG_PLN SP
+                 ,CPO      C
+                 ,CPO_DTL  CDL
+                 ,BILL_TO_CUST    B
+              WHERE 
+                  SP.GLBL_CMPY_CD         = #glblCmpyCd#
+                 AND  ((SP.SHPG_STS_CD = #shpgSts_VA# AND SP.CR_CHK_QTY > 0)
+                    OR (SP.SHPG_STS_CD = #shpgSts_HA# AND SP.CR_CHK_QTY > 0)
+                    OR (SP.SHPG_STS_CD IN (#sOrOPrinted#
+                                          ,#picked#
+                                          ,#packed#
+                                          ,#staged#
+                                          ,#inshed#
+                                          ,#shipped#
+                                          ,#sOrOCancelled#
+                                          ,#pOrOPrinted#
+                                          ,#pOrOCancelled#
+                                          ,#arrived#
+                                          ,#nInvoiceReady#
+                                          ,#installed#))
+                  )
+                  AND SP.PMT_TERM_CASH_DISC_CD NOT IN
+                         <iterate property="pmtTermCashDiscCrCardList" var="pmtTermCashDiscCrCard[]" open="(" close=")" conjunction=",">
+                             #pmtTermCashDiscCrCard[]#
+                         </iterate>
+                  AND SP.EZCANCELFLAG     = '0'
+                  AND SP.GLBL_CMPY_CD     = C.GLBL_CMPY_CD
+                  AND SP.TRX_HDR_NUM      = C.CPO_ORD_NUM
+                  AND C.OPEN_FLG          = 'Y'
+                  AND C.EZCANCELFLAG      = '0'
+                  AND SP.GLBL_CMPY_CD     = CDL.GLBL_CMPY_CD
+                  AND SP.TRX_HDR_NUM      = CDL.CPO_ORD_NUM
+                  AND SP.TRX_LINE_NUM     = CDL.CPO_DTL_LINE_NUM
+                  AND SP.TRX_LINE_SUB_NUM = CDL.CPO_DTL_LINE_SUB_NUM
+                  AND CDL.CPO_ORD_TP_CD   = #cpoOrdTp#
+                  AND CDL.EZCANCELFLAG    = '0'
+                  AND C.GLBL_CMPY_CD      = B.GLBL_CMPY_CD
+                  AND C.BILL_TO_CUST_CD   = B.BILL_TO_CUST_CD
+                  AND B.EZCANCELFLAG      = '0'
+                  AND B.SELL_TO_CUST_CD   = #dsAcctNum#
+                  AND (CDL.CR_REBIL_CD    = #crRebilCd_R#
+                    OR CDL.CR_REBIL_CD    IS NULL)
+                  AND NOT EXISTS (
+                      SELECT
+                          'X'
+                      FROM
+                            ORD_LINE_VAL_SET OLVS
+                      WHERE
+                            CDL.GLBL_CMPY_CD            = OLVS.GLBL_CMPY_CD
+                        AND CDL.DS_ORD_LINE_CATG_CD     = OLVS.DS_ORD_LINE_CATG_CD
+                        AND OLVS.ORD_LINE_CTX_TP_CD     = #revRecogExem#
+                        AND OLVS.EZCANCELFLAG           = '0'
+                  )
+                  AND EXISTS (
+                      SELECT
+                          'X'
+                      FROM
+                             DS_ORD_LINE_PROC_DFN       DOLP
+                            ,ORD_PROC_TP                OPT
+                      WHERE
+                            CDL.GLBL_CMPY_CD            = OPT.GLBL_CMPY_CD
+                        AND OPT.INV_CRAT_PROC_FLG       = 'Y'
+                        AND OPT.EZCANCELFLAG            = '0'
+                        AND OPT.GLBL_CMPY_CD            = DOLP.GLBL_CMPY_CD
+                        AND C.DS_ORD_TP_CD              = DOLP.DS_ORD_TP_CD
+                        AND CDL.DS_ORD_LINE_CATG_CD     = DOLP.DS_ORD_LINE_CATG_CD
+                        AND OPT.ORD_PROC_TP_CD          = DOLP.ORD_PROC_TP_CD
+                        AND DOLP.EZCANCELFLAG           = '0'
+                  )
+             )
+         GROUP BY
+             BILL_TO_CUST_ACCT_CD
+         ) CIAY
+    WHERE
+        CCR.GLBL_CMPY_CD     = #glblCmpyCd#
+        AND CCR.DS_ACCT_NUM  = #dsAcctNum#
+        AND CCR.DS_ACCT_NUM  = CIAY.BILL_TO_CUST_ACCT_CD(+)
+        AND CCR.EZCANCELFLAG = '0'
+    </statement>
+
+    <statement id="getBillInProcAmt" parameterClass="Map" resultClass="Map">
+    SELECT
+        CCR.BILL_TO_CUST_CD AS BILL_TO
+        ,ROUND(NVL(CIAY.SP_IN_PROC_AMT, 0), #aftDeclPntDigitNum#) AS TRX_IN_PROC
+    FROM
+        CUST_CR_PRFL CCR
+       ,(SELECT
+             PAYER_CUST_CD
+            ,SUM(SP_IN_PROC_AMT + CHARGE_AMT + TAX_AMT) AS SP_IN_PROC_AMT
+         FROM
+             (SELECT
+                  C.PAYER_CUST_CD
+                ,NVL(SP.SP_TOT_FUNC_NET_AMT, 0)  SP_IN_PROC_AMT
+                ,CASE WHEN NOT EXISTS (
+                    SELECT
+                        'X'
+                    FROM
+                         INV_LINE IL
+                    WHERE
+                            IL.GLBL_CMPY_CD         = SP.GLBL_CMPY_CD
+                        AND IL.CPO_ORD_NUM          = SP.TRX_HDR_NUM
+                        AND IL.CPO_DTL_LINE_NUM     = SP.TRX_LINE_NUM
+                        AND IL.CPO_DTL_LINE_SUB_NUM = SP.TRX_LINE_SUB_NUM
+                        AND IL.EZCANCELFLAG         = '0'
+                        )
+                 THEN NVL((
+                    SELECT
+                        SUM(OPCBC.CALC_PRC_AMT_RATE)
+                    FROM
+                        ORD_PRC_CALC_BASE   OPCBC
+                    WHERE
+                            OPCBC.GLBL_CMPY_CD          = SP.GLBL_CMPY_CD
+                        AND OPCBC.CPO_ORD_NUM           = SP.TRX_HDR_NUM
+                        AND OPCBC.CPO_DTL_LINE_NUM      = SP.TRX_LINE_NUM
+                        AND OPCBC.CPO_DTL_LINE_SUB_NUM  = SP.TRX_LINE_SUB_NUM
+                        <!-- 2018/05/22 QC#21841 Mod Start -->
+                        <!-- AND OPCBC.PRC_DTL_GRP_CD       in (#prcDtlGrp_FRT#, #prcDtlGrp_RND1#) -->
+                        <!-- AND OPCBC.PRC_DTL_GRP_CD       in (#prcDtlGrp_FRT#, #prcDtlGrp_RND1#, #prcDtlGrp_HNDF#, #prcDtlGrp_FSC#, #prcDtlGrp_SHPF#, #prcDtlGrp_RND2#) -->
+                        <!-- 2018/05/22 QC#21841 Mod End -->
+                        <!-- 2018/08/03 QC#27479 Mod Start -->
+                        AND OPCBC.PRC_DTL_GRP_CD IN
+                        <iterate property="prcDtlGrpCdList" var="prcDtlGrpCd[]" open="(" close=")" conjunction=",">
+                            #prcDtlGrpCd[]#
+                        </iterate>
+                        <!-- 2018/08/03 QC#27479 Mod End -->
+                        AND OPCBC.EZCANCELFLAG          = '0'
+                        AND OPCBC.PRC_COND_MAN_DEL_FLG  = #flgN#
+                    GROUP BY
+                        CPO_ORD_NUM, CPO_DTL_LINE_NUM, CPO_DTL_LINE_SUB_NUM), 0)
+                ELSE  0
+                END     CHARGE_AMT
+                ,NVL((
+                    SELECT
+                        SUM(OPCBT.CALC_PRC_AMT_RATE)
+                    FROM
+                        ORD_PRC_CALC_BASE OPCBT
+                    WHERE
+                            OPCBT.GLBL_CMPY_CD          = SP.GLBL_CMPY_CD
+                        AND OPCBT.CPO_ORD_NUM           = SP.TRX_HDR_NUM
+                        AND OPCBT.CPO_DTL_LINE_NUM      = SP.TRX_LINE_NUM
+                        AND OPCBT.CPO_DTL_LINE_SUB_NUM  = SP.TRX_LINE_SUB_NUM
+                        AND OPCBT.PRC_DTL_GRP_CD        = #prcDtlGrp_TAX#
+                        AND OPCBT.EZCANCELFLAG          = '0'
+                    GROUP BY
+                        CPO_ORD_NUM, CPO_DTL_LINE_NUM, CPO_DTL_LINE_SUB_NUM
+                ), 0) * SP.ORD_QTY / CDL.ORD_QTY  TAX_AMT
+              FROM
+                  SHPG_PLN SP
+                 ,CPO      C
+                 ,CPO_DTL  CDL
+              WHERE
+                  SP.GLBL_CMPY_CD         = #glblCmpyCd#
+                 AND  ((SP.SHPG_STS_CD = #shpgSts_VA# AND SP.CR_CHK_QTY > 0)
+                    OR (SP.SHPG_STS_CD = #shpgSts_HA# AND SP.CR_CHK_QTY > 0)
+                    OR (SP.SHPG_STS_CD IN (#sOrOPrinted#
+                                          ,#picked#
+                                          ,#packed#
+                                          ,#staged#
+                                          ,#inshed#
+                                          ,#shipped#
+                                          ,#sOrOCancelled#
+                                          ,#pOrOPrinted#
+                                          ,#pOrOCancelled#
+                                          ,#arrived#
+                                          ,#nInvoiceReady#
+                                          ,#installed#))
+                  )
+                  AND SP.PMT_TERM_CASH_DISC_CD NOT IN
+                         <iterate property="pmtTermCashDiscCrCardList" var="pmtTermCashDiscCrCard[]" open="(" close=")" conjunction=",">
+                             #pmtTermCashDiscCrCard[]#
+                         </iterate>
+                  AND SP.EZCANCELFLAG     = '0'
+                  AND SP.GLBL_CMPY_CD     = C.GLBL_CMPY_CD
+                  AND SP.TRX_HDR_NUM      = C.CPO_ORD_NUM
+                  AND C.PAYER_CUST_CD     = #billToCustCd#
+                  AND C.OPEN_FLG          = 'Y'
+                  AND C.EZCANCELFLAG      = '0'
+                  AND SP.GLBL_CMPY_CD     = CDL.GLBL_CMPY_CD
+                  AND SP.TRX_HDR_NUM      = CDL.CPO_ORD_NUM
+                  AND SP.TRX_LINE_NUM     = CDL.CPO_DTL_LINE_NUM
+                  AND SP.TRX_LINE_SUB_NUM = CDL.CPO_DTL_LINE_SUB_NUM
+                  AND CDL.CPO_ORD_TP_CD   = #cpoOrdTp#
+                  AND CDL.EZCANCELFLAG    = '0'
+                  AND (CDL.CR_REBIL_CD              = #crRebilCd_R#
+                    OR CDL.CR_REBIL_CD              IS NULL)
+                  AND NOT EXISTS (
+                      SELECT
+                          'X'
+                      FROM
+                            ORD_LINE_VAL_SET OLVS
+                      WHERE
+                            CDL.GLBL_CMPY_CD            = OLVS.GLBL_CMPY_CD
+                        AND CDL.DS_ORD_LINE_CATG_CD     = OLVS.DS_ORD_LINE_CATG_CD
+                        AND OLVS.ORD_LINE_CTX_TP_CD     = #revRecogExem#
+                        AND OLVS.EZCANCELFLAG           = '0'
+                  )
+                  AND EXISTS (
+                      SELECT
+                          'X'
+                      FROM
+                             DS_ORD_LINE_PROC_DFN       DOLP
+                            ,ORD_PROC_TP                OPT
+                      WHERE
+                            CDL.GLBL_CMPY_CD            = OPT.GLBL_CMPY_CD
+                        AND OPT.INV_CRAT_PROC_FLG       = 'Y'
+                        AND OPT.EZCANCELFLAG            = '0'
+                        AND OPT.GLBL_CMPY_CD            = DOLP.GLBL_CMPY_CD
+                        AND C.DS_ORD_TP_CD              = DOLP.DS_ORD_TP_CD
+                        AND CDL.DS_ORD_LINE_CATG_CD     = DOLP.DS_ORD_LINE_CATG_CD
+                        AND OPT.ORD_PROC_TP_CD          = DOLP.ORD_PROC_TP_CD
+                        AND DOLP.EZCANCELFLAG           = '0'
+                  )
+             )
+         GROUP BY
+             PAYER_CUST_CD
+        ) CIAY
+    WHERE
+        CCR.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND CCR.BILL_TO_CUST_CD = #billToCustCd#
+        AND CCR.BILL_TO_CUST_CD = CIAY.PAYER_CUST_CD(+)
+        AND CCR.EZCANCELFLAG    = '0'
+    </statement> 
+
+    <statement id="getDsAcctNum" parameterClass="Map" resultClass="String">
+    SELECT
+        B.SELL_TO_CUST_CD
+    FROM
+        BILL_TO_CUST    B
+    WHERE
+        B.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND B.BILL_TO_CUST_CD = #billToCustCd#
+        AND B.EZCANCELFLAG    = '0'
+    </statement>
+
+    <statement id="getOrdInProcAmt" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            SUM(SP_IN_PROC_AMT + CHARGE_AMT + TAX_AMT) AS ORD_IN_PROC_AMT
+        FROM
+            (SELECT
+                 NVL(SP.SP_TOT_FUNC_NET_AMT, 0) SP_IN_PROC_AMT
+                ,NVL((
+                    SELECT
+                        SUM(OPCBC.CALC_PRC_AMT_RATE)
+                    FROM
+                        ORD_PRC_CALC_BASE   OPCBC
+                    WHERE
+                            OPCBC.GLBL_CMPY_CD          = SP.GLBL_CMPY_CD
+                        AND OPCBC.CPO_ORD_NUM           = SP.TRX_HDR_NUM
+                        AND OPCBC.CPO_DTL_LINE_NUM      = SP.TRX_LINE_NUM
+                        AND OPCBC.CPO_DTL_LINE_SUB_NUM  = SP.TRX_LINE_SUB_NUM
+                        <!-- 2018/05/22 QC#21841 Mod Start -->
+                        <!-- AND OPCBC.PRC_DTL_GRP_CD       in (#prcDtlGrp_FRT#, #prcDtlGrp_RND1#) -->
+                        AND OPCBC.PRC_DTL_GRP_CD       in (#prcDtlGrp_FRT#, #prcDtlGrp_RND1#, #prcDtlGrp_HNDF#, #prcDtlGrp_FSC#, #prcDtlGrp_SHPF#, #prcDtlGrp_RND2#)
+                        <!-- 2018/05/22 QC#21841 Mod End -->
+                        AND OPCBC.EZCANCELFLAG          = '0'
+                        AND OPCBC.PRC_COND_MAN_DEL_FLG  = #flgN#
+                    GROUP BY
+                        CPO_ORD_NUM, CPO_DTL_LINE_NUM, CPO_DTL_LINE_SUB_NUM), 0)    CHARGE_AMT
+
+                ,NVL((
+                    SELECT
+                        SUM(OPCBT.CALC_PRC_AMT_RATE)
+                    FROM
+                        ORD_PRC_CALC_BASE OPCBT
+                    WHERE
+                            OPCBT.GLBL_CMPY_CD          = SP.GLBL_CMPY_CD
+                        AND OPCBT.CPO_ORD_NUM           = SP.TRX_HDR_NUM
+                        AND OPCBT.CPO_DTL_LINE_NUM      = SP.TRX_LINE_NUM
+                        AND OPCBT.CPO_DTL_LINE_SUB_NUM  = SP.TRX_LINE_SUB_NUM
+                        AND OPCBT.PRC_DTL_GRP_CD        = #prcDtlGrp_TAX#
+                        AND OPCBT.EZCANCELFLAG          = '0'
+                    GROUP BY
+                        CPO_ORD_NUM, CPO_DTL_LINE_NUM, CPO_DTL_LINE_SUB_NUM
+                ), 0)       TAX_AMT
+
+                FROM
+                     SHPG_PLN       SP
+                    ,CPO            C
+                    ,CPO_DTL        CDL
+
+             WHERE 
+                    SP.GLBL_CMPY_CD           = #glblCmpyCd#
+                AND SP.TRX_HDR_NUM            = #cpoOrdNum#
+                AND SP.SHPG_STS_CD            = #shpgSts_VA#
+                AND SP.CR_CHK_QTY             = 0
+                AND SP.PMT_TERM_CASH_DISC_CD NOT IN
+                         <iterate property="pmtTermCashDiscCrCardList" var="pmtTermCashDiscCrCard[]" open="(" close=")" conjunction=",">
+                             #pmtTermCashDiscCrCard[]#
+                         </iterate>
+                AND SP.EZCANCELFLAG           = '0'
+
+                AND SP.GLBL_CMPY_CD           = C.GLBL_CMPY_CD
+                AND SP.TRX_HDR_NUM            = C.CPO_ORD_NUM
+                AND C.OPEN_FLG                = 'Y'
+                AND C.EZCANCELFLAG            = '0'
+
+                AND SP.GLBL_CMPY_CD           = CDL.GLBL_CMPY_CD
+                AND SP.TRX_HDR_NUM            = CDL.CPO_ORD_NUM
+                AND SP.TRX_LINE_NUM           = CDL.CPO_DTL_LINE_NUM
+                AND SP.TRX_LINE_SUB_NUM       = CDL.CPO_DTL_LINE_SUB_NUM
+                AND CDL.CPO_ORD_TP_CD         = #cpoOrdTp#
+                AND CDL.EZCANCELFLAG          = '0'
+
+                AND (CDL.CR_REBIL_CD          = #crRebilCd_R#
+                  OR CDL.CR_REBIL_CD          IS NULL)
+
+                AND NOT EXISTS (
+                    SELECT
+                        'X'
+                    FROM
+                        ORD_LINE_VAL_SET OLVS
+                    WHERE
+                            CDL.GLBL_CMPY_CD            = OLVS.GLBL_CMPY_CD
+                        AND CDL.DS_ORD_LINE_CATG_CD     = OLVS.DS_ORD_LINE_CATG_CD
+                        AND OLVS.ORD_LINE_CTX_TP_CD     = #revRecogExem#
+                        AND OLVS.EZCANCELFLAG           = '0'
+                )
+
+                AND EXISTS (
+                    SELECT
+                        'X'
+                    FROM
+                         DS_ORD_LINE_PROC_DFN       DOLP
+                        ,ORD_PROC_TP                OPT
+                    WHERE
+                            CDL.GLBL_CMPY_CD            = OPT.GLBL_CMPY_CD
+                        AND OPT.INV_CRAT_PROC_FLG       = 'Y'
+                        AND OPT.EZCANCELFLAG            = '0'
+                        AND OPT.GLBL_CMPY_CD            = DOLP.GLBL_CMPY_CD
+                        AND C.DS_ORD_TP_CD              = DOLP.DS_ORD_TP_CD
+                        AND CDL.DS_ORD_LINE_CATG_CD     = DOLP.DS_ORD_LINE_CATG_CD
+                        AND OPT.ORD_PROC_TP_CD          = DOLP.ORD_PROC_TP_CD
+                        AND DOLP.EZCANCELFLAG           = '0'
+                )
+           )
+    </statement>
+
+    <statement id="getAftDeclPntDigitNum" parameterClass="Map" resultClass="Integer">
+        SELECT
+            CCY.AFT_DECL_PNT_DIGIT_NUM
+        FROM
+            GLBL_CMPY   GC
+           ,CCY         CCY
+        WHERE
+                GC.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND GC.EZCANCELFLAG     = '0'
+            AND CCY.GLBL_CMPY_CD    = GC.GLBL_CMPY_CD
+            AND CCY.CCY_CD          = GC.STD_CCY_CD
+            AND CCY.EZCANCELFLAG    = '0'
+    </statement>
+
+    <statement id="getAcctCrLimitAmt" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            DACP.CR_LIMIT_AMT
+        FROM
+            DS_ACCT_CR_PRFL     DACP
+        WHERE
+                DACP.GLBL_CMPY_CD       = #glblCmpyCd#
+            AND DACP.DS_ACCT_NUM        =
+            <isNotNull property="dsAcctNum">
+                #dsAcctNum#
+            </isNotNull>
+            <isNull property="dsAcctNum">
+                (SELECT
+                        BTC.SELL_TO_CUST_CD
+                   FROM
+                         BILL_TO_CUST        BTC
+                WHERE
+                        BTC.GLBL_CMPY_CD        = #glblCmpyCd#
+                    AND BTC.BILL_TO_CUST_CD     = #billToCustCd#
+                    AND BTC.EZCANCELFLAG        = '0'
+
+                    AND ROWNUM                  = 1
+                )
+            </isNull>
+            AND DACP.EZCANCELFLAG       = '0'
+    </statement>
+    <!-- START 2018/01/25 [QC#23681,MOD] -->
+    <!-- START 2017/12/19 [QC#22096,ADD] -->
+    <statement id="getArBalAmt" parameterClass="Map" resultClass="Map">
+        SELECT
+             SUM(GRS_AMT)    AS SUM_AMT
+        FROM
+             (
+             SELECT
+                   SUM(A.FUNC_RMNG_BAL_GRS_AMT)    AS GRS_AMT
+             FROM
+                  AR_TRX_BAL     A
+                 ,(
+                     SELECT
+                         CDT.GLBL_CMPY_CD
+                        ,CDT.EZCANCELFLAG
+                        ,CDT.AR_TRX_NUM
+                        ,NVL(SUM(CDT.FUNC_CLT_DSPT_AMT),0) AS FUNC_CLT_DSPT_AMT
+                     FROM
+                         CLT_DSPT_TRX CDT
+                     WHERE
+                             CDT.GLBL_CMPY_CD    = #glblCmpyCd#
+                         AND CDT.CLT_DSPT_STS_CD = #cltDsptStsCdApproved#
+                         AND CDT.EZCANCELFLAG    = '0'
+                     GROUP BY
+                         CDT.GLBL_CMPY_CD
+                        ,CDT.EZCANCELFLAG
+                        ,CDT.AR_TRX_NUM
+                  ) B
+             WHERE
+                     A.GLBL_CMPY_CD              = #glblCmpyCd#
+                 AND B.GLBL_CMPY_CD(+)           = A.GLBL_CMPY_CD
+                 <isNotNull property="billToCustCd">
+                 AND A.BILL_TO_CUST_CD           = #billToCustCd#
+                 </isNotNull>
+                 <isNull property="billToCustCd">
+                 AND A.BILL_TO_CUST_ACCT_CD      = #sellToCustCd#
+                 </isNull>
+                 AND A.AR_CASH_APPLY_STS_CD      IN(#applyStsCd_U#,#applyStsCd_P#)
+                 AND A.AR_TRX_TP_CD              &lt;&gt; #arTrxTp_Rcpt#
+                 AND B.AR_TRX_NUM(+)             = A.AR_TRX_NUM
+                 AND A.FUNC_RMNG_BAL_GRS_AMT - B.FUNC_CLT_DSPT_AMT(+) &gt; 0
+                 AND A.EZCANCELFLAG              = '0'
+                 AND B.EZCANCELFLAG(+)           = '0'
+             UNION
+             SELECT
+                  SUM(C.INV_TOT_DEAL_NET_AMT)    AS GRS_AMT
+             FROM
+                  INV     C
+             WHERE
+                     C.GLBL_CMPY_CD              = #glblCmpyCd#
+                 AND C.EZCANCELFLAG              = '0'
+                 AND C.FNLZ_INV_FLG              = #fnlzInvFlg#
+                 <isNotNull property="billToCustCd">
+                 AND C.BILL_TO_CUST_CD           = #billToCustCd#
+                 </isNotNull>
+                 <isNull property="billToCustCd">
+                 AND C.BILL_TO_CUST_ACCT_CD      = #sellToCustCd#
+                 </isNull>
+                 AND NOT EXISTS
+                          (
+                           SELECT
+                                /*+ INDEX(D AR_TRX_BAL_I4) */
+                                1
+                           FROM
+                                AR_TRX_BAL D
+                           WHERE
+                                    D.EZCANCELFLAG   = '0'
+                               AND  D.GLBL_CMPY_CD   = #glblCmpyCd#
+                               AND  D.AR_TRX_NUM  like CONCAT(C.INV_NUM, '%')
+                          )
+                 AND EXISTS
+                          (
+                           SELECT
+                                1
+                           FROM
+                                DS_INV_TP DIT
+                           WHERE
+                                DIT.GLBL_CMPY_CD = #glblCmpyCd#
+                            AND DIT.EZCANCELFLAG = '0'
+                            AND DIT.DS_INV_TP_CD = C.DS_INV_TP_CD
+                            AND DIT.OPEN_AR_FLG  = 'Y'
+                          )
+             UNION
+             SELECT
+                   SUM(E.FUNC_RMNG_BAL_GRS_AMT * -1)    AS GRS_AMT
+             FROM
+                  AR_TRX_BAL     E
+             WHERE
+                     E.GLBL_CMPY_CD              = #glblCmpyCd#
+                 <isNotNull property="billToCustCd">
+                 AND E.BILL_TO_CUST_CD           = #billToCustCd#
+                 </isNotNull>
+                 <isNull property="billToCustCd">
+                 AND E.BILL_TO_CUST_ACCT_CD      = #sellToCustCd#
+                 </isNull>
+                 AND E.AR_CASH_APPLY_STS_CD      IN(#applyStsCd_U#,#applyStsCd_P#)
+                 AND E.AR_TRX_TP_CD              = #arTrxTp_Rcpt#
+                 AND E.EZCANCELFLAG              = '0'
+             )
+    </statement>
+    <!-- END 2017/12/19 [QC#22096,ADD] -->
+    <!-- END 2018/01/25 [QC#23681,MOD] -->
+</sqlMap>

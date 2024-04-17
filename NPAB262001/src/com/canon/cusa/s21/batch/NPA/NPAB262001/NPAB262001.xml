@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NPAB262001">
+
+    <statement id="getPoAsnIntfcHdr" parameterClass="Map" resultClass="Map">
+        SELECT
+            EPAH.INTERFACE_ID
+            ,EPAH.TRANSACTION_ID
+            ,EPAH.SEGMENT_ID
+            ,EPAH.UNIT_ID
+            ,EPAH.SEQ_NUMBER
+            ,EPAH.ASN_RCV_PO_ORD_NUM
+            ,EPAH.ASN_RCV_BOL_NUM
+            ,EPAH.ASN_RCV_SHIP_DT
+            ,EPAH.ASN_RCV_OTBD_CARR_CD
+        FROM
+            NPAI0420_01 EPAH
+        WHERE
+            EPAH.INTERFACE_ID       = #interfaceId#
+        AND EPAH.TRANSACTION_ID     = #transactionId#
+        AND EPAH.EZCANCELFLAG       = '0'
+        ORDER BY
+            EPAH.TRANSACTION_ID
+            ,EPAH.SEGMENT_ID
+            ,EPAH.UNIT_ID
+            ,EPAH.SEQ_NUMBER
+    </statement>
+
+
+    <statement id="getPoAsnIntfcDtl" parameterClass="Map" resultClass="Map">
+        SELECT
+            EPAD.INTERFACE_ID
+            ,EPAD.TRANSACTION_ID
+            ,EPAD.SEGMENT_ID
+            ,EPAD.UNIT_ID
+            ,EPAD.SEQ_NUMBER
+            ,EPAD.ASN_RCV_BOL_NUM
+            ,EPAD.ASN_RCV_PO_ORD_NUM
+            ,EPAD.ASN_RCV_PO_ORD_DTL_LINE_NUM
+            ,EPAD.ASN_RCV_MDSE_CD
+            ,EPAD.ASN_RCV_SHIP_QTY
+<!-- START 2018/11/12 M.Naito [QC#29050,ADD] -->
+            ,EPAD.ASN_RCV_PKG_UOM_CD
+<!-- END 2018/11/12 M.Naito [QC#29050,ADD] -->
+        FROM
+            NPAI0420_02 EPAD
+        WHERE
+            EPAD.INTERFACE_ID      = #interfaceId#
+        AND EPAD.TRANSACTION_ID    = #transactionId#
+        AND EPAD.SEGMENT_ID        = #segmentId#
+        AND EPAD.UNIT_ID           = #unitId#
+        AND EPAD.EZCANCELFLAG      = '0'
+        ORDER BY
+            EPAD.SEGMENT_ID
+            ,EPAD.UNIT_ID
+            ,EPAD.SEQ_NUMBER
+    </statement>
+
+    <statement id="getPoAsnSoNum" parameterClass="Map" resultClass="String">
+        SELECT
+            MAX(EAHW.ASN_SO_NUM) ASN_SO_NUM
+        FROM
+            EDI_ASN_HDR_WRK EAHW
+        WHERE
+            EAHW.GLBL_CMPY_CD = #glblCmpyCd#
+        AND (EAHW.ASN_SO_NUM  = #asnSoNum# OR REGEXP_LIKE(EAHW.ASN_SO_NUM, #asnSoNumHyphn#))
+        AND EAHW.EZCANCELFLAG = '0'
+    </statement>
+
+
+    <statement id="getPoInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+            PD.PO_ORD_NUM
+           ,PD.SHPG_SVC_LVL_CD
+           ,PD.SHIP_TO_ST_CD
+        FROM
+            PO_DTL PD
+        WHERE
+            PD.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND PD.PO_ORD_NUM          = #poOrdNum#
+        AND PD.PO_ORD_DTL_LINE_NUM = #poOrdDtlLineNum#
+        AND PD.EZCANCELFLAG        = '0'
+    </statement>
+
+
+    <statement id="getAsnVndCd" parameterClass="Map" resultClass="String">
+        SELECT
+            RAV.RCV_ASN_VND_CD
+        FROM
+            RCV_ASN_VND RAV
+        WHERE
+            RAV.GLBL_CMPY_CD  = #glblCmpyCd#
+        AND RAV.VND_SYS_TP_CD = #vndSysTpCd#
+        AND RAV.EZCANCELFLAG  = '0'
+    </statement>
+
+
+    <statement id="getPoAsnLeadTime" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            A.DELY_LEAD_AOT
+        FROM (
+            SELECT
+                VSL_ASN.VND_SHIP_LT_PRIORITY
+               ,VSL_ASN.DELY_LEAD_AOT
+            FROM (
+                <!-- priority 1 : VND_CD, ST_CD, METH_NM -->
+                SELECT
+                    1 VND_SHIP_LT_PRIORITY
+                   ,VSL.DELY_LEAD_AOT
+                FROM
+                    VND_SHIP_LT VSL
+                WHERE
+                    VSL.GLBL_CMPY_CD     = #glblCmpyCd#
+                AND VSL.VND_CD           = #vndCd#
+                AND VSL.DEST_ST_CD       = #destStCd#
+                AND VSL.VND_SHIP_METH_CD = #vndShipMethCd#
+                AND VSL.EZCANCELFLAG     = '0'
+                <!-- priority 2 : VND_CD, METH_NM -->
+                UNION
+                SELECT
+                    2 VND_SHIP_LT_PRIORITY
+                   ,VSL.DELY_LEAD_AOT
+                FROM
+                    VND_SHIP_LT VSL
+                WHERE
+                    VSL.GLBL_CMPY_CD     = #glblCmpyCd#
+                AND VSL.VND_CD           = #vndCd#
+                AND VSL.DEST_ST_CD       = #ast#
+                AND VSL.VND_SHIP_METH_CD = #vndShipMethCd#
+                AND VSL.EZCANCELFLAG     = '0'
+                <!-- priority 3 : VND_CD, ST_CD, METH_CD -->
+                UNION
+                SELECT
+                    3 VND_SHIP_LT_PRIORITY
+                   ,VSL.DELY_LEAD_AOT
+                FROM
+                    VND_SHIP_LT VSL
+                WHERE
+                    VSL.GLBL_CMPY_CD     = #glblCmpyCd#
+                AND VSL.VND_CD           = #vndCd#
+                AND VSL.DEST_ST_CD       = #destStCd#
+                AND VSL.VND_SHIP_METH_CD = #vndShipMethCdFromPo#
+                AND VSL.EZCANCELFLAG     = '0'
+                <!-- priority 4 : VND_CD, METH_CD -->
+                UNION
+                SELECT
+                    4 VND_SHIP_LT_PRIORITY
+                   ,VSL.DELY_LEAD_AOT
+                FROM
+                    VND_SHIP_LT VSL
+                WHERE
+                    VSL.GLBL_CMPY_CD     = #glblCmpyCd#
+                AND VSL.VND_CD           = #vndCd#
+                AND VSL.DEST_ST_CD       = #ast#
+                AND VSL.VND_SHIP_METH_CD = #vndShipMethCdFromPo#
+                AND VSL.EZCANCELFLAG     = '0'
+                <!-- priority 5 : VND_CD -->
+                UNION
+                SELECT
+                    5 VND_SHIP_LT_PRIORITY
+                   ,VSL.DELY_LEAD_AOT
+                FROM
+                    VND_SHIP_LT VSL
+                WHERE
+                    VSL.GLBL_CMPY_CD     = #glblCmpyCd#
+                AND VSL.VND_CD           = #vndCd#
+                AND VSL.DEST_ST_CD       = #ast#
+                AND VSL.VND_SHIP_METH_CD = #ast#
+                AND VSL.EZCANCELFLAG     = '0'
+            ) VSL_ASN
+            ORDER BY
+                VSL_ASN.VND_SHIP_LT_PRIORITY
+        ) A
+        WHERE
+            ROWNUM = 1
+    </statement>
+
+    <statement id="getCarrCdFromXref" parameterClass="Map" resultClass="String">
+        SELECT DISTINCT
+            TPS.CARR_CD
+        FROM
+            TRD_PTNR_SHPG_X_REF TPS
+        WHERE
+            TPS.GLBL_CMPY_CD      = #glblCmpyCd#
+        AND TPS.VND_CD            = #vndCd#
+        AND TPS.TRD_PTNR_CARR_CD  = #trdPtnrCarrCd#
+        AND TPS.EZCANCELFLAG      = '0'
+    </statement>
+
+    <statement id="getSoNumFromCmbnXref" parameterClass="Map" resultClass="String">
+        SELECT
+             CPS.SO_NUM
+        FROM
+            CMBN_PO_SO_XREF CPS
+        WHERE
+            CPS.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND CPS.PO_ORD_NUM          = #poOrdNum#
+        AND CPS.PO_ORD_DTL_LINE_NUM = #poOrdDtlLineNum#
+        AND CPS.EZCANCELFLAG        = '0'
+    </statement>
+
+<!-- START 2018/11/12 M.Naito [QC#29050,ADD] -->
+    <statement id="getVndUom" parameterClass="Map" resultClass="String">
+        SELECT
+            TPU.PKG_UOM_CD
+        FROM
+            TRD_PTNR_UOM_XREF TPU
+           ,PKG_UOM           PU
+           ,PKG_UOM           PU2
+        WHERE
+            TPU.GLBL_CMPY_CD    = #glblCmpyCd#
+        AND TPU.VND_CD          = #vndCd#
+        AND TPU.TRD_PTNR_UOM_CD = #vndUomCd#
+        AND TPU.EZCANCELFLAG    = '0'
+        AND TPU.GLBL_CMPY_CD    = PU.GLBL_CMPY_CD
+        AND TPU.PKG_UOM_CD      = PU.PKG_UOM_CD
+        AND PU.EZCANCELFLAG     = '0'
+        AND PU.GLBL_CMPY_CD     = PU2.GLBL_CMPY_CD
+        AND PU.PKG_UOM_CLS_CD   = PU2.PKG_UOM_CLS_CD
+        AND PU2.PKG_UOM_CD      = #pkgUomCd#
+        AND PU2.EZCANCELFLAG    = '0'
+        AND ROWNUM              = 1
+    </statement>
+
+    <statement id="getMdseStorePkg" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            COUNT(*)
+        FROM
+            MDSE_STORE_PKG MSP
+        WHERE
+            MSP.GLBL_CMPY_CD    = #glblCmpyCd#
+        AND MSP.MDSE_CD         = #mdseCd#
+        AND MSP.BASE_PKG_UOM_CD = #basePkgUomCd#
+        AND MSP.PKG_UOM_CD      = #pkgUomCd#
+        AND MSP.EZCANCELFLAG    = '0'
+    </statement>
+<!-- END 2018/11/12 M.Naito [QC#29050,ADD] -->
+<!-- START 2020/09/02 [QC#56991,ADD] -->
+    <statement id="getPoOrdNum" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            COUNT(*)
+        FROM
+            PO
+        WHERE
+            PO.GLBL_CMPY_CD  = #glblCmpyCd#
+        AND PO.PO_ORD_NUM    = #poOrdNum#
+        AND PO.EZCANCELFLAG  = '0'
+    </statement>
+<!-- END 2020/09/02 [QC#56991,ADD] -->
+</sqlMap>

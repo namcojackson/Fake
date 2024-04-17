@@ -1,0 +1,142 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NWAL1770QueryForSaveSubmit">
+
+    <statement id="getRtlWhInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+            DILV.RTL_WH_CD  AS RTL_WH_CD
+           ,DILV.RTL_SWH_CD AS RTL_SWH_CD
+        FROM
+            DS_INVTY_LOC_V DILV
+        WHERE
+            DILV.GLBL_CMPY_CD       = #glblCmpyCd#
+            AND DILV.RTL_WH_NM      = #rtlWhNm#
+            <isNotNull property="rtlSwhNm">
+                AND DILV.RTL_SWH_NM = #rtlSwhNm#
+            </isNotNull>
+            AND DILV.RGTN_STS_CD    = #rgtnStsCd#
+            AND DILV.EFF_FROM_DT    &lt;= #slsDt#
+            AND NVL(DILV.EFF_THRU_DT, '99991231') &gt;= #slsDt#
+            AND DILV.EZCANCELFLAG    = '0'
+    </statement>
+
+    <statement id="isDuplicationPoNumForQuote" parameterClass="Map" resultClass="Integer">
+        SELECT
+            COUNT(SQ.SPLY_QUOTE_NUM)
+        FROM
+            SPLY_QUOTE SQ
+        WHERE
+            SQ.GLBL_CMPY_CD               = #glblCmpyCd#
+            <isNotNull property="splyQuoteStsDescTxt">
+                AND SQ.SPLY_QUOTE_NUM     != #splyQuoteNum#
+            </isNotNull>
+            <!-- 2019/04/02 QA#30756 Mod Start -->
+            <!-- AND SQ.CUST_ISS_PO_NUM    = #custIssPoNum# -->
+            AND UPPER(SQ.CUST_ISS_PO_NUM) = UPPER(#custIssPoNum#)
+            <!-- 2019/04/02 QA#30756 Mod End -->
+            AND SQ.SPLY_QUOTE_STS_CD      = #saved#
+            AND SQ.SELL_TO_CUST_CD        = #sellToCustCd#
+            AND SQ.EZCANCELFLAG           = '0'
+    </statement>
+
+    <statement id="isDuplicationPoNumForOrder" parameterClass="Map" resultClass="Integer">
+        SELECT
+            COUNT(CPO.CPO_ORD_NUM)
+        FROM
+            CPO CPO
+        WHERE
+            CPO.GLBL_CMPY_CD               = #glblCmpyCd#
+            <!-- 2019/04/02 QA#30756 Mod Start -->
+            <!-- AND CPO.CUST_ISS_PO_NUM = #custIssPoNum# -->
+            AND UPPER(CPO.CUST_ISS_PO_NUM) = UPPER(#custIssPoNum#)
+            <!-- 2019/04/02 QA#30756 Mod End -->
+            AND CPO.ORD_HDR_STS_CD         != #cancelled#
+            AND CPO.SELL_TO_CUST_CD        = #sellToCustCd#
+            AND CPO.EZCANCELFLAG           = '0'
+    </statement>
+
+    <statement id="getBllgAttrbReqFlg" parameterClass="Map" resultClass="String">
+        SELECT
+           ARA.BLLG_ATTRB_REQ_FLG
+        FROM
+            DS_ACCT_REF_ATTRB ARA
+        WHERE
+            ARA.GLBL_CMPY_CD            = #glblCmpyCd#
+            AND ARA.DS_ACCT_NUM         = #dsAcctNum#
+            AND ARA.BLLG_ATTRB_NM       = #bllgAttrbNm#
+            AND ARA.EZCANCELFLAG        = '0'
+        ORDER BY
+            ARA.DS_ACCT_REF_ATTRB_PK
+    </statement>
+
+    <statement id="getBillToLocationNumber" parameterClass="Map" resultClass="String"> 
+        SELECT
+           BT.LOC_NUM
+        FROM
+            BILL_TO_CUST    BT
+        WHERE
+                BT.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND BT.BILL_TO_CUST_CD = #custCd#
+            AND BT.RGTN_STS_CD     = #rgtnSts#
+            AND BT.EZCANCELFLAG    = '0'
+            AND ROWNUM            = #rowNum#
+    </statement>
+
+    <statement id="getShipToLocationNumber" parameterClass="Map" resultClass="String"> 
+        SELECT
+           ST.LOC_NUM
+        FROM
+            SHIP_TO_CUST    ST
+        WHERE
+                ST.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND ST.SHIP_TO_CUST_CD = #custCd#
+            AND ST.RGTN_STS_CD     = #rgtnSts#
+            AND ST.EZCANCELFLAG    = '0'
+            AND ROWNUM            = #rowNum#
+    </statement>
+    <!-- 2019/10/03 QC#53595 Add Start -->
+    <statement id="cntOrdTpCd" parameterClass="Map" resultClass="BigDecimal">
+    SELECT 
+      COUNT(OD.DS_ORD_TP_CD)
+    FROM
+      DS_ORD_TP_PROC_DFN OD
+    WHERE 
+          DS_ORD_TP_CD = #ordTpCd#
+      AND OD.TRTY_GRP_TP_TXT = 'IS' 
+      AND OD.EZCANCELFLAG = '0'
+      AND OD.GLBL_CMPY_CD= #glblCmpyCd#
+      AND OD.EFF_FROM_DT &lt;= #slsDt#
+      AND (OD.EFF_THRU_DT IS NULL
+        OR OD.EFF_THRU_DT &gt;= #slsDt#)
+    </statement>
+
+    <statement id="cntAssignedISGroup" parameterClass="Map" resultClass="BigDecimal">
+    SELECT 
+      COUNT(RESRC.ORG_CD)
+    FROM 
+      DS_ORG_RESRC_RELN RESRC
+    WHERE 
+          RESRC.GLBL_CMPY_CD = #glblCmpyCd#
+      AND RESRC.EZCANCELFLAG = '0'
+      AND RESRC.GNRN_TP_CD IN ('2' , '3')
+      AND RESRC.PSN_CD = #psnNum#
+      AND RESRC.EFF_FROM_DT &lt;= #slsDt#
+      AND (RESRC.EFF_THRU_DT IS NULL
+        OR RESRC.EFF_THRU_DT &gt;= #slsDt#)
+       <!-- 2019/12/07 QC#54670 Add Start -->
+      AND NON_SLS_REP_FLG = 'N'
+      <!-- 2019/12/07 QC#54670 Add End -->
+      AND RESRC.ORG_CD IN (
+        SELECT OU.ORG_CD
+        FROM DS_ORG_UNIT OU
+        WHERE OU.TRTY_GRP_TP_CD = 'IS'
+        AND OU.GLBL_CMPY_CD = #glblCmpyCd#
+        AND OU.EZCANCELFLAG = '0'
+        AND OU.EFF_FROM_DT &lt;= #slsDt#
+        AND (OU.EFF_THRU_DT IS NULL
+          OR OU.EFF_THRU_DT &gt;= #slsDt#)
+      )
+    </statement>
+    <!-- 2019/10/03 QC#53595 Add End -->
+
+</sqlMap>

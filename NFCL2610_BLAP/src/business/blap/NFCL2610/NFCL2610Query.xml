@@ -1,0 +1,563 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NFCL2610Query">
+
+    <typeAlias alias="NFCL2610CMsg"      type="business.blap.NFCL2610.NFCL2610CMsg"/>
+    <typeAlias alias="NFCL2610_ASMsg"    type="business.blap.NFCL2610.NFCL2610_ASMsg"/>
+    <statement id="getTransactionSeachInfo" parameterClass="Map" resultMap="result.getTransactionSeachInfo">
+    <!-- START 2020/09/18 R.Kurahashi [QC#57703,MOD] -->
+       WITH REQ AS (
+           SELECT
+                AR.AR_RF_RQST_PK AS AR_RF_RQST_PK
+               ,AR.EZINTIME AS EZINTIME
+               ,AR.AR_DS_WF_STS_CD AS AR_DS_WF_STS_CD
+               ,ARD.AR_RF_RQST_DTL_PK AS AR_RF_RQST_DTL_PK
+               ,ARD.AR_TRX_NUM AS AR_TRX_NUM
+               <!-- START 2022/06/03 D.Mamaril [QC#59333-1,ADD] -->
+               ,AR.AR_RF_STS_CD AS AR_RF_STS_CD
+               <!-- END 2022/06/03 D.Mamaril [QC#59333-1,ADD] -->
+               <!-- add start 2022/07/25 QC#57417 -->
+               ,ARD.AR_RCPT_RF_RSN_CD
+               <!-- add end 2022/07/25 QC#57417 -->
+           FROM
+                AR_RF_RQST AR
+               ,AR_RF_RQST_DTL ARD
+           WHERE
+               AR.GLBL_CMPY_CD = 'ADB'
+           AND AR.EZCANCELFLAG = '0'
+           AND ARD.EZCANCELFLAG = '0'
+           AND AR.GLBL_CMPY_CD = ARD.GLBL_CMPY_CD
+           AND AR.AR_RF_RQST_PK = ARD.AR_RF_RQST_PK
+           AND ARD.AR_TRX_NUM IS NOT NULL
+               UNION
+           SELECT
+                AR.AR_RF_RQST_PK AS AR_RF_RQST_PK
+               ,AR.EZINTIME AS EZINTIME
+               ,AR.AR_DS_WF_STS_CD AS AR_DS_WF_STS_CD
+               ,ARD.AR_RF_RQST_DTL_PK AS AR_RF_RQST_DTL_PK
+               ,ARD.AR_ORIG_RCPT_NUM AS AR_TRX_NUM
+               <!-- START 2022/06/03 D.Mamaril [QC#59333-1,ADD] -->
+               ,AR.AR_RF_STS_CD AS AR_RF_STS_CD
+               <!-- END 2022/06/03 D.Mamaril [QC#59333-1,ADD] -->
+               <!-- add start 2022/07/25 QC#57417 -->
+               ,ARD.AR_RCPT_RF_RSN_CD
+               <!-- add end 2022/07/25 QC#57417 -->
+           FROM
+                AR_RF_RQST AR
+               ,AR_RF_RQST_DTL ARD
+           WHERE
+                AR.GLBL_CMPY_CD = 'ADB'
+           AND AR.EZCANCELFLAG = '0'
+           AND ARD.EZCANCELFLAG = '0'
+           AND AR.GLBL_CMPY_CD = ARD.GLBL_CMPY_CD
+           AND AR.AR_RF_RQST_PK = ARD.AR_RF_RQST_PK
+           AND ARD.AR_ORIG_RCPT_NUM IS NOT NULL
+       )
+       SELECT
+           A.*
+        FROM (
+            SELECT
+<!-- START 2018/09/14 T.Ogura [QC#25091,ADD] -->
+                 NVL(ATB.AR_CUST_REF_NUM, ATB.AR_TRX_NUM) AS TRX_NUM
+<!-- END   2018/09/14 T.Ogura [QC#25091,ADD] -->
+                ,ATB.AR_TRX_NUM
+                ,ATB.AR_TRX_TP_CD
+                ,ATB.AR_TRX_DT
+                <!-- START 2018/03/12 [QC#22762,ADD] -->
+                ,ATB.BILL_TO_CUST_ACCT_CD
+                <!-- END   2018/03/12 [QC#22762,ADD] -->
+                ,ATB.BILL_TO_CUST_CD
+                ,ATB.CPO_ORD_NUM
+                ,ATB.CUST_ISS_PO_NUM
+                ,CASE WHEN ATB.AR_TRX_TP_CD = #arTrxTpCdIsRCP# THEN NVL(ATB.DEAL_ORIG_GRS_AMT, 0) * -1
+                      ELSE NVL(ATB.DEAL_ORIG_GRS_AMT, 0)
+                 END AS DEAL_ORIG_GRS_AMT
+                ,CASE WHEN ATB.AR_TRX_TP_CD = #arTrxTpCdIsRCP# THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0) * -1
+                      ELSE NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0)
+                 END AS DEAL_RMNG_BAL_GRS_AMT
+                ,ATB.AR_CASH_APPLY_STS_CD
+                ,ACAS.AR_CASH_APPLY_STS_DESC_TXT
+                ,CASE WHEN ATB.AR_TRX_TP_CD = #arTrxTpCdIsRCP# THEN NVL(ATB.FUNC_ORIG_GRS_AMT, 0) * -1
+                      ELSE NVL(ATB.FUNC_ORIG_GRS_AMT, 0)
+                 END AS FUNC_ORIG_GRS_AMT
+                ,CASE WHEN ATB.AR_TRX_TP_CD = #arTrxTpCdIsRCP# THEN NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0) * -1
+                      ELSE NVL(ATB.FUNC_RMNG_BAL_GRS_AMT, 0)
+                 END AS FUNC_RMNG_BAL_GRS_AMT
+                ,BTC.FIRST_LINE_ADDR ||
+                 DECODE(BTC.SCD_LINE_ADDR, NULL, '', ',' || BTC.SCD_LINE_ADDR) ||
+                 DECODE(BTC.CTY_ADDR, NULL, '', ',' || BTC.CTY_ADDR) ||
+                 DECODE(BTC.ST_CD, NULL, '', ',' || BTC.ST_CD) ||
+                 DECODE(BTC.POST_CD, NULL, '', ',' || BTC.POST_CD) AS ADDRESS
+                ,ATB.AR_TRX_BAL_PK
+                ,ATB.ORIG_INV_NUM
+                ,ATB.EZUPTIME
+                ,ATB.EZUPTIMEZONE
+                ,DIT.DS_INV_TP_DESC_TXT
+                ,RF_REQ.AR_DS_WF_STS_CD AS AR_DS_WF_STS_CD
+                ,CASE 
+                     WHEN RF_REQ.AR_DS_WF_STS_CD = '00' THEN ADWS.AR_DS_WF_STS_NM
+                     ELSE 'Open'
+                 END AS AR_DS_WF_STS_NM
+                 <!-- START 2022/01/26 D.Mamaril [QC#59618,ADD] -->
+                ,RF_REQ.AR_RF_RQST_PK
+                ,RF_REQ.AR_RF_RQST_DTL_PK
+                <!-- END 2022/01/26 D.Mamaril [QC#59618,ADD] -->
+                <!-- START 2022/06/03 D.Mamaril [QC#59333-1,ADD] -->
+                ,RF_REQ.AR_RF_STS_CD
+                <!-- END 2022/06/03 D.Mamaril [QC#59333-1,ADD] -->
+                <!-- add start 2022/07/25 QC#57417 -->
+                ,CASE 
+                     WHEN RF_REQ.AR_DS_WF_STS_CD = '00' THEN RF_REQ.AR_RCPT_RF_RSN_CD
+                 END AS AR_RCPT_RF_RSN_CD
+                <!-- add end 2022/07/25 QC#57417 -->
+
+            FROM
+                 AR_TRX_BAL        ATB
+                ,AR_CASH_APPLY_STS ACAS
+                ,BILL_TO_CUST      BTC
+                ,DS_INV_TP         DIT
+                ,REQ               RF_REQ
+                ,AR_DS_WF_STS      ADWS
+
+            WHERE
+                    ATB.GLBL_CMPY_CD                          = #glblCmpyCd#
+                    <iterate property="arTrxTpCd" var="arTrxTpCd[]" open=" AND ATB.AR_TRX_TP_CD IN (" close=")" conjunction=",">
+                      #arTrxTpCd[]#
+                    </iterate>
+                     <isNotNull property="billToCustAcctCd">
+                    <!-- START 2018/03/08 [QC#22762,MOD] -->
+                    <isEqual property="relatedCustomer" compareValue="N" >
+                    AND ATB.BILL_TO_CUST_ACCT_CD              = #billToCustAcctCd#
+                    </isEqual>
+                    <isEqual property="relatedCustomer" compareValue="Y" >
+                    AND ATB.BILL_TO_CUST_ACCT_CD IN (SELECT
+                                                         E.RELN_DS_ACCT_NUM
+                                                     FROM
+                                                         DS_ACCT_RELN E
+                                                     WHERE
+                                                         E.GLBL_CMPY_CD       = #glblCmpyCd#
+                                                     AND E.DS_ACCT_NUM        = #billToCustAcctCd#
+                                                     AND E.DS_ACCT_RELN_TP_CD IN (#parentAccount#,#relatedAccount#)
+                                                     AND E.EZCANCELFLAG          = '0'
+                                                     UNION ALL
+                                                     SELECT #billToCustAcctCd# FROM DUAL
+                                                    )
+                    </isEqual>
+                    <!-- END   2018/03/08 [QC#22762,MOD] -->
+                    </isNotNull>
+                    <isNotNull property="billToCustLocCd">
+                    AND ATB.BILL_TO_CUST_CD                   = #billToCustLocCd#
+                    </isNotNull>
+                    <iterate property="arCashApplyStsCd" var="arCashApplyStsCd[]" open=" AND ATB.AR_CASH_APPLY_STS_CD IN (" close=")" conjunction=",">
+                     #arCashApplyStsCd[]#
+                    </iterate>
+                    <!-- START 2018/07/11 [QC#26989,ADD] -->
+                    <isNotNull property="arTrxNumList">
+<!-- START 2018/09/14 T.Ogura [QC#25091,MOD] -->
+<!--                    <iterate property="arTrxNumList" var="arTrxNumList[]" open="AND ATB.AR_TRX_NUM IN (" close=")" conjunction=","> -->
+                        <iterate property="arTrxNumList" var="arTrxNumList[]" open="AND NVL(ATB.AR_CUST_REF_NUM, ATB.AR_TRX_NUM) IN (" close=")" conjunction=",">
+<!-- END   2018/09/14 T.Ogura [QC#25091,MOD] -->
+                        #arTrxNumList[]#
+                        </iterate>
+                    </isNotNull>
+                    <!-- END   2018/03/08 [QC#26989,ADD] -->
+                    AND ATB.EZCANCELFLAG                      = '0'
+                    AND ATB.GLBL_CMPY_CD                      = ACAS.GLBL_CMPY_CD
+                    AND ATB.AR_CASH_APPLY_STS_CD              = ACAS.AR_CASH_APPLY_STS_CD
+                    AND ACAS.EZCANCELFLAG                     = '0'
+                    AND ATB.GLBL_CMPY_CD                      = BTC.GLBL_CMPY_CD(+)
+                    AND ATB.BILL_TO_CUST_CD                   = BTC.BILL_TO_CUST_CD(+)
+                    AND BTC.EZCANCELFLAG(+)                   = '0'
+                    AND ATB.GLBL_CMPY_CD                      = DIT.GLBL_CMPY_CD(+)
+                    AND ATB.DS_INV_TP_CD                      = DIT.DS_INV_TP_CD(+)
+                    AND DIT.EZCANCELFLAG (+)                  = '0'
+                    AND ATB.AR_TRX_NUM                        = RF_REQ.AR_TRX_NUM(+)
+                    AND RF_REQ.AR_DS_WF_STS_CD                = ADWS.AR_DS_WF_STS_CD(+)
+                    AND (RF_REQ.AR_RF_RQST_PK IS NULL
+                            OR
+                        EXISTS (
+                                    SELECT 1 FROM
+                                        (SELECT
+                                             R1.AR_TRX_NUM AS AR_TRX_NUM
+                                            ,R1.AR_RF_RQST_PK AS AR_RF_RQST_PK
+                                            ,R1.AR_RF_RQST_DTL_PK AS AR_RF_RQST_DTL_PK
+                                            ,R1.EZINTIME, RANK() OVER(PARTITION BY R1.AR_TRX_NUM ORDER BY R1.EZINTIME DESC) AS RANK_REQ
+                                         FROM
+                                             REQ R1) LTST_REQ
+                                         WHERE
+                                             LTST_REQ.RANK_REQ = 1
+                                         AND LTST_REQ.AR_RF_RQST_PK = RF_REQ.AR_RF_RQST_PK
+                                         AND LTST_REQ.AR_RF_RQST_DTL_PK = RF_REQ.AR_RF_RQST_DTL_PK
+                        )
+                    <!-- START 2018/06/27 [QC#16941,ADD] -->
+<!--                                    SELECT -->
+<!--                                        1 -->
+<!--                                    FROM -->
+<!--                                        AR_RF_RQST      AR -->
+<!--                                       ,AR_RF_RQST_DTL  ARD -->
+<!--                                    WHERE -->
+<!--                                        AR.GLBL_CMPY_CD          = #glblCmpyCd# -->
+<!--                                    AND AR.AR_DS_WF_STS_CD       &lt;&gt; #rejected# -->
+<!--                                    AND AR.EZCANCELFLAG          = '0' -->
+<!--                                    AND AR.GLBL_CMPY_CD          = ARD.GLBL_CMPY_CD -->
+<!--                                    AND AR.AR_RF_RQST_PK         = ARD.AR_RF_RQST_PK -->
+<!--                                    AND (ARD.AR_ORIG_RCPT_NUM    = ATB.AR_TRX_NUM -->
+<!--                                         OR ARD.AR_TRX_NUM       = ATB.AR_TRX_NUM) -->
+<!--                                         AND ARD.EZCANCELFLAG	 = '0' -->
+                                    )
+                    <!-- END 2018/06/27 [QC#16941,ADD] -->
+                    ORDER BY
+                        ATB.AR_TRX_NUM ASC
+            ) A
+           WHERE
+               <!-- START 2022/01/26 D.Mamaril [QC#59618,MOD] -->
+<!--           (A.AR_DS_WF_STS_CD IS NULL OR A.AR_DS_WF_STS_CD NOT IN ('01', '10')) -->
+               (A.AR_DS_WF_STS_CD IS NULL OR A.AR_DS_WF_STS_CD NOT IN (#arDsWfStsApproved#, #arDsWfStsNoApprover#)
+                OR
+               (A.AR_DS_WF_STS_CD = #arDsWfStsApproved#
+               AND
+                  EXISTS(
+                       SELECT 1
+                       FROM
+                           AR_RF_TRX ART
+                       WHERE
+                               ART.GLBL_CMPY_CD             = #glblCmpyCd#
+                           AND ART.BILL_TO_CUST_ACCT_CD     = A.BILL_TO_CUST_ACCT_CD
+                           AND ART.AR_RF_RQST_PK            = A.AR_RF_RQST_PK
+                           AND ART.AR_RF_RQST_DTL_PK        = A.AR_RF_RQST_DTL_PK
+                           AND ART.EZCANCELFLAG             = '0'
+                  )
+               )
+               <!-- START 2022/06/03 D.Mamaril [QC#59333-1,ADD] -->
+               OR (A.AR_DS_WF_STS_CD = #arDsWfStsApproved# AND A.AR_RF_STS_CD = #arRfStsError#)
+               <!-- END 2022/06/03 D.Mamaril [QC#59333-1,ADD] -->
+           )
+               <!-- END 2022/01/26 D.Mamaril [QC#59618,MOD] -->
+           AND
+               ROWNUM                          &lt;=   #limitCount#
+    <!-- END 2020/09/18 R.Kurahashi [QC#57703,MOD] -->
+    </statement>
+
+    <resultMap id="result.getTransactionSeachInfo" class="NFCL2610_ASMsg">
+<!-- START 2018/09/14 T.Ogura [QC#25091,ADD] -->
+        <result property="arCustRefNum_A"          column="TRX_NUM"                    javaType="EZDSStringItem"/>
+<!-- END   2018/09/14 T.Ogura [QC#25091,ADD] -->
+        <result property="arTrxNum_A"              column="AR_TRX_NUM"                 javaType="EZDSStringItem"/>
+        <result property="arTrxTpCd_A"             column="AR_TRX_TP_CD"               javaType="EZDSStringItem"/>
+        <result property="dsInvTpDescTxt_A"        column="DS_INV_TP_DESC_TXT"         javaType="EZDSStringItem"/>
+        <result property="arTrxDt_A"               column="AR_TRX_DT"                  javaType="EZDSDateItem"/>
+        <!-- START 2018/03/08 [QC#22762,ADD] -->
+        <result property="billToCustAcctCd_A"      column="BILL_TO_CUST_ACCT_CD"       javaType="EZDSStringItem"/>
+        <!-- END   2018/03/08 [QC#22762,ADD] -->
+        <result property="billToCustCd_A"          column="BILL_TO_CUST_CD"            javaType="EZDSStringItem"/>
+        <result property="dealOrigGrsAmt_A"        column="DEAL_ORIG_GRS_AMT"          javaType="EZDSBigDecimalItem"/>
+        <result property="dealRmngBalGrsAmt_A"     column="DEAL_RMNG_BAL_GRS_AMT"      javaType="EZDSBigDecimalItem"/>
+        <result property="arCashApplyStsCd_A"      column="AR_CASH_APPLY_STS_CD"       javaType="EZDSStringItem"/>
+        <result property="arCashApplyStsDescTxt_A" column="AR_CASH_APPLY_STS_DESC_TXT" javaType="EZDSStringItem"/>
+        <result property="funcOrigGrsAmt_A"        column="FUNC_ORIG_GRS_AMT"          javaType="EZDSBigDecimalItem"/>
+        <result property="funcRmngBalGrsAmt_A"     column="FUNC_RMNG_BAL_GRS_AMT"      javaType="EZDSBigDecimalItem"/>
+        <result property="xxAllLineAddr_A"         column="ADDRESS"                    javaType="EZDSStringItem"/>
+        <result property="arTrxBalPk_A"            column="AR_TRX_BAL_PK"              javaType="EZDSBigDecimalItem"/>
+        <result property="origInvNum_A"            column="ORIG_INV_NUM"               javaType="EZDSStringItem"/>
+        <result property="ezUpTime_A"              column="EZUPTIME"                   javaType="EZDSStringItem"/>
+        <result property="ezUpTimeZone_A"          column="EZUPTIMEZONE"               javaType="EZDSStringItem"/>
+<!-- START 2020/09/18 R.Kurahashi [QC#57703,MOD] -->
+        <result property="arDsWfStsNm_A"           column="AR_DS_WF_STS_NM"            javaType="EZDSStringItem"/>
+        <result property="arDsWfStsCd_A"           column="AR_DS_WF_STS_CD"            javaType="EZDSStringItem"/>
+<!-- END 2020/09/18 R.Kurahashi [QC#57703,MOD] -->
+        <!-- add start 2022/07/25 QC#57417 -->
+        <result property="arRcptRfRsnCd_A"         column="AR_RCPT_RF_RSN_CD"          javaType="EZDSStringItem"/>
+        <!-- add end 2022/07/25 QC#57417 -->
+    </resultMap>
+
+    <statement id="getArRfRqstDtlSeachInfo" parameterClass="Map" resultMap="result.getArRfRqstDtlSeachInfo">
+       SELECT
+           A.*
+        FROM (
+            SELECT
+<!-- START 2018/09/14 T.Ogura [QC#25091,ADD] -->
+                 NVL(ATB.AR_CUST_REF_NUM, ATB.AR_TRX_NUM) AS TRX_NUM
+<!-- END   2018/09/14 T.Ogura [QC#25091,ADD] -->
+<!-- START 2018/09/14 T.Ogura [QC#25091,MOD] -->
+<!--             ARRD.AR_TRX_NUM -->
+                ,ATB.AR_TRX_NUM
+<!-- END   2018/09/14 T.Ogura [QC#25091,MOD] -->
+                ,ARRD.AR_TRX_TP_CD
+                ,ATB.AR_TRX_DT
+                <!-- START 2018/03/08 [QC#22762,ADD] -->
+                ,ATB.BILL_TO_CUST_ACCT_CD
+                <!-- END   2018/03/08 [QC#22762,ADD] -->
+                ,ARRD.BILL_TO_CUST_CD
+                ,ATB.CPO_ORD_NUM
+                ,ATB.CUST_ISS_PO_NUM
+                ,NVL(ARRD.DEAL_ORIG_GRS_AMT ,0) AS DEAL_ORIG_GRS_AMT
+                ,NVL(ARRD.DEAL_RMNG_BAL_GRS_AMT ,0) AS DEAL_RMNG_BAL_GRS_AMT
+                ,ATB.AR_CASH_APPLY_STS_CD
+                ,ACAS.AR_CASH_APPLY_STS_DESC_TXT
+                ,NVL(ARRD.FUNC_ORIG_GRS_AMT ,0) AS FUNC_ORIG_GRS_AMT
+                ,NVL(ARRD.FUNC_RMNG_BAL_GRS_AMT ,0) AS FUNC_RMNG_BAL_GRS_AMT
+                ,BTC.FIRST_LINE_ADDR ||
+                 DECODE(BTC.SCD_LINE_ADDR, NULL, '', ',' || BTC.SCD_LINE_ADDR) ||
+                 DECODE(BTC.CTY_ADDR, NULL, '', ',' || BTC.CTY_ADDR) ||
+                 DECODE(BTC.ST_CD, NULL, '', ',' || BTC.ST_CD) ||
+                 DECODE(BTC.POST_CD, NULL, '', ',' || BTC.POST_CD) AS ADDRESS
+                ,DIT.DS_INV_TP_DESC_TXT
+<!-- START 2020/09/18 R.Kurahashi [QC#57703,MOD] -->
+                ,ADWS.AR_DS_WF_STS_NM
+<!-- END 2020/09/18 R.Kurahashi [QC#57703,MOD] -->
+                <!-- add start 2022/07/25 QC#57417 -->
+                ,ARRD.AR_RCPT_RF_RSN_CD
+                <!-- add end 2022/07/25 QC#57417 -->
+            FROM
+                 AR_RF_RQST        ARR
+                ,AR_RF_RQST_DTL    ARRD
+                ,BILL_TO_CUST      BTC
+                ,AR_TRX_BAL        ATB
+                ,AR_CASH_APPLY_STS ACAS
+                ,DS_INV_TP         DIT
+<!-- START 2020/09/18 R.Kurahashi [QC#57703,MOD] -->
+                ,AR_DS_WF_STS      ADWS
+<!-- END 2020/09/18 R.Kurahashi [QC#57703,MOD] -->
+
+            WHERE
+                    ARR.GLBL_CMPY_CD                          = #glblCmpyCd#
+                    AND ARR.AR_RF_RQST_PK                     = #arRfRqstPk#
+                    AND ARR.EZCANCELFLAG                      = '0'
+                    AND ARR.GLBL_CMPY_CD                      = ARRD.GLBL_CMPY_CD
+                    AND ARR.AR_RF_RQST_PK                     = ARRD.AR_RF_RQST_PK
+                    AND ARRD.EZCANCELFLAG                     = '0'
+                    AND ARRD.GLBL_CMPY_CD                     = BTC.GLBL_CMPY_CD(+)
+                    AND ARRD.BILL_TO_CUST_CD                  = BTC.BILL_TO_CUST_CD(+)
+                    AND BTC.EZCANCELFLAG(+)                   = '0'
+                    AND ARRD.GLBL_CMPY_CD                     = ATB.GLBL_CMPY_CD
+                    AND ARRD.AR_TRX_BAL_PK                    = ATB.AR_TRX_BAL_PK
+                    AND ATB.EZCANCELFLAG                      = '0'
+                    AND ATB.GLBL_CMPY_CD                      = ACAS.GLBL_CMPY_CD
+                    AND ATB.AR_CASH_APPLY_STS_CD              = ACAS.AR_CASH_APPLY_STS_CD
+                    AND ACAS.EZCANCELFLAG                     = '0'
+                    AND ATB.GLBL_CMPY_CD                      = DIT.GLBL_CMPY_CD(+)
+                    AND ATB.DS_INV_TP_CD                      = DIT.DS_INV_TP_CD(+)
+                    AND DIT.EZCANCELFLAG(+)                   = '0'
+<!-- START 2020/09/18 R.Kurahashi [QC#57703,MOD] -->
+                    AND ARR.GLBL_CMPY_CD                      = ADWS.GLBL_CMPY_CD
+                    AND ADWS.EZCANCELFLAG                     = '0'
+                    AND ARR.AR_DS_WF_STS_CD                   = ADWS.AR_DS_WF_STS_CD(+)
+<!-- END 2020/09/18 R.Kurahashi [QC#57703,MOD] -->
+
+            ORDER BY
+                ARRD.AR_TRX_NUM ASC
+       ) A
+       WHERE
+           ROWNUM                          &lt;=   #limitCount#
+    </statement>
+    <resultMap id="result.getArRfRqstDtlSeachInfo" class="NFCL2610_ASMsg">
+<!-- START 2018/09/14 T.Ogura [QC#25091,ADD] -->
+        <result property="arCustRefNum_A"          column="TRX_NUM"                    javaType="EZDSStringItem"/>
+<!-- END   2018/09/14 T.Ogura [QC#25091,ADD] -->
+        <result property="arTrxNum_A"              column="AR_TRX_NUM"                 javaType="EZDSStringItem"/>
+        <result property="arTrxTpCd_A"             column="AR_TRX_TP_CD"               javaType="EZDSStringItem"/>
+        <result property="dsInvTpDescTxt_A"        column="DS_INV_TP_DESC_TXT"         javaType="EZDSStringItem"/>
+        <result property="arTrxDt_A"               column="AR_TRX_DT"                  javaType="EZDSDateItem"/>
+        <!-- START 2018/03/08 [QC#22762,ADD] -->
+        <result property="billToCustAcctCd_A"      column="BILL_TO_CUST_ACCT_CD"       javaType="EZDSStringItem"/>
+        <!-- END   2018/03/08 [QC#22762,ADD] -->
+        <result property="billToCustCd_A"          column="BILL_TO_CUST_CD"            javaType="EZDSStringItem"/>
+        <result property="dealOrigGrsAmt_A"        column="DEAL_ORIG_GRS_AMT"          javaType="EZDSBigDecimalItem"/>
+        <result property="dealRmngBalGrsAmt_A"     column="DEAL_RMNG_BAL_GRS_AMT"      javaType="EZDSBigDecimalItem"/>
+        <result property="arCashApplyStsCd_A"      column="AR_CASH_APPLY_STS_CD"       javaType="EZDSStringItem"/>
+        <result property="arCashApplyStsDescTxt_A" column="AR_CASH_APPLY_STS_DESC_TXT" javaType="EZDSStringItem"/>
+        <result property="funcOrigGrsAmt_A"        column="FUNC_ORIG_GRS_AMT"          javaType="EZDSBigDecimalItem"/>
+        <result property="funcRmngBalGrsAmt_A"     column="FUNC_RMNG_BAL_GRS_AMT"      javaType="EZDSBigDecimalItem"/>
+        <result property="xxAllLineAddr_A"         column="ADDRESS"                    javaType="EZDSStringItem"/>
+        <result property="arDsWfStsNm_A"           column="AR_DS_WF_STS_NM"            javaType="EZDSStringItem"/>
+        <!-- add start 2022/07/25 QC#57417 -->
+        <result property="arRcptRfRsnCd_A"         column="AR_RCPT_RF_RSN_CD"          javaType="EZDSStringItem"/>
+        <!-- add end 2022/07/25 QC#57417 -->
+    </resultMap>
+ 
+
+    <typeAlias alias="NFCL2610_BCMsg"    type="business.blap.NFCL2610.NFCL2610_BCMsg"/>
+    <statement id="getSupplierInfo" parameterClass="Map" resultMap="result.getSupplierInfo">
+       SELECT
+           A.*
+        FROM (
+            SELECT
+                  PV.PRNT_VND_CD
+                  ,PV.PRNT_VND_PK
+                  ,PV.PRNT_VND_NM
+                  ,PV.PRNT_VND_TP_CD || ' ' || PVT.PRNT_VND_TP_DESC_TXT AS PRNT_VND_TP
+                  ,PVT.PRNT_VND_TP_DESC_TXT
+                  ,V.VND_CD
+                  ,V.LOC_NM
+                  ,V.FIRST_LINE_ADDR                           AS FIRST_LINE_ADDR
+                  <!-- START 2020/10/02 H.Dimay [QC#56851, MOD] -->
+                  ,V.THIRD_LINE_ADDR 					       AS SCD_LINE_ADDR
+                  <!-- END 2020/10/02 H.Dimay [QC#56851, MOD] -->
+                  ,V.CTY_ADDR
+                  ,V.ST_CD
+                  ,V.POST_CD
+                  ,SUBSTR(V.EZINTIME, 1, 8)                    AS DT
+                  ,CASE
+                       WHEN #effDt# BETWEEN V.EFF_FROM_DT 
+                       AND V.EFF_THRU_DT THEN 'Y' ELSE 'N' END AS ACTIVE_FLG
+
+            FROM
+                 PRNT_VND      PV
+                ,VND           V
+                ,PRNT_VND_TP   PVT
+
+            WHERE
+                    PV.GLBL_CMPY_CD                           = #glblCmpyCd#
+                    <!-- START 2020/08/04 R.Kurahashi [QC#57119-2,DEL] -->
+                    <!-- <isNotNull property="cfsCoaAfflCd"> -->
+                    <!-- AND PV.COA_AFFL_CD                        = #cfsCoaAfflCd# -->
+                    <!-- </isNotNull> -->
+                    <!-- END 2020/08/04 R.Kurahashi [QC#57119-2,DEL] -->
+                    <isNotNull property="customerCoaAfflCd">
+                    <!-- START 2019/12/16 [QC#54297, MOD] -->
+                    <!-- AND PV.DS_ACCT_NUM                        = #dsAcctNum#  -->
+                    <!-- START 2020/10/28 R.Kurahashi [QC#57732,MOD] -->
+                    <!-- AND PV.PRNT_VND_NM                        = #prntVndNm# -->
+                    AND (PV.PRNT_VND_NM                       = #prntVndNm#
+                         OR
+                         PV.DS_ACCT_NUM                       = #dsAcctNum#)
+                    <!-- END 2020/10/28 R.Kurahashi [QC#57732,MOD] -->
+                    <!-- END   2019/12/16 [QC#54297, MOD] -->
+                    AND PV.PRNT_VND_TP_CD                     = #prntVndTpCd#
+                    </isNotNull>
+                    <!-- START 2020/06/29 R.Kurahashi [QC#57119,ADD] -->
+                    <isNotNull property="vndSiteTxt">
+                    AND V.VND_CD in(SELECT TRIM(REGEXP_SUBSTR(#vndSiteTxt#, '[^,]+', 1, LEVEL)) FROM DUAL
+                                     CONNECT BY REGEXP_SUBSTR(#vndSiteTxt#, '[^,]+', 1, LEVEL) IS NOT NULL)
+                    </isNotNull>
+                    <!-- END 2020/06/29 R.Kurahashi [QC#57119,ADD] -->
+                    AND PV.EZCANCELFLAG                       = '0'
+                    AND PV.GLBL_CMPY_CD                       = V.GLBL_CMPY_CD
+                    AND PV.PRNT_VND_PK                        = V.PRNT_VND_PK
+                    AND V.RGTN_STS_CD                         = #rgtnStsCd#
+                    AND V.EZCANCELFLAG                        = '0'
+                    AND PV.GLBL_CMPY_CD                       = PVT.GLBL_CMPY_CD
+                    AND PV.PRNT_VND_TP_CD                     = PVT.PRNT_VND_TP_CD
+                    AND PVT.EZCANCELFLAG                      = '0'
+            ORDER BY
+                PV.PRNT_VND_CD ASC
+       ) A
+       WHERE
+         ROWNUM                          &lt;=   #limitCount#
+    </statement>
+
+    <resultMap id="result.getSupplierInfo" class="NFCL2610_BCMsg">
+        <result property="prntVndCd"             column="PRNT_VND_CD"          javaType="EZDSStringItem"/>
+        <result property="prntVndPk"             column="PRNT_VND_PK"          javaType="EZDSBigDecimalItem"/>
+        <result property="prntVndNm"             column="PRNT_VND_NM"          javaType="EZDSStringItem"/>
+        <result property="xxScrItem61Txt"        column="PRNT_VND_TP"          javaType="EZDSStringItem"/>
+        <result property="xxChkBox_4"            column="ACTIVE_FLG"           javaType="EZDSStringItem"/>
+        <result property="vndCd"                 column="VND_CD"               javaType="EZDSStringItem"/>
+        <result property="xxLocNm_P"             column="LOC_NM"               javaType="EZDSStringItem"/>
+        <result property="firstLineAddr"         column="FIRST_LINE_ADDR"      javaType="EZDSStringItem"/>
+        <result property="scdLineAddr"           column="SCD_LINE_ADDR"        javaType="EZDSStringItem"/>
+        <result property="rtlCtrCtyAddr"         column="CTY_ADDR"             javaType="EZDSStringItem"/>
+        <result property="stCd"                  column="ST_CD"                javaType="EZDSStringItem"/>
+        <result property="postCd"                column="POST_CD"              javaType="EZDSStringItem"/>
+        <result property="xxToDt"                column="DT"                   javaType="EZDSDateItem"/>
+    </resultMap>
+
+    <statement id="getExchRate" parameterClass="Map" resultClass="BigDecimal">
+        WITH AER AS (
+            SELECT
+                EX.ACTL_EXCH_RATE
+            FROM
+                ACCT_DLY_ACTL_EXCH_RATES EX
+            WHERE
+                EX.GLBL_CMPY_CD              = #glblCmpyCd#
+            AND EX.CCY_CD                    = #ccyCd#
+            AND EX.ACTL_EXCH_RATE_ENT_DT &lt;= #slsDt#
+            AND EX.ACTL_EXCH_RATE            IS NOT NULL
+            AND EX.EZCANCELFLAG              = '0'
+            ORDER BY
+                EX.ACTL_EXCH_RATE_ENT_DT DESC
+        )
+        SELECT
+            AER.ACTL_EXCH_RATE
+        FROM
+            AER
+        WHERE
+            ROWNUM &lt;= 1
+    </statement>
+    <statement id="getPulldownArRfTpCd" parameterClass="Map" resultClass="Map">
+        SELECT
+             ART.AR_RF_TP_CD
+            ,ART.AR_RF_TP_DESC_TXT
+        FROM
+            AR_RF_TP ART
+        WHERE
+                ART.GLBL_CMPY_CD = #glblCmpyCd#
+            AND ART.EZCANCELFLAG = '0'
+            <!-- START 2023/06/13 [QC#61486,ADD] -->
+            <isNotNull property="arRfTpCdCustomerRefund">
+            AND ART.AR_RF_TP_CD = #arRfTpCdCustomerRefund#
+            </isNotNull>
+            <!-- END 2023/06/13 [QC#61486,ADD] -->
+            <isNotNull property="arRfTpCdCreditCardRefund">
+            AND ART.AR_RF_TP_CD &lt;&gt; #arRfTpCdCreditCardRefund#
+            </isNotNull>
+        ORDER BY
+            ART.AR_RF_TP_SORT_NUM
+    </statement>
+
+    <!-- START 2017/01/13 [QC#16941,ADD] -->
+    <statement id="countAlreadyRqstData" parameterClass="Map" resultClass="Integer">
+        SELECT
+            COUNT(1)
+        FROM 
+            AR_RF_RQST      AR
+           ,AR_RF_RQST_DTL  ARD
+        WHERE 
+            AR.GLBL_CMPY_CD     = #glblCmpyCd#
+        AND AR.AR_DS_WF_STS_CD  = #wfStsCd00#
+        AND AR.EZCANCELFLAG     = '0'
+        
+        AND AR.GLBL_CMPY_CD     = ARD.GLBL_CMPY_CD
+        AND AR.AR_RF_RQST_PK    = ARD.AR_RF_RQST_PK
+        AND (   ARD.AR_ORIG_RCPT_NUM    = #arNumber#
+             OR ARD.AR_TRX_NUM          = #arNumber#)
+        AND ARD.EZCANCELFLAG	= '0'
+    </statement>
+    <!-- END   2017/01/13 [QC#16941,ADD] -->
+    <!-- START 2018/03/02 [QC#22765,ADD] -->
+    <statement id="getRfSts" parameterClass="Map" resultClass="String">
+    SELECT DISTINCT
+        CASE WHEN ARS_TRX.AR_RF_STS_DESC_TXT IS NOT NULL THEN ARS_TRX.AR_RF_STS_DESC_TXT
+                  WHEN ARS.AR_RF_STS_DESC_TXT IS NOT NULL THEN ARS.AR_RF_STS_DESC_TXT
+                  ELSE ADWS.AR_DS_WF_STS_DESC_TXT
+             END AS AR_RF_STS_DESC_TXT
+    FROM
+         AR_RF_RQST        ARR
+        ,AR_RF_RQST_DTL    ARRD
+        ,AR_RF_STS         ARS
+        ,AR_RF_STS         ARS_TRX
+        ,AR_RF_TRX         AR_TRX
+        ,AR_DS_WF_STS      ADWS
+    WHERE
+         ARR.GLBL_CMPY_CD                     = #glblCmpyCd#
+    AND  ARR.AR_RF_RQST_PK                    = #arRfRqstPk#
+    AND  ARR.EZCANCELFLAG                     = '0'
+    AND  ARR.GLBL_CMPY_CD                     = ARRD.GLBL_CMPY_CD
+    AND  ARR.AR_RF_RQST_PK                    = ARRD.AR_RF_RQST_PK
+    AND  ARRD.EZCANCELFLAG                    = '0'
+    AND  ARR.GLBL_CMPY_CD                     = AR_TRX.GLBL_CMPY_CD(+)
+    AND  ARR.AR_RF_RQST_PK                    = AR_TRX.AR_RF_RQST_PK(+)
+    AND  ARRD.AR_RF_RQST_DTL_PK               = AR_TRX.AR_RF_RQST_DTL_PK(+)
+    AND  AR_TRX.EZCANCELFLAG(+)               = '0'
+    AND  ARR.GLBL_CMPY_CD                     = ARS.GLBL_CMPY_CD(+)
+    AND  ARR.AR_RF_STS_CD                     = ARS.AR_RF_STS_CD(+)
+    AND  ARS.EZCANCELFLAG(+)                  = '0'
+    AND  AR_TRX.GLBL_CMPY_CD                  = ARS_TRX.GLBL_CMPY_CD(+)
+    AND  AR_TRX.AR_RF_STS_CD                  = ARS_TRX.AR_RF_STS_CD(+)
+    AND  ARS_TRX.EZCANCELFLAG(+)              = '0'
+    AND  ARR.GLBL_CMPY_CD                     = ADWS.GLBL_CMPY_CD
+    AND  ARR.AR_DS_WF_STS_CD                  = ADWS.AR_DS_WF_STS_CD
+    AND  ADWS.EZCANCELFLAG                    = '0'
+    </statement>
+    <!-- END   2018/03/02 [QC#22765,ADD] -->
+</sqlMap>

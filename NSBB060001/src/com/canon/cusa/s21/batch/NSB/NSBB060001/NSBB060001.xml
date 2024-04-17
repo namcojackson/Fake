@@ -1,0 +1,786 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NSBB060001">
+    <statement id="getInputData" parameterClass="Map" resultClass="Map">
+        WITH TG_FSR AS (
+            SELECT
+                 A.GLBL_CMPY_CD
+                ,A.FSR_NUM
+                ,A.SVC_MACH_MSTR_PK
+                ,A.TECH_CD
+                ,A.FSR_CRAT_DT
+                ,A.FSR_CRAT_TM
+                ,A.FSR_CLO_DT
+                ,B.SVC_TASK_NUM
+                ,B.MDL_GRP_NM
+                ,B.MDL_NM
+                ,B.MDSE_CD
+                ,B.DS_SVC_CALL_TP_CD
+                ,B.SVC_RSP_TM_NUM
+                ,B.MACH_DOWN_FLG
+                ,B.SVC_RSP_TM_MN_AOT
+                ,C.FSR_VISIT_ARV_DT
+                ,D.SVC_PBLM_TP_CD
+            FROM
+                 FSR                        A
+                ,SVC_TASK                   B
+                ,FSR_VISIT                  C
+                ,FSR_VISIT_TASK             D
+            WHERE
+                    A.GLBL_CMPY_CD          =  #glblCmpyCd#
+                AND A.EZCANCELFLAG          =  '0'
+                AND A.FSR_STS_CD            =  #fsrStsCd_closed#
+                AND A.SVC_CALL_AVOID_CD     IS NULL
+                AND A.EZUPTIME              &gt;  TO_CHAR(TO_TIMESTAMP(ADD_MONTHS(LAST_DAY(TO_DATE(#slsDt#, 'YYYYMMDD')), #addMonth#)), 'YYYYMMDDHH24MISSFF3')
+                AND A.EZUPTIME              &lt;  TO_CHAR(TO_TIMESTAMP(TO_DATE(#slsDt#, 'YYYYMMDD') + 1), 'YYYYMMDDHH24MISSFF3')
+                AND A.GLBL_CMPY_CD          =  B.GLBL_CMPY_CD
+                AND A.FSR_NUM               =  B.FSR_NUM
+                AND B.EZCANCELFLAG          =  '0'
+                AND B.FIRST_SVC_TASK_FLG    =  'Y'
+                AND B.GLBL_CMPY_CD          =  C.GLBL_CMPY_CD
+                AND B.FSR_NUM               =  C.FSR_NUM
+                AND B.SVC_TASK_NUM          =  C.SVC_TASK_NUM
+                AND C.EZCANCELFLAG          =  '0'
+<!-- START 2017/01/18 N.Arai [QC#16585, MOD] -->
+<!--            AND B.GLBL_CMPY_CD          =  D.GLBL_CMPY_CD   -->
+<!--            AND B.FSR_NUM               =  D.FSR_NUM        -->
+<!--            AND B.SVC_TASK_NUM          =  D.SVC_TASK_NUM   -->
+                AND C.GLBL_CMPY_CD          =  D.GLBL_CMPY_CD
+                AND C.FSR_NUM               =  D.FSR_NUM
+                AND C.FSR_VISIT_NUM         =  D.FSR_VISIT_NUM
+                AND C.SVC_TASK_NUM          =  D.SVC_TASK_NUM
+                AND D.EZCANCELFLAG          =  '0'
+<!--        ORDER BY                            -->
+<!--              A.FSR_NUM             ASC     -->
+<!--             ,B.SVC_TASK_NUM        ASC     -->
+<!--             ,B.MDSE_CD             ASC     -->
+<!--             ,B.SVC_MACH_MSTR_PK    ASC     -->
+<!-- END 2017/01/18 N.Arai [QC#16585, MOD] -->
+         )
+        ,TOT_MTR_READ AS (
+            SELECT 
+                 D.FSR_NUM
+                ,D.SVC_MACH_MSTR_PK
+                ,D.MTR_READ_DT
+                ,D.READ_MTR_CNT
+            FROM
+                (
+                 SELECT 
+                      TG_FSR.FSR_NUM
+                     ,A.SVC_MACH_MSTR_PK
+                     ,A.MTR_READ_DT
+                     ,SUM(A.READ_MTR_CNT) AS READ_MTR_CNT
+                     ,ROW_NUMBER() OVER (
+                           PARTITION BY
+                                 TG_FSR.FSR_NUM
+                                ,A.SVC_MACH_MSTR_PK
+                           ORDER BY
+                                 A.MTR_READ_DT DESC
+                                ,A.RGTN_MTR_DT DESC
+                                ,A.SVC_PHYS_MTR_READ_GRP_SQ DESC
+                      ) RANK
+                 FROM
+                      TG_FSR
+                     ,SVC_PHYS_MTR_READ       A
+<!-- START 2017/01/18 N.Arai [QC#16585, MOD] -->
+<!--                 ,SVC_PHYS_MTR            B -->
+<!--                 ,MTR_LB                  C -->
+                 WHERE 
+                         TG_FSR.GLBL_CMPY_CD      =  A.GLBL_CMPY_CD
+                     AND TG_FSR.FSR_NUM           =  A.FSR_NUM
+                     AND TG_FSR.SVC_MACH_MSTR_PK  =  A.SVC_MACH_MSTR_PK
+                     AND A.EZCANCELFLAG           =  '0'
+                     AND A.DS_MTR_READ_TP_GRP_CD  =  #dsMtrReadTpGrp_SR#
+                     AND A.VLD_MTR_FLG            =  'Y'
+                     AND EXISTS(
+                        SELECT
+                            1
+                        FROM
+                             SVC_PHYS_MTR   B
+                            ,MTR_LB         C
+                        WHERE
+                                A.GLBL_CMPY_CD           =  B.GLBL_CMPY_CD
+                            AND A.SVC_PHYS_MTR_PK        =  B.SVC_PHYS_MTR_PK
+                            AND B.EZCANCELFLAG           =  '0'
+                            AND B.GLBL_CMPY_CD           =  C.GLBL_CMPY_CD
+                            AND B.MDL_MTR_LB_CD          =  C.MTR_LB_CD
+                            AND C.EZCANCELFLAG           =  '0'
+                            AND C.TOT_MTR_FLG            =  'Y'
+                     )
+                 GROUP BY
+                      TG_FSR.FSR_NUM
+                     ,A.SVC_MACH_MSTR_PK
+                     ,A.MTR_READ_DT
+                     ,A.RGTN_MTR_DT
+                     ,A.SVC_PHYS_MTR_READ_GRP_SQ
+               ) D
+            WHERE 
+                D.RANK = 1
+<!--        ORDER BY                    -->
+<!--             D.FSR_NUM ASC          -->
+<!--            ,D.SVC_MACH_MSTR_PK ASC -->
+<!-- END 2017/01/18 N.Arai [QC#16585, MOD] -->
+         ) 
+        ,MTR_READ AS (
+            SELECT 
+                 D.FSR_NUM
+                ,D.SVC_MACH_MSTR_PK
+                ,D.MTR_READ_DT
+                ,D.READ_MTR_CNT
+            FROM
+                (
+                 SELECT 
+                      TG_FSR.FSR_NUM
+                     ,A.SVC_MACH_MSTR_PK
+                     ,A.MTR_READ_DT
+                     ,SUM(A.READ_MTR_CNT) AS READ_MTR_CNT
+                     ,ROW_NUMBER() OVER (
+                           PARTITION BY
+                                 TG_FSR.FSR_NUM
+                                ,A.SVC_MACH_MSTR_PK
+                           ORDER BY
+                                 A.MTR_READ_DT DESC
+                                ,A.RGTN_MTR_DT DESC
+                                ,A.SVC_PHYS_MTR_READ_GRP_SQ DESC
+                      ) RANK
+                 FROM
+                      TG_FSR
+                     ,SVC_PHYS_MTR_READ       A
+<!-- START 2017/01/18 N.Arai [QC#16585, MOD] -->
+<!--                 ,SVC_PHYS_MTR            B -->
+<!--                 ,MTR_LB                  C -->
+                 WHERE 
+                         TG_FSR.GLBL_CMPY_CD      =  A.GLBL_CMPY_CD
+                     AND TG_FSR.FSR_NUM           =  A.FSR_NUM
+                     AND TG_FSR.SVC_MACH_MSTR_PK  =  A.SVC_MACH_MSTR_PK
+                     AND A.EZCANCELFLAG           =  '0'
+                     AND A.DS_MTR_READ_TP_GRP_CD  =  #dsMtrReadTpGrp_SR#
+                     AND A.VLD_MTR_FLG            =  'Y'
+                     AND EXISTS(
+                        SELECT
+                            1
+                        FROM
+                             SVC_PHYS_MTR   B
+                            ,MTR_LB         C
+                        WHERE
+                                A.GLBL_CMPY_CD           =  B.GLBL_CMPY_CD
+                            AND A.SVC_PHYS_MTR_PK        =  B.SVC_PHYS_MTR_PK
+                            AND B.EZCANCELFLAG           =  '0'
+                            AND B.GLBL_CMPY_CD           =  C.GLBL_CMPY_CD
+                            AND B.MDL_MTR_LB_CD          =  C.MTR_LB_CD
+                            AND C.EZCANCELFLAG           =  '0'
+                            AND C.TOT_MTR_FLG            &lt;&gt; 'Y'
+                     )
+                 GROUP BY
+                      TG_FSR.FSR_NUM
+                     ,A.SVC_MACH_MSTR_PK
+                     ,A.MTR_READ_DT
+                     ,A.RGTN_MTR_DT
+                     ,A.SVC_PHYS_MTR_READ_GRP_SQ
+               ) D
+            WHERE 
+                D.RANK = 1
+<!--        ORDER BY                    -->
+<!--             D.FSR_NUM ASC          -->
+<!--            ,D.SVC_MACH_MSTR_PK ASC -->
+<!-- END 2017/01/18 N.Arai [QC#16585, MOD] -->
+         ) 
+        ,PRE_MTR_READ AS (
+            SELECT 
+                 D.FSR_NUM
+                ,D.SVC_MACH_MSTR_PK
+                ,D.MTR_READ_DT
+                ,D.READ_MTR_CNT
+            FROM
+                (
+                 SELECT 
+                      TG_FSR.FSR_NUM
+                     ,A.SVC_MACH_MSTR_PK
+                     ,A.MTR_READ_DT
+                     ,SUM(A.READ_MTR_CNT) AS READ_MTR_CNT
+                     ,ROW_NUMBER() OVER (
+                           PARTITION BY
+                                 TG_FSR.FSR_NUM
+                                ,A.SVC_MACH_MSTR_PK
+                           ORDER BY
+                                 A.MTR_READ_DT DESC
+                                ,A.RGTN_MTR_DT DESC
+                                ,A.SVC_PHYS_MTR_READ_GRP_SQ DESC
+                      ) RANK
+                 FROM
+                      TG_FSR
+                     ,MTR_READ
+                     ,SVC_PHYS_MTR_READ       A
+<!-- START 2017/01/18 N.Arai [QC#16585, MOD] -->
+<!--                 ,SVC_PHYS_MTR            B -->
+<!--                 ,MTR_LB                  C -->
+                WHERE 
+                         TG_FSR.FSR_NUM           =  MTR_READ.FSR_NUM
+                     AND TG_FSR.SVC_MACH_MSTR_PK  =  MTR_READ.SVC_MACH_MSTR_PK
+                     AND TG_FSR.GLBL_CMPY_CD      =  A.GLBL_CMPY_CD
+                     AND TG_FSR.FSR_NUM           &lt;&gt; A.FSR_NUM
+                     AND A.FSR_NUM                IS NOT NULL
+                     AND TG_FSR.SVC_MACH_MSTR_PK  =  A.SVC_MACH_MSTR_PK
+                     AND MTR_READ.MTR_READ_DT     &gt;  A.MTR_READ_DT
+                     AND A.EZCANCELFLAG           =  '0'
+                     AND A.DS_MTR_READ_TP_GRP_CD  =  #dsMtrReadTpGrp_SR#
+                     AND A.VLD_MTR_FLG            =  'Y'
+                     AND EXISTS(
+                        SELECT
+                            1
+                        FROM
+                             SVC_PHYS_MTR   B
+                            ,MTR_LB         C
+                        WHERE
+                                A.GLBL_CMPY_CD           =  B.GLBL_CMPY_CD
+                            AND A.SVC_PHYS_MTR_PK        =  B.SVC_PHYS_MTR_PK
+                            AND B.EZCANCELFLAG           =  '0'
+                            AND B.GLBL_CMPY_CD           =  C.GLBL_CMPY_CD
+                            AND B.MDL_MTR_LB_CD          =  C.MTR_LB_CD
+                            AND C.EZCANCELFLAG           =  '0'
+                            AND C.TOT_MTR_FLG            &lt;&gt; 'Y'
+                     )
+                 GROUP BY
+                      TG_FSR.FSR_NUM
+                     ,A.SVC_MACH_MSTR_PK
+                     ,A.MTR_READ_DT
+                     ,A.RGTN_MTR_DT
+                     ,A.SVC_PHYS_MTR_READ_GRP_SQ
+               ) D
+            WHERE 
+                D.RANK = 1
+<!--        ORDER BY                    -->
+<!--             D.FSR_NUM ASC          -->
+<!--            ,D.SVC_MACH_MSTR_PK ASC -->
+<!-- END 2017/01/18 N.Arai [QC#16585, MOD] -->
+         ) 
+        ,DOWN_FSR AS (
+            SELECT 
+                 C.GLBL_CMPY_CD
+                ,C.FSR_NUM
+                ,C.DOWN_FSR_NUM
+                ,C.SVC_MACH_MSTR_PK
+            FROM
+                (
+                 SELECT 
+                      TG_FSR.GLBL_CMPY_CD
+                     ,TG_FSR.FSR_NUM
+                     ,A.FSR_NUM   AS DOWN_FSR_NUM
+                     ,A.SVC_MACH_MSTR_PK
+                     ,ROW_NUMBER() OVER (
+                           PARTITION BY
+                                 TG_FSR.FSR_NUM
+                                ,A.SVC_MACH_MSTR_PK
+                           ORDER BY
+                                 A.FSR_CRAT_DT DESC
+                                ,A.FSR_CRAT_TM DESC
+                      ) RANK
+                 FROM
+                      TG_FSR
+                     ,FSR                        A
+                 WHERE
+                         TG_FSR.GLBL_CMPY_CD     =  A.GLBL_CMPY_CD 
+                     AND TG_FSR.FSR_NUM          &lt;&gt; A.FSR_NUM
+                     AND TG_FSR.SVC_MACH_MSTR_PK =  A.SVC_MACH_MSTR_PK
+                     AND TG_FSR.FSR_CRAT_DT ||  TG_FSR.FSR_CRAT_TM
+                                                 &gt;  A.FSR_CRAT_DT ||  A.FSR_CRAT_TM
+                     AND A.EZCANCELFLAG          =  '0'
+                     AND EXISTS (
+                                 SELECT
+                                     1
+                                 FROM
+                                     SVC_TASK    B
+                                 WHERE
+                                         B.GLBL_CMPY_CD    =  A.GLBL_CMPY_CD 
+                                     AND B.FSR_NUM         =  A.FSR_NUM
+                                     AND B.EZCANCELFLAG    =  '0'
+                                     AND B.MACH_DOWN_FLG   =  'Y'
+                                )
+                ) C
+            WHERE 
+                C.RANK = 1
+<!-- START 2017/01/18 N.Arai [QC#16585, MOD] -->
+<!--        ORDER BY                    -->
+<!--             C.FSR_NUM ASC          -->
+<!--            ,C.SVC_MACH_MSTR_PK ASC -->
+<!-- END 2017/01/18 N.Arai [QC#16585, MOD] -->
+         )
+        ,DOWN_MTR_READ AS (
+            SELECT 
+                 D.FSR_NUM
+                ,D.DOWN_FSR_NUM
+                ,D.SVC_MACH_MSTR_PK
+                ,D.MTR_READ_DT
+                ,D.READ_MTR_CNT
+            FROM
+                (
+                 SELECT 
+                      DOWN_FSR.FSR_NUM
+                     ,DOWN_FSR.DOWN_FSR_NUM
+                     ,A.SVC_MACH_MSTR_PK
+                     ,A.MTR_READ_DT
+                     ,SUM(A.READ_MTR_CNT) AS READ_MTR_CNT
+                     ,ROW_NUMBER() OVER (
+                           PARTITION BY
+                                 DOWN_FSR.FSR_NUM
+                                ,A.SVC_MACH_MSTR_PK
+                           ORDER BY
+                                 A.MTR_READ_DT DESC
+                                ,A.RGTN_MTR_DT DESC
+                                ,A.SVC_PHYS_MTR_READ_GRP_SQ DESC
+                      ) RANK
+                 FROM
+                      DOWN_FSR
+                     ,SVC_PHYS_MTR_READ          A
+<!-- START 2017/01/18 N.Arai [QC#16585, MOD] -->
+<!--                 ,SVC_PHYS_MTR               B  -->
+<!--                 ,MTR_LB                     C  -->
+                 WHERE 
+                         DOWN_FSR.GLBL_CMPY_CD      =  A.GLBL_CMPY_CD
+                     AND DOWN_FSR.DOWN_FSR_NUM      =  A.FSR_NUM
+                     AND DOWN_FSR.SVC_MACH_MSTR_PK  =  A.SVC_MACH_MSTR_PK
+                     AND A.EZCANCELFLAG             =  '0'
+                     AND A.DS_MTR_READ_TP_GRP_CD    =  #dsMtrReadTpGrp_SR#
+                     AND A.VLD_MTR_FLG              =  'Y'
+                     AND EXISTS(
+                        SELECT
+                            1
+                        FROM
+                             SVC_PHYS_MTR   B
+                            ,MTR_LB         C
+                        WHERE
+                                A.GLBL_CMPY_CD             =  B.GLBL_CMPY_CD
+                            AND A.SVC_PHYS_MTR_PK          =  B.SVC_PHYS_MTR_PK
+                            AND B.EZCANCELFLAG             =  '0'
+                            AND B.GLBL_CMPY_CD             =  C.GLBL_CMPY_CD
+                            AND B.MDL_MTR_LB_CD            =  C.MTR_LB_CD
+                            AND C.EZCANCELFLAG             =  '0'
+                            AND C.TOT_MTR_FLG              &lt;&gt; 'Y'
+                     )
+                 GROUP BY
+                      DOWN_FSR.FSR_NUM
+                     ,DOWN_FSR.DOWN_FSR_NUM
+                     ,A.SVC_MACH_MSTR_PK
+                     ,A.MTR_READ_DT
+                     ,A.RGTN_MTR_DT
+                     ,A.SVC_PHYS_MTR_READ_GRP_SQ
+               ) D
+            WHERE 
+                D.RANK = 1
+<!--        ORDER BY                    -->
+<!--             D.FSR_NUM ASC          -->
+<!--            ,D.SVC_MACH_MSTR_PK ASC -->
+<!-- END 2017/01/18 N.Arai [QC#16585, MOD] -->
+         )
+        ,LAST_VISIT AS (
+            SELECT 
+                 B.FSR_NUM
+                ,B.SVC_MACH_MSTR_PK
+                ,B.FSR_VISIT_ARV_DT
+            FROM
+                (
+                 SELECT 
+                      TG_FSR.FSR_NUM
+                     ,TG_FSR.SVC_MACH_MSTR_PK
+                     ,A.FSR_VISIT_ARV_DT
+                     ,ROW_NUMBER() OVER (
+                           PARTITION BY
+                                 TG_FSR.FSR_NUM
+                           ORDER BY
+                                 A.FSR_VISIT_NUM DESC
+                      ) RANK
+                 FROM
+                      TG_FSR
+                     ,FSR_VISIT                  A
+                 WHERE
+                         TG_FSR.GLBL_CMPY_CD     =  A.GLBL_CMPY_CD 
+                     AND TG_FSR.FSR_NUM          =  A.FSR_NUM
+                     AND A.EZCANCELFLAG          =  '0'
+                ) B
+            WHERE 
+                B.RANK = 1
+<!-- START 2017/01/18 N.Arai [QC#16585, MOD] -->
+<!--        ORDER BY                -->
+<!--             B.FSR_NUM          -->
+<!--            ,B.SVC_MACH_MSTR_PK -->
+<!-- END 2017/01/18 N.Arai [QC#16585, MOD] -->
+         )
+        ,TIER_RG AS(
+            SELECT
+                OHSD.ORG_TIER_CD
+            FROM
+                 STRU_DFN          SDF
+                ,ORG_HRCH_STRU_DFN OHSD
+            WHERE
+                    SDF.GLBL_CMPY_CD     = #glblCmpyCd#
+                AND SDF.RG_FLG           = 'Y'
+                AND SDF.GLBL_CMPY_CD     = OHSD.GLBL_CMPY_CD
+                AND SDF.STRU_DFN_CD      = OHSD.STRU_DFN_CD
+                AND OHSD.BIZ_AREA_ORG_CD = #bizAreaOrgCd_S#
+                AND SDF.EZCANCELFLAG     = '0'
+                AND OHSD.EZCANCELFLAG    = '0'
+                AND OHSD.EFF_FROM_DT                &lt;=  #slsDt#
+                AND NVL(OHSD.EFF_THRU_DT,  #slsDt#) &gt;=  #slsDt#
+                AND ROWNUM               = 1
+        )
+        ,TIER_BR AS(
+            SELECT
+                OHSD.ORG_TIER_CD
+            FROM
+                 STRU_DFN          SDF
+                ,ORG_HRCH_STRU_DFN OHSD
+            WHERE
+                    SDF.GLBL_CMPY_CD     = #glblCmpyCd#
+                AND SDF.BR_FLG           = 'Y'
+                AND SDF.GLBL_CMPY_CD     = OHSD.GLBL_CMPY_CD
+                AND SDF.STRU_DFN_CD      = OHSD.STRU_DFN_CD
+                AND OHSD.BIZ_AREA_ORG_CD = #bizAreaOrgCd_S#
+                AND SDF.EZCANCELFLAG     = '0'
+                AND OHSD.EZCANCELFLAG    = '0'
+                AND OHSD.EFF_FROM_DT                &lt;=  #slsDt#
+                AND NVL(OHSD.EFF_THRU_DT,  #slsDt#) &gt;=  #slsDt#
+                AND ROWNUM               = 1
+        )
+        ,TIER_REP AS(
+            SELECT
+                OHSD.ORG_TIER_CD
+            FROM
+                 STRU_DFN          SDF
+                ,ORG_HRCH_STRU_DFN OHSD
+            WHERE
+                    SDF.GLBL_CMPY_CD     = #glblCmpyCd#
+                AND SDF.REP_FLG          = 'Y'
+                AND SDF.GLBL_CMPY_CD     = OHSD.GLBL_CMPY_CD
+                AND SDF.STRU_DFN_CD      = OHSD.STRU_DFN_CD
+                AND OHSD.BIZ_AREA_ORG_CD = #bizAreaOrgCd_S#
+                AND SDF.EZCANCELFLAG     = '0'
+                AND OHSD.EZCANCELFLAG    = '0'
+                AND OHSD.EFF_FROM_DT                &lt;=  #slsDt#
+                AND NVL(OHSD.EFF_THRU_DT,  #slsDt#) &gt;=  #slsDt#
+                AND ROWNUM               = 1
+        )
+        ,ORG AS(
+            SELECT DISTINCT
+                 TG_FSR.TECH_CD
+                ,CASE WHEN TIER_RG.ORG_TIER_CD = #orgTierCd_0#  THEN ORG.FIRST_ORG_CD
+                      WHEN TIER_RG.ORG_TIER_CD = #orgTierCd_1#  THEN ORG.SCD_ORG_CD
+                      WHEN TIER_RG.ORG_TIER_CD = #orgTierCd_2#  THEN ORG.THIRD_ORG_CD
+                      WHEN TIER_RG.ORG_TIER_CD = #orgTierCd_3#  THEN ORG.FRTH_ORG_CD
+                      WHEN TIER_RG.ORG_TIER_CD = #orgTierCd_4#  THEN ORG.FIFTH_ORG_CD
+                      WHEN TIER_RG.ORG_TIER_CD = #orgTierCd_5#  THEN ORG.SIXTH_ORG_CD
+                      WHEN TIER_RG.ORG_TIER_CD = #orgTierCd_6#  THEN ORG.SVNTH_ORG_CD
+                      WHEN TIER_RG.ORG_TIER_CD = #orgTierCd_7#  THEN ORG.EIGHTH_ORG_CD
+                      WHEN TIER_RG.ORG_TIER_CD = #orgTierCd_8#  THEN ORG.NINTH_ORG_CD
+                      WHEN TIER_RG.ORG_TIER_CD = #orgTierCd_9#  THEN ORG.TENTH_ORG_CD
+                      WHEN TIER_RG.ORG_TIER_CD = #orgTierCd_10# THEN ORG.ELVTH_ORG_CD
+                END                                                                 AS FRTH_ORG_CD
+                ,CASE WHEN TIER_BR.ORG_TIER_CD = #orgTierCd_0#  THEN ORG.FIRST_ORG_CD
+                      WHEN TIER_BR.ORG_TIER_CD = #orgTierCd_1#  THEN ORG.SCD_ORG_CD
+                      WHEN TIER_BR.ORG_TIER_CD = #orgTierCd_2#  THEN ORG.THIRD_ORG_CD
+                      WHEN TIER_BR.ORG_TIER_CD = #orgTierCd_3#  THEN ORG.FRTH_ORG_CD
+                      WHEN TIER_BR.ORG_TIER_CD = #orgTierCd_4#  THEN ORG.FIFTH_ORG_CD
+                      WHEN TIER_BR.ORG_TIER_CD = #orgTierCd_5#  THEN ORG.SIXTH_ORG_CD
+                      WHEN TIER_BR.ORG_TIER_CD = #orgTierCd_6#  THEN ORG.SVNTH_ORG_CD
+                      WHEN TIER_BR.ORG_TIER_CD = #orgTierCd_7#  THEN ORG.EIGHTH_ORG_CD
+                      WHEN TIER_BR.ORG_TIER_CD = #orgTierCd_8#  THEN ORG.NINTH_ORG_CD
+                      WHEN TIER_BR.ORG_TIER_CD = #orgTierCd_9#  THEN ORG.TENTH_ORG_CD
+                      WHEN TIER_BR.ORG_TIER_CD = #orgTierCd_10# THEN ORG.ELVTH_ORG_CD
+                 END                                                                AS SIXTH_ORG_CD
+                ,CASE WHEN TIER_REP.ORG_TIER_CD = #orgTierCd_0#  THEN ORG.FIRST_ORG_CD
+                      WHEN TIER_REP.ORG_TIER_CD = #orgTierCd_1#  THEN ORG.SCD_ORG_CD
+                      WHEN TIER_REP.ORG_TIER_CD = #orgTierCd_2#  THEN ORG.THIRD_ORG_CD
+                      WHEN TIER_REP.ORG_TIER_CD = #orgTierCd_3#  THEN ORG.FRTH_ORG_CD
+                      WHEN TIER_REP.ORG_TIER_CD = #orgTierCd_4#  THEN ORG.FIFTH_ORG_CD
+                      WHEN TIER_REP.ORG_TIER_CD = #orgTierCd_5#  THEN ORG.SIXTH_ORG_CD
+                      WHEN TIER_REP.ORG_TIER_CD = #orgTierCd_6#  THEN ORG.SVNTH_ORG_CD
+                      WHEN TIER_REP.ORG_TIER_CD = #orgTierCd_7#  THEN ORG.EIGHTH_ORG_CD
+                      WHEN TIER_REP.ORG_TIER_CD = #orgTierCd_8#  THEN ORG.NINTH_ORG_CD
+                      WHEN TIER_REP.ORG_TIER_CD = #orgTierCd_9#  THEN ORG.TENTH_ORG_CD
+                      WHEN TIER_REP.ORG_TIER_CD = #orgTierCd_10# THEN ORG.ELVTH_ORG_CD
+                 END                                                                AS SVNTH_ORG_CD
+            FROM
+                 TG_FSR
+                ,TIER_RG
+                ,TIER_BR
+                ,TIER_REP
+                ,ORG_FUNC_ASG ORGASG
+                ,S21_ORG      ORG
+            WHERE
+                    TG_FSR.GLBL_CMPY_CD     = ORGASG.GLBL_CMPY_CD(+)
+                AND TG_FSR.TECH_CD          = ORGASG.PSN_CD(+)
+                AND ORGASG.EZCANCELFLAG(+)  = '0'
+                AND ORGASG.GLBL_CMPY_CD     = ORG.GLBL_CMPY_CD(+)
+                AND ORGASG.TOC_CD           = ORG.TOC_CD(+)
+                AND ORG.EZCANCELFLAG(+)     = '0'
+        )
+<!-- START 2017/01/18 N.Arai [QC#16585, MOD] -->
+        ,INV_LINE AS(
+            SELECT
+                 TG_FSR.FSR_NUM
+                ,SUM(CASE WHEN LINE.SVC_INV_CHRG_TP_CD   =   #svcInvChrgTpCd_PC#
+                         THEN 1
+                         ELSE 0 END) AS PC_CNT
+                ,SUM(CASE WHEN LINE.SVC_INV_CHRG_TP_CD   =   #svcInvChrgTpCd_PC#
+                         THEN LINE.INV_LINE_DEAL_SLS_AMT + LINE.INV_LINE_DEAL_TAX_AMT
+                         ELSE 0 END) AS TOT_PC_AMT
+                ,SUM(CASE WHEN LINE.SVC_INV_CHRG_TP_CD   =   #svcInvChrgTpCd_TC#
+                         THEN 1
+                         ELSE 0 END) AS TC_CNT
+                ,SUM(CASE WHEN LINE.SVC_INV_CHRG_TP_CD   =   #svcInvChrgTpCd_TC#
+                         THEN LINE.INV_LINE_DEAL_SLS_AMT + LINE.INV_LINE_DEAL_TAX_AMT
+                         ELSE 0 END) AS TOT_TC_AMT
+                ,SUM(CASE WHEN LINE.SVC_INV_CHRG_TP_CD   =   #svcInvChrgTpCd_LC#
+                         THEN 1
+                         ELSE 0 END) AS LC_CNT
+                ,SUM(CASE WHEN LINE.SVC_INV_CHRG_TP_CD   =   #svcInvChrgTpCd_LC#
+                         THEN LINE.INV_LINE_DEAL_SLS_AMT + LINE.INV_LINE_DEAL_TAX_AMT
+                         ELSE 0 END) AS TOT_LC_AMT
+            FROM
+                 TG_FSR
+                ,SVC_INV       INV
+                ,SVC_INV_LINE  LINE
+            WHERE
+                  TG_FSR.GLBL_CMPY_CD       =   INV.GLBL_CMPY_CD
+              AND TG_FSR.FSR_NUM            =   INV.FSR_NUM
+              AND INV.EZCANCELFLAG          =   '0'
+              AND INV.GLBL_CMPY_CD          =   LINE.GLBL_CMPY_CD
+              AND INV.SVC_INV_NUM           =   LINE.SVC_INV_NUM
+              AND LINE.EZCANCELFLAG         =   '0'
+            GROUP BY
+                TG_FSR.FSR_NUM
+        )
+<!-- END 2017/01/18 N.Arai [QC#16585, MOD] -->
+        SELECT
+             TG_FSR.FSR_NUM                                                             AS FSR_NUM
+            ,SMM.SVC_BY_LINE_BIZ_TP_CD                                                  AS SVC_BY_LINE_BIZ_TP_CD
+            ,''                                                                         AS INTFC_MDL_GRP_NUM
+            ,TG_FSR.MDL_GRP_NM                                                          AS MDL_GRP_NM
+            ,TG_FSR.MDL_NM                                                              AS MDL_NM
+            ,TG_FSR.MDSE_CD                                                             AS MDSE_CD
+            ,SMM.SER_NUM                                                                AS SER_NUM
+            ,SMM.SVC_CONFIG_MSTR_PK                                                     AS SVC_CONFIG_MSTR_PK
+            ,CASE WHEN ORG.FRTH_ORG_CD IS NOT NULL AND ORG.SIXTH_ORG_CD IS NOT NULL
+                  THEN SUBSTR(ORG.FRTH_ORG_CD, 1, #strLen_2#)
+                    || SUBSTR(ORG.SIXTH_ORG_CD, 1, #strLen_2#)
+                    || #strOrg_11#
+                  ELSE NULL
+             END                                                                        AS ORG_CD
+            ,SMM.CUR_LOC_ACCT_NUM                                                       AS CUR_LOC_ACCT_NUM
+            ,TG_FSR.FSR_VISIT_ARV_DT                                                    AS FSR_VISIT_ARV_DT
+            ,TG_FSR.DS_SVC_CALL_TP_CD                                                   AS DS_SVC_CALL_TP_CD
+            ,CASE WHEN TRUNC(TG_FSR.SVC_RSP_TM_NUM / #minPerHour_60#) &gt; #maxHour_99#
+                  THEN #maxHour_99#
+                  ELSE TRUNC(TG_FSR.SVC_RSP_TM_NUM / #minPerHour_60#)
+             END AS INTFC_RSP_HRS
+            ,MOD(TG_FSR.SVC_RSP_TM_NUM, #minPerHour_60#)                                AS INTFC_RSP_MN
+            ,''                                                                         AS INTFC_DOWN_HRS
+            ,''                                                                         AS INTFC_DOWN_MN
+            ,CASE WHEN TOT_MTR_READ.READ_MTR_CNT &gt; #maxMtrCnt#
+                  THEN #maxMtrCnt#
+                  ELSE TOT_MTR_READ.READ_MTR_CNT
+             END  AS TOT_READ_MTR_CNT_01
+            ,CASE WHEN (NVL(MTR_READ.READ_MTR_CNT, 0) - NVL(PRE_MTR_READ.READ_MTR_CNT, 0)) &gt; #maxMtrCnt#
+                  THEN #maxMtrCnt#
+                  ELSE NVL(MTR_READ.READ_MTR_CNT, 0) - NVL(PRE_MTR_READ.READ_MTR_CNT, 0)
+             END  AS PREV_CALL_DIFF_COPY_CNT
+            ,CASE WHEN MTR_READ.MTR_READ_DT IS NOT NULL AND PRE_MTR_READ.MTR_READ_DT IS NOT NULL
+                  THEN CASE WHEN (TO_DATE(MTR_READ.MTR_READ_DT, 'YYYYMMDD') - TO_DATE(PRE_MTR_READ.MTR_READ_DT, 'YYYYMMDD')) &gt; #maxDt# THEN #maxDt#
+                            ELSE TO_DATE(MTR_READ.MTR_READ_DT, 'YYYYMMDD') - TO_DATE(PRE_MTR_READ.MTR_READ_DT, 'YYYYMMDD')
+                       END
+                  ELSE NULL
+             END                                                                        AS PREV_CALL_DIFF_DAYS_NUM
+            ,CASE WHEN (NVL(MTR_READ.READ_MTR_CNT, 0) - NVL(DOWN_MTR_READ.READ_MTR_CNT, 0)) &gt; #maxMtrCnt#
+                  THEN #maxMtrCnt#
+                  ELSE NVL(MTR_READ.READ_MTR_CNT, 0) - NVL(DOWN_MTR_READ.READ_MTR_CNT, 0)
+             END  AS PREV_VISIT_DIFF_COPY_CNT
+            ,CASE WHEN MTR_READ.MTR_READ_DT IS NOT NULL AND DOWN_MTR_READ.MTR_READ_DT IS NOT NULL
+                 THEN CASE WHEN (TO_DATE(MTR_READ.MTR_READ_DT, 'YYYYMMDD') - TO_DATE(DOWN_MTR_READ.MTR_READ_DT, 'YYYYMMDD')) &gt; #maxDt# THEN #maxDt#
+                           ELSE TO_DATE(MTR_READ.MTR_READ_DT, 'YYYYMMDD') - TO_DATE(DOWN_MTR_READ.MTR_READ_DT, 'YYYYMMDD')
+                      END
+                 ELSE NULL
+             END                                                                        AS PREV_VISIT_DIFF_DAYS_NUM
+            ,TG_FSR.TECH_CD                                                             AS TECH_CD
+            ,ORG.FRTH_ORG_CD                                                            AS FRTH_ORG_CD
+            ,ORG.SIXTH_ORG_CD                                                           AS SIXTH_ORG_CD
+            ,'1'                                                                        AS FILL_1_TXT_01
+            ,'1'                                                                        AS FILL_1_TXT_02
+            ,ORG.SVNTH_ORG_CD                                                           AS SVNTH_ORG_CD
+            ,''                                                                         AS FILL_1_TXT_03
+            ,''                                                                         AS FILL_3_TXT
+            ,''                                                                         AS FILL_1_TXT_04
+            ,TG_FSR.SVC_PBLM_TP_CD                                                      AS SVC_PBLM_TP_CD
+            ,DC.CONTR_VRSN_EFF_FROM_DT                                                  AS CONTR_VRSN_EFF_FROM_DT
+            ,#omalDataType_A#                                                           AS FILL_1_TXT_05
+            ,TG_FSR.MACH_DOWN_FLG                                                       AS MACH_DOWN_FLG
+            ,''                                                                         AS FILL_2_TXT
+            ,'Y'                                                                        AS FILL_1_TXT_06
+            ,#relevantMeterType_B#                                                      AS FILL_1_TXT_07
+            ,0                                                                          AS TOT_READ_MTR_CNT_02
+            ,''                                                                         AS FILL_1_TXT_08
+            ,TG_FSR.SVC_RSP_TM_MN_AOT                                                   AS SVC_RSP_TM_MN_AOT
+            ,'Y'                                                                        AS FILL_1_TXT_09
+<!-- START 2017/01/18 N.Arai [QC#16585, MOD] -->
+<!--
+            ,(SELECT
+                 CASE WHEN SUM(LINE.INV_LINE_DEAL_SLS_AMT + LINE.INV_LINE_DEAL_TAX_AMT) &gt; #maxAmt#
+                      THEN #maxAmt#
+                      ELSE SUM(LINE.INV_LINE_DEAL_SLS_AMT + LINE.INV_LINE_DEAL_TAX_AMT)
+                 END
+              FROM
+                   SVC_INV       INV
+                  ,SVC_INV_LINE  LINE
+              WHERE 
+                      INV.GLBL_CMPY_CD          =   TG_FSR.GLBL_CMPY_CD
+                  AND INV.FSR_NUM               =   TG_FSR.FSR_NUM
+                  AND INV.GLBL_CMPY_CD          =   LINE.GLBL_CMPY_CD
+                  AND INV.SVC_INV_NUM           =   LINE.SVC_INV_NUM
+                  AND LINE.SVC_INV_CHRG_TP_CD   =   #svcInvChrgTpCd_PC#
+             )                                                                          AS THIS_MTH_TOT_STD_COST_AMT
+            ,(SELECT
+                 CASE WHEN SUM(LINE.INV_LINE_DEAL_SLS_AMT + LINE.INV_LINE_DEAL_TAX_AMT) &gt; #maxAmt#
+                      THEN #maxAmt#
+                      ELSE SUM(LINE.INV_LINE_DEAL_SLS_AMT + LINE.INV_LINE_DEAL_TAX_AMT)
+                 END
+              FROM
+                   SVC_INV       INV
+                  ,SVC_INV_LINE  LINE
+              WHERE 
+                      INV.GLBL_CMPY_CD          =   TG_FSR.GLBL_CMPY_CD
+                  AND INV.FSR_NUM               =   TG_FSR.FSR_NUM
+                  AND INV.GLBL_CMPY_CD          =   LINE.GLBL_CMPY_CD
+                  AND INV.SVC_INV_NUM           =   LINE.SVC_INV_NUM
+                  AND LINE.SVC_INV_CHRG_TP_CD   =   #svcInvChrgTpCd_TC#
+             )                                                                          AS INV_LINE_DEAL_SLS_AMT_01
+            ,(SELECT
+                 CASE WHEN SUM(LINE.INV_LINE_DEAL_SLS_AMT + LINE.INV_LINE_DEAL_TAX_AMT) &gt; #maxAmt#
+                      THEN #maxAmt#
+                  ELSE SUM(LINE.INV_LINE_DEAL_SLS_AMT + LINE.INV_LINE_DEAL_TAX_AMT)
+             END
+             FROM
+                  SVC_INV       INV
+                 ,SVC_INV_LINE  LINE
+             WHERE
+                     INV.GLBL_CMPY_CD          =   TG_FSR.GLBL_CMPY_CD
+                 AND INV.FSR_NUM               =   TG_FSR.FSR_NUM
+                 AND INV.GLBL_CMPY_CD          =   LINE.GLBL_CMPY_CD
+                 AND INV.SVC_INV_NUM           =   LINE.SVC_INV_NUM
+                 AND LINE.SVC_INV_CHRG_TP_CD   =   #svcInvChrgTpCd_LC#
+             )                                                                          AS INV_LINE_DEAL_SLS_AMT_02
+-->
+<!-- END 2017/01/18 N.Arai [QC#16585, MOD] -->
+            ,CASE WHEN PC_CNT &gt;= 1 THEN
+                         CASE WHEN TOT_PC_AMT &gt; #maxAmt#
+                              THEN #maxAmt#
+                              ELSE NVL(TOT_PC_AMT,0)
+                         END
+                   ELSE NULL
+             END AS THIS_MTH_TOT_STD_COST_AMT
+            ,CASE WHEN TC_CNT &gt;= 1 THEN
+                         CASE WHEN TOT_TC_AMT &gt; #maxAmt#
+                              THEN #maxAmt#
+                              ELSE NVL(TOT_TC_AMT,0)
+                         END
+                   ELSE NULL
+             END AS INV_LINE_DEAL_SLS_AMT_01
+            ,CASE WHEN LC_CNT &gt;= 1 THEN
+                         CASE WHEN TOT_LC_AMT &gt; #maxAmt#
+                              THEN #maxAmt#
+                              ELSE NVL(TOT_LC_AMT,0)
+                         END
+                   ELSE NULL
+             END AS INV_LINE_DEAL_SLS_AMT_02
+            ,LAST_VISIT.FSR_VISIT_ARV_DT                                                AS LAST_VISIT_FSR_VISIT_ARV_DT
+            ,''                                                                         AS TOT_TAX_AMT_01
+            ,''                                                                         AS TOT_TAX_AMT_02
+            ,''                                                                         AS TOT_TAX_AMT_03
+<!-- START 2017/01/18 N.Arai [QC#16585, MOD] -->
+<!--
+            ,(SELECT
+                 CASE WHEN SUM(LINE.INV_LINE_DEAL_SLS_AMT + LINE.INV_LINE_DEAL_TAX_AMT) &gt; #maxAmt#
+                      THEN #maxAmt#
+                      ELSE SUM(LINE.INV_LINE_DEAL_SLS_AMT + LINE.INV_LINE_DEAL_TAX_AMT)
+                 END
+              FROM
+                   SVC_INV       INV
+                  ,SVC_INV_LINE  LINE
+              WHERE 
+                      INV.GLBL_CMPY_CD          =   TG_FSR.GLBL_CMPY_CD
+                  AND INV.FSR_NUM               =   TG_FSR.FSR_NUM
+                  AND INV.GLBL_CMPY_CD          =   LINE.GLBL_CMPY_CD
+                  AND INV.SVC_INV_NUM           =   LINE.SVC_INV_NUM
+                  AND LINE.SVC_INV_CHRG_TP_CD   =   #svcInvChrgTpCd_PC#
+             )                                                                          AS TOT_SVC_PRT_DEAL_TAX_AMT
+-->
+            ,CASE WHEN PC_CNT &gt;= 1 THEN
+                         CASE WHEN TOT_PC_AMT &gt; #maxAmt#
+                              THEN #maxAmt#
+                              ELSE NVL(TOT_PC_AMT,0)
+                         END
+                   ELSE NULL
+             END AS TOT_SVC_PRT_DEAL_TAX_AMT
+<!-- END 2017/01/18 N.Arai [QC#16585, MOD] -->
+        FROM
+             TG_FSR
+            ,SVC_MACH_MSTR  SMM
+            ,TOT_MTR_READ
+            ,MTR_READ
+            ,PRE_MTR_READ
+            ,DOWN_MTR_READ
+            ,LAST_VISIT
+            ,ORG
+            ,(
+                SELECT
+                     TG_FSR.SVC_MACH_MSTR_PK
+                    ,MAX(CONTR.CONTR_VRSN_EFF_FROM_DT) AS CONTR_VRSN_EFF_FROM_DT
+                FROM
+                     TG_FSR
+                    ,DS_CONTR_DTL       CONTDTL
+                    ,DS_CONTR_DTL_STS_V DTLSTS
+                    ,DS_CONTR           CONTR
+                WHERE
+                        CONTDTL.GLBL_CMPY_CD             = TG_FSR.GLBL_CMPY_CD
+                    AND CONTDTL.CONTR_EFF_FROM_DT       &lt;= TG_FSR.FSR_CLO_DT
+                    AND (
+                       (CONTDTL.CONTR_CLO_DT        &gt;= TG_FSR.FSR_CLO_DT)
+                    OR (CONTDTL.CONTR_CLO_DT IS NULL AND NVL(CONTDTL.CONTR_EFF_THRU_DT, #slsDt#) &gt;= TG_FSR.FSR_CLO_DT)
+                    )
+                    AND CONTDTL.SVC_MACH_MSTR_PK         = TG_FSR.SVC_MACH_MSTR_PK
+                    AND DTLSTS.GLBL_CMPY_CD              = CONTDTL.GLBL_CMPY_CD
+                    AND DTLSTS.DS_CONTR_DTL_PK           = CONTDTL.DS_CONTR_DTL_PK
+                    <iterate property="dsContrCtrlStsCdList" var="dsContrCtrlSts[]" open="AND DTLSTS.DS_CONTR_CTRL_STS_CD NOT IN (" close=")" conjunction=",">
+                        #dsContrCtrlSts[]#
+                    </iterate>
+                    AND CONTR.GLBL_CMPY_CD               = CONTDTL.GLBL_CMPY_CD
+                    AND CONTR.DS_CONTR_PK                = CONTDTL.DS_CONTR_PK
+                    AND CONTR.DS_CONTR_CATG_CD           &lt;&gt; #dsCntrCatgCd_warranty#
+                    AND CONTDTL.EZCANCELFLAG             = '0'
+                    AND DTLSTS.EZCANCELFLAG              = '0'
+                    AND CONTR.EZCANCELFLAG               = '0'
+                GROUP BY
+                    TG_FSR.SVC_MACH_MSTR_PK
+            ) DC
+<!-- START 2017/01/18 N.Arai [QC#16585, MOD] -->
+            ,INV_LINE
+        WHERE
+                TG_FSR.GLBL_CMPY_CD     =  SMM.GLBL_CMPY_CD
+            AND TG_FSR.SVC_MACH_MSTR_PK =  SMM.SVC_MACH_MSTR_PK
+            AND SMM.EZCANCELFLAG        =  '0'
+            AND TG_FSR.SVC_MACH_MSTR_PK =  DC.SVC_MACH_MSTR_PK (+)
+            AND TG_FSR.TECH_CD          =  ORG.TECH_CD (+)
+            AND TG_FSR.FSR_NUM          =  TOT_MTR_READ.FSR_NUM (+)
+            AND TG_FSR.SVC_MACH_MSTR_PK =  TOT_MTR_READ.SVC_MACH_MSTR_PK (+)
+            AND TG_FSR.FSR_NUM          =  MTR_READ.FSR_NUM (+)
+            AND TG_FSR.SVC_MACH_MSTR_PK =  MTR_READ.SVC_MACH_MSTR_PK (+)
+            AND TG_FSR.FSR_NUM          =  PRE_MTR_READ.FSR_NUM (+)
+            AND TG_FSR.SVC_MACH_MSTR_PK =  PRE_MTR_READ.SVC_MACH_MSTR_PK (+)
+            AND TG_FSR.FSR_NUM          =  DOWN_MTR_READ.FSR_NUM (+)
+            AND TG_FSR.SVC_MACH_MSTR_PK =  DOWN_MTR_READ.SVC_MACH_MSTR_PK (+)
+            AND TG_FSR.FSR_NUM          =  LAST_VISIT.FSR_NUM
+            AND TG_FSR.SVC_MACH_MSTR_PK =  LAST_VISIT.SVC_MACH_MSTR_PK
+            AND TG_FSR.FSR_NUM          =  INV_LINE.FSR_NUM (+)
+        ORDER BY
+             TG_FSR.FSR_NUM ASC
+            ,TG_FSR.SVC_MACH_MSTR_PK ASC
+<!-- END 2017/01/18 N.Arai [QC#16585, MOD] -->
+    </statement>
+</sqlMap>

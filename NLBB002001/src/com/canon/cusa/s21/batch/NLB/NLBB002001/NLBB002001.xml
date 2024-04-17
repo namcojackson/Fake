@@ -1,0 +1,492 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NLBB002001">
+
+    <!-- ==== Type Aliases ==== -->
+    <typeAlias alias="WhShipToInfo"      type="com.canon.cusa.s21.batch.NLB.NLBB002001.WhShipToInfo"/>
+    <typeAlias alias="ShpgPlnInfo"       type="com.canon.cusa.s21.batch.NLB.NLBB002001.ShpgPlnInfo"/>
+    <typeAlias alias="ShpgSvcInfo"       type="com.canon.cusa.s21.batch.NLB.NLBB002001.ShpgSvcInfo"/>
+    <typeAlias alias="WH_LEAD_TMTMsg"    type="business.db.WH_LEAD_TMTMsg"/>
+    <typeAlias alias="TRNSP_LTTMsg"      type="business.db.TRNSP_LTTMsg"/>
+    <typeAlias alias="AREA_LEAD_TMTMsg"  type="business.db.AREA_LEAD_TMTMsg"/>
+    <typeAlias alias="SHPG_WTTMsg"       type="business.db.SHPG_WTTMsg"/>
+    <typeAlias alias="SHIP_TO_CUSTTMsg"  type="business.db.SHIP_TO_CUSTTMsg"/>
+    <typeAlias alias="WHTMsg"            type="business.db.WHTMsg"/>
+    <typeAlias alias="DS_INVTY_LOC_VTMsg" type="business.db.DS_INVTY_LOC_VTMsg"/>
+
+    <!-- ==== Statement ==== -->
+    <!-- ==== Result Mapping ==== -->
+
+    <statement id="getWhShipToFromRTE_CTRL" parameterClass="Map" resultMap="result.WhShipToInfo">
+        SELECT
+             RC.WH_CD
+            ,RC.SHIP_TO_CUST_CD
+            ,WH.WH_SYS_TP_CD
+            ,RC.END_MTH_FLG
+            ,ILV.INVTY_LOC_TP_CD
+        FROM
+             RTE_CTRL RC
+            ,RTL_WH WH
+            ,INVTY_LOC_V ILV
+        WHERE
+             RC.GLBL_CMPY_CD       = #glblCmpyCd#
+         AND RC.PROC_CTRL_NUM      = #procCtrlNum#
+         AND RC.EZCANCELFLAG       = '0'
+         AND RC.GLBL_CMPY_CD       = ILV.GLBL_CMPY_CD(+)
+         AND RC.WH_CD              = ILV.INVTY_LOC_CD(+)
+         AND RC.GLBL_CMPY_CD       = WH.GLBL_CMPY_CD(+)
+         AND RC.WH_CD              = WH.RTL_WH_CD(+)
+         AND WH.EFF_FROM_DT(+) &lt;= #effDt#
+         AND WH.EFF_THRU_DT(+) &gt;= #effDt#
+         AND WH.EZCANCELFLAG(+)    = '0'
+    </statement>
+
+    <resultMap id="result.WhShipToInfo" class="WhShipToInfo">
+        <result property="whCd"          column="WH_CD"     javaType="String"/>
+        <result property="shipToCustCd"  column="SHIP_TO_CUST_CD"  javaType="String"/>
+        <result property="whSysTpCd"     column="WH_SYS_TP_CD"     javaType="String"/>
+        <result property="endMthFlg"     column="END_MTH_FLG"      javaType="String"/>
+        <result property="invtyLocTpCd"  column="INVTY_LOC_TP_CD"  javaType="String"/>
+    </resultMap>
+
+    <statement id="getTrxSrcTp" parameterClass="Map" resultClass="String">
+        SELECT
+            TRX_SRC_TP_CD
+        FROM
+            TRX_SRC_TP
+        WHERE
+            GLBL_CMPY_CD = #glblCmpyCd#
+            <isNotNull property="shpgOrdCratTpCdList">
+                <iterate property="shpgOrdCratTpCdList" var="shpgOrdCratTpCd[]" open="AND (" close=")" conjunction="OR">
+                    SHPG_ORD_CRAT_TP_CD  = #shpgOrdCratTpCd[]#
+                </iterate>
+            </isNotNull>
+            AND EZCANCELFLAG = '0'
+    </statement>
+
+    <statement id="getShpgPln" parameterClass="Map" resultMap="result.ShpgPlnInfo">
+        SELECT
+             SP.INVTY_LOC_CD
+            ,SP.SHIP_TO_CUST_CD
+            ,SP.TRX_SRC_TP_CD
+            ,SP.RDD_DT
+            ,DECODE(SP.RDD_DT, NULL, SP.RSD_DT, NULL) RSD_DT
+            ,SP.DROP_SHIP_FLG
+            ,SP.REQ_FRT_CHRG_TO_CD
+            ,SP.REQ_FRT_CHRG_METH_CD
+            ,SP.RQST_CARR_CD
+            ,SP.CARR_ACCT_NUM
+            ,DECODE(SP.DROP_SHIP_FLG, #dropShipFlg#, NULL, SP.ORIG_SHPG_SVC_LVL_CD) ORIG_SHPG_SVC_LVL_CD_FOR_SORT
+            ,DECODE(SP.DROP_SHIP_FLG, #dropShipFlg#, NULL, SP.TRX_HDR_NUM) TRX_HDR_NUM_FOR_SORT
+            ,SP.SHIP_TO_POST_CD
+            ,SP.SHIP_TO_FIRST_LINE_ADDR
+            ,SP.SHIP_TO_SCD_LINE_ADDR
+            ,SP.SHIP_TO_THIRD_LINE_ADDR
+            ,SP.SHIP_TO_FRTH_LINE_ADDR
+            ,SP.ORIG_SHPG_SVC_LVL_CD
+            ,SP.TRX_HDR_NUM
+            ,SP.TRX_LINE_NUM
+            ,SP.TRX_LINE_SUB_NUM
+            ,SP.MDSE_CD
+            ,SP.CUST_UOM_CD
+            ,SP.SHPG_PLN_NUM
+            ,SP.AVAL_SO_QTY
+            ,SP.SHPG_STS_CD
+            ,SP.RTE_STS_CD
+            ,SP.SELL_TO_CUST_CD
+            ,SP.SHIP_TO_ST_CD
+            ,SP.EXPT_FLG
+            ,SP.PDD_DT
+            ,DCD.DS_ORD_POSN_NUM
+            ,NVL(MSI.HAZ_MAT_FLG,'N') HAZ_MAT_FLG_FOR_SORT
+            ,'N' CONFIG_ITEM_FLG
+            ,NVL((SELECT
+                     'Y'
+                FROM 
+                     CUST_EX_FOR_LT_CALC CLC
+               WHERE
+                     CLC.GLBL_CMPY_CD(+)        = SP.GLBL_CMPY_CD
+                 AND CLC.SELL_TO_CUST_CD(+)     = SP.SELL_TO_CUST_CD
+                 AND CLC.EZCANCELFLAG(+)        = '0'),'N') CUST_EX_FOR_LT_CALC_FLG
+           ,DMI.CONFIG_LT_DAY_NUM
+           ,ILV.INVTY_LOC_TP_CD
+           ,DRW.RTL_WH_CD
+           <!-- QC#17395 Start -->
+           ,DRW.WH_OWNR_CD
+           <!-- QC#17395 End -->
+           <!-- QC#17395-1 Start -->
+           ,DCC.SVC_CONFIG_MSTR_PK
+           <!-- QC#17395-1 End -->
+           ,DCD.SVC_MACH_MSTR_PK
+           ,DC.DS_ORD_CATG_CD
+           ,DC.DS_ORD_TP_CD
+        FROM
+            SHPG_PLN       SP
+           ,MDSE_SFTY_INFO MSI
+           ,MDSE           DMI
+           ,INVTY_LOC_V    ILV
+           ,CPO_DTL        DCD
+           ,CPO            DC
+           ,DS_RTL_WH_V    DRW
+           ,DS_INVTY_LOC_V DIL
+           ,DS_CPO_CONFIG  DCC
+       WHERE
+             SP.GLBL_CMPY_CD      = #glblCmpyCd#
+         AND SP.SHPG_STS_CD       = #shpgStsCd#
+         AND SP.INVTY_LOC_CD      IN (SELECT INVTY_LOC_CD
+                                        FROM DS_RTL_WH_V
+                                       WHERE 1=1
+                                         AND GLBL_CMPY_CD = #glblCmpyCd#
+                                         AND RTL_WH_CD    = #whCd#
+                                         AND EZCANCELFLAG = '0'
+                                     )
+         AND (SP.SHIP_TO_CUST_CD  IN (SELECT DRW2.INVTY_LOC_CD
+                                        FROM DS_RTL_WH_V DRW2
+                                       WHERE 1=1
+                                         AND DRW2.GLBL_CMPY_CD = #glblCmpyCd#
+                                         AND DRW2.RTL_WH_CD    = #shipToCustCd#
+                                         AND DRW2.EZCANCELFLAG = '0'
+                                     )
+             OR SP.SHIP_TO_CUST_CD = #shipToCustCd#)
+            <isNotNull property="trxSrcTpCdList">
+                <iterate property="trxSrcTpCdList" var="trxSrcTpCd[]" open="AND (" close=")" conjunction="OR">
+                    SP.TRX_SRC_TP_CD = #trxSrcTpCd[]#
+                </iterate>
+            </isNotNull>
+         AND SP.AVAL_SO_QTY     &gt; 0
+         AND SP.MDSE_CD           = MSI.MDSE_CD(+)
+         AND SP.GLBL_CMPY_CD      = MSI.GLBL_CMPY_CD(+)
+         AND SP.EZCANCELFLAG      = '0'
+         AND MSI.EZCANCELFLAG(+)  = '0'
+         AND SP.MDSE_CD           = DMI.MDSE_CD(+)
+         AND SP.GLBL_CMPY_CD      = DMI.GLBL_CMPY_CD(+)
+         AND DMI.EZCANCELFLAG(+)  = '0'
+         AND SP.GLBL_CMPY_CD      = ILV.GLBL_CMPY_CD
+         AND SP.INVTY_LOC_CD      = ILV.INVTY_LOC_CD
+         AND SP.GLBL_CMPY_CD      = DCD.GLBL_CMPY_CD(+)
+         AND SP.TRX_HDR_NUM       = DCD.CPO_ORD_NUM(+)
+         AND SP.TRX_LINE_NUM      = DCD.CPO_DTL_LINE_NUM(+)
+         AND SP.TRX_LINE_SUB_NUM  = DCD.CPO_DTL_LINE_SUB_NUM(+)
+         AND DCD.EZCANCELFLAG(+)  = '0'
+         AND DCD.GLBL_CMPY_CD     = DC.GLBL_CMPY_CD(+)
+         AND DCD.CPO_ORD_NUM      = DC.CPO_ORD_NUM(+)
+         AND DC.EZCANCELFLAG(+)   = '0'
+         AND SP.GLBL_CMPY_CD      = DRW.GLBL_CMPY_CD(+)
+         AND SP.INVTY_LOC_CD      = DRW.INVTY_LOC_CD(+)
+         AND DRW.EZCANCELFLAG(+)  = '0'
+         AND SP.GLBL_CMPY_CD      = DIL.GLBL_CMPY_CD(+)
+         AND SP.INVTY_LOC_CD      = DIL.INVTY_LOC_CD(+)
+         AND DIL.EZCANCELFLAG(+)  = '0'
+         AND DCD.GLBL_CMPY_CD     = DCC.GLBL_CMPY_CD(+)
+         AND DCD.DS_CPO_CONFIG_PK = DCC.DS_CPO_CONFIG_PK(+)
+         AND DCC.EZCANCELFLAG(+)  = '0'
+    ORDER BY
+             DIL.RTL_WH_CD
+            ,DCC.SHIP_TO_CUST_LOC_CD
+            ,SP.TRX_SRC_TP_CD
+            ,SP.EXPT_FLG
+            ,SP.RDD_DT
+            ,SP.RSD_DT
+            ,SP.DROP_SHIP_FLG
+            ,SP.REQ_FRT_CHRG_TO_CD
+            ,SP.REQ_FRT_CHRG_METH_CD
+            ,SP.RQST_CARR_CD
+            ,SP.CARR_ACCT_NUM
+            ,ORIG_SHPG_SVC_LVL_CD_FOR_SORT
+            ,TRX_HDR_NUM_FOR_SORT
+            ,SP.SHIP_TO_POST_CD
+            ,SP.SHIP_TO_FIRST_LINE_ADDR
+            ,SP.SHIP_TO_SCD_LINE_ADDR
+            ,SP.SHIP_TO_THIRD_LINE_ADDR
+            ,SP.SHIP_TO_FRTH_LINE_ADDR
+            ,SP.ORIG_SHPG_SVC_LVL_CD
+            ,SP.TRX_HDR_NUM
+            ,DCD.DS_ORD_POSN_NUM
+           <!-- QC#17395 Start -->
+            ,HAZ_MAT_FLG_FOR_SORT
+           <!-- QC#17395 End -->
+            ,SP.TRX_LINE_NUM
+            ,SP.TRX_LINE_SUB_NUM
+           <!-- QC#17395 Start -->
+           <!-- ,HAZ_MAT_FLG_FOR_SORT -->
+           <!-- QC#17395 End -->
+        FOR UPDATE OF SP.SHPG_PLN_NUM
+    </statement>
+
+    <resultMap id="result.ShpgPlnInfo"          class="ShpgPlnInfo">
+        <result property="invtyLocCd"           column="INVTY_LOC_CD"             javaType="String"/>
+        <result property="shipToCustCd"         column="SHIP_TO_CUST_CD"          javaType="String"/>
+        <result property="trxSrcTpCd"           column="TRX_SRC_TP_CD"            javaType="String"/>
+        <result property="rddDt"                column="RDD_DT"                   javaType="String"/>
+        <result property="rsdDt"                column="RSD_DT"                   javaType="String"/>
+        <result property="dropShipFlg"          column="DROP_SHIP_FLG"            javaType="String"/>
+        <result property="reqFrtChrgToCd"       column="REQ_FRT_CHRG_TO_CD"       javaType="String"/>
+        <result property="reqFrtChrgMethCd"     column="REQ_FRT_CHRG_METH_CD"     javaType="String"/>
+        <result property="rqstCarrCd"           column="RQST_CARR_CD"             javaType="String"/>
+        <result property="carrAcctNum"          column="CARR_ACCT_NUM"            javaType="String"/>
+        <result property="shipToPostCd"         column="SHIP_TO_POST_CD"          javaType="String"/>
+        <result property="shipToFirstLineAddr"  column="SHIP_TO_FIRST_LINE_ADDR"  javaType="String"/>
+        <result property="shipToScdLineAddr"    column="SHIP_TO_SCD_LINE_ADDR"    javaType="String"/>
+        <result property="shipToThirdLineAddr"  column="SHIP_TO_THIRD_LINE_ADDR"  javaType="String"/>
+        <result property="shipToFrthLineAddr"   column="SHIP_TO_FRTH_LINE_ADDR"   javaType="String"/>
+        <result property="origShpgSvcLvlCd"     column="ORIG_SHPG_SVC_LVL_CD"     javaType="String"/>
+        <result property="trxHdrNum"            column="TRX_HDR_NUM"              javaType="String"/>
+        <result property="trxLineNum"           column="TRX_LINE_NUM"             javaType="String"/>
+        <result property="trxLineSubNum"        column="TRX_LINE_SUB_NUM"         javaType="String"/>
+        <result property="mdseCd"               column="MDSE_CD"                  javaType="String"/>
+        <result property="custUomCd"            column="CUST_UOM_CD"              javaType="String"/>
+        <result property="shpgPlnNum"           column="SHPG_PLN_NUM"             javaType="String"/>
+        <result property="avalSoQty"            column="AVAL_SO_QTY"              javaType="BigDecimal"/>
+        <result property="shpgStsCd"            column="SHPG_STS_CD"              javaType="String"/>
+        <result property="rteStsCd"             column="RTE_STS_CD"               javaType="String"/>
+        <result property="sellToCustCd"         column="SELL_TO_CUST_CD"          javaType="String"/>
+        <result property="shipToStCd"           column="SHIP_TO_ST_CD"            javaType="String"/>
+        <result property="exptFlg"              column="EXPT_FLG"                 javaType="String"/>
+        <result property="pddDt"                column="PDD_DT"                   javaType="String"/>
+        <result property="dsOrdPosnNum"         column="DS_ORD_POSN_NUM"          javaType="String"/>
+        <result property="configItemFlg"        column="CONFIG_ITEM_FLG"          javaType="String"/>
+        <result property="custExForLtCalcFlg"   column="CUST_EX_FOR_LT_CALC_FLG"  javaType="String"/>
+        <result property="hazMatFlg"            column="HAZ_MAT_FLG_FOR_SORT"     javaType="String"/>
+        <result property="configLtDayNum"       column="CONFIG_LT_DAY_NUM"        javaType="BigDecimal"/>
+        <result property="invtyLocTpCd"         column="INVTY_LOC_TP_CD"          javaType="String"/>
+        <result property="rtlWhCd"              column="RTL_WH_CD"                javaType="String"/>
+        <result property="dsOrdCatgCd"          column="DS_ORD_CATG_CD"           javaType="String"/>
+        <result property="dsOrdTpCd"            column="DS_ORD_TP_CD"             javaType="String"/>
+        <!-- QC#17395 Start -->
+        <result property="whOwnrCd"             column="WH_OWNR_CD"               javaType="String"/>
+        <!-- QC#17395 End -->
+        <!-- QC#17395-1 Start -->
+        <result property="svcMachMstrPk"        column="SVC_MACH_MSTR_PK"         javaType="String"/>
+        <result property="svcConfigMstrPk"      column="SVC_CONFIG_MSTR_PK"       javaType="String"/>
+        <!-- QC#17395-1 End -->
+    </resultMap>
+
+    <statement id="getAvailableShpgMode" parameterClass="Map" resultClass="String">
+        SELECT
+            SHPG_MODE_CD
+        FROM
+            SHPG_WT
+        WHERE
+                GLBL_CMPY_CD     = #glblCmpyCd#
+            AND SELL_TO_CUST_CD  = #sellToCustCd#
+            AND SHIP_TO_CUST_CD  = #shipToCustCd#
+            AND FRT_CHRG_TO_CD   = #frtChrgToCd#
+            AND FRT_CHRG_METH_CD = #frtChrgMethCd#
+            AND #effDt# BETWEEN EFF_FROM_DT AND NVL(EFF_THRU_DT,'99991231')
+            AND EZCANCELFLAG     = '0'
+            <isNull property="noLimitFlg">
+                <isNull property="minReqFlg">
+                    AND TRANS_MAX_WT &gt;= #targetWt#
+                </isNull>
+                <isNotNull property="minReqFlg">
+                    AND #targetWt# BETWEEN TRANS_MIN_WT AND TRANS_MAX_WT
+                </isNotNull>
+            </isNull>
+            <isNotNull property="noLimitFlg">
+                ORDER BY TRANS_MAX_WT DESC
+            </isNotNull>
+    </statement>
+
+    <statement id="getMaxShipPrty" parameterClass="Map" resultClass="BigDecimal">
+     SELECT
+            MAX(SHIP_PRTY)
+       FROM
+            SHPG_SVC
+      WHERE
+            GLBL_CMPY_CD     = #glblCmpyCd#
+        AND FRT_CHRG_TO_CD   = #frtChrgToCd#
+        AND FRT_CHRG_METH_CD = #frtChrgMethCd#
+        AND SHPG_SVC_LVL_CD  = #shpgSvcLvlCd#
+        AND EZCANCELFLAG     = '0'
+    </statement>
+
+    <statement id="getAvailableShpgSvc" parameterClass="Map" resultMap="result.ShpgSvcInfo">
+     SELECT
+            SHPG_MODE_CD
+           ,SHPG_SVC_LVL_CD
+       FROM
+            SHPG_SVC
+      WHERE
+            GLBL_CMPY_CD      = #glblCmpyCd#
+        AND FRT_CHRG_TO_CD    = #frtChrgToCd#
+        AND FRT_CHRG_METH_CD  = #frtChrgMethCd#
+            <isNotNull property="rsdFlg">
+                AND SHPG_SVC_LVL_CD = #shpgSvcLvlCd#
+            </isNotNull>
+            <isNotNull property="shpgModeCdList">
+                <iterate property="shpgModeCdList" var="shpgModeCd[]" open="AND (" close=")" conjunction="OR">
+                    SHPG_MODE_CD = #shpgModeCd[]#
+                </iterate>
+            </isNotNull>
+            <isNotNull property="rddFlg">
+                AND SHIP_PRTY &lt;= #shipPrty#
+            </isNotNull>
+        AND EZCANCELFLAG = '0'
+        ORDER BY
+            SHIP_PRTY
+    </statement>
+
+    <resultMap id="result.ShpgSvcInfo" class="ShpgSvcInfo">
+        <result property="shpgModeCd"    column="SHPG_MODE_CD"     javaType="String"/>
+        <result property="shpgSvcLvlCd"  column="SHPG_SVC_LVL_CD"  javaType="String"/>
+    </resultMap>
+
+    <statement id="getWhLeadTm" parameterClass="Map" resultMap="result.WH_LEAD_TMTMsg">
+     SELECT
+            SHPG_CLO_TM_TS
+           ,PICK_PACK_AOT
+       FROM
+            WH_LEAD_TM
+      WHERE
+            GLBL_CMPY_CD    = #glblCmpyCd#
+        AND WH_CD           = #whCd#
+        AND SHPG_MODE_CD    = #shpgModeCd#
+        AND SHPG_SVC_LVL_CD = #shpgSvcLvlCd#
+        AND #effDt# BETWEEN EFF_FROM_DT AND NVL(EFF_THRU_DT,'99991231')
+        AND EZCANCELFLAG    = '0'
+    </statement>
+
+    <resultMap id="result.WH_LEAD_TMTMsg" class="WH_LEAD_TMTMsg">
+        <result property="shpgCloTmTs"    column="SHPG_CLO_TM_TS"    javaType="EZDTStringItem"/>
+        <result property="pickPackAot"    column="PICK_PACK_AOT"     javaType="EZDTBigDecimalItem"/>
+    </resultMap>
+
+    <statement id="getShpgSvcLeadTm" parameterClass="Map" resultMap="result.ShpgSvcLeadTm">
+        SELECT
+             SLT.DELY_LEAD_AOT
+            ,SSL.SHPG_SVC_TP_CD
+        FROM
+             SHPG_SVC_LEAD_TM SLT
+            ,SHPG_SVC_LVL SSL
+        WHERE
+             SLT.GLBL_CMPY_CD    = #glblCmpyCd#
+         AND SLT.SHPG_SVC_LVL_CD = #shpgSvcLvlCd#
+         AND SLT.EZCANCELFLAG    = '0'
+         AND SSL.EZCANCELFLAG    = '0'
+         AND SLT.GLBL_CMPY_CD    = SSL.GLBL_CMPY_CD
+         AND SLT.SHPG_SVC_LVL_CD = SSL.SHPG_SVC_LVL_CD
+    </statement>
+
+    <resultMap id="result.ShpgSvcLeadTm" class="ShpgSvcInfo">
+        <result property="delyLeadAot"    column="DELY_LEAD_AOT"     javaType="BigDecimal"/>
+        <result property="shpgSvcTpCd"    column="SHPG_SVC_TP_CD"    javaType="String"/>
+    </resultMap>
+
+    <statement id="getTrnspLt" parameterClass="Map" resultMap="result.TRNSP_LTTMsg">
+        SELECT
+            TRNSP_LT_AOT
+        FROM
+            TRNSP_LT
+        WHERE
+            GLBL_CMPY_CD = #glblCmpyCd#
+        AND WH_CD        = #whCd#
+        AND ST_CD        = #shipToStCd#
+        AND SHPG_MODE_CD = #shpgModeCd#
+        AND #shipToPostCd# BETWEEN FROM_ZIP_CD AND TO_ZIP_CD
+        AND #effDt# BETWEEN EFF_FROM_DT AND NVL(EFF_THRU_DT,'99991231')
+        AND EZCANCELFLAG = '0'
+    </statement>
+
+    <resultMap id="result.TRNSP_LTTMsg" class="TRNSP_LTTMsg">
+        <result property="trnspLtAot"    column="TRNSP_LT_AOT"    javaType="EZDTBigDecimalItem"/>
+    </resultMap>
+
+    <statement id="getAreaLeadTm" parameterClass="Map" resultMap="result.AREA_LEAD_TMTMsg">
+        SELECT
+            DELY_LEAD_AOT
+        FROM
+            AREA_LEAD_TM
+        WHERE
+            GLBL_CMPY_CD = #glblCmpyCd#
+        AND WH_CD        = #whCd#
+        AND ST_CD        = #shipToStCd#
+        AND SHPG_MODE_CD = #shpgModeCd#
+        AND #effDt# BETWEEN EFF_FROM_DT AND NVL(EFF_THRU_DT,'99991231')
+        AND EZCANCELFLAG = '0'
+    </statement>
+
+    <resultMap id="result.AREA_LEAD_TMTMsg" class="AREA_LEAD_TMTMsg">
+        <result property="delyLeadAot"    column="DELY_LEAD_AOT"    javaType="EZDTBigDecimalItem"/>
+    </resultMap>
+
+    <statement id="getShpgWt" parameterClass="Map" resultMap="result.SHPG_WTTMsg">
+        SELECT
+            TRANS_MIN_WT
+           ,TRANS_MAX_WT
+        FROM
+            SHPG_WT
+        WHERE
+            GLBL_CMPY_CD     = #glblCmpyCd#
+        AND SELL_TO_CUST_CD  = #sellToCustCd#
+        AND SHIP_TO_CUST_CD  = #shipToCustCd#
+        AND FRT_CHRG_TO_CD   = #frtChrgToCd#
+        AND FRT_CHRG_METH_CD = #frtChrgMethCd#
+        AND SHPG_MODE_CD = #shpgModeCd#
+        AND #effDt# BETWEEN EFF_FROM_DT AND NVL(EFF_THRU_DT,'99991231')
+        AND EZCANCELFLAG     = '0'
+    </statement>
+
+    <resultMap id="result.SHPG_WTTMsg" class="SHPG_WTTMsg">
+        <result property="transMinWt"    column="TRANS_MIN_WT"    javaType="EZDTBigDecimalItem"/>
+        <result property="transMaxWt"    column="TRANS_MAX_WT"    javaType="EZDTBigDecimalItem"/>
+    </resultMap>
+
+    <statement id="getShipToCust" parameterClass="Map" resultMap="result.SHIP_TO_CUSTTMsg">
+        SELECT
+            ST_CD
+           ,POST_CD
+           ,EFF_FROM_DT
+           ,EFF_THRU_DT
+           ,RGTN_STS_CD
+        FROM
+            SHIP_TO_CUST
+        WHERE
+            GLBL_CMPY_CD    = #glblCmpyCd#
+        AND SHIP_TO_CUST_CD = #shipToCustCd#
+        AND EZCANCELFLAG    = '0'
+    </statement>
+
+    <resultMap id="result.SHIP_TO_CUSTTMsg" class="SHIP_TO_CUSTTMsg">
+        <result property="stCd"       column="ST_CD"        javaType="EZDTStringItem"/>
+        <result property="postCd"     column="POST_CD"      javaType="EZDTStringItem"/>
+        <result property="effFromDt"  column="EFF_FROM_DT"  javaType="EZDTStringItem"/>
+        <result property="effThruDt"  column="EFF_THRU_DT"  javaType="EZDTStringItem"/>
+        <result property="rgtnStsCd"  column="RGTN_STS_CD"  javaType="EZDTStringItem"/>
+    </resultMap>
+
+    <statement id="getWh" parameterClass="Map" resultMap="result.WHTMsg">
+        SELECT
+            ST_CD
+           ,POST_CD
+        FROM
+            WH
+        WHERE
+            GLBL_CMPY_CD = #glblCmpyCd#
+        AND WH_CD        = #whCd#
+        AND #effDt# BETWEEN EFF_FROM_DT AND NVL(EFF_THRU_DT,'99991231')
+        AND EZCANCELFLAG = '0'
+    </statement>
+
+    <resultMap id="result.WHTMsg" class="WHTMsg">
+        <result property="stCd"    column="ST_CD"    javaType="EZDTStringItem"/>
+        <result property="postCd"  column="POST_CD"  javaType="EZDTStringItem"/>
+    </resultMap>
+
+    <statement id="getDSInvtyLocV" parameterClass="Map" resultMap="result.DS_INVTY_LOC_VTMsg">
+        SELECT
+            DILV.ST_CD
+           ,DILV.POST_CD
+        FROM
+            DS_INVTY_LOC_V DILV
+        WHERE
+            DILV.GLBL_CMPY_CD = #glblCmpyCd#
+        AND DILV.INVTY_LOC_CD = #invtyLocCd#
+        AND #effDt# BETWEEN DILV.EFF_FROM_DT AND NVL(DILV.EFF_THRU_DT,'99991231')
+        ORDER BY
+            DILV.INVTY_LOC_CD
+    </statement>
+
+    <resultMap id="result.DS_INVTY_LOC_VTMsg" class="DS_INVTY_LOC_VTMsg">
+        <result property="stCd"    column="ST_CD"    javaType="EZDTStringItem"/>
+        <result property="postCd"  column="POST_CD"  javaType="EZDTStringItem"/>
+    </resultMap>
+</sqlMap>

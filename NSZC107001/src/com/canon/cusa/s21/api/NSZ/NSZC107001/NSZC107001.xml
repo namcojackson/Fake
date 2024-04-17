@@ -1,0 +1,2026 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NSZC107001">
+
+    <!-- #################### Type Alias #################### -->
+
+    <!-- #################### Statement #################### -->
+    <statement id="getTaskInfo" parameterClass="Map" resultClass="Map">
+        <!-- START 2019/10/24 K.Fujimoto [QC#53441,MOD] -->
+        <!-- START 2018/10/27 T.Tomita [QC#28565,MOD] -->
+        WITH TASK_INFO AS (
+        SELECT
+              TASK.SVC_TASK_NUM  AS SVC_TASK_NUM
+            , TASK.FSR_NUM                           AS FSR_NUM
+            , EVENT.FSR_EVENT_PK                     AS FSR_EVENT_PK
+            , EVENT.FSR_EVENT_EXE_TS                 AS FSR_EVENT_EXE_TS
+            , EVENT.SVC_DISPT_EVENT_CD               AS SVC_DISPT_EVENT_CD
+            , TASK.SVC_MACH_MSTR_PK                  AS SVC_MACH_MSTR_PK
+        FROM
+              SVC_TASK TASK
+            , FSR_EVENT EVENT
+        WHERE 
+              TASK.GLBL_CMPY_CD = #glblCmpyCd#
+          AND TASK.EZCANCELFLAG = '0'
+          AND TASK.GLBL_CMPY_CD = EVENT.GLBL_CMPY_CD
+          AND EVENT.EZCANCELFLAG = '0'
+          AND TASK.SVC_TASK_NUM = EVENT.SVC_TASK_NUM
+          AND EVENT.MBL_INTFC_PROC_CD = '0'
+          AND TASK.SVC_TASK_NUM = #svcTaskNum#
+        UNION
+        SELECT
+              RSLT.SVC_TASK_NUM                      AS SVC_TASK_NUM
+            , RSLT.FSR_NUM                           AS FSR_NUM
+            , FE.FSR_EVENT_PK                        AS FSR_EVENT_PK
+            , FE.FSR_EVENT_EXE_TS                    AS FSR_EVENT_EXE_TS
+            , FE.SVC_DISPT_EVENT_CD                  AS SVC_DISPT_EVENT_CD
+            , TASK.SVC_MACH_MSTR_PK                  AS SVC_MACH_MSTR_PK
+        FROM
+              CLICK_TASK_SEND_RSLT RSLT
+            , FSR_EVENT            FE
+            , SVC_TASK             TASK
+        WHERE
+              RSLT.GLBL_CMPY_CD    = #glblCmpyCd#
+          AND RSLT.SVC_TASK_NUM    = #svcTaskNum#
+          AND RSLT.EZCANCELFLAG    = '0'
+          AND RSLT.GLBL_CMPY_CD    = FE.GLBL_CMPY_CD
+          AND RSLT.FSR_NUM         = FE.FSR_NUM
+          AND RSLT.SVC_TASK_NUM    = FE.SVC_TASK_NUM
+          AND FE.MBL_INTFC_PROC_CD = #procStsError#
+          AND FE.EZCANCELFLAG      = '0'
+          AND RSLT.FSR_NUM         = TASK.FSR_NUM
+          AND RSLT.SVC_TASK_NUM    = TASK.SVC_TASK_NUM
+          AND TASK.EZCANCELFLAG    = '0'
+        <!-- END 2018/10/27 T.Tomita [QC#28565,MOD] -->
+        <!-- END 2019/10/24 K.Fujimoto [QC#53441,MOD] -->
+        )
+
+        , EVENT_SEND AS (SELECT DISTINCT FE.SVC_TASK_NUM, 'Y' AS SEND_FLG FROM FSR_EVENT FE
+                          WHERE FE.GLBL_CMPY_CD = #glblCmpyCd#
+                            AND FE.SVC_TASK_NUM = #svcTaskNum#
+                            AND FE.EZCANCELFLAG = '0'
+                            AND FE.MBL_INTFC_PROC_CD IN (#procStsProcessed#, #procStsError#)
+        )
+        
+        , PMT_WK AS (SELECT ACCS.GLBL_CMPY_CD           AS GLBL_CMPY_CD
+                          , ACCS.SVC_LBOR_TM_PMIT_VAL_TXT  AS SVC_LBOR_TM_PMIT_VAL_TXT
+                          , TP.MACH_LVL_FLG             AS MACH_LVL_FLG
+                          , TP.SITE_LVL_FLG             AS SITE_LVL_FLG
+                          , TP.PTY_LVL_FLG              AS PTY_LVL_FLG
+                           FROM SVC_LBOR_TM_PMIT ACCS, SVC_PMIT_LVL_TP TP
+                     WHERE ACCS.GLBL_CMPY_CD = #glblCmpyCd#
+                       AND ACCS.EZCANCELFLAG = '0'
+                       AND ACCS.SVC_PMIT_LVL_TP_CD = TP.SVC_PMIT_LVL_TP_CD
+                       AND ACCS.GLBL_CMPY_CD = TP.GLBL_CMPY_CD
+                       AND TP.EZCANCELFLAG = '0'
+<!-- START 2018/07/27 T.Wada [QC#17094,MOD] -->
+                       AND   ACCS.EFF_FROM_DT &lt;= #slsDt#
+                       AND   (ACCS.EFF_TO_DT &gt;= #slsDt# OR ACCS.EFF_TO_DT IS NULL)
+<!-- END   2018/07/27 T.Wada [QC#17094,MOD] -->
+                       
+        )
+
+<!-- START 2018/10/09 K.fujimoto [QC#28612,DEL] -->
+<!--
+        ,MEMO AS (
+                SELECT
+                    GLBL_CMPY_CD
+                    ,SVC_TASK_NUM
+                    ,SVC_CMNT_TXT
+                FROM
+                   (SELECT
+                        MEMO.GLBL_CMPY_CD
+                        ,MEMO.SVC_TASK_NUM
+                        ,MEMO.SVC_CMNT_TXT
+                         , ROW_NUMBER() OVER (PARTITION BY MEMO.SVC_TASK_NUM ORDER BY MEMO.LAST_UPD_TS DESC) AS ROW_NUM 
+                    FROM
+                        SVC_MEMO MEMO
+                    WHERE
+                            MEMO.GLBL_CMPY_CD   = #glblCmpyCd#
+                        AND MEMO.EZCANCELFLAG   = '0'
+                        AND MEMO.SVC_TASK_NUM   = #svcTaskNum#
+                        AND MEMO.SVC_MEMO_TP_CD = #svcMemoTpCd#
+                        AND MEMO.SVC_TASK_NUM   IS NOT NULL
+                    )
+                WHERE
+                    ROW_NUM = 1
+        )
+-->
+<!-- END 2018/10/09 K.fujimoto [QC#28612,DEL] -->
+
+        ,FSR_CLO AS (
+            <!-- START 2019/10/24 K.Fujimoto [QC#53441,MOD] -->
+            <!-- performance -->
+            SELECT
+                   GLBL_CMPY_CD      AS GLBL_CMPY_CD
+                  ,SVC_MACH_MSTR_PK  AS SVC_MACH_MSTR_PK
+                  ,MAX(FSR_CLO_DT)   AS FSR_CLO_DT
+             FROM
+                   FSR
+             WHERE
+                   GLBL_CMPY_CD   = #glblCmpyCd#
+               AND EZCANCELFLAG   = '0'
+               AND FSR_STS_CD     = #fsrStsCd#
+               AND FSR_CLO_DT     IS NOT NULL
+               AND EXISTS(
+                   SELECT
+                          1
+                     FROM
+                          TASK_INFO TASK
+                    WHERE
+                          TASK.SVC_MACH_MSTR_PK = FSR.SVC_MACH_MSTR_PK
+                   )
+            GROUP BY
+                   GLBL_CMPY_CD
+                  ,SVC_MACH_MSTR_PK
+            <!-- END   2019/10/24 K.Fujimoto [QC#53441,MOD] -->
+        )
+        ,TIER AS(
+            SELECT
+                OHSD.ORG_TIER_CD
+            FROM
+                 STRU_DFN SDF
+                ,ORG_HRCH_STRU_DFN OHSD
+            WHERE
+                    SDF.GLBL_CMPY_CD         = #glblCmpyCd#
+                AND SDF.BR_FLG               = 'Y'
+                AND SDF.GLBL_CMPY_CD         = OHSD.GLBL_CMPY_CD
+                AND SDF.STRU_DFN_CD          = OHSD.STRU_DFN_CD
+                AND OHSD.BIZ_AREA_ORG_CD     = #bizAreaOrdCd#
+                AND SDF.EZCANCELFLAG         = '0'
+                AND OHSD.EZCANCELFLAG        = '0'
+                AND OHSD.EFF_FROM_DT               &lt;= #slsDt#
+                AND NVL(OHSD.EFF_THRU_DT, #slsDt#) &gt;= #slsDt#
+                AND ROWNUM                   = 1
+        )
+        ,ORG_INFO AS (
+                SELECT
+                     GLBL_CMPY_CD
+                     ,PSN_CD
+                     <!-- ,COA_BR_CD -->
+                     ,DISTRICT
+                FROM
+                   (SELECT
+                         OFA.GLBL_CMPY_CD
+                         ,OFA.PSN_CD
+                         <!-- ,TOC.COA_BR_CD
+                         ,CBR.COA_BR_NM -->
+                         ,CASE WHEN TIER.ORG_TIER_CD = ORG.FIRST_ORG_TIER_CD  AND ORG.FIRST_ORG_CD  IS NOT NULL THEN ORG.FIRST_ORG_NM
+                               WHEN TIER.ORG_TIER_CD = ORG.SCD_ORG_TIER_CD    AND ORG.SCD_ORG_CD    IS NOT NULL THEN ORG.SCD_ORG_NM
+                               WHEN TIER.ORG_TIER_CD = ORG.THIRD_ORG_TIER_CD  AND ORG.THIRD_ORG_CD  IS NOT NULL THEN ORG.THIRD_ORG_NM
+                               WHEN TIER.ORG_TIER_CD = ORG.FRTH_ORG_TIER_CD   AND ORG.FRTH_ORG_CD   IS NOT NULL THEN ORG.FRTH_ORG_NM
+                               WHEN TIER.ORG_TIER_CD = ORG.FIFTH_ORG_TIER_CD  AND ORG.FIFTH_ORG_CD  IS NOT NULL THEN ORG.FIFTH_ORG_NM
+                               WHEN TIER.ORG_TIER_CD = ORG.SIXTH_ORG_TIER_CD  AND ORG.SIXTH_ORG_CD  IS NOT NULL THEN ORG.SIXTH_ORG_NM
+                               WHEN TIER.ORG_TIER_CD = ORG.SVNTH_ORG_TIER_CD  AND ORG.SVNTH_ORG_CD  IS NOT NULL THEN ORG.SVNTH_ORG_NM
+                               WHEN TIER.ORG_TIER_CD = ORG.EIGHTH_ORG_TIER_CD AND ORG.EIGHTH_ORG_CD IS NOT NULL THEN ORG.EIGHTH_ORG_NM
+                               WHEN TIER.ORG_TIER_CD = ORG.NINTH_ORG_TIER_CD  AND ORG.NINTH_ORG_CD  IS NOT NULL THEN ORG.NINTH_ORG_NM
+                               WHEN TIER.ORG_TIER_CD = ORG.TENTH_ORG_TIER_CD  AND ORG.TENTH_ORG_CD  IS NOT NULL THEN ORG.TENTH_ORG_NM
+                               WHEN TIER.ORG_TIER_CD = ORG.ELVTH_ORG_TIER_CD  AND ORG.ELVTH_ORG_CD  IS NOT NULL THEN ORG.ELVTH_ORG_NM
+                          END AS DISTRICT
+                         ,ROW_NUMBER() OVER (PARTITION BY OFA.PSN_CD ORDER BY RTP.MGR_FLG ASC) AS ROW_NUM 
+                    FROM
+                         ORG_FUNC_ASG       OFA
+                       , TOC                TOC
+                       , ORG_FUNC_ROLE_TP   RTP
+                       <!-- , COA_BR             CBR -->
+                       , S21_ORG            ORG
+                       , TIER
+                    WHERE
+                        OFA.GLBL_CMPY_CD            = #glblCmpyCd#
+                        AND OFA.EZCANCELFLAG        = '0'
+                        AND OFA.EFF_FROM_DT         &lt;= #slsDt#
+                        AND NVL(OFA.EFF_THRU_DT,#slsDt#)     &gt;= #slsDt#
+                        AND OFA.GLBL_CMPY_CD        = TOC.GLBL_CMPY_CD
+                        AND OFA.TOC_CD              = TOC.TOC_CD
+                        AND TOC.EZCANCELFLAG        = '0'
+                        AND TOC.GLBL_CMPY_CD        = RTP.GLBL_CMPY_CD
+                        AND TOC.ORG_FUNC_ROLE_TP_CD = RTP.ORG_FUNC_ROLE_TP_CD
+                        AND RTP.TECH_MSTR_REQ_FLG   = 'Y'
+                        AND RTP.ACTV_FLG            = 'Y'
+                        AND RTP.EZCANCELFLAG        = '0'
+                        <!-- AND TOC.GLBL_CMPY_CD        = CBR.GLBL_CMPY_CD
+                        AND TOC.COA_BR_CD           = CBR.COA_BR_CD
+                        AND CBR.EZCANCELFLAG        = '0' -->
+                        AND TOC.GLBL_CMPY_CD        = ORG.GLBL_CMPY_CD
+                        AND TOC.TOC_CD              = ORG.TOC_CD
+                        AND ORG.EZCANCELFLAG        = '0'
+                    )
+                WHERE
+                    ROW_NUM = 1
+        )
+
+        SELECT  
+            TASK.SVC_TASK_NUM            AS SVC_TASK_NUM
+           , TASK.SVC_MACH_MSTR_PK       AS SVC_MACH_MSTR_PK
+           , VISIT.TECH_CD               AS TECH_CD
+           , TASK.SER_NUM                AS SER_NUM
+           , TASK.CUST_MACH_CTRL_NUM     AS CUST_MACH_CTRL_NUM
+           , TASK.SVC_BILL_TP_CD         AS SVC_BILL_TP_CD
+           , TASK.CUST_EML_ADDR          AS CUST_EML_ADDR
+           , TASK.MACH_DOWN_FLG          AS MACH_DOWN_FLG
+           , TASK.FSR_NUM                AS FSR_NUM
+           , TASK.DS_SVC_CALL_TP_CD      AS DS_SVC_CALL_TP_CD
+           , CALL.XTRNL_CALL_TP_REF_TXT  AS XTRNL_CALL_TP_REF_TXT
+           , CALL.SVC_ISTL_REQ_FLG       AS SVC_ISTL_REQ_FLG
+           <!-- START 2018/01/31 K.Kojima [QC#21112,ADD] -->
+           , CALL.SVC_DEINS_REQ_FLG      AS SVC_DEINS_REQ_FLG
+           <!-- END 2018/01/31 K.Kojima [QC#21112,ADD] -->
+           , TASK.SVC_CUST_ATTN_TXT      AS SVC_CUST_ATTN_TXT
+           , TASK.CUST_TEL_NUM           AS CUST_TEL_NUM
+           , TASK.CUST_TEL_EXTN_NUM      AS CUST_TEL_EXTN_NUM
+           , TASK.SVC_CUST_CLLR_TXT      AS SVC_CUST_CLLR_TXT
+           , TASK.ERL_START_TS           AS ERL_START_TS
+           , TASK.LATE_START_TS          AS LATE_START_TS
+           , TASK.SVC_BILL_TP_CD         AS SVC_BILL_TP_CD
+           , NVL(MDL.MDL_DURN_TM_NUM, MDL2.MDL_DURN_TM_NUM) * #mdlDurnTm# AS MDL_DURN_TM_NUM
+           , NVL(MDL_NM.T_MDL_NM ,MDL_NM2.T_MDL_NM)              AS T_MDL_NM
+           , TASK.SVC_TASK_STS_CD        AS SVC_TASK_STS_CD
+           , VISIT.FSR_VISIT_STS_CD      AS FSR_VISIT_STS_CD
+           , STS.XTRNL_STS_REF_TXT       AS SVC_TASK_STS_NM
+           , TECH.TECH_NM                AS TECH_NM
+           , CASE MACH.IWR_COND_CD 
+                 WHEN #iwrCondCd# THEN 'Y' 
+                           ELSE 'N'
+             END                         AS IWR_COND_FLG
+
+           , SHIP.FIRST_LINE_ADDR        AS FIRST_LINE_ADDR
+           , SHIP.SCD_LINE_ADDR          AS SCD_LINE_ADDR
+           , SHIP.CTY_ADDR               AS CTY_ADDR
+           , SHIP.ST_CD                  AS ST_CD
+           , SHIP.POST_CD                AS POST_CD
+           , SHIP.CTRY_CD                AS CTRY_CD
+<!-- START 2019/10/02 K.Fujimoto [QC#53864, ADD] -->
+           , FSR.SHIP_TO_CUST_CD         AS SHIP_TO_CUST_CD
+<!-- END   2019/10/02 K.Fujimoto [QC#53864, ADD] -->
+<!-- START 2017/09/04 M.Kidokoro [QC#20862, ADD] -->
+           , FSR.SHIP_TO_UPD_CUST_CD     AS SHIP_TO_UPD_CUST_CD
+<!-- END 2017/09/04 M.Kidokoro [QC#20862, ADD] -->
+           , ACCT.DS_ACCT_NM             AS DS_ACCT_NM
+           , ACCT.SELL_TO_CUST_CD        AS DS_ACCT_NUM
+           , MACH.DS_KEY_ACCT_FLG        AS DS_KEY_ACCT_FLG
+           <!-- mod start 2018/06/08 QC#17472 -->
+           <!--, MACH.PRF_TECH_CD            AS PRF_TECH_CD
+           , PTEC.TECH_NM                AS PRF_TECH_NM
+           , PCB.COA_BR_CD               AS PRF_COA_BR_CD
+           , PORG.DISTRICT               AS PRF_DISTRICT
+           , MACH.REQ_TECH_CD            AS REQ_TECH_CD
+           , RTEC.TECH_NM                AS REQ_TECH_NM
+           , RCB.COA_BR_CD               AS REQ_COA_BR_CD
+           , RORG.DISTRICT               AS REQ_DISTRICT -->
+           <!-- START 2019/11/18 K.Fujimoto [QC#54391,MOD] -->
+           <!-- START 2018/06/18 M.Naito [QC#25459,MOD] -->
+           <!--, NVL(MACH.PRF_TECH_CD, PLW.PRF_TECH_CD)                AS PRF_TECH_CD -->
+           , CASE WHEN SKL_MAP.SVC_SKILL_NUM IS NULL
+                  THEN NVL(POFA.PSN_CD, POFA2.PSN_CD)
+                  ELSE NULL END PRF_TECH_CD
+           , CASE WHEN SKL_MAP.SVC_SKILL_NUM IS NULL
+                  THEN NVL2(MACH.PRF_TECH_CD, PTEC.TECH_NM, PTEC2.TECH_NM)
+                  ELSE NULL END PRF_TECH_NM
+           , CASE WHEN SKL_MAP.SVC_SKILL_NUM IS NULL
+                  THEN NVL2(MACH.PRF_TECH_CD, PORG.DISTRICT, PORG2.DISTRICT)
+                  ELSE NULL END PRF_DISTRICT
+           , CASE WHEN SKL_MAP.SVC_SKILL_NUM IS NULL
+                  THEN NVL(ROFA.PSN_CD, ROFA2.PSN_CD)
+                  ELSE NULL END REQ_TECH_CD
+           , CASE WHEN SKL_MAP.SVC_SKILL_NUM IS NULL
+                  THEN NVL2(MACH.REQ_TECH_CD, RTEC.TECH_NM, RTEC2.TECH_NM)
+                  ELSE NULL END REQ_TECH_NM
+           , CASE WHEN SKL_MAP.SVC_SKILL_NUM IS NULL
+                  THEN NVL2(MACH.REQ_TECH_CD, RORG.DISTRICT, RORG2.DISTRICT)
+                  ELSE NULL END REQ_DISTRICT
+           <!--, NVL(POFA.PSN_CD, POFA2.PSN_CD)                        AS PRF_TECH_CD -->
+           <!--, NVL2(MACH.PRF_TECH_CD, PTEC.TECH_NM, PTEC2.TECH_NM)   AS PRF_TECH_NM -->
+           <!--, NVL2(MACH.PRF_TECH_CD, PORG.DISTRICT, PORG2.DISTRICT) AS PRF_DISTRICT -->
+           <!--, NVL(MACH.REQ_TECH_CD, PLW.REQ_TECH_CD)                AS REQ_TECH_CD -->
+           <!--, NVL(ROFA.PSN_CD, ROFA2.PSN_CD)                        AS REQ_TECH_CD -->
+           <!--, NVL2(MACH.REQ_TECH_CD, RTEC.TECH_NM, RTEC2.TECH_NM)   AS REQ_TECH_NM -->
+           <!--, NVL2(MACH.REQ_TECH_CD, RORG.DISTRICT, RORG2.DISTRICT) AS REQ_DISTRICT -->
+           <!-- END 2018/06/18 M.Naito [QC#25459,MOD] -->
+           <!-- mod end 2018/06/08 QC#17472 -->
+           <!-- , NVL(MDL.SVC_SKILL_NUM ,MDL2.SVC_SKILL_NUM)            AS SVC_SKILL_NUM -->
+           <!-- , NVL(SKL.SVC_SKILL_NM, SKL2.SVC_SKILL_NM)              AS SVC_SKILL_NM -->
+           <!-- , NVL(SKL.SVC_SKILL_DESC_TXT, SKL2.SVC_SKILL_DESC_TXT)  AS SVC_SKILL_DESC_TXT -->
+           , COALESCE(SKL_MAP.SVC_SKILL_NUM, MDL.SVC_SKILL_NUM, MDL2.SVC_SKILL_NUM)                AS SVC_SKILL_NUM
+           , COALESCE(l2_SKL.SVC_SKILL_NM, SKL.SVC_SKILL_NM, SKL2.SVC_SKILL_NM)                    AS SVC_SKILL_NM
+           , COALESCE(l2_SKL.SVC_SKILL_DESC_TXT, SKL.SVC_SKILL_DESC_TXT, SKL2.SVC_SKILL_DESC_TXT)  AS SVC_SKILL_DESC_TXT
+           <!-- END   2019/11/18 K.Fujimoto [QC#54391,MOD] -->
+           , FSR.SVC_PBLM_TP_CD          AS SVC_PBLM_TP_CD
+           <!-- START 2018/10/09 K.fujimoto [QC#28612,DEL] -->
+           <!-- 
+           , MEMO.SVC_CMNT_TXT           AS SVC_CMNT_TXT
+           -->
+           <!-- END   2018/10/09 K.fujimoto [QC#28612,DEL] -->
+           , CASE WHEN CLO.FSR_CLO_DT IS NOT NULL AND NVL(MDL.PHONE_FIX_INTVL_DAYS_AOT, MDL2.PHONE_FIX_INTVL_DAYS_AOT) IS NOT NULL
+                  THEN  CASE WHEN #slsDt# > TO_CHAR((TO_DATE(CLO.FSR_CLO_DT, 'YYYYMMDD') + NVL(MDL.PHONE_FIX_INTVL_DAYS_AOT, MDL2.PHONE_FIX_INTVL_DAYS_AOT)), 'YYYYMMDD')
+                                  AND CALL.PHO_FIX_FLG = 'Y' AND NVL(MDL.PHONE_FIX_FLG, MDL2.PHONE_FIX_FLG) = 'Y'
+                             THEN 'Y'
+                             ELSE 'N'
+                         END
+                  WHEN CLO.FSR_CLO_DT IS NULL AND CALL.PHO_FIX_FLG = 'Y' AND NVL(MDL.PHONE_FIX_FLG, MDL2.PHONE_FIX_FLG) = 'Y'
+                  THEN 'Y'
+                  ELSE 'N'  END AS PHONE_FIX
+           , MACH.SVC_BY_LINE_BIZ_TP_CD AS SVC_BY_LINE_BIZ_TP_CD
+           , MACH.FLD_SVC_BR_CD         AS FLD_SVC_BR_CD
+           , NVL(BPX9.SVC_BR_CD_DESC_TXT, BPX5.SVC_BR_CD_DESC_TXT) AS FLD_SVC_BR
+           , MACH.MDSE_CD               AS MDSE_CD
+           , CASE WHEN EXISTS (SELECT 1
+                      FROM PMT_WK PMT
+                     WHERE PMT.MACH_LVL_FLG = 'Y'
+                       AND TASK.SER_NUM = PMT.SVC_LBOR_TM_PMIT_VAL_TXT )
+                  THEN 'Y'
+
+                  WHEN EXISTS (SELECT 1
+                                 FROM FSR FSR, PMT_WK PMT
+                                WHERE  TASK.FSR_NUM = FSR.FSR_NUM
+                                  AND TASK.GLBL_CMPY_CD = FSR.GLBL_CMPY_CD
+                                  AND FSR.EZCANCELFLAG = '0'
+                                  AND PMT.SITE_LVL_FLG = 'Y'
+                                  <!-- START 2022/03/11 [QC#59702, MOD] -->
+                                  <!-- AND ((FSR.SHIP_TO_CUST_UPD_FLG = 'N' AND TASK.SHIP_TO_CUST_CD = PMT.SVC_LBOR_TM_PMIT_VAL_TXT) -->
+                                  <!--  OR (FSR.SHIP_TO_CUST_UPD_FLG = 'Y' AND FSR.SHIP_TO_UPD_CUST_CD = PMT.SVC_LBOR_TM_PMIT_VAL_TXT)) ) -->
+                                  AND ((FSR.SHIP_TO_UPD_CUST_CD IS NULL AND TASK.SHIP_TO_CUST_CD = PMT.SVC_LBOR_TM_PMIT_VAL_TXT) 
+                                   OR (FSR.SHIP_TO_UPD_CUST_CD IS NOT NULL AND FSR.SHIP_TO_UPD_CUST_CD = PMT.SVC_LBOR_TM_PMIT_VAL_TXT)) )
+                                  <!-- END   2022/03/11 [QC#59702, MOD] -->
+                  THEN 'Y'
+
+                  WHEN EXISTS (SELECT 1
+                                 FROM FSR FSR, PMT_WK PMT
+                                WHERE TASK.FSR_NUM = FSR.FSR_NUM
+                                  AND TASK.GLBL_CMPY_CD = FSR.GLBL_CMPY_CD
+                                  AND FSR.EZCANCELFLAG = '0'
+                                  AND PMT.SITE_LVL_FLG = 'Y'
+                                  AND ((FSR.BILL_TO_CUST_UPD_FLG = 'N' AND FSR.BILL_TO_CUST_CD = PMT.SVC_LBOR_TM_PMIT_VAL_TXT) 
+                                   OR (FSR.BILL_TO_CUST_UPD_FLG = 'Y' AND FSR.BILL_TO_UPD_CUST_CD = PMT.SVC_LBOR_TM_PMIT_VAL_TXT)) )
+                  THEN 'Y'
+
+                  WHEN EXISTS (SELECT 1
+                                 FROM FSR FSR, PMT_WK PMT
+                                WHERE TASK.FSR_NUM = FSR.FSR_NUM
+                                  AND TASK.GLBL_CMPY_CD = FSR.GLBL_CMPY_CD
+                                  AND FSR.EZCANCELFLAG = '0'
+                                  AND PMT.PTY_LVL_FLG = 'Y'
+                                  AND FSR.SHIP_TO_CUST_ACCT_CD = PMT.SVC_LBOR_TM_PMIT_VAL_TXT )
+                  THEN 'Y'
+
+                  WHEN EXISTS (SELECT 1
+                                 FROM FSR FSR, PMT_WK PMT
+                                WHERE TASK.FSR_NUM = FSR.FSR_NUM
+                                  AND TASK.GLBL_CMPY_CD = FSR.GLBL_CMPY_CD
+                                  AND FSR.EZCANCELFLAG = '0'
+                                  AND PMT.PTY_LVL_FLG = 'Y'
+                                  AND FSR.BILL_TO_CUST_ACCT_CD = PMT.SVC_LBOR_TM_PMIT_VAL_TXT )
+                  THEN 'Y'
+
+             ELSE 'N' END MAN_LBOR_ALLW
+           , VISIT.SVC_ASG_TP_CD         AS SVC_ASG_TP_CD
+           <!-- START 2018/06/18 M.Naito [QC#25459,MOD] -->
+           <!-- , VISIT.SVC_ASG_TECH_CD       AS SVC_ASG_TECH_CD -->
+           , AOFA.PSN_CD            AS SVC_ASG_TECH_CD
+           <!-- END 2018/06/18 M.Naito [QC#25459,MOD] -->
+           <!-- , ACB.COA_BR_CD               AS SVC_ASG_COA_BR_CD -->
+           , AORG.DISTRICT               AS SVC_ASG_DISTRICT
+           , TASK.EZUPTIME               AS EZUPTIME
+           <!--  START 2017/03/07 K.Kojima [QC#17943,ADD] -->
+           , SBT.SVC_BILL_TP_DESC_TXT    AS SVC_BILL_TP_DESC_TXT
+           <!--  END 2017/03/07 K.Kojima [QC#17943,ADD] -->
+           <!--  START 2018/03/22 T.Tomita [QC#18713,ADD] -->
+           ,TASK.CELL_PHO_NUM            AS CELL_PHO_NUM
+           <!--  END 2018/03/22 T.Tomita [QC#18713,ADD] -->
+           <!-- START 2019/11/18 K.Fujimoto [QC#54391,ADD] -->
+           ,CALL.ONS_SPRT_CALL_FLG       AS ONS_SPRT_CALL_FLG
+           <!-- END   2019/11/18 K.Fujimoto [QC#54391,ADD] -->
+           <!-- START 2023/03/02 K.Watanabe [QC#60926,ADD] -->
+           , CALL.MTR_READ_REQ_FLG       AS MTR_READ_REQ_FLG
+           <!-- END 2023/03/02 K.Watanabe [QC#60926,ADD] -->
+         FROM TASK_INFO       INFO
+           , EVENT_SEND       SEND
+           , SVC_TASK         TASK
+           , SVC_MACH_MSTR    MACH
+           , SVC_CONFIG_MSTR  CONFIG
+           , DS_MDL           MDL
+           , MDL_NM           MDL_NM
+           , DS_MDL           MDL2
+           , MDL_NM           MDL_NM2
+           , SVC_TASK_STS     STS
+           , TECH_MSTR        TECH
+           , DS_SVC_CALL_TP   CALL
+           , SHIP_TO_CUST     SHIP
+           , SELL_TO_CUST     ACCT
+           , FSR              FSR
+           <!-- START 2018/10/09 K.fujimoto [QC#28612,DEL] -->
+           <!-- 
+           , MEMO             MEMO
+           -->
+           <!-- END   2018/10/09 K.fujimoto [QC#28612,DEL] -->
+           , SVC_BR_POST_XREF BPX9
+           , SVC_BR_POST_XREF BPX5
+           , FSR_VISIT        VISIT
+           , SVC_SKILL        SKL
+           , SVC_SKILL        SKL2
+           , TECH_MSTR        PTEC
+           , ORG_INFO         PORG
+           , TECH_MSTR        RTEC
+           , ORG_INFO         RORG
+           , TECH_MSTR        ATEC
+           , ORG_INFO         AORG
+           , FSR_CLO          CLO
+           <!-- START 2017/03/07 K.Kojima [QC#17943,ADD] -->
+           , SVC_BILL_TP      SBT
+           <!-- END 2017/03/07 K.Kojima [QC#17943,ADD] -->
+           <!-- add start 2018/06/08 QC#17472 -->
+           , SHIP_TO_CUST     STC
+           , PTY_LOC_WRK      PLW
+           , TECH_MSTR        PTEC2
+           , ORG_INFO         PORG2
+           , TECH_MSTR        RTEC2
+           , ORG_INFO         RORG2
+           <!-- add end 2018/06/08 QC#17472 -->
+           <!-- START 2018/06/18 M.Naito [QC#25459,ADD] -->
+           , S21_PSN          PPSN
+           , ORG_FUNC_ASG     POFA
+           , S21_PSN          RPSN
+           , ORG_FUNC_ASG     ROFA
+           , S21_PSN          APSN
+           , ORG_FUNC_ASG     AOFA
+           , S21_PSN          PPSN2
+           , ORG_FUNC_ASG     POFA2
+           , S21_PSN          RPSN2
+           , ORG_FUNC_ASG     ROFA2
+           <!-- END 2018/06/18 M.Naito [QC#25459,ADD] -->
+           <!-- START 2019/11/18 K.Fujimoto [QC#54391,ADD] -->
+           , SVC_SKILL_CALL_TP_MAP SKL_MAP
+           , SVC_SKILL        l2_SKL
+           <!-- END   2019/11/18 K.Fujimoto [QC#54391,ADD] -->
+        WHERE NOT EXISTS (
+            SELECT 1
+            FROM TASK_INFO INFO_MAX
+            WHERE INFO_MAX.SVC_TASK_NUM = INFO.SVC_TASK_NUM
+            AND INFO_MAX.FSR_EVENT_EXE_TS &gt; INFO.FSR_EVENT_EXE_TS )
+
+            AND INFO.SVC_TASK_NUM = SEND.SVC_TASK_NUM(+) 
+            AND NOT ( INFO.SVC_DISPT_EVENT_CD = #svcDisptEvent# AND SEND.SEND_FLG &lt;&gt; 'Y')
+
+            AND INFO.SVC_TASK_NUM = TASK.SVC_TASK_NUM
+            AND TASK.GLBL_CMPY_CD = #glblCmpyCd#
+            AND TASK.EZCANCELFLAG = '0'
+
+            AND TASK.SVC_MACH_MSTR_PK = MACH.SVC_MACH_MSTR_PK(+)
+            AND TASK.GLBL_CMPY_CD = MACH.GLBL_CMPY_CD(+)
+            AND MACH.EZCANCELFLAG(+) = '0'
+
+            AND MACH.SVC_CONFIG_MSTR_PK = CONFIG.SVC_CONFIG_MSTR_PK(+)
+            AND MACH.GLBL_CMPY_CD = CONFIG.GLBL_CMPY_CD(+)
+            AND CONFIG.EZCANCELFLAG(+) = '0'
+
+            AND CONFIG.MDL_ID = MDL.MDL_ID(+)
+            AND CONFIG.GLBL_CMPY_CD = MDL.GLBL_CMPY_CD(+)
+            AND MDL.EZCANCELFLAG(+) = '0'
+
+            AND CONFIG.MDL_ID = MDL_NM.T_MDL_ID(+)
+            AND CONFIG.GLBL_CMPY_CD = MDL_NM.T_GLBL_CMPY_CD(+)
+            AND MDL_NM.EZCANCELFLAG(+) = '0'
+
+            AND TASK.MDL_NM = MDL_NM2.T_MDL_NM(+)
+            AND TASK.GLBL_CMPY_CD = MDL_NM2.T_GLBL_CMPY_CD(+)
+            AND MDL_NM2.EZCANCELFLAG(+) = '0'
+
+            AND MDL_NM2.T_MDL_ID = MDL2.MDL_ID(+)
+            AND MDL_NM2.T_GLBL_CMPY_CD = MDL2.GLBL_CMPY_CD(+)
+            AND MDL2.EZCANCELFLAG(+) = '0'
+
+            AND VISIT.FSR_VISIT_STS_CD = STS.SVC_TASK_STS_CD(+)
+            AND VISIT.GLBL_CMPY_CD     = STS.GLBL_CMPY_CD(+)
+            AND STS.EZCANCELFLAG(+) = '0'
+
+            AND TASK.DS_SVC_CALL_TP_CD = CALL.DS_SVC_CALL_TP_CD(+)
+            AND TASK.GLBL_CMPY_CD = CALL.GLBL_CMPY_CD(+)
+            AND CALL.EZCANCELFLAG(+) = '0'
+
+            AND TASK.FSR_NUM = FSR.FSR_NUM(+)
+            AND TASK.GLBL_CMPY_CD = FSR.GLBL_CMPY_CD(+)
+            AND FSR.EZCANCELFLAG(+) = '0'
+
+            <!-- START 2020/08/03 QC#57483,MOD -->
+            <!-- AND FSR.SHIP_TO_CUST_CD  = SHIP.SHIP_TO_CUST_CD(+) -->
+            AND NVL(FSR.SHIP_TO_UPD_CUST_CD, FSR.SHIP_TO_CUST_CD)  = SHIP.SHIP_TO_CUST_CD(+)
+            <!-- END 2020/08/03 QC#57483,MOD -->
+            AND FSR.GLBL_CMPY_CD     = SHIP.GLBL_CMPY_CD(+)
+            AND SHIP.EZCANCELFLAG(+) = '0'
+            AND SHIP.RGTN_STS_CD(+)  = #rgtnStsCd#
+
+            AND FSR.SHIP_TO_CUST_ACCT_CD = ACCT.SELL_TO_CUST_CD(+)
+            AND FSR.GLBL_CMPY_CD         = ACCT.GLBL_CMPY_CD(+)
+            AND ACCT.EZCANCELFLAG(+)     = '0' 
+           <!-- START 2018/10/09 K.fujimoto [QC#28612,DEL] -->
+           <!-- 
+            AND TASK.SVC_TASK_NUM = MEMO.SVC_TASK_NUM(+)
+            AND TASK.GLBL_CMPY_CD = MEMO.GLBL_CMPY_CD(+)
+            -->
+           <!-- END   2018/10/09 K.fujimoto [QC#28612,DEL] -->
+            AND MACH.GLBL_CMPY_CD          = BPX9.GLBL_CMPY_CD(+)
+            AND MACH.SVC_BY_LINE_BIZ_TP_CD = BPX9.SVC_LINE_BIZ_CD(+)
+            <!-- START 2020/08/03 QC#57483,DEL -->
+            <!-- AND MACH.FLD_SVC_BR_CD         = BPX9.SVC_BR_CD(+) -->
+            <!-- END 2020/08/03 QC#57483,DEL -->
+            AND SHIP.POST_CD               = BPX9.POST_CD(+)
+            AND BPX9.EZCANCELFLAG(+)       = '0'
+            AND MACH.GLBL_CMPY_CD          = BPX5.GLBL_CMPY_CD(+)
+            AND MACH.SVC_BY_LINE_BIZ_TP_CD = BPX5.SVC_LINE_BIZ_CD(+)
+            <!-- START 2020/08/03 QC#57483,DEL -->
+            <!-- AND MACH.FLD_SVC_BR_CD         = BPX5.SVC_BR_CD(+) -->
+            <!-- END 2020/08/03 QC#57483,DEL -->
+            AND SUBSTR(SHIP.POST_CD,0,5)   = BPX5.POST_CD(+)
+            AND BPX5.EZCANCELFLAG(+)       = '0'
+
+            AND TASK.SVC_TASK_NUM = VISIT.SVC_TASK_NUM(+)
+            AND TASK.GLBL_CMPY_CD = VISIT.GLBL_CMPY_CD(+) 
+            AND VISIT.EZCANCELFLAG(+) = '0'
+
+            AND VISIT.TECH_CD = TECH.TECH_TOC_CD(+)
+            AND VISIT.GLBL_CMPY_CD = TECH.GLBL_CMPY_CD(+)
+            AND TECH.EZCANCELFLAG(+) = '0'
+
+            AND SKL.EZCANCELFLAG(+)   = '0'
+            AND MDL.GLBL_CMPY_CD      = SKL.GLBL_CMPY_CD(+)
+            AND MDL.SVC_SKILL_NUM     = SKL.SVC_SKILL_NUM(+)
+
+            AND SKL2.EZCANCELFLAG(+)   = '0'
+            AND MDL2.GLBL_CMPY_CD      = SKL2.GLBL_CMPY_CD(+)
+            AND MDL2.SVC_SKILL_NUM     = SKL2.SVC_SKILL_NUM(+)
+
+            <!-- START 2018/06/18 M.Naito [QC#25459,MOD] -->
+            AND MACH.GLBL_CMPY_CD           = PTEC.GLBL_CMPY_CD(+)
+            AND MACH.PRF_TECH_CD            = PTEC.TECH_TOC_CD(+)
+            AND PTEC.EZCANCELFLAG(+)        = '0'
+            AND PTEC.GLBL_CMPY_CD           = PPSN.GLBL_CMPY_CD(+)
+            AND PTEC.TECH_TOC_CD            = PPSN.PSN_CD(+)
+            AND PPSN.EZCANCELFLAG(+)        = '0'
+            AND PPSN.GLBL_CMPY_CD           = POFA.GLBL_CMPY_CD(+)
+            AND PPSN.PSN_CD                 = POFA.PSN_CD(+)
+            AND POFA.EFF_FROM_DT(+)         &lt;= #slsDt#
+            AND NVL(POFA.EFF_THRU_DT(+), #slsDt#) &gt;= #slsDt#
+            AND POFA.EZCANCELFLAG(+)        = '0'
+            AND PTEC.GLBL_CMPY_CD           = PORG.GLBL_CMPY_CD(+)
+            AND PTEC.TECH_TOC_CD            = PORG.PSN_CD(+)
+
+            AND MACH.GLBL_CMPY_CD           = RTEC.GLBL_CMPY_CD(+)
+            AND MACH.REQ_TECH_CD            = RTEC.TECH_TOC_CD(+)
+            AND RTEC.EZCANCELFLAG(+)        = '0'
+            AND RTEC.GLBL_CMPY_CD           = RPSN.GLBL_CMPY_CD(+)
+            AND RTEC.TECH_TOC_CD            = RPSN.PSN_CD(+)
+            AND RPSN.EZCANCELFLAG(+)        = '0'
+            AND RPSN.GLBL_CMPY_CD           = ROFA.GLBL_CMPY_CD(+)
+            AND RPSN.PSN_CD                 = ROFA.PSN_CD(+)
+            AND ROFA.EFF_FROM_DT(+)         &lt;= #slsDt#
+            AND NVL(ROFA.EFF_THRU_DT(+), #slsDt#) &gt;= #slsDt#
+            AND ROFA.EZCANCELFLAG(+)        = '0'
+            AND RTEC.GLBL_CMPY_CD           = RORG.GLBL_CMPY_CD(+)
+            AND RTEC.TECH_TOC_CD            = RORG.PSN_CD(+)
+
+            AND VISIT.GLBL_CMPY_CD          = ATEC.GLBL_CMPY_CD(+)
+            AND VISIT.SVC_ASG_TECH_CD       = ATEC.TECH_TOC_CD(+)
+            AND ATEC.EZCANCELFLAG(+)        = '0'
+            AND ATEC.GLBL_CMPY_CD           = APSN.GLBL_CMPY_CD(+)
+            AND ATEC.TECH_TOC_CD            = APSN.PSN_CD(+)
+            AND APSN.EZCANCELFLAG(+)        = '0'
+            AND APSN.GLBL_CMPY_CD           = AOFA.GLBL_CMPY_CD(+)
+            AND APSN.PSN_CD                 = AOFA.PSN_CD(+)
+            AND AOFA.EFF_FROM_DT(+)         &lt;= #slsDt#
+            AND NVL(AOFA.EFF_THRU_DT(+), #slsDt#) &gt;= #slsDt#
+            AND AOFA.EZCANCELFLAG(+)        = '0'
+            AND ATEC.GLBL_CMPY_CD           = AORG.GLBL_CMPY_CD(+)
+            AND ATEC.TECH_TOC_CD            = AORG.PSN_CD(+)
+            <!-- END 2018/06/18 M.Naito [QC#25459,MOD] -->
+
+            AND TASK.GLBL_CMPY_CD           = CLO.GLBL_CMPY_CD(+)
+            AND TASK.SVC_MACH_MSTR_PK       = CLO.SVC_MACH_MSTR_PK(+)
+            <!-- START 2017/03/07 K.Kojima [QC#17943,ADD] -->
+            AND TASK.GLBL_CMPY_CD           = SBT.GLBL_CMPY_CD(+)
+            AND TASK.SVC_BILL_TP_CD         = SBT.SVC_BILL_TP_CD(+)
+            AND SBT.EZCANCELFLAG(+)         = '0'
+            <!-- END 2017/03/07 K.Kojima [QC#17943,ADD] -->
+
+            <!-- START 2018/06/18 M.Naito [QC#25459,MOD] -->
+            <!-- add start 2018/06/08 QC#17472 -->
+            AND MACH.GLBL_CMPY_CD           = STC.GLBL_CMPY_CD(+)
+            AND MACH.CUR_LOC_NUM            = STC.SHIP_TO_CUST_CD (+)
+            AND STC.EZCANCELFLAG(+)         = '0'
+
+            AND STC.GLBL_CMPY_CD            = PLW.GLBL_CMPY_CD(+)
+            AND STC.PTY_LOC_PK              = PLW.PTY_LOC_PK (+)
+            AND PLW.EZCANCELFLAG(+)         = '0'
+            AND PLW.GLBL_CMPY_CD            = PPSN2.GLBL_CMPY_CD(+)
+            AND PLW.PRF_TECH_CD             = PPSN2.PSN_CD(+)
+            AND PPSN2.EZCANCELFLAG(+)       = '0'
+            AND PPSN2.GLBL_CMPY_CD          = POFA2.GLBL_CMPY_CD(+)
+            AND PPSN2.PSN_CD                = POFA2.PSN_CD(+)
+            AND POFA2.EFF_FROM_DT(+)        &lt;= #slsDt#
+            AND NVL(POFA2.EFF_THRU_DT(+), #slsDt#) &gt;= #slsDt#
+            AND POFA2.EZCANCELFLAG(+)       = '0'
+            AND POFA2.GLBL_CMPY_CD          = PTEC2.GLBL_CMPY_CD(+)
+            AND POFA2.PSN_CD                = PTEC2.TECH_TOC_CD(+)
+            AND PTEC2.EZCANCELFLAG(+)       = '0'
+            AND PTEC2.GLBL_CMPY_CD          = PORG2.GLBL_CMPY_CD(+)
+            AND PTEC2.TECH_TOC_CD           = PORG2.PSN_CD(+)
+
+            AND PLW.GLBL_CMPY_CD            = RPSN2.GLBL_CMPY_CD(+)
+            AND PLW.REQ_TECH_CD             = RPSN2.PSN_CD(+)
+            AND RPSN2.EZCANCELFLAG(+)       = '0'
+            AND RPSN2.GLBL_CMPY_CD          = ROFA2.GLBL_CMPY_CD(+)
+            AND RPSN2.PSN_CD                = ROFA2.PSN_CD(+)
+            AND ROFA2.EFF_FROM_DT(+)       &lt;= #slsDt#
+            AND NVL(ROFA2.EFF_THRU_DT(+), #slsDt#) &gt;= #slsDt#
+            AND ROFA2.EZCANCELFLAG(+)       = '0'
+            AND ROFA2.GLBL_CMPY_CD          = RTEC2.GLBL_CMPY_CD(+)
+            AND ROFA2.PSN_CD                = RTEC2.TECH_TOC_CD(+)
+            AND RTEC2.EZCANCELFLAG(+)       = '0'
+            AND RTEC2.GLBL_CMPY_CD          = RORG2.GLBL_CMPY_CD(+)
+            AND RTEC2.TECH_TOC_CD           = RORG2.PSN_CD(+)
+            <!-- add end 2018/06/08 QC#17472 -->
+            <!-- END 2018/06/18 M.Naito [QC#25459,MOD] -->
+            <!-- START 2019/11/18 K.Fujimoto [QC#54391,ADD] -->
+            AND TASK.GLBL_CMPY_CD           = SKL_MAP.GLBL_CMPY_CD(+)
+            AND TASK.DS_SVC_CALL_TP_CD      = SKL_MAP.DS_SVC_CALL_TP_CD(+)
+            AND SKL_MAP.EZCANCELFLAG(+)     = '0'
+            AND SKL_MAP.GLBL_CMPY_CD        = L2_SKL.GLBL_CMPY_CD(+)
+            AND SKL_MAP.SVC_SKILL_NUM       = L2_SKL.SVC_SKILL_NUM(+)
+            AND L2_SKL.EZCANCELFLAG(+)      = '0'
+            <!-- END 2019/11/18 K.Fujimoto [QC#54391,ADD] -->
+    </statement>
+
+<!-- START 2018/10/01 [QC#28505, MOD] -->
+    <statement id="getMtrInfo" parameterClass="Map" resultClass="Map">
+    WITH METER_INFO AS (
+                        SELECT
+                            TASK_INFO.SVC_TASK_NUM
+                            ,TASK_INFO.READ_MTR_CNT
+                            ,TASK_INFO.MDL_MTR_LB_CD AS MTR_LB_CD
+                            ,TASK_INFO.MTR_READ_DT
+                            ,TASK_INFO.SVC_PHYS_MTR_READ_GRP_SQ
+                            ,TASK_INFO.SVC_MACH_MSTR_PK
+                            ,TASK_INFO.GLBL_CMPY_CD
+                            ,TASK_INFO.SER_NUM
+                            ,TASK_INFO.MTR_LB_NM
+                            ,TASK_INFO.TOT_MTR_FLG
+                            <!-- START 2018/12/3 [QC#28644, MOD] -->
+                            ,TASK_INFO.SVC_PHYS_MTR_PK
+                            <!-- END 2018/12/3 [QC#28644, MOD] -->
+                            ,TECH.TECH_NM
+                            <!-- START 2019/10/21 [QC#53441, MOD] -->
+                            ,NVL(TO_DATE(EXPECTED_MTR_ENT_DT, #dateFormat#) - TO_DATE(TASK_INFO.MTR_READ_DT, #dateFormat#), 1) AS EXPECTED_MTR_ENT_DT_CNT
+                            <!-- END   2019/10/21 [QC#53441, MOD] -->
+                            <!-- START 2019/10/21 [QC#53441, ADD] -->
+                            ,TASK_INFO.CNTR_DIGIT_NUM
+                            <!-- END   2019/10/21 [QC#53441, ADD] --> 
+                            <!-- START 2020/12/22 [QC#58154, ADD] -->
+                            ,TASK_INFO.SVC_TASK_RCV_DT
+                            <!-- END   2020/12/22 [QC#58154, ADD] --> 
+                        FROM
+                           (SELECT TASK.SVC_TASK_NUM
+                                 , NVL(READ.READ_MTR_CNT,0) AS READ_MTR_CNT
+                                 , MTR.MDL_MTR_LB_CD
+                                 , READ.MTR_READ_DT
+                                 , READ.SVC_PHYS_MTR_READ_GRP_SQ
+                                 , TASK.SVC_MACH_MSTR_PK
+                                 , TASK.GLBL_CMPY_CD
+                                 , TASK.SER_NUM
+                                 , MLB.MTR_LB_NM
+                                 , MLB.TOT_MTR_FLG
+                                 <!-- START 2018/12/3 [QC#28644, MOD] -->
+                                 , MTR.SVC_PHYS_MTR_PK
+                                  <!-- END 2018/12/3 [QC#28644, MOD] -->
+                                 <!-- START 2019/10/21 [QC#53441, MOD] -->
+                                 , CASE WHEN SUBSTR(TASK.ERL_START_TS,0,8) &lt; #slsDt#
+                                        THEN #slsDt#
+                                        ELSE SUBSTR(TASK.ERL_START_TS,0,8)
+                                   END AS EXPECTED_MTR_ENT_DT
+                                 <!-- END   2019/10/21 [QC#53441, MOD] -->
+                                 , ROW_NUMBER() OVER (PARTITION BY MTR.SVC_PHYS_MTR_PK ORDER BY READ.MTR_READ_DT DESC,READ.SVC_PHYS_MTR_READ_GRP_SQ DESC) AS ROW_NUM
+                                 <!-- START 2019/10/21 [QC#53441, ADD] -->
+                                 , CASE
+                                         WHEN CNTR_DIGIT_NUM IS NULL OR CNTR_DIGIT_NUM = ''
+                                         THEN 0
+                                         ELSE POWER(10, CNTR_DIGIT_NUM)
+                                   END AS CNTR_DIGIT_NUM
+                                 <!-- END   2019/10/21 [QC#53441, ADD] --> 
+                            <!-- START 2020/12/22 [QC#58154, ADD] -->
+                                 , TASK.SVC_TASK_RCV_DT
+                            <!-- END   2020/12/22 [QC#58154, ADD] --> 
+                            FROM  SVC_TASK TASK
+                                 ,SVC_PHYS_MTR MTR
+                                 ,SVC_PHYS_MTR_READ READ
+                                 ,MTR_LB MLB
+                            WHERE TASK.SVC_TASK_NUM     = #svcTaskNum#
+                              AND TASK.GLBL_CMPY_CD     = #glblCmpyCd#
+                              AND TASK.EZCANCELFLAG     = '0'
+
+                              AND TASK.SVC_MACH_MSTR_PK = MTR.SVC_MACH_MSTR_PK
+                              AND TASK.GLBL_CMPY_CD     = MTR.GLBL_CMPY_CD
+                              AND MTR.EZCANCELFLAG      = '0'
+
+                              AND MTR.SVC_PHYS_MTR_PK   = READ.SVC_PHYS_MTR_PK(+)
+                              AND MTR.GLBL_CMPY_CD      = READ.GLBL_CMPY_CD(+)
+                              AND READ.VLD_MTR_FLG(+)   = 'Y'
+                              AND READ.EZCANCELFLAG(+)  = '0'
+<!-- add start 2020/03/03 QC#56123 -->
+                              <iterate property="dsMtrReadTpGrpCdList" var="dsMtrReadTpGrpCd[]" open="AND READ.DS_MTR_READ_TP_GRP_CD(+) IN (" close=")" conjunction=",">
+                                  #dsMtrReadTpGrpCd[]#
+                              </iterate>
+<!-- add end 2020/03/03 QC#56123 -->
+                              AND MTR.MDL_MTR_LB_CD     = MLB.MTR_LB_CD
+                              AND MTR.GLBL_CMPY_CD      = MLB.GLBL_CMPY_CD
+                              AND MLB.EZCANCELFLAG      = '0'
+
+                            ) TASK_INFO
+
+                             ,FSR_VISIT VISIT
+                             ,TECH_MSTR TECH
+
+                        WHERE ROW_NUM = 1
+                          AND TASK_INFO.SVC_TASK_NUM = VISIT.SVC_TASK_NUM(+)
+                          AND TASK_INFO.GLBL_CMPY_CD = VISIT.GLBL_CMPY_CD(+) 
+                          AND VISIT.EZCANCELFLAG(+)  = '0'
+                          AND VISIT.TECH_CD          = TECH.TECH_TOC_CD(+)
+                          AND VISIT.GLBL_CMPY_CD     = TECH.GLBL_CMPY_CD(+)
+                          AND TECH.EZCANCELFLAG(+)   = '0'
+                         )
+    , CHECK_MAX AS (
+                        SELECT
+                            SVC_MACH_MSTR_PK
+                            ,SUM(CASE WHEN TOT_MTR_FLG = 'Y' THEN 1 ELSE 0 END) AS TOT_MTR_CNT
+                        FROM
+                            METER_INFO
+                        GROUP BY
+                            SVC_MACH_MSTR_PK
+                         )
+    , PRE_READ AS (
+                        SELECT
+                            INFO.SVC_MACH_MSTR_PK
+                            ,SUM(CASE WHEN CHMX.TOT_MTR_CNT &gt; 0 AND INFO.TOT_MTR_FLG = 'N' THEN 0 ELSE INFO.READ_MTR_CNT END) AS PRE_READ_CNT
+                        FROM
+                            METER_INFO INFO
+                            ,CHECK_MAX CHMX
+                        WHERE
+                            INFO.SVC_MACH_MSTR_PK = CHMX.SVC_MACH_MSTR_PK(+)
+                        GROUP BY
+                            INFO.SVC_MACH_MSTR_PK
+                         )
+    SELECT INFO.READ_MTR_CNT             AS READ_MTR_CNT
+         , INFO.MTR_LB_CD                AS MTR_LB_CD
+         , INFO.MTR_READ_DT              AS MTR_READ_DT
+         , INFO.MTR_LB_NM                AS MTR_LB_NM
+         , INFO.TOT_MTR_FLG              AS TOT_MTR_FLG
+         , INFO.SVC_TASK_NUM             AS SVC_TASK_NUM
+         , INFO.SER_NUM                  AS SER_NUM
+         , INFO.TECH_NM                  AS TECH_NM
+         , INFO.SVC_PHYS_MTR_READ_GRP_SQ AS SVC_PHYS_MTR_READ_GRP_SQ
+         <!-- START 2019/10/21 [QC#53441, MOD] -->
+         <!-- , NVL(MDL.MAX_COPY_PER_DAY_TOT_CNT, MDL2.MAX_COPY_PER_DAY_TOT_CNT)  AS MAX_COPY_PER_DAY  -->
+<!-- mod start 2020/03/03 QC#56123 -->
+<!--  mod start 2020/06/18 QC#57175 -->
+<!-- 
+         , CASE WHEN INFO.TOT_MTR_FLG = 'Y' THEN
+             CASE
+               WHEN INFO.CNTR_DIGIT_NUM = 0
+                AND NVL(MDL.MAX_COPY_PER_DAY_TOT_CNT, MDL2.MAX_COPY_PER_DAY_TOT_CNT) IS NULL
+                 THEN 0
+               WHEN INFO.CNTR_DIGIT_NUM = 0
+                 THEN NVL(MDL.MAX_COPY_PER_DAY_TOT_CNT, MDL2.MAX_COPY_PER_DAY_TOT_CNT) * DECODE(EXPECTED_MTR_ENT_DT_CNT, 0, 1, EXPECTED_MTR_ENT_DT_CNT)
+               WHEN NVL(MDL.MAX_COPY_PER_DAY_TOT_CNT, MDL2.MAX_COPY_PER_DAY_TOT_CNT) IS NULL
+                 THEN INFO.CNTR_DIGIT_NUM - INFO.READ_MTR_CNT - 1
+               WHEN INFO.CNTR_DIGIT_NUM &gt; INFO.READ_MTR_CNT + NVL(MDL.MAX_COPY_PER_DAY_TOT_CNT, MDL2.MAX_COPY_PER_DAY_TOT_CNT) * DECODE(EXPECTED_MTR_ENT_DT_CNT, 0, 1, EXPECTED_MTR_ENT_DT_CNT)
+                 THEN NVL(MDL.MAX_COPY_PER_DAY_TOT_CNT, MDL2.MAX_COPY_PER_DAY_TOT_CNT) * DECODE(EXPECTED_MTR_ENT_DT_CNT, 0, 1, EXPECTED_MTR_ENT_DT_CNT)
+               ELSE
+                 INFO.CNTR_DIGIT_NUM - INFO.READ_MTR_CNT - 1
+              END
+           ELSE
+             ROUND(
+               CASE
+                WHEN INFO.CNTR_DIGIT_NUM = 0
+                 AND NVL(ASER.AVG_MTR_READ_CNT, AMDL.AVG_MTR_READ_CNT) IS NULL
+                  THEN 0
+                WHEN INFO.CNTR_DIGIT_NUM = 0
+                  THEN NVL(ASER.AVG_MTR_READ_CNT, AMDL.AVG_MTR_READ_CNT) * DECODE(EXPECTED_MTR_ENT_DT_CNT, 0, 1, EXPECTED_MTR_ENT_DT_CNT)
+                WHEN NVL(ASER.AVG_MTR_READ_CNT, AMDL.AVG_MTR_READ_CNT) IS NULL
+                  THEN INFO.CNTR_DIGIT_NUM - INFO.READ_MTR_CNT - 1
+                WHEN INFO.CNTR_DIGIT_NUM &gt; INFO.READ_MTR_CNT + NVL(ASER.AVG_MTR_READ_CNT, AMDL.AVG_MTR_READ_CNT) * DECODE(EXPECTED_MTR_ENT_DT_CNT, 0, 1, EXPECTED_MTR_ENT_DT_CNT)
+                  THEN NVL(ASER.AVG_MTR_READ_CNT, AMDL.AVG_MTR_READ_CNT) * DECODE(EXPECTED_MTR_ENT_DT_CNT, 0, 1, EXPECTED_MTR_ENT_DT_CNT)
+                ELSE
+                  INFO.CNTR_DIGIT_NUM - INFO.READ_MTR_CNT - 1
+               END * #mtrUpThrhdFctNum#
+             )
+           END  AS EXPECTED_MAX_COPIES
+-->
+        , NVL(MDL.MAX_COPY_PER_DAY_TOT_CNT, MDL2.MAX_COPY_PER_DAY_TOT_CNT) AS MAX_COPY_PER_DAY
+        , NVL(MDL.MAX_COPY_TEST_CNT, MDL2.MAX_COPY_TEST_CNT) AS MAX_COPY_TEST_CNT
+        , ROUND(NVL(ASER.AVG_MTR_READ_CNT, AMDL.AVG_MTR_READ_CNT) * #mtrUpThrhdFctNum#) AS ADCV_HIGH
+        , ROUND(NVL(ASER.AVG_MTR_READ_CNT, AMDL.AVG_MTR_READ_CNT) * #mtrLowThrhdFctNum#) AS ADCV_LOW
+<!--  mod end 2020/06/18 QC#57175 -->
+<!-- mod end 2020/03/03 QC#56123 -->
+         <!-- END   2019/10/21 [QC#53441, MOD] -->
+         , CASE WHEN CHMX.TOT_MTR_CNT &gt; 0 THEN #total#
+           ELSE #all#                                   END AS CHECK_MAX
+         , NVL(MDL.MAX_COPY_PER_DAY_TOT_CNT, MDL2.MAX_COPY_PER_DAY_TOT_CNT) * (NVL(TO_DATE(#slsDt#, #dateFormat#) - TO_DATE(INFO.MTR_READ_DT, #dateFormat#), 1))
+             +  PRE.PRE_READ_CNT       AS EXPECTED_MAX_COPY_PER_DAY
+<!-- START 2020/12/22 [QC#58154, ADD] -->
+        , INFO.SVC_TASK_RCV_DT
+<!-- END   2020/12/22 [QC#58154, ADD] --> 
+    FROM METER_INFO         INFO
+        , SVC_MACH_MSTR     MACH
+        , SVC_CONFIG_MSTR   CONFIG
+        , DS_MDL            MDL
+        , DS_MDL            MDL2
+        , CPO_DTL           DCD
+        , DS_CPO_CONFIG     DCC
+        , CHECK_MAX         CHMX
+        , PRE_READ          PRE
+<!-- add start 2020/03/03 QC#56123 -->
+        , FLD_ADCV_BY_SER   ASER
+        , MDL_NM            MNM
+        , FLD_ADCV_BY_MDL   AMDL
+<!-- add end 2020/03/03 QC#56123 -->
+    WHERE
+      INFO.SVC_MACH_MSTR_PK = MACH.SVC_MACH_MSTR_PK
+      AND INFO.GLBL_CMPY_CD = MACH.GLBL_CMPY_CD
+      AND MACH.EZCANCELFLAG = '0'
+
+      AND MACH.SVC_CONFIG_MSTR_PK = CONFIG.SVC_CONFIG_MSTR_PK(+)
+      AND MACH.GLBL_CMPY_CD       = CONFIG.GLBL_CMPY_CD(+)
+      AND CONFIG.EZCANCELFLAG(+)  = '0'
+
+      AND CONFIG.MDL_ID       = MDL.MDL_ID(+)
+      AND CONFIG.GLBL_CMPY_CD = MDL.GLBL_CMPY_CD(+)
+      AND MDL.EZCANCELFLAG(+) = '0'
+<!-- mod start 2020/06/18 QC#57175 -->
+<!-- add start 2020/03/03 QC#56123 -->
+      AND (MDL.MAX_COPY_PER_DAY_TOT_CNT(+) &gt; 0 OR MDL.MAX_COPY_TEST_CNT(+) &gt; 0)
+<!-- add end 2020/03/03 QC#56123 -->
+<!-- mod end 2020/06/18 QC#57175 -->
+      AND MACH.GLBL_CMPY_CD          = DCD.GLBL_CMPY_CD(+)
+      AND MACH.CPO_ORD_NUM           = DCD.CPO_ORD_NUM(+)
+      AND MACH.CPO_DTL_LINE_NUM      = DCD.CPO_DTL_LINE_NUM(+)
+      AND MACH.CPO_DTL_LINE_SUB_NUM  = DCD.CPO_DTL_LINE_SUB_NUM(+)
+      AND DCD.GLBL_CMPY_CD           = DCC.GLBL_CMPY_CD(+)
+      AND DCD.DS_CPO_CONFIG_PK       = DCC.DS_CPO_CONFIG_PK(+)
+      AND DCC.GLBL_CMPY_CD           = MDL2.GLBL_CMPY_CD(+)
+      AND DCC.MDL_ID                 = MDL2.MDL_ID(+)
+      AND DCD.EZCANCELFLAG(+)        = '0'
+      AND DCC.EZCANCELFLAG(+)        = '0'
+      AND MDL2.EZCANCELFLAG(+)       = '0'
+<!-- mod start 2020/06/18 QC#57175 -->
+<!-- add start 2020/03/03 QC#56123 -->
+      AND (MDL2.MAX_COPY_PER_DAY_TOT_CNT(+) &gt; 0 OR MDL2.MAX_COPY_TEST_CNT(+) &gt; 0)
+<!-- add end 2020/03/03 QC#56123 -->
+<!-- mod end 2020/06/18 QC#57175 -->
+      AND INFO.SVC_MACH_MSTR_PK = CHMX.SVC_MACH_MSTR_PK(+)
+      AND INFO.SVC_MACH_MSTR_PK = PRE.SVC_MACH_MSTR_PK(+)
+
+<!-- add start 2020/03/03 QC#56123 -->
+      AND INFO.GLBL_CMPY_CD        = ASER.GLBL_CMPY_CD(+)
+      AND INFO.SVC_MACH_MSTR_PK    = ASER.SVC_MACH_MSTR_PK(+)
+      AND INFO.MTR_LB_CD           = ASER.MTR_LB_CD(+)
+      AND ASER.EZCANCELFLAG(+)     = '0'
+      AND ASER.AVG_MTR_READ_CNT(+) &gt; 0
+      AND CONFIG.GLBL_CMPY_CD      = MNM.T_GLBL_CMPY_CD(+)
+      AND CONFIG.MDL_ID            = MNM.T_MDL_ID(+)
+      AND MNM.EZCANCELFLAG(+)      = '0'
+      AND MNM.T_GLBL_CMPY_CD       = AMDL.GLBL_CMPY_CD(+)
+      AND MNM.T_MDL_NM             = AMDL.MDL_NM(+)
+      AND INFO.MTR_LB_CD           = AMDL.MTR_LB_CD(+)
+      AND AMDL.EZCANCELFLAG(+)     = '0'
+      AND AMDL.AVG_MTR_READ_CNT(+) &gt; 0
+<!-- add end 2020/03/03 QC#56123 -->
+      <!-- START 2018/12/3 [QC#28644, MOD] -->
+      <isEqual property="techReadMndFlg" compareValue="Y">
+      AND (
+        EXISTS (
+            SELECT 
+           1
+            FROM 
+                DS_MDL_MTR DMM 
+            WHERE 
+                MACH.GLBL_CMPY_CD       = DMM.GLBL_CMPY_CD
+            AND MACH.MTR_GRP_PK         = DMM.MTR_GRP_PK
+            AND INFO.MTR_LB_CD          = DMM.MDL_MTR_LB_CD
+            AND DMM.EZCANCELFLAG        = '0'
+            AND DMM.TECH_READ_MND_FLG = #techReadMndFlg# 
+            ) 
+        OR 
+ 
+        EXISTS (
+            SELECT
+           1
+            FROM 
+                CONTR_PHYS_BLLG_MTR_RELN A,
+                DS_CONTR_BLLG_MTR B,
+                DS_CONTR_DTL C,
+                DS_CONTR_DTL_STS_V D 
+            WHERE
+                A.GLBL_CMPY_CD          = INFO.GLBL_CMPY_CD
+            AND A.MACH_MSTR_PK          = INFO.SVC_MACH_MSTR_PK
+            AND A.SVC_PHYS_MTR_PK       = INFO.SVC_PHYS_MTR_PK
+            AND A.BLLBL_FLG             = 'Y'
+            AND A.ACTV_FLG              = 'Y'
+            AND A.EZCANCELFLAG          = '0'
+            AND A.GLBL_CMPY_CD          = B.GLBL_CMPY_CD
+            AND A.DS_CONTR_BLLG_MTR_PK  = B.DS_CONTR_BLLG_MTR_PK
+            AND B.EZCANCELFLAG          = '0'
+            AND B.GLBL_CMPY_CD          = C.GLBL_CMPY_CD
+            AND B.DS_CONTR_DTL_PK       = C.DS_CONTR_DTL_PK
+            AND C.CONTR_EFF_FROM_DT     &lt;= #slsDt#
+            AND NVL(C.CONTR_CLO_DT, C.CONTR_EFF_THRU_DT) &gt;= #slsDt#
+            AND C.EZCANCELFLAG          = '0' 
+            AND C.GLBL_CMPY_CD          = D.GLBL_CMPY_CD
+            AND C.DS_CONTR_DTL_PK       = D.DS_CONTR_DTL_PK
+            AND D.ETTL_AVAL_FLG         = 'Y'
+            AND D.EZCANCELFLAG          = '0'
+            )
+        )
+         </isEqual>
+         <!-- END 2018/12/3 [QC#28644, MOD] -->
+    ORDER BY INFO.MTR_LB_CD
+    </statement>
+<!-- END 2018/10/01 [QC#28505, MOD] -->
+
+    <statement id="getSvcModPln" parameterClass="Map" resultClass="Map">
+        SELECT DISTINCT
+             TASK.SVC_TASK_NUM         AS SVC_TASK_NUM
+            ,SMOD.SVC_MOD_PLN_ID       AS SVC_MOD_PLN_ID
+            ,SMOD.EST_SVC_LBOR_HOUR_MN AS EST_SVC_LBOR_HOUR_MN
+            <!-- START 2018/08/08 K.Kitachi [QC#27460, MOD] -->
+            <!-- ,SMM2.MDSE_CD              AS MDSE_CD -->
+            ,RNG.MDSE_CD               AS MDSE_CD
+            <!-- END 2018/08/08 K.Kitachi [QC#27460, MOD] -->
+            ,SMM2.SER_NUM              AS SER_NUM
+            ,SMM2.SVC_MACH_TP_CD       AS SVC_MACH_TP_CD
+            ,SMM2.SVC_MACH_SQ_NUM      AS SVC_MACH_SQ_NUM
+            <!-- STRAT 2019/10/24 K.Fujimoto [QC#53870, MOD] -->
+            ,RNG.SVC_MOD_FROM_SER_NUM  AS SVC_MOD_FROM_SER_NUM
+            ,RNG.SVC_MOD_TO_SER_NUM    AS SVC_MOD_TO_SER_NUM
+            <!-- END   2019/10/24 K.Fujimoto [QC#53870, MOD] -->
+            <!-- add start 2020/04/08 QC#56328 -->
+            ,RNG.SVC_MOD_PK
+            ,RNG.SVC_MOD_DTL_PK
+            ,SMM2.SVC_MACH_MSTR_PK
+            <!-- add end 2020/04/08 QC#56328 -->
+        FROM
+             SVC_TASK           TASK
+            ,SVC_MACH_MSTR      SMM1
+            ,SVC_MACH_MSTR      SMM2
+            ,SVC_MOD_SER_RNG    RNG
+            <!-- START 2018/08/08 K.Kitachi [QC#27460, ADD] -->
+            ,MDSE_ITEM_FLIP_SET FLP
+            <!-- END 2018/08/08 K.Kitachi [QC#27460, ADD] -->
+            ,SVC_MOD            SMOD
+            ,SVC_MOD_DTL        DTL
+            <!-- START 2021/12/17 Y.Penequito [QC#59114, ADD] -->
+            ,(
+                  SELECT
+                      DISTINCT SMSR.SVC_MOD_PK
+                     ,SMSR.GLBL_CMPY_CD
+                     ,SMSR.MDSE_CD
+                  FROM
+                      SVC_MOD_SER_RNG SMSR
+                  WHERE
+                      SMSR.EZCANCELFLAG            = '0'
+             ) MDSE_1A
+            ,(
+                  SELECT
+                      DISTINCT SMSR.SVC_MOD_PK
+                     ,SMSR.GLBL_CMPY_CD
+                     ,SMSR.MDSE_CD
+                  FROM
+                      SVC_MOD_SER_RNG SMSR
+                  WHERE
+                      SMSR.EZCANCELFLAG            = '0'
+              ) MDSE_1B
+             ,( 
+                  SELECT
+                      DISTINCT MIFS.RELN_MDSE_CD
+                     ,MIFS.GLBL_CMPY_CD
+                     ,MIFS.MDSE_CD
+                  FROM
+                      MDSE_ITEM_FLIP_SET MIFS
+                  WHERE
+                      MIFS.EZCANCELFLAG         = '0'
+                      <iterate property="mdseItemRelnTpCdList" var="mdseItemRelnTpCd[]" open="AND MIFS.MDSE_ITEM_RELN_TP_CD (+) IN (" close=")" conjunction=",">
+                           #mdseItemRelnTpCd[]#
+                      </iterate>
+             ) MDSE_2A
+            ,(
+                  SELECT
+                      DISTINCT MIFS.RELN_MDSE_CD
+                     ,MIFS.GLBL_CMPY_CD
+                     ,MIFS.MDSE_CD
+                  FROM
+                      MDSE_ITEM_FLIP_SET MIFS
+                  WHERE
+                      MIFS.EZCANCELFLAG           = '0'
+                      <iterate property="mdseItemRelnTpCdList" var="mdseItemRelnTpCd[]" open="AND MIFS.MDSE_ITEM_RELN_TP_CD (+) IN (" close=")" conjunction=",">
+                           #mdseItemRelnTpCd[]#
+                      </iterate>
+             ) MDSE_2B
+            <!-- END 2021/12/17 Y.Penequito [QC#59114, ADD] -->
+        WHERE
+            TASK.GLBL_CMPY_CD                      = #glblCmpyCd#
+        AND TASK.EZCANCELFLAG                      = '0'
+        AND TASK.SVC_TASK_NUM                      = #svcTaskNum#
+        AND TASK.GLBL_CMPY_CD                      = SMM1.GLBL_CMPY_CD
+        AND TASK.SVC_MACH_MSTR_PK                  = SMM1.SVC_MACH_MSTR_PK
+        AND SMM1.EZCANCELFLAG                      = '0'
+        AND SMM1.GLBL_CMPY_CD                      = SMM2.GLBL_CMPY_CD
+        AND SMM1.SVC_CONFIG_MSTR_PK                = SMM2.SVC_CONFIG_MSTR_PK
+        AND SMM2.EZCANCELFLAG                      = '0'
+        AND SMM2.GLBL_CMPY_CD                      = RNG.GLBL_CMPY_CD
+        AND SMM2.SER_NUM                          &gt;= RNG.SVC_MOD_FROM_SER_NUM
+        AND SMM2.SER_NUM                          &lt;= RNG.SVC_MOD_TO_SER_NUM
+        AND LENGTH(SMM2.SER_NUM)                   = RNG.LG_SER_NUM
+        <!-- START 2018/08/08 K.Kitachi [QC#27460, ADD] -->
+        AND RNG.GLBL_CMPY_CD                       = FLP.GLBL_CMPY_CD            (+)
+        AND RNG.MDSE_CD                            = FLP.MDSE_CD                 (+)
+        <iterate property="mdseItemRelnTpCdList" var="mdseItemRelnTpCd[]" open="AND FLP.MDSE_ITEM_RELN_TP_CD (+) IN (" close=")" conjunction=",">
+            #mdseItemRelnTpCd[]#
+        </iterate>
+        AND FLP.EZCANCELFLAG                   (+) = '0'
+        <!-- END 2018/08/08 K.Kitachi [QC#27460, ADD] -->
+        <!-- START 2021/10/18 L.Mandanas [QC#59114, DEL] -->
+<!--         AND (  -->
+<!--                SMM2.MDSE_CD                       = RNG.MDSE_CD  -->
+<!--            OR  SUBSTR(SMM2.MDSE_CD, 1, 8)         = RNG.MDSE_CD  -->
+            <!-- START 2018/08/08 K.Kitachi [QC#27460, ADD] -->
+<!--            OR  SMM2.MDSE_CD                       = FLP.RELN_MDSE_CD -->
+<!--            OR  SUBSTR(SMM2.MDSE_CD, 1, 8)         = FLP.RELN_MDSE_CD -->
+            <!-- END 2018/08/08 K.Kitachi [QC#27460, ADD] -->
+<!--             )  -->
+       <!-- END 2021/10/18 L.Mandanas [QC#59114, DEL] -->
+       <!-- START 2021/12/17 Y.Penequito [QC#59114, ADD] -->
+        AND MDSE_1A.SVC_MOD_PK(+)                  = SMOD.SVC_MOD_PK
+        AND MDSE_1A.GLBL_CMPY_CD(+)                = SMOD.GLBL_CMPY_CD
+        AND MDSE_1A.MDSE_CD(+)                     = SMM2.MDSE_CD
+        AND MDSE_1B.SVC_MOD_PK(+)                  = SMOD.SVC_MOD_PK
+        AND MDSE_1B.GLBL_CMPY_CD(+)                = SMOD.GLBL_CMPY_CD
+        AND MDSE_1B.MDSE_CD(+)                     = SUBSTR (SMM2.MDSE_CD, 1, 8)
+        AND MDSE_2A.MDSE_CD(+)                     = RNG.MDSE_CD
+        AND MDSE_2A.GLBL_CMPY_CD(+)                = RNG.GLBL_CMPY_CD
+        AND MDSE_2A.RELN_MDSE_CD(+)                = SMM2.MDSE_CD
+        AND MDSE_2B.MDSE_CD(+)                     = RNG.MDSE_CD
+        AND MDSE_2B.GLBL_CMPY_CD(+)                = RNG.GLBL_CMPY_CD
+        AND MDSE_2B.RELN_MDSE_CD(+)                = SMM2.MDSE_CD
+        AND MDSE_2B.RELN_MDSE_CD(+)                = SUBSTR (SMM2.MDSE_CD, 1, 8)
+        AND SMM2.MDSE_CD  =
+                           CASE 
+                              WHEN MDSE_1A.MDSE_CD IS NOT NULL 
+                                 OR MDSE_1B.MDSE_CD IS NOT NULL 
+                              THEN RNG.MDSE_CD
+                              WHEN MDSE_2A.MDSE_CD IS NOT NULL
+                                 OR MDSE_2B.MDSE_CD IS NOT NULL
+                              THEN FLP.RELN_MDSE_CD
+                           END
+       <!-- END 2021/12/17 Y.Penequito [QC#59114, ADD] -->
+<!-- START 2021/12/17 Y.Penequito [QC#59114, DEL] -->
+       <!-- START 2021/10/18 L.Mandanas [QC#59114, ADD] -->
+        <!-- AND SMM2.MDSE_CD =
+                   CASE
+                   WHEN EXISTS (
+                           SELECT
+                               1
+                           FROM
+                               SVC_MOD_SER_RNG SMSR
+                           WHERE
+                               SMOD.SVC_MOD_PK               = SMSR.SVC_MOD_PK
+                           AND SMOD.GLBL_CMPY_CD             = SMSR.GLBL_CMPY_CD
+                           AND SMSR.EZCANCELFLAG             = '0'
+                           AND (
+                               SMM2.MDSE_CD                  = SMSR.MDSE_CD
+                           OR  SUBSTR(SMM2.MDSE_CD, 1, 8)    = SMSR.MDSE_CD
+                           )
+                   )
+                   THEN RNG.MDSE_CD
+                   WHEN EXISTS (
+                           SELECT
+                               1
+                           FROM
+                               MDSE_ITEM_FLIP_SET MIFS
+                           WHERE
+                               RNG.GLBL_CMPY_CD               = MIFS.GLBL_CMPY_CD
+                           AND RNG.MDSE_CD                    = MIFS.MDSE_CD
+                           <iterate property="mdseItemRelnTpCdList" var="mdseItemRelnTpCd[]" open="AND MIFS.MDSE_ITEM_RELN_TP_CD (+) IN (" close=")" conjunction=",">
+                               #mdseItemRelnTpCd[]#
+                           </iterate>
+                           AND MIFS.EZCANCELFLAG              = '0'
+                           AND (
+                               SMM2.MDSE_CD                   = MIFS.RELN_MDSE_CD
+                           OR  SUBSTR(SMM2.MDSE_CD, 1, 8)     = MIFS.RELN_MDSE_CD
+                           )
+                   )
+                   THEN FLP.RELN_MDSE_CD
+                   END -->
+       <!-- END 2021/10/18 L.Mandanas [QC#59114, ADD] -->
+<!-- END 2021/12/17 Y.Penequito [QC#59114, DEL] -->
+        AND RNG.EZCANCELFLAG                       = '0'
+        AND RNG.GLBL_CMPY_CD                       = SMOD.GLBL_CMPY_CD
+        AND RNG.SVC_MOD_PK                         = SMOD.SVC_MOD_PK
+        AND SMOD.EZCANCELFLAG                      = '0'
+        AND RNG.GLBL_CMPY_CD                       = DTL.GLBL_CMPY_CD
+        AND RNG.SVC_MOD_DTL_PK                     = DTL.SVC_MOD_DTL_PK
+        AND DTL.SVC_MOD_START_DT                  &lt;= #slsDt#
+        <!-- mod start 2019/04/02 QC#31027 -->
+        AND NVL(DTL.SVC_MOD_ON_HLD_DT,#maxDate#) &gt; #slsDt#
+        AND NVL(DTL.SVC_MOD_CANC_DT,  #maxDate#) &gt; #slsDt#
+        AND NVL(DTL.SVC_MOD_OBSL_DT,  #maxDate#) &gt; #slsDt#
+        <!-- mod end 2019/04/02 QC#31027 -->
+        AND DTL.EZCANCELFLAG                       = '0'
+        AND NOT EXISTS (
+            SELECT
+                *
+            FROM
+                SVC_MOD_STS STS
+            WHERE
+                RNG.SVC_MOD_PK               = STS.SVC_MOD_PK
+            <!-- START 2018/10/01 [QC#28505, ADD] -->
+            <!-- START 2021/10/04 L.Mandanas [QC#59114, DEL] -->
+              <!-- AND RNG.SVC_MOD_DTL_PK           = STS.SVC_MOD_DTL_PK  -->
+            <!-- END 2021/10/04 L.Mandanas [QC#59114, DEL] -->
+            <!-- END 2018/10/01 [QC#28505, ADD] -->
+            AND RNG.GLBL_CMPY_CD             = STS.GLBL_CMPY_CD
+            <!-- START 2019/03/15 [QC#30794, MOD] -->
+            <!-- AND TASK.SVC_MACH_MSTR_PK        = STS.SVC_MACH_MSTR_PK -->
+            AND SMM2.SVC_MACH_MSTR_PK        = STS.SVC_MACH_MSTR_PK
+            <!-- END 2019/03/15 [QC#30794, MOD] -->
+            AND (
+                    STS.SVC_MOD_PROC_STS_CD IN (#stsClosed#, #stsCancelled#)
+                <!-- START 2018/01/18 K.Kojima [QC#22394,MOD] -->
+                <!-- OR  STS.SVC_MOD_OPT_DT      &lt;  #slsDt# -->
+                OR  STS.SVC_MOD_OPT_DT      &lt;=  #slsDt#
+                <!-- END 2018/01/18 K.Kojima [QC#22394,MOD] -->
+                )
+            AND STS.EZCANCELFLAG             = '0'
+            )
+        <!-- add start 2020/04/08 QC#56328 -->
+        <!-- mod start 2020/04/21 QC#56328-1 -->
+        AND NOT EXISTS (
+                <!-- START 2021/12/17 Y.Penequito [QC#59114, MOD] -->
+                <!-- SELECT -->
+                SELECT /*+ UNNEST */
+                <!-- END 2021/12/17 Y.Penequito [QC#59114, MOD] -->
+                    1
+                FROM
+                     SVC_MOD_SEND_CLICK A
+                    ,SVC_TASK           B
+                WHERE
+                    RNG.GLBL_CMPY_CD             = A.GLBL_CMPY_CD
+                AND RNG.SVC_MOD_PK               = A.SVC_MOD_PK
+                AND RNG.SVC_MOD_DTL_PK           = A.SVC_MOD_DTL_PK
+                AND SMM2.SVC_MACH_MSTR_PK        = A.SVC_MACH_MSTR_PK
+                AND A.EZCANCELFLAG               = '0'
+                AND A.GLBL_CMPY_CD               = B.GLBL_CMPY_CD
+                AND A.SVC_TASK_NUM               = B.SVC_TASK_NUM
+                AND B.SVC_TASK_STS_CD       NOT IN (#completed#, #closed#, #cancelled#)
+                AND B.EZCANCELFLAG               = '0'
+            )
+        AND NOT EXISTS (
+                <!-- START 2021/12/17 Y.Penequito [QC#59114, MOD] -->
+                <!-- SELECT -->
+                SELECT /*+ UNNEST */
+                <!-- END 2021/12/17 Y.Penequito [QC#59114, MOD] -->
+                    1
+                FROM
+                     SVC_MOD_SEND_CLICK A
+                    ,SVC_TASK           B
+                WHERE
+                    RNG.GLBL_CMPY_CD             = A.GLBL_CMPY_CD
+                AND RNG.SVC_MOD_PK               = A.SVC_MOD_PK
+                AND RNG.SVC_MOD_DTL_PK           = A.SVC_MOD_DTL_PK
+                AND SMM2.SVC_MACH_MSTR_PK        = A.SVC_MACH_MSTR_PK
+                AND A.EZCANCELFLAG               = '0'
+                AND A.GLBL_CMPY_CD               = B.GLBL_CMPY_CD
+                AND A.SVC_TASK_NUM               = B.SVC_TASK_NUM
+                AND B.SVC_TASK_STS_CD            = #completed#
+                AND B.EZCANCELFLAG               = '0'
+                AND EXISTS (
+                        SELECT
+                            1
+                        FROM
+                             FSR_VISIT_TM_EVENT C
+                            ,MDSE_ITEM_FLIP_SET D
+                            ,SVC_MOD            E
+                            ,SVC_MOD_DTL        F
+                        WHERE
+                            A.GLBL_CMPY_CD           = C.GLBL_CMPY_CD
+                        AND A.SVC_TASK_NUM           = C.SVC_TASK_NUM
+                        AND C.SVC_TM_EVENT_CD        = #modification#
+                        AND C.EZCANCELFLAG           = '0'
+                        AND C.GLBL_CMPY_CD           = D.GLBL_CMPY_CD(+)
+                        AND C.MOD_ITEM_TXT           = D.RELN_MDSE_CD(+)
+                        <iterate property="mdseItemRelnTpCdList" var="mdseItemRelnTpCd[]" open="AND D.MDSE_ITEM_RELN_TP_CD (+) IN (" close=")" conjunction=",">
+                            #mdseItemRelnTpCd[]#
+                        </iterate>
+                        AND D.EZCANCELFLAG(+)        = '0'
+                        AND C.GLBL_CMPY_CD           = E.GLBL_CMPY_CD
+                        AND C.SVC_MOD_PLN_ID         = E.SVC_MOD_PLN_ID
+                        AND A.SVC_MOD_PK             = E.SVC_MOD_PK
+                        AND E.EZCANCELFLAG           = '0'
+                        AND E.GLBL_CMPY_CD           = F.GLBL_CMPY_CD
+                        AND E.SVC_MOD_PK             = F.SVC_MOD_PK
+                        AND (   C.MOD_ITEM_TXT       = F.MDSE_CD
+                             OR D.MDSE_CD            = F.MDSE_CD)
+                        AND A.SVC_MOD_DTL_PK         = F.SVC_MOD_DTL_PK
+                        AND F.EZCANCELFLAG           = '0'
+                    )
+            )
+        <!-- mod end 2020/04/21 QC#56328-1 -->
+        <!-- add end 2020/04/08 QC#56328 -->
+        ORDER BY
+             SMOD.SVC_MOD_PLN_ID
+            ,SMM2.SVC_MACH_TP_CD
+            ,SMM2.SVC_MACH_SQ_NUM
+            <!-- START 2018/08/08 K.Kitachi [QC#27460, MOD] -->
+            <!-- ,SMM2.MDSE_CD -->
+            ,RNG.MDSE_CD
+            <!-- END 2018/08/08 K.Kitachi [QC#27460, MOD] -->
+            ,SMM2.SER_NUM
+    </statement>
+
+    <statement id="getSvcNonPrfTech" parameterClass="Map" resultClass="Map">
+<!-- WITH  BR_INFO AS (
+                SELECT
+                     GLBL_CMPY_CD
+                     ,PSN_CD
+                     ,COA_BR_CD
+                     ,COA_BR_NM
+                FROM
+                   (SELECT
+                         OFA.GLBL_CMPY_CD
+                         ,OFA.PSN_CD
+                         ,TOC.COA_BR_CD
+                         ,CBR.COA_BR_NM
+                         ,ROW_NUMBER() OVER (PARTITION BY OFA.PSN_CD ORDER BY RTP.MGR_FLG ASC) AS ROW_NUM 
+                    FROM
+                        ORG_FUNC_ASG        OFA
+                       , TOC                TOC
+                       , ORG_FUNC_ROLE_TP   RTP
+                       , COA_BR             CBR
+                    WHERE
+                        OFA.GLBL_CMPY_CD            = #glblCmpyCd#
+                        AND OFA.EZCANCELFLAG        = '0'
+                        AND OFA.EFF_FROM_DT         &lt;= #slsDt#
+                        AND NVL(OFA.EFF_THRU_DT,#slsDt#)     &gt;= #slsDt#
+                        AND OFA.GLBL_CMPY_CD        = TOC.GLBL_CMPY_CD
+                        AND OFA.TOC_CD              = TOC.TOC_CD
+                        AND TOC.EZCANCELFLAG        = '0'
+                        AND TOC.GLBL_CMPY_CD        = RTP.GLBL_CMPY_CD
+                        AND TOC.ORG_FUNC_ROLE_TP_CD = RTP.ORG_FUNC_ROLE_TP_CD
+                        AND RTP.TECH_MSTR_REQ_FLG   = 'Y'
+                        AND RTP.ACTV_FLG            = 'Y'
+                        AND RTP.EZCANCELFLAG        = '0'
+                        AND TOC.GLBL_CMPY_CD        = CBR.GLBL_CMPY_CD
+                        AND TOC.COA_BR_CD           = CBR.COA_BR_CD
+                        AND CBR.EZCANCELFLAG        = '0'
+                    )
+                WHERE
+                    ROW_NUM = 1
+        ) -->
+    WITH TIER AS(
+        SELECT
+            OHSD.ORG_TIER_CD
+        FROM
+            STRU_DFN SDF
+            ,ORG_HRCH_STRU_DFN OHSD
+        WHERE
+            SDF.GLBL_CMPY_CD         = #glblCmpyCd#
+            AND SDF.BR_FLG           = 'Y'
+            AND SDF.GLBL_CMPY_CD     = OHSD.GLBL_CMPY_CD
+            AND SDF.STRU_DFN_CD      = OHSD.STRU_DFN_CD
+            AND OHSD.BIZ_AREA_ORG_CD = #bizAreaOrgCd#
+            AND SDF.EZCANCELFLAG     = '0'
+            AND OHSD.EZCANCELFLAG    = '0'
+            AND OHSD.EFF_FROM_DT               &lt;= #slsDt#
+            AND NVL(OHSD.EFF_THRU_DT,#slsDt#)  &gt;= #slsDt#
+            AND ROWNUM               = 1
+        )
+<!-- add start 2018/06/08 QC#17472 -->
+    ,ORG_INFO AS (
+            SELECT
+                 GLBL_CMPY_CD
+                 ,PSN_CD
+                 ,DISTRICT
+            FROM
+               (SELECT
+                     OFA.GLBL_CMPY_CD
+                     ,OFA.PSN_CD
+                     ,CASE WHEN TIER.ORG_TIER_CD = ORG.FIRST_ORG_TIER_CD  AND ORG.FIRST_ORG_CD  IS NOT NULL THEN ORG.FIRST_ORG_NM
+                           WHEN TIER.ORG_TIER_CD = ORG.SCD_ORG_TIER_CD    AND ORG.SCD_ORG_CD    IS NOT NULL THEN ORG.SCD_ORG_NM
+                           WHEN TIER.ORG_TIER_CD = ORG.THIRD_ORG_TIER_CD  AND ORG.THIRD_ORG_CD  IS NOT NULL THEN ORG.THIRD_ORG_NM
+                           WHEN TIER.ORG_TIER_CD = ORG.FRTH_ORG_TIER_CD   AND ORG.FRTH_ORG_CD   IS NOT NULL THEN ORG.FRTH_ORG_NM
+                           WHEN TIER.ORG_TIER_CD = ORG.FIFTH_ORG_TIER_CD  AND ORG.FIFTH_ORG_CD  IS NOT NULL THEN ORG.FIFTH_ORG_NM
+                           WHEN TIER.ORG_TIER_CD = ORG.SIXTH_ORG_TIER_CD  AND ORG.SIXTH_ORG_CD  IS NOT NULL THEN ORG.SIXTH_ORG_NM
+                           WHEN TIER.ORG_TIER_CD = ORG.SVNTH_ORG_TIER_CD  AND ORG.SVNTH_ORG_CD  IS NOT NULL THEN ORG.SVNTH_ORG_NM
+                           WHEN TIER.ORG_TIER_CD = ORG.EIGHTH_ORG_TIER_CD AND ORG.EIGHTH_ORG_CD IS NOT NULL THEN ORG.EIGHTH_ORG_NM
+                           WHEN TIER.ORG_TIER_CD = ORG.NINTH_ORG_TIER_CD  AND ORG.NINTH_ORG_CD  IS NOT NULL THEN ORG.NINTH_ORG_NM
+                           WHEN TIER.ORG_TIER_CD = ORG.TENTH_ORG_TIER_CD  AND ORG.TENTH_ORG_CD  IS NOT NULL THEN ORG.TENTH_ORG_NM
+                           WHEN TIER.ORG_TIER_CD = ORG.ELVTH_ORG_TIER_CD  AND ORG.ELVTH_ORG_CD  IS NOT NULL THEN ORG.ELVTH_ORG_NM
+                      END AS DISTRICT
+                     ,ROW_NUMBER() OVER (PARTITION BY OFA.PSN_CD ORDER BY RTP.MGR_FLG ASC) AS ROW_NUM 
+                FROM
+                     ORG_FUNC_ASG       OFA
+                   , TOC                TOC
+                   , ORG_FUNC_ROLE_TP   RTP
+                   , S21_ORG            ORG
+                   , TIER
+                WHERE
+                    OFA.GLBL_CMPY_CD            = #glblCmpyCd#
+                    AND OFA.EZCANCELFLAG        = '0'
+                    AND OFA.EFF_FROM_DT         &lt;= #slsDt#
+                    AND NVL(OFA.EFF_THRU_DT,#slsDt#)     &gt;= #slsDt#
+                    AND OFA.GLBL_CMPY_CD        = TOC.GLBL_CMPY_CD
+                    AND OFA.TOC_CD              = TOC.TOC_CD
+                    AND TOC.EZCANCELFLAG        = '0'
+                    AND TOC.GLBL_CMPY_CD        = RTP.GLBL_CMPY_CD
+                    AND TOC.ORG_FUNC_ROLE_TP_CD = RTP.ORG_FUNC_ROLE_TP_CD
+                    AND RTP.TECH_MSTR_REQ_FLG   = 'Y'
+                    AND RTP.ACTV_FLG            = 'Y'
+                    AND RTP.EZCANCELFLAG        = '0'
+                    AND TOC.GLBL_CMPY_CD        = ORG.GLBL_CMPY_CD
+                    AND TOC.TOC_CD              = ORG.TOC_CD
+                    AND ORG.EZCANCELFLAG        = '0'
+                )
+            WHERE
+                ROW_NUM = 1
+    )
+<!-- add end 2018/06/08 QC#17472 -->
+    SELECT 
+        TECH.TECH_NM               AS NON_PRF_TECH_NM
+      , TECH.TECH_TOC_CD           AS NON_PRF_TECH_CD
+      <!-- , CB.COA_BR_CD               AS NON_PRF_COA_BR_CD
+      , CB.COA_BR_NM               AS NON_PRF_COA_BR_NM -->
+<!-- mod start 2018/06/08 QC#17472 -->
+      <!--,CASE WHEN TIER.ORG_TIER_CD = ORG.FIRST_ORG_TIER_CD  AND ORG.FIRST_ORG_CD  IS NOT NULL THEN ORG.FIRST_ORG_NM
+                   WHEN TIER.ORG_TIER_CD = ORG.SCD_ORG_TIER_CD    AND ORG.SCD_ORG_CD    IS NOT NULL THEN ORG.SCD_ORG_NM
+                   WHEN TIER.ORG_TIER_CD = ORG.THIRD_ORG_TIER_CD  AND ORG.THIRD_ORG_CD  IS NOT NULL THEN ORG.THIRD_ORG_NM
+                   WHEN TIER.ORG_TIER_CD = ORG.FRTH_ORG_TIER_CD   AND ORG.FRTH_ORG_CD   IS NOT NULL THEN ORG.FRTH_ORG_NM
+                   WHEN TIER.ORG_TIER_CD = ORG.FIFTH_ORG_TIER_CD  AND ORG.FIFTH_ORG_CD  IS NOT NULL THEN ORG.FIFTH_ORG_NM
+                   WHEN TIER.ORG_TIER_CD = ORG.SIXTH_ORG_TIER_CD  AND ORG.SIXTH_ORG_CD  IS NOT NULL THEN ORG.SIXTH_ORG_NM
+                   WHEN TIER.ORG_TIER_CD = ORG.SVNTH_ORG_TIER_CD  AND ORG.SVNTH_ORG_CD  IS NOT NULL THEN ORG.SVNTH_ORG_NM
+                   WHEN TIER.ORG_TIER_CD = ORG.EIGHTH_ORG_TIER_CD AND ORG.EIGHTH_ORG_CD IS NOT NULL THEN ORG.EIGHTH_ORG_NM
+                   WHEN TIER.ORG_TIER_CD = ORG.NINTH_ORG_TIER_CD  AND ORG.NINTH_ORG_CD  IS NOT NULL THEN ORG.NINTH_ORG_NM
+                   WHEN TIER.ORG_TIER_CD = ORG.TENTH_ORG_TIER_CD  AND ORG.TENTH_ORG_CD  IS NOT NULL THEN ORG.TENTH_ORG_NM
+                   WHEN TIER.ORG_TIER_CD = ORG.ELVTH_ORG_TIER_CD  AND ORG.ELVTH_ORG_CD  IS NOT NULL THEN ORG.ELVTH_ORG_NM
+              END AS NON_PRF_DISTRICT -->
+      , ORG.DISTRICT               AS NON_PRF_DISTRICT
+<!-- mod end 2018/06/08 QC#17472 -->
+    FROM
+          SVC_TASK         TASK
+        , SVC_NON_PRF_TECH PRF
+        , TECH_MSTR        TECH
+        <!-- , BR_INFO          CB -->
+<!-- mod start 2018/06/08 QC#17472 -->
+        <!-- , TOC              TOC
+        , TIER
+        , ORG_FUNC_ASG     OFA
+        , S21_ORG          ORG -->
+        , ORG_INFO         ORG
+<!-- mod end 2018/06/08 QC#17472 -->
+    WHERE TASK.GLBL_CMPY_CD          = #glblCmpyCd#
+      AND TASK.EZCANCELFLAG          = '0'
+      AND TASK.SVC_TASK_NUM          = #svcTaskNum#
+
+      AND TASK.SVC_MACH_MSTR_PK      = PRF.SVC_MACH_MSTR_PK
+      AND TASK.GLBL_CMPY_CD          = PRF.GLBL_CMPY_CD
+<!-- START 2016/11/16 N.Arai [QC#15860, MOD] -->
+      AND PRF.NON_PRF_TECH_CD        IS NOT NULL
+      AND (PRF.EFF_THRU_DT           IS NULL
+          OR PRF.EFF_THRU_DT         &gt;= #slsDt#)
+<!-- END 2016/11/16 N.Arai [QC#15860, MOD] -->
+      AND PRF.EZCANCELFLAG           = '0'
+
+      AND PRF.GLBL_CMPY_CD           = TECH.GLBL_CMPY_CD
+      AND PRF.NON_PRF_TECH_CD        = TECH.TECH_TOC_CD
+      AND TECH.EZCANCELFLAG          = '0'
+
+<!--       AND TECH.GLBL_CMPY_CD          = CB.GLBL_CMPY_CD(+)
+      AND TECH.TECH_TOC_CD           = CB.PSN_CD(+) -->
+<!--      AND TECH.GLBL_CMPY_CD                       = TOC.GLBL_CMPY_CD -->
+<!-- mod start 2018/06/08 QC#17472 -->
+<!--       AND TECH.GLBL_CMPY_CD                     = OFA.GLBL_CMPY_CD
+      AND TECH.TECH_TOC_CD                      = OFA.PSN_CD
+      AND OFA.EFF_FROM_DT                       &lt;= #slsDt#
+      AND (OFA.EFF_THRU_DT                      IS NULL
+          OR OFA.EFF_THRU_DT                    &gt;= #slsDt#)
+      AND OFA.EZCANCELFLAG                      = '0'
+
+      AND OFA.GLBL_CMPY_CD                      = TOC.GLBL_CMPY_CD
+      AND OFA.TOC_CD                            = TOC.TOC_CD
+      AND TOC.EZCANCELFLAG                      = '0'
+
+      AND TOC.GLBL_CMPY_CD                      = ORG.GLBL_CMPY_CD
+      AND TOC.TOC_CD                            = ORG.TOC_CD
+      AND ORG.EZCANCELFLAG                      = '0' -->
+      AND TECH.GLBL_CMPY_CD          = ORG.GLBL_CMPY_CD(+)
+      AND TECH.TECH_TOC_CD           = ORG.PSN_CD(+)
+<!-- mod end 2018/06/08 QC#17472 -->
+<!-- add start 2018/06/08 QC#17472 -->
+    UNION
+    SELECT 
+        TECH.TECH_NM               AS NON_PRF_TECH_NM
+      , TECH.TECH_TOC_CD           AS NON_PRF_TECH_CD
+      , ORG.DISTRICT               AS NON_PRF_DISTRICT
+     FROM
+          SVC_TASK         TASK
+        , SVC_MACH_MSTR    MACH
+        , SHIP_TO_CUST     STC
+        , DS_CUST_NON_PRF_TECH  PRF
+        , TECH_MSTR        TECH
+        , ORG_INFO         ORG
+    WHERE TASK.GLBL_CMPY_CD          = #glblCmpyCd#
+      AND TASK.EZCANCELFLAG          = '0'
+      AND TASK.SVC_TASK_NUM          = #svcTaskNum#
+
+      AND TASK.GLBL_CMPY_CD          = MACH.GLBL_CMPY_CD
+      AND TASK.SVC_MACH_MSTR_PK      = MACH.SVC_MACH_MSTR_PK
+      AND MACH.EZCANCELFLAG          = '0'
+
+      AND MACH.GLBL_CMPY_CD          = STC.GLBL_CMPY_CD
+      AND MACH.CUR_LOC_NUM           = STC.SHIP_TO_CUST_CD
+      AND STC.EZCANCELFLAG           = '0'
+
+      AND STC.GLBL_CMPY_CD           = PRF.GLBL_CMPY_CD
+      AND STC.LOC_NUM                = PRF.LOC_NUM
+      AND PRF.NON_PRF_TECH_CD        IS NOT NULL
+      AND (PRF.EFF_THRU_DT           IS NULL
+          OR PRF.EFF_THRU_DT         &gt;= #slsDt#)
+      AND PRF.EZCANCELFLAG           = '0'
+
+      AND PRF.GLBL_CMPY_CD           = TECH.GLBL_CMPY_CD
+      AND PRF.NON_PRF_TECH_CD        = TECH.TECH_TOC_CD
+      AND TECH.EZCANCELFLAG          = '0'
+
+      AND TECH.GLBL_CMPY_CD          = ORG.GLBL_CMPY_CD(+)
+      AND TECH.TECH_TOC_CD           = ORG.PSN_CD(+)
+      ORDER BY
+           NON_PRF_TECH_NM
+          ,NON_PRF_TECH_CD
+<!-- add end 2018/06/08 QC#17472 -->
+    </statement>
+    
+    <statement id="getAccessPermits" parameterClass="Map" resultClass="Map">
+        WITH PMT_WK AS (SELECT ACCS.GLBL_CMPY_CD           AS GLBL_CMPY_CD	
+<!-- START 2021/09/02 T.Wada [QC#59169, MOD] -->
+                          <!-- , ACCS.SVC_ACCS_PMIT_VAL_TXT  AS SVC_ACCS_PMIT_VAL_TXT -->
+                          , ACCS.SVC_PMIT_LVL_VAL_TXT  AS SVC_ACCS_PMIT_VAL_TXT	
+                          , ACCS.SVC_ACCS_PMIT_NUM      AS SVC_ACCS_PMIT_NUM	
+                           <!-- , ACCS.SVC_ACCS_PMIT_DESC_TXT AS SVC_ACCS_PMIT_DESC_TXT -->
+                          , ACV.SVC_ACCS_PMIT_DESC_TXT AS SVC_ACCS_PMIT_DESC_TXT	
+<!-- End 2021/09/02 T.Wada [QC#59169, MOD] -->
+                          , TP.MACH_LVL_FLG             AS MACH_LVL_FLG	
+                          , TP.SITE_LVL_FLG             AS SITE_LVL_FLG	
+                          , TP.PTY_LVL_FLG              AS PTY_LVL_FLG	
+                           FROM SVC_ACCS_PMIT ACCS, SVC_PMIT_LVL_TP TP 	
+<!-- START 2021/09/02 T.Wada [QC#59169, ADD] -->
+                           ,SVC_ACCS_PMIT_VAL ACV	
+<!-- End 2021/09/02 T.Wada [QC#59169, ADD] -->
+                     WHERE ACCS.GLBL_CMPY_CD = #glblCmpyCd#	
+                       AND ACCS.EZCANCELFLAG = '0' 	
+<!-- START 2021/09/02 T.Wada [QC#59169, ADD] -->
+                       AND ACCS.GLBL_CMPY_CD = ACV.GLBL_CMPY_CD	
+                       AND ACCS.SVC_ACCS_PMIT_NUM=ACV.SVC_ACCS_PMIT_NUM
+                       AND ACV.EZCANCELFLAG='0'	
+<!-- End 2021/09/02 T.Wada [QC#59169, ADD] -->
+                       AND ACCS.SVC_PMIT_LVL_TP_CD = TP.SVC_PMIT_LVL_TP_CD	
+                       AND ACCS.GLBL_CMPY_CD = TP.GLBL_CMPY_CD	
+                       AND TP.EZCANCELFLAG = '0') 	
+        , TASK_WK AS (SELECT * FROM SVC_TASK TASK 
+                   WHERE TASK.SVC_TASK_NUM = #svcTaskNum#
+                   AND TASK.GLBL_CMPY_CD = #glblCmpyCd#
+                   AND TASK.EZCANCELFLAG = '0'  )
+        SELECT 
+            TASK.SVC_TASK_NUM             AS SVC_TASK_NUM
+            , PMT.SVC_ACCS_PMIT_NUM      AS SVC_ACCS_PMIT_NUM
+            , PMT.SVC_ACCS_PMIT_DESC_TXT AS SVC_ACCS_PMIT_DESC_TXT
+
+        FROM TASK_WK TASK, PMT_WK PMT
+        WHERE PMT.MACH_LVL_FLG = 'Y'
+            AND TASK.SER_NUM = PMT.SVC_ACCS_PMIT_VAL_TXT
+
+<!-- START 2021/09/06 T.Wada [QC#59178, MOD] -->
+<!--         UNION ALL-->
+        UNION
+<!-- END 2021/09/06 T.Wada [QC#59178, MOD] -->
+
+        SELECT TASK.SVC_TASK_NUM              AS SVC_TASK_NUM
+            , PMT.SVC_ACCS_PMIT_NUM          AS SVC_ACCS_PMIT_NUM
+            , PMT.SVC_ACCS_PMIT_DESC_TXT     AS SVC_ACCS_PMIT_DESC_TXT
+
+        FROM TASK_WK TASK, FSR FSR, PMT_WK PMT
+        WHERE  TASK.FSR_NUM = FSR.FSR_NUM
+            AND TASK.GLBL_CMPY_CD = FSR.GLBL_CMPY_CD
+            AND FSR.EZCANCELFLAG = '0'
+            AND PMT.SITE_LVL_FLG = 'Y'
+            <!-- START 2022/03/11 [QC#59702, MOD] -->
+            <!-- AND ((FSR.SHIP_TO_CUST_UPD_FLG = 'N' AND TASK.SHIP_TO_CUST_CD = PMT.SVC_ACCS_PMIT_VAL_TXT) -->
+            <!--    OR (FSR.SHIP_TO_CUST_UPD_FLG = 'Y' AND FSR.SHIP_TO_UPD_CUST_CD = PMT.SVC_ACCS_PMIT_VAL_TXT)) -->
+            AND ((FSR.SHIP_TO_UPD_CUST_CD IS NULL AND TASK.SHIP_TO_CUST_CD = PMT.SVC_ACCS_PMIT_VAL_TXT) 
+               OR (FSR.SHIP_TO_UPD_CUST_CD IS NOT NULL AND FSR.SHIP_TO_UPD_CUST_CD = PMT.SVC_ACCS_PMIT_VAL_TXT))
+            <!-- END   2022/03/11 [QC#59702, MOD] -->
+    
+<!-- START 2021/09/06 T.Wada [QC#59178, MOD] -->
+<!--    UNION ALL -->
+        UNION
+<!-- END 2021/09/06 T.Wada [QC#59178, MOD] -->
+
+        SELECT TASK.SVC_TASK_NUM             AS SVC_TASK_NUM
+            , PMT.SVC_ACCS_PMIT_NUM          AS SVC_ACCS_PMIT_NUM
+            , PMT.SVC_ACCS_PMIT_DESC_TXT     AS SVC_ACCS_PMIT_DESC_TXT
+
+        FROM TASK_WK TASK, FSR FSR, PMT_WK PMT
+        WHERE TASK.FSR_NUM = FSR.FSR_NUM
+            AND TASK.GLBL_CMPY_CD = FSR.GLBL_CMPY_CD
+            AND FSR.EZCANCELFLAG = '0'
+            AND PMT.SITE_LVL_FLG = 'Y'
+            AND ((FSR.BILL_TO_CUST_UPD_FLG = 'N' AND FSR.BILL_TO_CUST_CD = PMT.SVC_ACCS_PMIT_VAL_TXT) 
+               OR (FSR.BILL_TO_CUST_UPD_FLG = 'Y' AND FSR.BILL_TO_UPD_CUST_CD = PMT.SVC_ACCS_PMIT_VAL_TXT))
+<!-- START 2021/09/06 T.Wada [QC#59178, MOD] -->
+<!--    UNION ALL -->
+        UNION
+<!-- END 2021/09/06 T.Wada [QC#59178, MOD] -->
+
+
+        SELECT TASK.SVC_TASK_NUM             AS SVC_TASK_NUM
+           , PMT.SVC_ACCS_PMIT_NUM          AS SVC_ACCS_PMIT_NUM
+            , PMT.SVC_ACCS_PMIT_DESC_TXT     AS SVC_ACCS_PMIT_DESC_TXT
+
+        FROM TASK_WK TASK, FSR FSR, PMT_WK PMT
+        WHERE TASK.FSR_NUM = FSR.FSR_NUM
+            AND TASK.GLBL_CMPY_CD = FSR.GLBL_CMPY_CD
+            AND FSR.EZCANCELFLAG = '0'
+            AND PMT.PTY_LVL_FLG = 'Y'
+            AND FSR.SHIP_TO_CUST_ACCT_CD = PMT.SVC_ACCS_PMIT_VAL_TXT
+
+<!-- START 2021/09/06 T.Wada [QC#59178, MOD] -->
+<!--    UNION ALL -->
+        UNION
+<!-- END 2021/09/06 T.Wada [QC#59178, MOD] -->
+
+        SELECT TASK.SVC_TASK_NUM             AS SVC_TASK_NUM
+            , PMT.SVC_ACCS_PMIT_NUM          AS SVC_ACCS_PMIT_NUM
+            , PMT.SVC_ACCS_PMIT_DESC_TXT     AS SVC_ACCS_PMIT_DESC_TXT
+
+        FROM TASK_WK TASK, FSR FSR, PMT_WK PMT
+        WHERE TASK.FSR_NUM = FSR.FSR_NUM
+            AND TASK.GLBL_CMPY_CD = FSR.GLBL_CMPY_CD
+            AND FSR.EZCANCELFLAG = '0'
+            AND PMT.PTY_LVL_FLG = 'Y'
+            AND FSR.BILL_TO_CUST_ACCT_CD = PMT.SVC_ACCS_PMIT_VAL_TXT
+
+        ORDER BY SVC_ACCS_PMIT_NUM
+    </statement>
+    <statement id="getFsrEvent" parameterClass="Map" resultClass="Map">
+        SELECT 
+              EVENT.FSR_EVENT_PK AS  FSR_EVENT_PK 
+        FROM
+              FSR_EVENT EVENT
+        WHERE
+              EVENT.GLBL_CMPY_CD = #glblCmpyCd#
+          AND EVENT.EZCANCELFLAG = '0' 
+          AND EVENT.SVC_TASK_NUM = #svcTaskNum#
+          <!-- START 2018/10/24 T.Tomita [QC#28565, MOD] -->
+          AND EVENT.MBL_INTFC_PROC_CD IN (#notProc#, #error#)
+          <!-- START 2018/10/24 T.Tomita [QC#28565, MOD] -->
+    </statement>
+    <statement id="getInstallCheckList" parameterClass="Map" resultClass="Map">
+<!-- START 2018/08/06 K.Kitachi [QC#26049, MOD] -->
+        SELECT
+             SVC_CONFIG_MSTR_PK
+            ,MDSE_CD
+            ,MDSE_DESC_SHORT_TXT
+            ,SER_NUM
+            ,T_MDL_NM
+            ,SVC_MACH_MSTR_STS_CD
+        FROM (
+            SELECT
+                IB.SVC_CONFIG_MSTR_PK
+                ,IB.MDSE_CD
+                ,DMI.MDSE_DESC_SHORT_TXT
+                ,IB.SER_NUM
+<!-- START 2016/12/12 N.Arai [QC#16511, MOD] -->
+                ,MN.T_MDL_NM
+<!-- START 2018/02/19 M.Naito [QC#21112, ADD] -->
+                ,IB.SVC_MACH_MSTR_STS_CD
+<!-- END 2018/02/19 M.Naito [QC#21112, ADD] -->
+                ,IB.SVC_MACH_TP_CD
+            FROM
+                SVC_MACH_MSTR   IB
+                ,MDSE               DMI
+                ,SVC_CONFIG_MSTR    SCM
+                ,MDL_NM             MN
+<!-- END 2016/12/12 N.Arai [QC#16511, MOD] -->
+            WHERE
+                    IB.GLBL_CMPY_CD          = #glblCmpyCd#
+<!-- START 2018/02/19 M.Naito [QC#21112, MOD] -->
+                <!-- AND IB.SVC_MACH_MSTR_STS_CD  = #machStsCd# -->
+<!-- mod start 2019/07/12 QC#51427 -->
+                <!-- AND IB.SVC_MACH_MSTR_STS_CD  IN (#machStsCd#, #machStsCdInstl#) -->
+                <iterate property="svcMachMstrStsCdList" var="svcMachMstrStsCd[]" open="AND IB.SVC_MACH_MSTR_STS_CD IN (" close=")" conjunction=",">
+                    #svcMachMstrStsCd[]#
+                </iterate>
+<!-- mod end 2019/07/12 QC#51427 -->
+<!-- END 2018/02/19 M.Naito [QC#21112, MOD] -->
+                AND IB.EZCANCELFLAG          = '0'
+<!-- START 2018/12/07 S.Kitamura [QC#29519, ADD] -->
+                AND DMI.INVTY_CTRL_FLG       = 'Y'
+<!-- END 2018/12/07 S.Kitamura [QC#29519, ADD] -->
+                AND IB.GLBL_CMPY_CD          = DMI.GLBL_CMPY_CD(+)
+                AND IB.MDSE_CD               = DMI.MDSE_CD(+)
+                AND DMI.EZCANCELFLAG(+)      = '0'
+<!-- START 2016/12/12 N.Arai [QC#16511, MOD] -->
+                AND IB.SVC_CONFIG_MSTR_PK    = SCM.SVC_CONFIG_MSTR_PK(+)
+                AND IB.GLBL_CMPY_CD          = SCM.GLBL_CMPY_CD(+)
+                AND SCM.EZCANCELFLAG(+)      = '0'
+                AND SCM.MDL_ID               = MN.T_MDL_ID(+)
+                AND SCM.GLBL_CMPY_CD         = MN.T_GLBL_CMPY_CD(+)
+                AND MN.EZCANCELFLAG(+)       = '0'
+<!-- END 2016/12/12 N.Arai [QC#16511, MOD] -->
+                AND EXISTS(SELECT 1 FROM SVC_MACH_MSTR TRIB
+                           WHERE TRIB.GLBL_CMPY_CD             = IB.GLBL_CMPY_CD
+                                 AND TRIB.SVC_MACH_MSTR_PK     = #svcMachMstrPk#
+                                 AND TRIB.SVC_CONFIG_MSTR_PK   = IB.SVC_CONFIG_MSTR_PK
+                                 AND TRIB.EZCANCELFLAG         = '0' )
+            <!-- START 2023/07/14 K.Watanabe [QC#61310, ADD] -->
+            UNION
+            SELECT
+                IB.SVC_CONFIG_MSTR_PK
+                ,IB.MDSE_CD
+                ,DMI.MDSE_DESC_SHORT_TXT
+                ,IB.SER_NUM
+                ,MN.T_MDL_NM
+                ,IB.SVC_MACH_MSTR_STS_CD
+                ,IB.SVC_MACH_TP_CD
+            FROM
+                SVC_MACH_MSTR       IB
+                ,MDSE               DMI
+                ,SVC_CONFIG_MSTR    SCM
+                ,MDL_NM             MN
+                ,RTL_SWH            RS
+            WHERE
+                    IB.GLBL_CMPY_CD          = #glblCmpyCd#
+                <!-- START 2023/09/12 K.Watanabe [QC#61310, MOD] -->
+                <!-- <iterate property="svcMachMstrStsCdList" var="svcMachMstrStsCd[]" open="AND IB.SVC_MACH_MSTR_STS_CD IN (" close=")" conjunction=","> -->
+                <iterate property="svcMachMstrStsCdSearchShowRoomList" var="svcMachMstrStsCdSearchShowRoom[]" open="AND IB.SVC_MACH_MSTR_STS_CD IN (" close=")" conjunction=",">
+                <!-- END 2023/09/12 K.Watanabe [QC#61310, MOD] -->
+                    #svcMachMstrStsCdSearchShowRoom[]#
+                </iterate>
+                AND IB.EZCANCELFLAG          = '0'
+                AND DMI.INVTY_CTRL_FLG       = 'Y'
+                AND IB.GLBL_CMPY_CD          = DMI.GLBL_CMPY_CD(+)
+                AND IB.MDSE_CD               = DMI.MDSE_CD(+)
+                AND DMI.EZCANCELFLAG(+)      = '0'
+                AND IB.SVC_CONFIG_MSTR_PK    = SCM.SVC_CONFIG_MSTR_PK(+)
+                AND IB.GLBL_CMPY_CD          = SCM.GLBL_CMPY_CD(+)
+                AND SCM.EZCANCELFLAG(+)      = '0'
+                AND SCM.MDL_ID               = MN.T_MDL_ID(+)
+                AND SCM.GLBL_CMPY_CD         = MN.T_GLBL_CMPY_CD(+)
+                AND MN.EZCANCELFLAG(+)       = '0'
+                AND IB.CUR_LOC_NUM           = RS.INVTY_LOC_CD
+                AND IB.GLBL_CMPY_CD          = RS.GLBL_CMPY_CD
+                AND RS.RTL_WH_CATG_CD        = #rtlWhCatgCd#
+                AND RS.EZCANCELFLAG          = '0'
+                AND EXISTS(SELECT 1 FROM SVC_MACH_MSTR TRIB
+                           WHERE TRIB.GLBL_CMPY_CD             = IB.GLBL_CMPY_CD
+                                 AND TRIB.SVC_MACH_MSTR_PK     = #svcMachMstrPk#
+                                 AND TRIB.SVC_CONFIG_MSTR_PK   = IB.SVC_CONFIG_MSTR_PK
+                                 AND TRIB.EZCANCELFLAG         = '0' )
+            <!-- END 2023/07/14 K.Watanabe [QC#61310, ADD] -->
+            UNION
+            SELECT
+                 CD2.SVC_CONFIG_MSTR_PK
+                ,M.MDSE_CD
+                ,M.MDSE_DESC_SHORT_TXT
+                ,SMM2.SER_NUM
+                ,MN.T_MDL_NM
+                ,SMM2.SVC_MACH_MSTR_STS_CD
+                ,#svcMachTpCd# SVC_MACH_TP_CD
+            FROM
+                 SVC_MACH_MSTR SMM1
+                ,CPO_DTL       CD1
+                ,DS_CPO_CONFIG DCC
+                ,MDL_NM        MN
+                ,CPO_DTL       CD2
+                ,ORD_TAKE_MDSE OTM
+                ,MDSE          M
+                ,SVC_MACH_MSTR SMM2
+            WHERE
+                    SMM1.GLBL_CMPY_CD                 = #glblCmpyCd#
+                AND SMM1.SVC_MACH_MSTR_PK             = #svcMachMstrPk#
+                AND SMM1.EZCANCELFLAG                 = '0'
+                AND SMM1.GLBL_CMPY_CD                 = CD1.GLBL_CMPY_CD
+                AND SMM1.CPO_ORD_NUM                  = CD1.CPO_ORD_NUM
+                AND SMM1.CPO_DTL_LINE_NUM             = CD1.CPO_DTL_LINE_NUM
+                AND SMM1.CPO_DTL_LINE_SUB_NUM         = CD1.CPO_DTL_LINE_SUB_NUM
+                AND CD1.EZCANCELFLAG                  = '0'
+                AND CD1.GLBL_CMPY_CD                  = DCC.GLBL_CMPY_CD
+                AND CD1.DS_CPO_CONFIG_PK              = DCC.DS_CPO_CONFIG_PK
+                AND DCC.EZCANCELFLAG                  = '0'
+                AND DCC.GLBL_CMPY_CD                  = MN.T_GLBL_CMPY_CD
+                AND DCC.MDL_ID                        = MN.T_MDL_ID
+                AND MN.EZCANCELFLAG                   = '0'
+                AND DCC.GLBL_CMPY_CD                  = CD2.GLBL_CMPY_CD
+                AND DCC.DS_CPO_CONFIG_PK              = CD2.DS_CPO_CONFIG_PK
+                AND CD2.EZCANCELFLAG                  = '0'
+                AND CD2.GLBL_CMPY_CD                  = OTM.GLBL_CMPY_CD         (+)
+                AND CD2.MDSE_CD                       = OTM.ORD_TAKE_MDSE_CD     (+)
+                AND OTM.EZCANCELFLAG              (+) = '0'
+                AND CD2.GLBL_CMPY_CD                  = M.GLBL_CMPY_CD
+                AND NVL(OTM.MDSE_CD, CD2.MDSE_CD)     = M.MDSE_CD
+                AND M.INSTL_BASE_CTRL_FLG             = 'Y'
+                AND M.EZCANCELFLAG                    = '0'
+<!-- START 2018/12/07 S.Kitamura [QC#29519, ADD] -->
+                AND M.INVTY_CTRL_FLG                  = 'Y'
+<!-- END 2018/12/07 S.Kitamura [QC#29519, ADD] -->
+                AND CD2.GLBL_CMPY_CD                  = SMM2.GLBL_CMPY_CD        (+)
+                AND CD2.SVC_MACH_MSTR_PK              = SMM2.SVC_MACH_MSTR_PK    (+)
+                AND SMM2.EZCANCELFLAG             (+) = '0'
+                AND NOT EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        SVC_MACH_MSTR X
+                    WHERE
+                            CD2.GLBL_CMPY_CD         = X.GLBL_CMPY_CD
+                        AND CD2.CPO_ORD_NUM          = X.CPO_ORD_NUM
+                        AND CD2.CPO_DTL_LINE_NUM     = X.CPO_DTL_LINE_NUM
+                        AND CD2.CPO_DTL_LINE_SUB_NUM = X.CPO_DTL_LINE_SUB_NUM
+                        AND X.EZCANCELFLAG           = '0'
+                )
+        )
+        ORDER BY
+            <!-- IB.SVC_MACH_TP_CD, IB.MDSE_CD, IB.SER_NUM -->
+            SVC_MACH_TP_CD, MDSE_CD, SER_NUM
+<!-- END 2018/08/06 K.Kitachi [QC#26049, MOD] -->
+    </statement>
+<!-- START 2016/11/02 N.Arai [QC#15654, MOD] -->
+    <statement id="getTaskNoteList" parameterClass="Map" resultClass="Map">
+        SELECT
+            ST.GLBL_CMPY_CD
+            ,SCST.SVC_CALL_SRC_TP_DESC_TXT
+            ,MEMO.GLBL_CMPY_CD
+<!-- START 2016/11/07 N.Arai [QC#15784, MOD]    -->
+            ,MEMO.SVC_MEMO_PK
+<!-- END 2016/11/07 N.Arai [QC#15784, MOD]    -->
+            ,MEMO.LAST_UPD_TS
+            ,MEMO.SVC_CMNT_TXT
+            ,NVL(PSN.USR_NM,#system#) AS LAST_UPD_USR_ID
+            ,MEMO.SVC_TASK_NUM
+            ,TP.SVC_MEMO_TP_DESC_TXT
+        FROM
+            SVC_TASK          ST
+            ,FSR              FSR
+            ,SVC_CALL_SRC_TP  SCST
+            ,SVC_MEMO         MEMO
+            ,SVC_MEMO_TP      TP
+            ,AUTH_PSN         PSN
+        WHERE
+                ST.GLBL_CMPY_CD         = #glblCmpyCd#
+            AND ST.SVC_TASK_NUM         = #svcTaskNum#
+            AND ST.EZCANCELFLAG         = '0'
+            AND ST.GLBL_CMPY_CD         = FSR.GLBL_CMPY_CD
+            AND ST.FSR_NUM              = FSR.FSR_NUM
+            AND FSR.EZCANCELFLAG        = '0'
+            AND FSR.GLBL_CMPY_CD        = SCST.GLBL_CMPY_CD
+            AND FSR.SVC_CALL_SRC_TP_CD  = SCST.SVC_CALL_SRC_TP_CD
+            AND SCST.EZCANCELFLAG       = '0'
+            AND ST.GLBL_CMPY_CD         = MEMO.GLBL_CMPY_CD
+            AND ST.SVC_TASK_NUM         = MEMO.SVC_TASK_NUM
+<!-- START 2016/11/15 N.Arai [QC#15784, MOD]    -->
+<!-- START 2016/11/11 N.Arai [QC#15654, MOD]    -->
+<!--        AND MEMO.MBL_INTFC_PROC_CD  = #procCdnotProcessed#      -->
+<!-- START 2022/05/23 [QC#60058, MOD] -->
+<!--            AND NVL(MEMO.MBL_INTFC_PROC_CD, #procCdNotProcessed#)  = #procCdNotProcessed# -->
+            AND NVL(MEMO.MBL_INTFC_PROC_CD, #procCdNotProcessed#)  IN (#procCdNotProcessed#, #procCdError#)
+<!-- END   2022/05/23 [QC#60058, MOD] -->
+<!-- END 2016/11/11 N.Arai [QC#15654, MOD]    -->
+            AND MEMO.EZCANCELFLAG       = '0'
+            AND MEMO.GLBL_CMPY_CD       = TP.GLBL_CMPY_CD
+            AND MEMO.SVC_MEMO_TP_CD     = TP.SVC_MEMO_TP_CD
+            AND TP.MBL_INTFC_FLG        = #mblIntfcFlgY#
+            AND TP.EZCANCELFLAG         = '0'
+<!-- END 2016/11/15 N.Arai [QC#15784, MOD]    -->
+            AND MEMO.LAST_UPD_USR_ID    = PSN.USR_NM(+)
+            AND PSN.EZCANCELFLAG(+)     = '0'
+        ORDER BY
+            MEMO.LAST_UPD_TS DESC
+    </statement>
+<!-- END 2016/11/02 N.Arai [QC#15654, MOD] -->
+
+    <!-- START 2017/08/24 K.Kojima [QC#20667,ADD] -->
+    <statement id="getIstlChkVerFlg" parameterClass="Map" resultClass="String">
+        SELECT
+            ISTL.ISTL_CHK_VER_FLG
+        FROM
+             FSR_VISIT         PREV
+            ,FSR_VISIT         CURR
+            ,FSR_ISTL_CHK_LIST ISTL
+        WHERE
+            CURR.GLBL_CMPY_CD       = #glblCmpyCd#
+        AND CURR.SVC_TASK_NUM       = #svcTaskNum#
+        AND CURR.EZCANCELFLAG       = '0'
+        AND CURR.GLBL_CMPY_CD       = PREV.GLBL_CMPY_CD
+        AND CURR.FSR_NUM            = PREV.FSR_NUM
+        AND CURR.PREV_FSR_VISIT_NUM = PREV.FSR_VISIT_NUM
+        AND PREV.EZCANCELFLAG       = '0'
+        AND PREV.GLBL_CMPY_CD       = ISTL.GLBL_CMPY_CD
+        AND PREV.FSR_NUM            = ISTL.FSR_NUM
+        AND PREV.SVC_TASK_NUM       = ISTL.SVC_TASK_NUM
+        AND ISTL.MDSE_CD            = #mdseCd#
+        <isNotNull property="serNum">
+        AND ISTL.SER_NUM            = #serNum#
+        </isNotNull>
+        AND ISTL.EZCANCELFLAG       = '0'
+    </statement>
+    <!-- END 2017/08/24 K.Kojima [QC#20667,ADD] -->
+    <statement id="countSvcExchOrd" parameterClass="Map" resultClass="BigDecimal">
+    <!-- START 2018/05/30 T.Tomita [QC#26408,MOD] -->
+        SELECT
+            COUNT(*) AS CNT
+        FROM
+             SVC_MACH_MSTR        A
+            ,SVC_CONFIG_MSTR_DTL  B1
+            ,SVC_CONFIG_MSTR_DTL  B2
+            ,SVC_MACH_MSTR        C
+            ,CPO                  D
+            ,DS_ORD_TP            E
+            ,ORD_CATG_BIZ_CTX     F
+        WHERE
+            A.GLBL_CMPY_CD         =   #glblCmpyCd#
+        AND A.EZCANCELFLAG         =   '0'
+        AND A.SVC_MACH_MSTR_PK     =   #svcMachMstrPk#
+        AND A.GLBL_CMPY_CD         =   B1.GLBL_CMPY_CD
+        AND A.SVC_MACH_MSTR_PK     =   B1.SVC_MACH_MSTR_PK
+        AND B1.EZCANCELFLAG        =   '0'
+        AND B1.GLBL_CMPY_CD        =   B2.GLBL_CMPY_CD
+        AND B1.SVC_CONFIG_MSTR_PK  =   B2.SVC_CONFIG_MSTR_PK
+        AND B2.EZCANCELFLAG        =   '0'
+        AND B2.GLBL_CMPY_CD        =   C.GLBL_CMPY_CD
+        AND B2.SVC_MACH_MSTR_PK    =   C.SVC_MACH_MSTR_PK
+        AND C.EZCANCELFLAG         =   '0'
+        AND C.SVC_MACH_MSTR_STS_CD =   #svcMachMstrStsCd#
+        AND C.GLBL_CMPY_CD         =   D.GLBL_CMPY_CD
+        AND C.CPO_ORD_NUM          =   D.CPO_ORD_NUM
+        <iterate property="ordHdrStsCdList" var="ordHdrStsCd[]" open="AND D.ORD_HDR_STS_CD NOT IN (" close=")" conjunction=",">
+            #ordHdrStsCd[]#
+        </iterate>
+        AND D.EZCANCELFLAG         =   '0'
+        AND D.GLBL_CMPY_CD         =   E.GLBL_CMPY_CD
+        AND D.DS_ORD_TP_CD         =   E.DS_ORD_TP_CD
+        AND E.EZCANCELFLAG         =   '0'
+        AND E.GLBL_CMPY_CD         =   F.GLBL_CMPY_CD
+        AND E.DS_ORD_CATG_CD       =   F.DS_ORD_CATG_CD
+<!-- START 2019/06/17 W.Honda [QC#50842,MOD] -->
+        AND (E.DS_ORD_TP_CD        =   F.DS_ORD_TP_CD
+            OR  F.DS_ORD_TP_CD     IS  NULL)
+<!-- END 2019/06/17 W.Honda [QC#50842,MOD] -->
+        AND F.EZCANCELFLAG         =   '0'
+        AND F.ORD_CATG_CTX_TP_CD   =   #ordCatgCtxTpCd#
+    <!-- END 2018/05/30 T.Tomita [QC#26408,MOD] -->
+    </statement>
+    <statement id="getInstallCheckListForSvcExch" parameterClass="Map" resultClass="Map">
+        SELECT
+             B.SVC_CONFIG_MSTR_PK
+            ,C.MDSE_CD
+            ,D.MDSE_DESC_SHORT_TXT
+            ,C.SER_NUM
+            ,F.T_MDL_NM
+            ,C.SVC_MACH_TP_CD
+            ,C.SVC_MACH_MSTR_STS_CD
+        FROM
+             SVC_CONFIG_MSTR_DTL A
+            ,SVC_CONFIG_MSTR_DTL B
+            ,SVC_MACH_MSTR       C
+            ,MDSE                D
+            ,SVC_CONFIG_MSTR     E
+            ,MDL_NM              F
+        WHERE
+            A.GLBL_CMPY_CD                = #glblCmpyCd#
+        AND A.EZCANCELFLAG                = '0'
+        AND A.SVC_MACH_MSTR_PK            = #svcMachMstrPk#
+        AND A.GLBL_CMPY_CD                = B.GLBL_CMPY_CD
+        AND A.SVC_CONFIG_MSTR_PK          = B.SVC_CONFIG_MSTR_PK
+        AND B.EZCANCELFLAG                = '0'
+        AND B.SVC_MACH_RMV_DT             IS NULL
+        AND B.GLBL_CMPY_CD                = C.GLBL_CMPY_CD
+        AND B.SVC_MACH_MSTR_PK            = C.SVC_MACH_MSTR_PK
+        AND C.EZCANCELFLAG                = '0'
+        AND C.GLBL_CMPY_CD                = D.GLBL_CMPY_CD
+        AND C.MDSE_CD                     = D.MDSE_CD
+        AND D.EZCANCELFLAG                = '0'
+<!-- START 2018/12/07 S.Kitamura [QC#29519, ADD] -->
+        AND D.INVTY_CTRL_FLG              = 'Y'
+<!-- END 2018/12/07 S.Kitamura [QC#29519, ADD] -->
+        AND B.GLBL_CMPY_CD                = E.GLBL_CMPY_CD
+        AND B.SVC_CONFIG_MSTR_PK          = E.SVC_CONFIG_MSTR_PK
+        AND E.EZCANCELFLAG                = '0'
+        AND E.GLBL_CMPY_CD                = F.T_GLBL_CMPY_CD
+        AND E.MDL_ID                      = F.T_MDL_ID
+        AND F.EZCANCELFLAG                = '0'
+        AND NOT EXISTS (
+            SELECT
+                *
+            FROM
+                 SVC_MACH_MSTR   Z
+                ,DS_CPO_RTRN_DTL Y
+            WHERE
+<!-- START 2018/05/30 T.Tomita [QC#26408,MOD] -->
+                Z.GLBL_CMPY_CD     = C.GLBL_CMPY_CD
+            AND Z.EZCANCELFLAG     = '0'
+            AND Z.SVC_MACH_MSTR_PK = C.SVC_MACH_MSTR_PK
+            AND Z.GLBL_CMPY_CD     = Y.GLBL_CMPY_CD
+            AND (
+                    (
+                            Z.TRX_HDR_NUM      = Y.CPO_ORD_NUM
+                        AND Z.TRX_LINE_NUM     = Y.DS_CPO_RTRN_LINE_NUM
+                        AND Z.TRX_LINE_SUB_NUM = Y.DS_CPO_RTRN_LINE_SUB_NUM
+                    ) OR (
+                            Z.RMA_NUM          = Y.CPO_ORD_NUM
+                        AND Z.RMA_LINE_NUM     = Y.DS_CPO_RTRN_LINE_NUM
+                        AND Z.RMA_LINE_SUB_NUM = Y.DS_CPO_RTRN_LINE_SUB_NUM
+                    )
+                )
+<!-- END 2018/05/30 T.Tomita [QC#26408,MOD] -->
+            AND Y.EZCANCELFLAG     = '0'
+            <iterate property="rtnLineStsCdList" var="rtnLineStsCd[]" open="AND Y.RTRN_LINE_STS_CD NOT IN (" close=")" conjunction=",">
+                #rtnLineStsCd[]#
+            </iterate>
+            AND Y.SVC_MACH_MSTR_PK = B.SVC_MACH_MSTR_PK
+        )
+        ORDER BY
+             C.SVC_MACH_TP_CD
+            ,C.MDSE_CD
+            ,SER_NUM
+    </statement>
+    <!-- START 2019/10/02 K.Fujimoto [QC#53864, ADD] -->
+    <statement id="getFldSvcBr" parameterClass="Map" resultClass="String">
+    SELECT
+           BPX.SVC_BR_CD_DESC_TXT
+      FROM
+           SVC_BR_POST_XREF BPX
+     WHERE
+           BPX.GLBL_CMPY_CD    = #glblCmpyCd#
+       AND BPX.EZCANCELFLAG    = '0'
+       AND BPX.POST_CD         = #postCd#
+       AND BPX.SVC_LINE_BIZ_CD = #svcLineBizCd#
+       AND BPX.SVC_BR_CD       = #svcBrCd#
+    </statement>
+    <!-- END   2019/10/02 K.Fujimoto [QC#53864, ADD] -->
+    <!-- START 2019/12/19 K.Fujimoto [QC#55106, ADD] -->
+    <statement id="getFsrEventCnt" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+              COUNT(*)
+        FROM
+              FSR_EVENT EVENT
+        WHERE
+              EVENT.GLBL_CMPY_CD       = #glblCmpyCd#
+          AND EVENT.EZCANCELFLAG       = '0'
+          AND EVENT.SVC_TASK_NUM       = #svcTaskNum#
+          AND EVENT.MBL_INTFC_PROC_CD  = #mblIntfcProcCd#
+          AND EVENT.SVC_DISPT_EVENT_CD = #svcDisptEventCd#
+    </statement>
+    <!-- END   2019/12/19 K.Fujimoto [QC#55106, ADD] -->
+    <!-- START 2023/06/16 K.Watanabe [QC#61552, ADD] -->
+    <statement id="getSvcModSendClickCnt" parameterClass="Map" resultClass="BigDecimal">
+    SELECT
+           COUNT(*)
+      FROM
+           SVC_MOD_SEND_CLICK SMSC
+     WHERE
+           SMSC.EZCANCELFLAG = '0'
+       AND SMSC.GLBL_CMPY_CD = #glblCmpyCd#
+       AND SMSC.SVC_TASK_NUM = #svcTaskNum#
+    </statement>
+    <!-- END   2023/06/16 K.Watanabe [QC#61552, ADD] -->
+    <!-- START 2023/07/14 K.Watanabe [QC#61310, ADD] -->
+    <statement id="getShowRoomMachineCnt" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            COUNT(*)
+        FROM
+             SVC_TASK      TASK 
+            ,SVC_MACH_MSTR SMM
+            ,RTL_SWH       RS
+        WHERE
+                TASK.EZCANCELFLAG               = '0'
+            AND TASK.GLBL_CMPY_CD               = #glblCmpyCd#
+            AND TASK.SVC_TASK_NUM               = #svcTaskNum#
+            AND TASK.GLBL_CMPY_CD               = SMM.GLBL_CMPY_CD
+            AND TASK.SVC_MACH_MSTR_PK           = SMM.SVC_MACH_MSTR_PK
+            AND SMM.EZCANCELFLAG                = '0'
+            AND SMM.SVC_MACH_TP_CD              = #svcMachTpCd#
+            AND SMM.SVC_CONFIG_MSTR_PK          IS NOT NULL
+            <iterate property="svcMachMstrStsCdList" var="svcMachMstrStsCd[]" open="AND SMM.SVC_MACH_MSTR_STS_CD IN (" close=")" conjunction=",">
+                #svcMachMstrStsCd[]#
+            </iterate>
+            AND SMM.GLBL_CMPY_CD                = RS.GLBL_CMPY_CD
+            AND SMM.CUR_LOC_NUM                 = RS.INVTY_LOC_CD
+            AND RS.EZCANCELFLAG                 = '0'
+            AND RS.RTL_WH_CATG_CD               = #rtlWhCatgCd#
+            AND RS.EFF_FROM_DT                  &lt;= #startDt#
+            AND NVL(RS.EFF_THRU_DT, #startDt#)  &gt;= #startDt#
+    </statement>
+    <!-- END 2023/07/14 K.Watanabe [QC#61310, ADD] -->
+</sqlMap>

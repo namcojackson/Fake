@@ -1,0 +1,217 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NWAB151001">
+
+    <statement id="getHoldOrderInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+               H.HLD_PK
+              ,H.CPO_ORD_NUM
+              ,H.CPO_DTL_LINE_NUM
+              ,H.CPO_DTL_LINE_SUB_NUM
+              ,H.SHPG_PLN_NUM
+              ,HR.HLD_LVL_CD
+        FROM
+               HLD     H
+              ,HLD_RSN HR
+        WHERE
+               H.GLBL_CMPY_CD       = #glblCmpyCd#
+           AND H.REL_FLG            = 'N'
+           AND H.HLD_UNTIL_DT       <![CDATA[<=]]> #slsDt#
+           AND H.GLBL_CMPY_CD       = HR.GLBL_CMPY_CD
+           AND H.HLD_RSN_CD         = HR.HLD_RSN_CD
+           AND H.EZCANCELFLAG       = '0'
+           AND HR.EZCANCELFLAG      = '0'
+        ORDER BY
+           H.CPO_ORD_NUM
+
+    </statement>
+
+    <!-- 2019/09/02 QC#53016 Add Start -->
+    <statement id="getPendingBillingHoldOrderInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+               H.HLD_PK
+              ,H.CPO_ORD_NUM
+              ,H.CPO_DTL_LINE_NUM
+              ,H.CPO_DTL_LINE_SUB_NUM
+              ,H.SHPG_PLN_NUM
+              ,HR.HLD_LVL_CD
+        FROM
+              ( 
+              SELECT
+                  CPO.GLBL_CMPY_CD
+                 ,CPO.EZCANCELFLAG
+                 ,CPO.CPO_ORD_NUM
+                 ,CPO.DS_ORD_CATG_CD
+                 ,CPO.DS_ORD_TP_CD
+                 ,MAX ( 
+                     CASE 
+                     WHEN     CPO.REV_RECOG_METH_CD = #revRecogMethCdPOD#
+                          AND DM.SVC_ISTL_REQ_FLG   = 'Y'
+                     THEN #revRecogMethCdInstall#
+                     ELSE CPO.REV_RECOG_METH_CD 
+                     END
+                  ) AS REV_RECOG_METH_CD 
+                 <!-- 2019/12/05 QC#54724 Add Start -->
+                 ,CPO.REV_RECOG_METH_CD AS ORIG_REV_RECOG_METH_CD
+                 <!-- 2019/12/05 QC#54724 Add End -->
+              FROM
+                  CPO           CPO
+                 ,DS_CPO_CONFIG DCC
+                 ,DS_MDL        DM 
+              WHERE
+                    CPO.GLBL_CMPY_CD   = #glblCmpyCd#
+                AND CPO.GLBL_CMPY_CD   = DCC.GLBL_CMPY_CD
+                AND CPO.CPO_ORD_NUM    = DCC.CPO_ORD_NUM
+                AND DCC.CONFIG_CATG_CD = #configCatgCdOutbound#
+                AND DCC.GLBL_CMPY_CD   = DM.GLBL_CMPY_CD(+)
+                AND DCC.MDL_ID         = DM.MDL_ID(+) 
+                AND CPO.EZCANCELFLAG   = '0'
+                AND DCC.EZCANCELFLAG   = '0'
+                AND DM.EZCANCELFLAG(+) = '0'
+              GROUP BY
+                CPO.GLBL_CMPY_CD
+               ,CPO.EZCANCELFLAG
+               ,CPO.CPO_ORD_NUM
+               ,CPO.DS_ORD_CATG_CD
+               ,CPO.DS_ORD_TP_CD
+               <!-- 2019/12/05 QC#54724 Add Start -->
+               ,CPO.REV_RECOG_METH_CD
+               <!-- 2019/12/05 QC#54724 Add End -->
+              )                  C
+             ,HLD                H
+             ,HLD_RSN            HR
+             ,ORD_CATG_BIZ_CTX   OCBC
+             ,REV_RECOG_SHPG_STS RRSS 
+        WHERE
+              OCBC.GLBL_CMPY_CD       = C.GLBL_CMPY_CD
+          AND (
+                  (
+                       OCBC.DS_ORD_CATG_CD  IS NULL
+                   AND OCBC.DS_ORD_TP_CD    IS NULL
+                  )
+                  OR
+                  (
+                       OCBC.DS_ORD_CATG_CD  = C.DS_ORD_CATG_CD
+                   AND OCBC.DS_ORD_TP_CD    IS NULL
+                  )
+                  OR
+                  (
+                       OCBC.DS_ORD_CATG_CD  = C.DS_ORD_CATG_CD
+                   AND OCBC.DS_ORD_TP_CD    = C.DS_ORD_TP_CD
+                  )
+              )
+          AND OCBC.ORD_CATG_CTX_TP_CD = #ordCatgCtxTp#
+          AND C.GLBL_CMPY_CD          = H.GLBL_CMPY_CD
+          AND C.CPO_ORD_NUM           = H.CPO_ORD_NUM
+          AND H.REL_FLG               = 'N'
+          AND H.GLBL_CMPY_CD          = HR.GLBL_CMPY_CD
+          AND H.HLD_RSN_CD            = HR.HLD_RSN_CD
+          AND HR.HLD_RSN_CD           = #hldRsnCd#
+          AND C.GLBL_CMPY_CD          = RRSS.GLBL_CMPY_CD
+          AND C.REV_RECOG_METH_CD     = RRSS.REV_RECOG_METH_CD
+          AND EXISTS (
+                  SELECT
+                         1
+                  FROM
+                         SHPG_PLN SP
+                        ,CPO_DTL CD
+                  WHERE
+                         C.GLBL_CMPY_CD          = SP.GLBL_CMPY_CD
+                     AND C.CPO_ORD_NUM           = SP.TRX_HDR_NUM
+                     AND RRSS.GLBL_CMPY_CD       = SP.GLBL_CMPY_CD
+                     AND RRSS.SHPG_STS_CD        = SP.SHPG_STS_CD
+                     AND SP.TRX_LINE_SUB_NUM     != #setParentLineSubNum#
+                     AND SP.EZCANCELFLAG         = '0'
+                     AND CD.GLBL_CMPY_CD         = SP.GLBL_CMPY_CD
+                     AND CD.CPO_ORD_NUM          = SP.TRX_HDR_NUM
+                     AND CD.CPO_DTL_LINE_NUM     = SP.TRX_LINE_NUM
+                     AND CD.CPO_DTL_LINE_SUB_NUM = SP.TRX_LINE_SUB_NUM
+                     AND CD.CR_REBIL_CD          IS NULL
+                     AND (CD.RTL_WH_CD            NOT IN 
+                     <iterate property="crRebillDummyWhCdList" var="crRebillDummyWhCd[]" open="(" close=" )" conjunction=",">
+                         #crRebillDummyWhCd[]#
+                     </iterate>
+                         <!-- 2019/12/05 QC#54724 Add Start -->
+                         OR CD.RTL_WH_CD IS NULL
+                         )
+                         <!-- 2019/12/05 QC#54724 Add End -->
+                     AND CD.EZCANCELFLAG         = '0'
+                  )
+           AND NOT EXISTS (
+                  SELECT
+                         1
+                  FROM
+                         SHPG_PLN SP
+                        ,CPO_DTL CD
+                        <!-- 2019/12/05 QC#54724 Add Start -->
+                        ,ALL_MDSE_V AMV 
+                        <!-- 2019/12/05 QC#54724 Add End -->
+                  WHERE
+                         C.GLBL_CMPY_CD          = SP.GLBL_CMPY_CD
+                     AND C.CPO_ORD_NUM           = SP.TRX_HDR_NUM
+                     <!-- 2019/12/05 QC#54724 Add Start -->
+                     AND SP.GLBL_CMPY_CD         = AMV.GLBL_CMPY_CD
+                     AND SP.MDSE_CD              = AMV.MDSE_CD
+                     AND AMV.EZCANCELFLAG        = '0'
+                     <!-- 2019/12/05 QC#54724 Add End -->
+                     AND SP.SHPG_STS_CD NOT IN ( 
+                        SELECT
+                              RRSS2.SHPG_STS_CD 
+                        FROM
+                              REV_RECOG_SHPG_STS RRSS2 
+                        WHERE
+                            C.GLBL_CMPY_CD          = RRSS2.GLBL_CMPY_CD 
+                            <!-- 2019/12/05 QC#54724 Mod Start -->
+<!--                            AND C.REV_RECOG_METH_CD = RRSS2.REV_RECOG_METH_CD -->
+                            AND (
+                                   (
+                                        AMV.INSTL_BASE_CTRL_FLG = 'Y'
+                                    AND C.REV_RECOG_METH_CD = RRSS2.REV_RECOG_METH_CD
+                                   )
+                                   OR
+                                   (
+                                        AMV.INSTL_BASE_CTRL_FLG = 'N'
+                                    AND C.ORIG_REV_RECOG_METH_CD = RRSS2.REV_RECOG_METH_CD
+                                   )
+                                )
+                              <!-- 2019/12/05 QC#54724 Mod End -->
+                              AND RRSS2.EZCANCELFLAG  = '0'
+                     ) 
+                     AND SP.TRX_LINE_SUB_NUM        != #setParentLineSubNum#
+                     AND NOT (
+                                 SP.SHPG_STS_CD   = #ignoreShpgStsCd#
+                              OR SP.REV_RECOG_FLG = 'Y'
+                             )
+                     AND SP.EZCANCELFLAG         = '0'
+                     AND CD.GLBL_CMPY_CD         = SP.GLBL_CMPY_CD
+                     AND CD.CPO_ORD_NUM          = SP.TRX_HDR_NUM
+                     AND CD.CPO_DTL_LINE_NUM     = SP.TRX_LINE_NUM
+                     AND CD.CPO_DTL_LINE_SUB_NUM = SP.TRX_LINE_SUB_NUM
+                     AND CD.CR_REBIL_CD          IS NULL
+                     AND (CD.RTL_WH_CD            NOT IN 
+                     <iterate property="crRebillDummyWhCdList" var="crRebillDummyWhCd[]" open="(" close=" )" conjunction=",">
+                         #crRebillDummyWhCd[]#
+                     </iterate>
+                     <!-- 2019/12/05 QC#54724 Add Start -->
+                         OR CD.RTL_WH_CD IS NULL
+                         )
+                     <!-- 2019/12/05 QC#54724 Add End -->
+                     AND CD.EZCANCELFLAG         = '0'
+                 )
+           AND C.EZCANCELFLAG       = '0'
+           AND H.EZCANCELFLAG       = '0'
+           AND HR.EZCANCELFLAG      = '0'
+           AND OCBC.EZCANCELFLAG    = '0'
+           AND RRSS.EZCANCELFLAG    = '0'
+        GROUP BY
+              H.HLD_PK
+            , H.CPO_ORD_NUM
+            , H.CPO_DTL_LINE_NUM
+            , H.CPO_DTL_LINE_SUB_NUM
+            , H.SHPG_PLN_NUM
+            , HR.HLD_LVL_CD 
+        ORDER BY
+              H.CPO_ORD_NUM
+    </statement>
+    <!-- 2019/09/02 QC#53016 Add End -->
+</sqlMap>

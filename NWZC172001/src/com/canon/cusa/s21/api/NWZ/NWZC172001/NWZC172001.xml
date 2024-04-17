@@ -1,0 +1,410 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NWZC172001">
+
+    <!-- #################### Statement #################### --> 
+    <statement id="getSchdCratTmpl" parameterClass="Map" resultClass="Map">
+          SELECT 
+                    SCT.SCHD_CRAT_TMPL_PK         AS SCHD_CRAT_TMPL_PK
+                  , SCT.DS_CONTR_PK               AS DS_CONTR_PK
+                  , SCT.REF_CPO_ORD_NUM           AS REF_CPO_ORD_NUM
+                  , SCT.DS_ORD_TP_CD              AS DS_ORD_TP_CD
+                  <!-- 2018/08/20 S21_NA#26146 Mod Start -->
+                  <!--
+                  , SCT.CUST_ISS_PO_NUM           AS CUST_ISS_PO_NUM
+                  , SCT.CUST_ISS_PO_DT            AS CUST_ISS_PO_DT
+                  -->
+                  , NVL(CCP.CUST_PO_NUM,    CPO.CUST_ISS_PO_NUM) AS CUST_ISS_PO_NUM
+                  , NVL(CCP.CUST_ISS_PO_DT, CPO.CUST_ISS_PO_DT)  AS CUST_ISS_PO_DT
+                  <!-- 2018/08/20 S21_NA#26146 Mod End -->
+                  , SCT.CPO_SRC_TP_CD             AS CPO_SRC_TP_CD
+                  , SCT.ORD_SRC_REF_NUM           AS ORD_SRC_REF_NUM
+                  , DOTPD.DEF_PRC_CATG_CD         AS DEF_PRC_CATG_CD
+                  , DOTPD.FRT_COND_CD             AS FRT_COND_CD
+                  , DOTPD.LINE_BIZ_TP_CD          AS LINE_BIZ_TP_CD
+                  , DOTPD.DEF_SHPG_SVC_LVL_CD     AS DEF_SHPG_SVC_LVL_CD
+                  , TMP_DOLPD.DS_ORD_LINE_CATG_CD AS DS_ORD_LINE_CATG_CD
+                  , FRTC.FRT_CHRG_METH_CD         AS FRT_CHRG_METH_CD
+                  , FRTC.FRT_CHRG_TO_CD           AS FRT_CHRG_TO_CD
+                  , DOT.DS_ORD_CATG_CD            AS DS_ORD_CATG_CD
+                  , DOT.CPO_ORD_TP_CD             AS CPO_ORD_TP_CD
+                  , CPO.ADMIN_PSN_CD              AS ADMIN_PSN_CD
+                  , PRCC.CCY_CD                   AS CCY_CD
+          FROM  
+                    SCHD_CRAT_TMPL SCT
+                  , SCHD_CRAT_TMPL_LINE SCTL
+                  , DS_ORD_TP_PROC_DFN DOTPD
+                  , FRT_COND  FRTC
+                  , DS_ORD_TP DOT
+                  , (SELECT DOLPD.GLBL_CMPY_CD
+                            , DOLPD.DS_ORD_TP_CD
+                            , DOLPD.EZCANCELFLAG
+                            , DOLPD.DS_ORD_LINE_CATG_CD
+                       FROM DS_ORD_LINE_PROC_DFN DOLPD
+                      WHERE DOLPD.GLBL_CMPY_CD       = #glblCmpyCd#
+                        AND DOLPD.PRIM_LINE_CATG_FLG = 'Y'
+                        AND DOLPD.EFF_FROM_DT    &lt;= #slsDt#
+                        AND ( DOLPD.EFF_THRU_DT  &gt;= #slsDt#
+                              OR DOLPD.EFF_THRU_DT   IS NULL )
+                        AND DOLPD.ACTV_FLG           = 'Y'
+                        AND DOLPD.EZCANCELFLAG       = '0') TMP_DOLPD
+                  , CPO CPO
+                  , PRC_CATG PRCC
+                  , DS_ORD_LINE_CATG DOLC
+                  <!-- 2018/08/20 S21_NA#26146 Add Start -->
+                  , DS_CONTR_CR_CARD_PO CCP
+                  <!-- 2018/08/20 S21_NA#26146 Add End -->
+          WHERE 
+                    SCT.GLBL_CMPY_CD              = #glblCmpyCd#
+                AND SCT.DS_CONTR_PK               = #dsContrPk#
+                AND SCT.EZCANCELFLAG              = '0'
+
+                <!-- Add Start 2017/03/16 S21_NA#18024 -->
+                AND SCT.GLBL_CMPY_CD              = SCTL.GLBL_CMPY_CD
+                AND SCT.SCHD_CRAT_TMPL_PK         = SCTL.SCHD_CRAT_TMPL_PK
+                AND SCHD_CRAT_TMPL_LINE_NUM       = (
+                                                     SELECT
+                                                             MIN(A.SCHD_CRAT_TMPL_LINE_NUM)
+                                                     FROM
+                                                             SCHD_CRAT_TMPL_LINE A
+                                                     WHERE
+                                                             A.GLBL_CMPY_CD      = SCTL.GLBL_CMPY_CD
+                                                         AND A.SCHD_CRAT_TMPL_PK = SCTL.SCHD_CRAT_TMPL_PK
+                                                         AND A.EZCANCELFLAG      ='0'
+                                                    )
+                AND SCTL.DS_CONTR_DTL_PK          = #dsContrDtlPk#
+                AND SCTL.EZCANCELFLAG             = '0'
+                <!-- Add End   2017/03/16 S21_NA#18024 -->
+
+                AND SCT.GLBL_CMPY_CD              = DOTPD.GLBL_CMPY_CD (+)
+                AND SCT.DS_ORD_TP_CD              = DOTPD.DS_ORD_TP_CD (+)
+                AND DOTPD.EFF_FROM_DT (+)     &lt;= #slsDt# --SALESDATE
+                AND ( DOTPD.EFF_THRU_DT (+)   &gt;= #slsDt# OR DOTPD.EFF_THRU_DT (+) IS NULL ) --SALESDATE
+                AND DOTPD.EZCANCELFLAG (+)        = '0'
+                AND DOTPD.GLBL_CMPY_CD            = FRTC.GLBL_CMPY_CD (+)
+                AND DOTPD.FRT_COND_CD             = FRTC.FRT_COND_CD (+)
+                AND FRTC.EZCANCELFLAG (+)         = '0'
+                AND SCT.GLBL_CMPY_CD              = DOT.GLBL_CMPY_CD (+)
+                AND SCT.DS_ORD_TP_CD              = DOT.DS_ORD_TP_CD (+)
+                AND DOT.EZCANCELFLAG (+)          = '0'
+                AND DOT.GLBL_CMPY_CD              = TMP_DOLPD.GLBL_CMPY_CD (+)
+                AND DOT.DS_ORD_TP_CD              = TMP_DOLPD.DS_ORD_TP_CD (+)
+                AND TMP_DOLPD.EZCANCELFLAG (+)    = '0'
+                AND SCT.GLBL_CMPY_CD              = CPO.GLBL_CMPY_CD (+)
+                AND SCT.REF_CPO_ORD_NUM           = CPO.CPO_ORD_NUM (+)
+                AND CPO.EZCANCELFLAG (+)          = '0'
+                AND DOTPD.GLBL_CMPY_CD            = PRCC.GLBL_CMPY_CD (+)
+                AND DOTPD.DEF_PRC_CATG_CD         = PRCC.PRC_CATG_CD (+)
+                AND PRCC.EZCANCELFLAG (+)         = '0'
+                AND TMP_DOLPD.GLBL_CMPY_CD        = DOLC.GLBL_CMPY_CD (+)
+                AND TMP_DOLPD.DS_ORD_LINE_CATG_CD = DOLC.DS_ORD_LINE_CATG_CD (+)
+                AND DOLC.DS_ORD_LINE_DRCTN_CD (+) = #dsOrdLineDrctnOut#
+                AND DOLC.EZCANCELFLAG (+)         = '0'
+                <!-- 2018/08/20 S21_NA#26146 Add Start -->
+                AND SCTL.DS_CONTR_DTL_PK          = CCP.DS_CONTR_DTL_PK (+)
+                AND SCTL.GLBL_CMPY_CD             = CCP.GLBL_CMPY_CD (+)
+                AND CCP.EZCANCELFLAG (+)          = '0'
+                <!-- 2018/08/20 S21_NA#26146 Add End -->
+    </statement>
+
+    <statement id="getPmtTermCashDiscCd" parameterClass="Map" resultMap="String">
+          SELECT 
+                    CCP.PMT_TERM_CASH_DISC_CD
+          FROM
+                    CUST_CR_PRFL    CCP
+          WHERE 
+                    CCP.GLBL_CMPY_CD    = #glblCmpyCd#
+                AND CCP.BILL_TO_CUST_CD = #billToCustCd#
+                AND CCP.EZCANCELFLAG    = '0'
+    </statement>
+
+    <statement id="getShipToCustInfoList" parameterClass="Map" resultClass="Map">
+        SELECT
+            STC.SHIP_TO_CUST_CD     AS SHIP_TO_CUST_CD
+            ,(
+              CASE WHEN STC.FIRST_LINE_ADDR IS NOT NULL THEN
+                   DECODE (STC.FIRST_LINE_ADDR, NULL, '', CONCAT(STC.FIRST_LINE_ADDR, CHR(13) || CHR(10)))
+                   || DECODE (STC.SCD_LINE_ADDR, NULL, '', CONCAT(STC.SCD_LINE_ADDR, CHR(13) || CHR(10)))
+                   || DECODE (STC.THIRD_LINE_ADDR, NULL, '', CONCAT(STC.THIRD_LINE_ADDR, CHR(13) || CHR(10)))
+                   || DECODE (STC.FRTH_LINE_ADDR, NULL, '', CONCAT(STC.FRTH_LINE_ADDR, CHR(13) || CHR(10)))
+                   || CONCAT (STC.CTY_ADDR, ',')
+                   || RPAD (STC.ST_CD, LENGTH (STC.ST_CD) + 1)
+                   || STC.POST_CD
+              END)                  AS SHIP_TO_ADDR
+            ,STC.LOC_NM             AS LOC_NM
+            ,STC.LOC_NUM            AS LOC_NUM
+            ,STC.ADDL_LOC_NM        AS ADDL_LOC_NM
+            ,STC.FIRST_LINE_ADDR    AS FIRST_LINE_ADDR
+            ,STC.SCD_LINE_ADDR      AS SCD_LINE_ADDR
+            ,STC.THIRD_LINE_ADDR    AS THIRD_LINE_ADDR
+            ,STC.FRTH_LINE_ADDR     AS FRTH_LINE_ADDR
+            ,STC.FIRST_REF_CMNT_TXT AS FIRST_REF_CMNT_TXT
+            ,STC.SCD_REF_CMNT_TXT   AS SCD_REF_CMNT_TXT
+            ,STC.CTY_ADDR           AS CTY_ADDR
+            ,STC.ST_CD              AS ST_CD
+            ,STC.POST_CD            AS POST_CD
+            ,STC.PROV_NM            AS PROV_NM
+            ,STC.CTRY_CD            AS CTRY_CD
+            ,DAC.SELL_TO_CUST_CD    AS SELL_TO_CUST_CD
+            ,DAC.DS_ACCT_NM         AS DS_ACCT_NM
+            ,CNTY.CNTY_NM           AS CNTY_NM
+        FROM
+            SHIP_TO_CUST STC
+           ,SELL_TO_CUST DAC
+           ,CNTY         CNTY
+        WHERE
+            STC.GLBL_CMPY_CD        = #glblCmpyCd#
+            AND STC.SHIP_TO_CUST_CD = #shipToCustCd#
+            AND STC.RGTN_STS_CD     = #rgtnStsCd#
+            AND STC.EZCANCELFLAG    = '0'
+            
+            AND STC.GLBL_CMPY_CD    = DAC.GLBL_CMPY_CD
+            AND STC.SELL_TO_CUST_CD = DAC.SELL_TO_CUST_CD
+            AND DAC.RGTN_STS_CD     = #rgtnStsCd#
+            AND DAC.EZCANCELFLAG    = '0'
+
+            AND STC.GLBL_CMPY_CD      = CNTY.GLBL_CMPY_CD (+)
+            AND STC.CNTY_PK           = CNTY.CNTY_PK (+)
+            AND CNTY.EZCANCELFLAG (+) = '0'
+    </statement>
+    <statement id="getSalesCredit" parameterClass="Map" resultClass="Map">
+        SELECT
+              CSC.DS_CPO_CONFIG_PK
+            , CSC.SLS_REP_TOC_CD
+            , CSC.SLS_REP_ROLE_TP_CD
+            , CSC.SLS_REP_CR_PCT
+            , CSC.SLS_CR_QUOT_FLG
+        FROM
+              DS_CPO_SLS_CR     CSC
+            , DS_CPO_CONFIG     DCC
+        WHERE
+                CSC.GLBL_CMPY_CD             = #glblCmpyCd#
+            AND CSC.CPO_ORD_NUM              = #cpoOrdNum#
+            AND CSC.DS_CPO_CONFIG_PK         = #dsCpoConfigPk#
+            AND CSC.EZCANCELFLAG             = '0'
+            AND CSC.GLBL_CMPY_CD             = DCC.GLBL_CMPY_CD
+            AND CSC.CPO_ORD_NUM              = DCC.CPO_ORD_NUM
+            AND CSC.DS_CPO_CONFIG_PK         = DCC.DS_CPO_CONFIG_PK
+            AND DCC.CONFIG_CATG_CD           = #configCatgCd#
+            AND DCC.EZCANCELFLAG             = '0'
+        ORDER BY
+              CSC.DS_CPO_SLS_CR_PK               ASC
+    </statement>
+    <statement id ="getCtacPsn" parameterClass="Map"  resultClass="Map">
+        SELECT 
+              DCCP.DS_CPO_CTAC_PSN_PK
+            , DCCP.CTAC_PSN_PK
+            , DCCP.CTAC_PSN_TP_CD
+            , CASE WHEN CT.SA_AUTO_CHNG_CTAC_TP_CD IS NULL THEN DCCP.CTAC_PSN_TP_CD ELSE CT.SA_AUTO_CHNG_CTAC_TP_CD END AS CHNG_CTAC_PSN_TP_CD <!-- S21_NA MOD QC#20164 -->
+            , DCCP.CTAC_PSN_OVRD_FLG
+            , DCCP.CTAC_PSN_FIRST_NM
+            , DCCP.CTAC_PSN_LAST_NM
+            , DCCP.CTAC_PSN_TEL_NUM
+            , DCCP.CTAC_PSN_EXTN_NUM
+            , DCCP.CTAC_PSN_EML_ADDR
+            , DCCP.CTAC_PSN_FAX_NUM
+            , DCCP.CTAC_CUST_REF_TP_CD <!-- S21_NA ADD QC#21564 -->
+        FROM 
+            DS_CPO_CONFIG     DCC
+           ,DS_CPO_CTAC_PSN   DCCP
+           ,CTAC_TP           CT <!-- S21_NA ADD QC#20164 -->
+        WHERE 
+                DCCP.GLBL_CMPY_CD            = #glblCmpyCd#
+            AND DCCP.CPO_ORD_NUM             = #cpoOrdNum#
+            AND DCCP.DS_CPO_CONFIG_PK        = #dsCpoConfigPk#
+            AND DCCP.EZCANCELFLAG            = '0'
+            AND DCCP.GLBL_CMPY_CD            = DCC.GLBL_CMPY_CD
+            AND DCCP.CPO_ORD_NUM             = DCC.CPO_ORD_NUM
+            AND DCCP.DS_CPO_CONFIG_PK        = DCC.DS_CPO_CONFIG_PK
+            AND DCC.CONFIG_CATG_CD           = #configCatgCd#
+            AND DCC.EZCANCELFLAG             = '0'
+
+            <!-- S21_NA ADD START QC#20164 -->
+            AND DCCP.GLBL_CMPY_CD            = CT.GLBL_CMPY_CD
+            AND DCCP.CTAC_PSN_TP_CD          = CT.CTAC_TP_CD
+            AND CT.EZCANCELFLAG              = '0'
+            <!-- S21_NA ADD END QC#20164 -->
+    </statement>
+
+    <!-- Add Start 2017/03/16 S21_NA#18024 -->
+    <statement id="getDsContrDtlPk" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            DCD.DS_CONTR_DTL_PK
+        FROM
+            SCHD_CRAT_TMPL      SCT
+           ,SCHD_CRAT_TMPL_LINE SCTL
+           ,DS_CONTR_DTL        DCD
+        WHERE
+            SCT.GLBL_CMPY_CD           = #glblCmpyCd#
+        AND SCT.SCHD_CRAT_TMPL_PK      = #schdCratTmplPk#
+        AND SCT.EZCANCELFLAG           = '0'
+        AND SCT.GLBL_CMPY_CD           = SCTL.GLBL_CMPY_CD
+        AND SCT.SCHD_CRAT_TMPL_PK      = SCTL.SCHD_CRAT_TMPL_PK
+        AND SCTL.EZCANCELFLAG          = '0'
+        AND SCTL.GLBL_CMPY_CD          = DCD.GLBL_CMPY_CD
+        AND SCTL.DS_CONTR_DTL_PK       = DCD.DS_CONTR_DTL_PK
+        AND DCD.EZCANCELFLAG           = '0'
+        AND ROWNUM                     = 1
+    </statement>
+
+    <statement id="getSplyAgmtParam" parameterClass="Map" resultClass="Map">
+        SELECT
+                DS_CONTR_DTL_PK
+              , PRC_CATG_CD
+              , MDL_ID
+              , PRC_MTR_PKG_PK
+              , PRC_SVC_PLN_TP_CD
+              , PRC_SVC_CONTR_TP_CD
+              , BLLG_MTR_LB_CD
+              , PRC_LIST_BAND_CD
+              , INTG_MDSE_CD
+              , NVL(CXC.XS_MTR_COPY_QTY, 0) AS MIN_COPY_VOL_CNT
+              , MTR_LB_SORT_NUM
+              , PRC_SVC_TIER_TP_SORT_NUM
+        FROM
+            (
+                SELECT
+                        DCD.GLBL_CMPY_CD            AS GLBL_CMPY_CD
+                      , DCD.DS_CONTR_DTL_PK         AS DS_CONTR_DTL_PK
+                      , DCD.PRC_CATG_CD             AS PRC_CATG_CD
+                      , DCD.MDL_ID                  AS MDL_ID
+                      , DCD.PRC_MTR_PKG_PK          AS PRC_MTR_PKG_PK
+                      , DC.PRC_SVC_PLN_TP_CD        AS PRC_SVC_PLN_TP_CD
+                      , DC.PRC_SVC_CONTR_TP_CD      AS PRC_SVC_CONTR_TP_CD
+                      , DCBM.BLLG_MTR_LB_CD         AS BLLG_MTR_LB_CD
+                      , DCBM.PRC_LIST_BAND_CD       AS PRC_LIST_BAND_CD
+                      , DCBM.INTG_MDSE_CD           AS INTG_MDSE_CD
+                      , (
+                        SELECT
+                            A.CONTR_XS_COPY_PK
+                        FROM (
+                            SELECT
+                                B.CONTR_XS_COPY_PK AS CONTR_XS_COPY_PK
+                            FROM
+                                CONTR_XS_COPY B
+                            WHERE
+                                    B.GLBL_CMPY_CD         = DCBM.GLBL_CMPY_CD
+                                AND B.DS_CONTR_BLLG_MTR_PK = DCBM.DS_CONTR_BLLG_MTR_PK
+                                AND B.EZCANCELFLAG         = '0'
+                            ORDER BY
+                                B.XS_MTR_COPY_QTY
+                            ) A
+                        WHERE
+                            ROWNUM = 1
+                        )                           AS CONTR_XS_COPY_PK
+                      , ML.MTR_LB_SORT_NUM          AS MTR_LB_SORT_NUM
+                FROM
+                      DS_CONTR_DTL       DCD
+                    , DS_CONTR           DC
+                    , DS_CONTR_BLLG_MTR  DCBM
+                    , MTR_LB             ML
+                WHERE
+                        DCD.GLBL_CMPY_CD          = #glblCmpyCd#
+                    <isNull property="dsContrDtlPk">
+                    AND DCD.DS_CONTR_DTL_PK       IS NULL
+                    </isNull>
+                    <isNotNull property="dsContrDtlPk">
+                    AND DCD.DS_CONTR_DTL_PK       = #dsContrDtlPk#
+                    </isNotNull>
+                    AND DCD.EZCANCELFLAG          = '0'
+                    --
+                    AND DCD.GLBL_CMPY_CD          = DC.GLBL_CMPY_CD
+                    AND DCD.DS_CONTR_PK           = DC.DS_CONTR_PK
+                    --
+                    AND DCD.GLBL_CMPY_CD          = DCBM.GLBL_CMPY_CD
+                    AND DCD.DS_CONTR_DTL_PK       = DCBM.DS_CONTR_DTL_PK
+                    AND DCBM.EZCANCELFLAG         = '0'
+                    --
+                    AND DCBM.GLBL_CMPY_CD         = ML.GLBL_CMPY_CD(+)
+                    AND DCBM.BLLG_MTR_LB_CD       = ML.MTR_LB_CD(+)
+                    AND ML.EZCANCELFLAG(+)        = '0'
+            ) TGT
+            , CONTR_XS_COPY      CXC
+            , PRC_SVC_TIER_TP    TT
+        WHERE
+                TGT.GLBL_CMPY_CD       = CXC.GLBL_CMPY_CD
+            AND TGT.CONTR_XS_COPY_PK   = CXC.CONTR_XS_COPY_PK
+            AND CXC.EZCANCELFLAG       = '0'
+            --
+            AND CXC.GLBL_CMPY_CD       = TT.GLBL_CMPY_CD(+)
+            AND CXC.PRC_SVC_TIER_TP_CD = TT.PRC_SVC_TIER_TP_CD(+)
+            AND TT.EZCANCELFLAG(+)     = '0'
+        ORDER BY
+              MDL_ID                    NULLS LAST
+            , BLLG_MTR_LB_CD
+            , INTG_MDSE_CD              NULLS LAST
+            , MIN_COPY_VOL_CNT          NULLS LAST
+            , MTR_LB_SORT_NUM           NULLS FIRST
+            , PRC_SVC_TIER_TP_SORT_NUM
+    </statement>
+
+    <statement id="getSplyAgmtPlnPk" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+             SPLY_AGMT_PLN_PK
+        FROM
+             PRC_LIST_SPLY_PGM
+        WHERE
+             GLBL_CMPY_CD          = #glblCmpyCd#
+        AND  PRC_CATG_CD           = #prcCatgCd#
+        AND  PRC_SVC_PLN_TP_CD     = #prcSvcPlnTpCd#
+        AND  PRC_SVC_CONTR_TP_CD   = #prcSvcContrTpCd#
+
+        <isNull property="mdlId">
+        AND  MDL_ID                IS NULL
+        </isNull>
+        <isNotNull property="mdlId">
+        AND  MDL_ID                = #mdlId#
+        </isNotNull>
+
+        <isNull property="prcMtrPkgPk">
+        AND  PRC_MTR_PKG_PK        IS NULL
+        </isNull>
+        <isNotNull property="prcMtrPkgPk">
+        AND  PRC_MTR_PKG_PK        = #prcMtrPkgPk#
+        </isNotNull>
+
+        <isNull property="bllgMtrLbCd">
+        AND  BLLG_MTR_LB_CD        IS NULL
+        </isNull>
+        <isNotNull property="bllgMtrLbCd">
+        AND  BLLG_MTR_LB_CD        = #bllgMtrLbCd#
+        </isNotNull>
+
+        <isNull property="prcListBandCd">
+        AND  PRC_LIST_BAND_CD      IS NULL
+        </isNull>
+        <isNotNull property="prcListBandCd">
+        AND  PRC_LIST_BAND_CD      = #prcListBandCd#
+        </isNotNull>
+
+        AND  EZCANCELFLAG          = '0'
+        AND  ROWNUM                = 1
+    </statement>
+    <!-- Add End   2017/03/16 S21_NA#18024 -->
+    <!-- Add Start   2018/06/25 S21_NA#23762 -->
+    <statement id="getCarrSvcLvlCd" parameterClass="Map" resultClass="String">
+        SELECT
+            CARR_SVC_LVL_CD
+        FROM
+            (
+             SELECT 
+                 CSL.CARR_SVC_LVL_CD
+             FROM
+                 SHPG_SVC_LVL_CARR_RELN SSLCR
+                ,CARR_SVC_LVL           CSL
+             WHERE
+                 SSLCR.GLBL_CMPY_CD        = #glblCmpyCd#
+                 AND SSLCR.SHPG_SVC_LVL_CD = #shpgSvcLvlCd#
+                 AND SSLCR.CARR_CD         = #carrCd#
+                 AND SSLCR.EZCANCELFLAG    = '0'
+
+                 AND SSLCR.GLBL_CMPY_CD    = CSL.GLBL_CMPY_CD
+                 AND SSLCR.CARR_SVC_LVL_CD = CSL.CARR_SVC_LVL_CD
+                 AND CSL.EZCANCELFLAG      = '0'
+             ORDER BY
+                 SSLCR.CARR_SVC_LVL_CD DESC
+            )
+        WHERE
+            ROWNUM = 1
+    </statement>
+    <!-- Add End   2018/06/25 S21_NA#23762 -->
+</sqlMap>

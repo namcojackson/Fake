@@ -1,0 +1,454 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NFZC204001">
+
+    <statement id="getArStmtIssCycleCd" parameterClass="Map" resultClass="Map">
+    SELECT
+           ARSC.AR_STMT_ISS_CYCLE_CD
+         , ARSC.LATE_FEE_CALC_FLG
+         
+         , ARSC.AR_STMT_CTRL_PK
+      FROM
+           AR_STMT_CTRL ARSC
+     WHERE
+           ARSC.GLBL_CMPY_CD   = #glblCmpyCd#
+       AND ARSC.EZCANCELFLAG   = '0'
+       AND ARSC.AR_STMT_DT     = #arStmtDt#
+       <!--QC 5655 INSERT start -->
+       AND ARSC.AR_STMT_STS_CD = #arStmtStsCd#
+       <!--QC 5655 INSERT end -->
+    </statement>
+
+    <statement id="getArStmtIssDay" parameterClass="Map" resultClass="String">
+    SELECT
+           ASIC.AR_STMT_ISS_DAY
+      FROM
+           AR_STMT_ISS_CYCLE ASIC
+     WHERE
+           ASIC.GLBL_CMPY_CD         = #glblCmpyCd#
+       AND ASIC.EZCANCELFLAG         = '0'
+       AND ASIC.AR_STMT_ISS_CYCLE_CD = #arStmtIssCycleCd#
+       AND ASIC.AR_STMT_ISS_ACTV_FLG = #actvFlgY#
+    </statement>
+
+    <statement id="getTrgtBillTo" parameterClass="Map" resultClass="Map">
+    SELECT
+           BTC.BILL_TO_CUST_CD
+         , BTC.LATE_FEE_FLG
+         , BTC.LATE_FEE_AMT
+      FROM
+           BILL_TO_CUST    BTC
+     WHERE
+           BTC.GLBL_CMPY_CD    = #glblCmpyCd#
+       AND BTC.EZCANCELFLAG    = '0'
+       AND BTC.AR_STMT_ISS_DAY = #arStmtIssDay#
+       AND EXISTS
+           (SELECT
+               1
+            FROM
+              (<!-- NO PAYER -->
+               SELECT
+                   ATB.GLBL_CMPY_CD
+                  ,ATB.BILL_TO_CUST_CD AS BILL_TO_CUST_CD
+               FROM
+                   AR_TRX_BAL ATB
+               WHERE
+                   ATB.GLBL_CMPY_CD = #glblCmpyCd#
+               AND (ATB.AR_CASH_APPLY_STS_CD IN (#unapply#, #partial#) OR (ATB.AR_CASH_APPLY_STS_CD = #applied# AND SUBSTR(ATB.CASH_APP_DT, 0, 6) = #month#))
+               AND ATB.EZCANCELFLAG = '0'
+               AND NOT EXISTS
+                       (SELECT
+                            1
+                        FROM
+                            PAYER_CUST_MAP PCM
+                        WHERE
+                            ATB.GLBL_CMPY_CD = PCM.GLBL_CMPY_CD
+                        AND ATB.BILL_TO_CUST_ACCT_CD = PCM.BILL_TO_CUST_ACCT_CD
+                        AND PCM.EZCANCELFLAG = '0'
+                       )
+               UNION
+               <!-- PAYER AS STATEMENT MODE -->
+               SELECT
+                   ATB.GLBL_CMPY_CD
+                  ,PCM.PAYER_CUST_CD AS BILL_TO_CUST_CD
+               FROM
+                   AR_TRX_BAL ATB
+                  ,PAYER_CUST_MAP PCM
+               WHERE
+                   ATB.GLBL_CMPY_CD = #glblCmpyCd#
+               AND (ATB.AR_CASH_APPLY_STS_CD IN (#unapply#, #partial#) OR (ATB.AR_CASH_APPLY_STS_CD = #applied# AND SUBSTR(ATB.CASH_APP_DT, 0, 6) = #month#))
+               AND ATB.EZCANCELFLAG = '0'
+               AND ATB.GLBL_CMPY_CD = PCM.GLBL_CMPY_CD
+               AND ATB.BILL_TO_CUST_ACCT_CD = PCM.BILL_TO_CUST_ACCT_CD
+               AND PCM.PAYER_CUST_MODE_CD = #payerCustModeCdStmtTo#
+               AND PCM.EZCANCELFLAG = '0'
+               UNION
+               <!-- PAYER AS SOLD TO MODE -->
+               SELECT
+                   ATB.GLBL_CMPY_CD
+                  ,I.SOLD_TO_CUST_LOC_CD AS BILL_TO_CUST_CD
+               FROM
+                   AR_TRX_BAL ATB
+                  ,INV I
+                  ,PAYER_CUST_MAP PCM
+               WHERE
+                   ATB.GLBL_CMPY_CD = #glblCmpyCd#
+               AND (ATB.AR_CASH_APPLY_STS_CD IN (#unapply#, #partial#) OR (ATB.AR_CASH_APPLY_STS_CD = #applied# AND SUBSTR(ATB.CASH_APP_DT, 0, 6) = #month#))
+               AND ATB.EZCANCELFLAG = '0'
+               AND ATB.GLBL_CMPY_CD = PCM.GLBL_CMPY_CD
+               AND ATB.BILL_TO_CUST_ACCT_CD = PCM.BILL_TO_CUST_ACCT_CD
+               AND PCM.PAYER_CUST_MODE_CD = #payerCustModeCdSoldTo#
+               AND PCM.EZCANCELFLAG = '0'
+               AND ATB.GLBL_CMPY_CD = I.GLBL_CMPY_CD
+               AND SUBSTR(ATB.AR_TRX_NUM, 1, 10) = I.INV_NUM 
+               AND I.EZCANCELFLAG = '0'
+               UNION
+               <!-- PAYER AS SOLD TO MODE(NO Invoice) -->
+               SELECT
+                   ATB.GLBL_CMPY_CD
+                  ,ATB.BILL_TO_CUST_CD AS BILL_TO_CUST_CD
+               FROM
+                   AR_TRX_BAL ATB
+                  ,PAYER_CUST_MAP PCM
+               WHERE
+                   ATB.GLBL_CMPY_CD = #glblCmpyCd#
+               AND (ATB.AR_CASH_APPLY_STS_CD IN (#unapply#, #partial#) OR (ATB.AR_CASH_APPLY_STS_CD = #applied# AND SUBSTR(ATB.CASH_APP_DT, 0, 6) = #month#))
+               AND ATB.EZCANCELFLAG = '0'
+               AND ATB.GLBL_CMPY_CD = PCM.GLBL_CMPY_CD
+               AND ATB.BILL_TO_CUST_ACCT_CD = PCM.BILL_TO_CUST_ACCT_CD
+               AND PCM.PAYER_CUST_MODE_CD = #payerCustModeCdSoldTo#
+               AND PCM.EZCANCELFLAG = '0'
+               AND NOT EXISTS
+                       (SELECT
+                            1
+                        FROM
+                            INV I
+                        WHERE
+                            ATB.GLBL_CMPY_CD = I.GLBL_CMPY_CD
+                        AND SUBSTR(ATB.AR_TRX_NUM, 1, 10) = I.INV_NUM 
+                            AND I.SOLD_TO_CUST_LOC_CD IS NOT NULL
+                        AND I.EZCANCELFLAG = '0'
+                       )
+              ) MAP
+            WHERE
+                BTC.GLBL_CMPY_CD = MAP.GLBL_CMPY_CD
+            AND BTC.BILL_TO_CUST_CD = MAP.BILL_TO_CUST_CD
+           )
+     ORDER BY
+           BTC.BILL_TO_CUST_CD
+    </statement>
+
+    <statement id="getTrgtBillTo_org" parameterClass="Map" resultClass="Map">
+    SELECT
+           BTC.BILL_TO_CUST_CD
+         , BTC.LATE_FEE_FLG
+         , BTC.LATE_FEE_AMT
+      FROM
+           BILL_TO_CUST    BTC
+     WHERE
+           BTC.GLBL_CMPY_CD    = #glblCmpyCd#
+       AND BTC.EZCANCELFLAG    = '0'
+       AND BTC.AR_STMT_ISS_DAY = #arStmtIssDay#
+       AND EXISTS
+           ( SELECT 1 FROM AR_TRX_BAL ATB
+             WHERE
+             ATB.GLBL_CMPY_CD        = #glblCmpyCd#
+             AND ATB.BILL_TO_CUST_CD = BTC.BILL_TO_CUST_CD
+             AND ATB.EZCANCELFLAG    = BTC.EZCANCELFLAG
+             AND ATB.AR_CASH_APPLY_STS_CD IN (#unapply#, #partial#)
+           )
+     ORDER BY
+           BTC.BILL_TO_CUST_CD
+    </statement>
+
+    <statement id="getTrgtInv" parameterClass="Map" resultClass="Map">
+    SELECT
+<!--       ATB.BILL_TO_CUST_ACCT_CD -->
+           MAP.BILL_TO_CUST_ACCT_CD
+         , ATB.SELL_TO_CUST_CD
+<!--     , ATB.BILL_TO_CUST_CD -->
+         , MAP.BILL_TO_CUST_CD
+         , ATB.PAYER_CUST_CD
+         , ATB.AR_TRX_NUM
+         , (SELECT MAX(ALFTD.AR_STMT_DT)
+              FROM AR_LATE_FEE_TRX_DTL ALFTD
+             WHERE ALFTD.GLBL_CMPY_CD = ATB.GLBL_CMPY_CD
+               AND ALFTD.EZCANCELFLAG = ATB.EZCANCELFLAG
+               AND ALFTD.AR_TRX_NUM   = ATB.AR_TRX_NUM
+           ) AR_LAST_STMT_DT
+         , ATB.CASH_APP_DT
+         , (SELECT COUNT(1)
+              FROM AR_CASH_APP ACA
+             WHERE ACA.GLBL_CMPY_CD = ATB.GLBL_CMPY_CD
+               AND ACA.EZCANCELFLAG = ATB.EZCANCELFLAG
+               AND ACA.AR_TRX_NUM   = ATB.AR_TRX_NUM
+           ) CASH_APP_CNT
+         , ATB.AR_TRX_DT
+         , ATB.INV_DUE_DT
+         , CDT.DEAL_CLT_DSPT_AMT
+         , ATB.DEAL_ORIG_GRS_AMT
+         , ATB.DEAL_RMNG_BAL_GRS_AMT
+         , DECODE(CDT.DEAL_CLT_DSPT_AMT, NULL, #flgN#, #flgY#) DSPT_EX_FLG
+         , ATB.TOC_CD
+         , ATB.COA_PROD_CD
+         , ATB.SLS_REP_TOC_CD
+         <!-- Start 2023/2/02 S.Nakatani [QC#60811, ADD]-->
+         , BTC.MLY_LATE_FEE_RATE
+         <!-- End 2023/2/02 S.Nakatani [QC#60811, ADD]-->
+      FROM
+           AR_TRX_BAL   ATB
+         , ( <!-- NO PAYER -->
+             SELECT
+                 ATB1.AR_TRX_BAL_PK
+               , ATB1.BILL_TO_CUST_ACCT_CD AS BILL_TO_CUST_ACCT_CD
+               , ATB1.BILL_TO_CUST_CD      AS BILL_TO_CUST_CD
+             FROM
+                 AR_TRX_BAL ATB1
+             WHERE
+                 ATB1.GLBL_CMPY_CD = #glblCmpyCd#
+             AND ATB1.BILL_TO_CUST_CD = #billToCustCd#
+             AND ATB1.AR_CASH_APPLY_STS_CD &lt;&gt; #arCashApplyStsVoid#
+             AND ATB1.EZCANCELFLAG = '0'
+             AND NOT EXISTS
+                     (SELECT
+                          1
+                      FROM
+                          PAYER_CUST_MAP PCM1
+                      WHERE
+                          ATB1.GLBL_CMPY_CD = PCM1.GLBL_CMPY_CD
+                      AND ATB1.BILL_TO_CUST_ACCT_CD = PCM1.BILL_TO_CUST_ACCT_CD
+                      AND PCM1.EZCANCELFLAG = '0'
+                     )
+             UNION ALL
+             <!-- PAYER AS STATEMENT MODE -->
+             SELECT
+                 ATB2.AR_TRX_BAL_PK
+               , PCM2.PAYER_CUST_ACCT_CD AS BILL_TO_CUST_ACCT_CD
+               , PCM2.PAYER_CUST_CD      AS BILL_TO_CUST_CD
+             FROM
+                 AR_TRX_BAL ATB2
+               , PAYER_CUST_MAP PCM2
+             WHERE
+                 ATB2.GLBL_CMPY_CD = #glblCmpyCd#
+             AND ATB2.AR_CASH_APPLY_STS_CD &lt;&gt; #arCashApplyStsVoid#
+             AND ATB2.EZCANCELFLAG = '0'
+             AND ATB2.GLBL_CMPY_CD = PCM2.GLBL_CMPY_CD
+             AND ATB2.BILL_TO_CUST_ACCT_CD = PCM2.BILL_TO_CUST_ACCT_CD
+             AND PCM2.PAYER_CUST_MODE_CD = #payerCustModeCdStmtTo#
+             AND PCM2.PAYER_CUST_CD = #billToCustCd#
+             AND PCM2.EZCANCELFLAG = '0'
+             UNION ALL
+             <!-- PAYER AS SOLD TO MODE -->
+             SELECT
+                 <!-- START 2022/06/24 D.Mamaril [QC#60196,ADD] -->
+                 /*+ INDEX(ATB3 AR_TRX_BAL_I4) */
+                 DISTINCT
+                 <!-- END 2022/06/24 D.Mamaril [QC#60196,ADD] -->
+                 ATB3.AR_TRX_BAL_PK
+               , I.SELL_TO_CUST_CD     AS BILL_TO_CUST_ACCT_CD
+               , I.SOLD_TO_CUST_LOC_CD AS BILL_TO_CUST_CD
+             FROM
+                 AR_TRX_BAL ATB3
+               , PAYER_CUST_MAP PCM3
+               , INV I
+             WHERE
+                 ATB3.GLBL_CMPY_CD = #glblCmpyCd#
+             AND ATB3.AR_CASH_APPLY_STS_CD &lt;&gt; #arCashApplyStsVoid#
+             AND ATB3.EZCANCELFLAG = '0'
+             AND ATB3.GLBL_CMPY_CD = PCM3.GLBL_CMPY_CD
+             AND ATB3.BILL_TO_CUST_ACCT_CD = PCM3.BILL_TO_CUST_ACCT_CD
+             AND PCM3.PAYER_CUST_MODE_CD = #payerCustModeCdSoldTo#
+             AND PCM3.EZCANCELFLAG = '0'
+             AND ATB3.GLBL_CMPY_CD = I.GLBL_CMPY_CD
+             AND SUBSTR(ATB3.AR_TRX_NUM, 1, 10) = I.INV_NUM
+             <!-- START 2022/06/24 D.Mamaril [QC#60196,ADD] -->
+             AND ATB3.AR_TRX_NUM LIKE (I.INV_NUM || '%')
+             <!-- END 2022/06/24 D.Mamaril [QC#60196,ADD] -->
+             AND I.SOLD_TO_CUST_LOC_CD = #billToCustCd#
+             AND I.EZCANCELFLAG = '0'
+             UNION ALL
+             <!-- PAYER AS SOLD TO MODE(NO Invoice) -->
+              SELECT
+                 ATB4.AR_TRX_BAL_PK
+               , ATB4.BILL_TO_CUST_ACCT_CD AS BILL_TO_CUST_ACCT_CD
+               , ATB4.BILL_TO_CUST_CD      AS BILL_TO_CUST_CD
+              FROM
+                 AR_TRX_BAL ATB4
+               , PAYER_CUST_MAP PCM4
+              WHERE
+                  ATB4.GLBL_CMPY_CD = #glblCmpyCd#
+              AND ATB4.AR_CASH_APPLY_STS_CD &lt;&gt; #arCashApplyStsVoid#
+              AND ATB4.EZCANCELFLAG = '0'
+              AND ATB4.GLBL_CMPY_CD = PCM4.GLBL_CMPY_CD
+              AND ATB4.BILL_TO_CUST_ACCT_CD = PCM4.BILL_TO_CUST_ACCT_CD
+              AND PCM4.PAYER_CUST_MODE_CD = #payerCustModeCdSoldTo#
+              AND PCM4.EZCANCELFLAG = '0'
+              AND NOT EXISTS
+                      (SELECT
+                           1
+                       FROM
+                           INV I
+                       WHERE
+                           ATB4.GLBL_CMPY_CD = I.GLBL_CMPY_CD
+                       AND SUBSTR(ATB4.AR_TRX_NUM, 1, 10) = I.INV_NUM 
+                       AND I.SOLD_TO_CUST_LOC_CD IS NOT NULL
+                       AND I.EZCANCELFLAG = '0'
+                      )
+           ) MAP
+         , (
+             SELECT
+                 CDT_IN.GLBL_CMPY_CD
+                ,CDT_IN.EZCANCELFLAG
+                ,CDT_IN.AR_TRX_NUM
+                ,SUM(CDT_IN.DEAL_CLT_DSPT_AMT) AS DEAL_CLT_DSPT_AMT
+             FROM
+                 CLT_DSPT_TRX CDT_IN
+             WHERE
+                     CDT_IN.GLBL_CMPY_CD    = #glblCmpyCd#
+                 AND CDT_IN.CLT_DSPT_STS_CD = #cltDsptStsCdApproved#
+                 AND CDT_IN.EZCANCELFLAG    = '0'
+             GROUP BY
+                 CDT_IN.GLBL_CMPY_CD
+                ,CDT_IN.EZCANCELFLAG
+                ,CDT_IN.AR_TRX_NUM
+          ) CDT
+         <!-- Start 2023/2/02 S.Nakatani [QC#60811, ADD]-->
+          , BILL_TO_CUST BTC
+         <!-- End 2023/2/02 S.Nakatani [QC#60811, ADD]-->
+     WHERE
+           ATB.GLBL_CMPY_CD = #glblCmpyCd#
+       AND ATB.EZCANCELFLAG = '0'
+       AND ATB.AR_CASH_APPLY_STS_CD &lt;&gt; #arCashApplyStsVoid#
+       AND ATB.AR_TRX_TP_CD = #arTrxTpCdInv#
+<!--   AND ATB.BILL_TO_CUST_CD = #billToCustCd#  -->
+       AND ATB.INV_DUE_DT &lt; #exclDt#
+       AND NOT (ATB.FUNC_RMNG_BAL_GRS_AMT = 0
+       <!--QC 5724 UPDATE start -->
+       AND ATB.CASH_APP_DT &lt;= TO_CHAR(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD') + #graceDays# , 'YYYYMMDD'))
+       <!--QC 5724 UPDATE end -->
+
+       AND ATB.AR_TRX_BAL_PK = MAP.AR_TRX_BAL_PK
+       AND MAP.BILL_TO_CUST_CD  = #billToCustCd#
+       <!-- Start 2023/2/02 S.Nakatani [QC#60811, ADD]-->
+       AND MAP.BILL_TO_CUST_CD = BTC.BILL_TO_CUST_CD
+       AND BTC.GLBL_CMPY_CD = #glblCmpyCd#
+       AND BTC.EZCANCELFLAG = '0'
+       <!-- End 2023/2/02 S.Nakatani [QC#60811, ADD]-->
+
+       AND ATB.GLBL_CMPY_CD = CDT.GLBL_CMPY_CD(+)
+       AND ATB.EZCANCELFLAG = CDT.EZCANCELFLAG(+)
+       AND ATB.AR_TRX_NUM   = CDT.AR_TRX_NUM(+)
+     ORDER BY
+           ATB.AR_TRX_NUM
+         , ATB.AR_TRX_DT
+    </statement>
+
+    <statement id="getTrgtInv_org" parameterClass="Map" resultClass="Map">
+    SELECT
+           ATB.BILL_TO_CUST_ACCT_CD
+         , ATB.SELL_TO_CUST_CD
+         , ATB.BILL_TO_CUST_CD
+         , ATB.PAYER_CUST_CD
+         , ATB.AR_TRX_NUM
+         , (SELECT MAX(ALFTD.AR_STMT_DT)
+              FROM AR_LATE_FEE_TRX_DTL ALFTD
+             WHERE ALFTD.GLBL_CMPY_CD = ATB.GLBL_CMPY_CD
+               AND ALFTD.EZCANCELFLAG = ATB.EZCANCELFLAG
+               AND ALFTD.AR_TRX_NUM   = ATB.AR_TRX_NUM
+           ) AR_LAST_STMT_DT
+         , ATB.CASH_APP_DT
+         , (SELECT COUNT(1)
+              FROM AR_CASH_APP ACA
+             WHERE ACA.GLBL_CMPY_CD = ATB.GLBL_CMPY_CD
+               AND ACA.EZCANCELFLAG = ATB.EZCANCELFLAG
+               AND ACA.AR_TRX_NUM   = ATB.AR_TRX_NUM
+           ) CASH_APP_CNT
+         , ATB.AR_TRX_DT
+         , ATB.INV_DUE_DT
+         , CDT.DEAL_CLT_DSPT_AMT
+         , ATB.DEAL_ORIG_GRS_AMT
+         , ATB.DEAL_RMNG_BAL_GRS_AMT
+         , DECODE(CDT.DEAL_CLT_DSPT_AMT, NULL, #flgN#, #flgY#) DSPT_EX_FLG
+         , ATB.TOC_CD
+         , ATB.COA_PROD_CD
+         , ATB.SLS_REP_TOC_CD
+      FROM
+           AR_TRX_BAL   ATB
+         , (
+             SELECT
+                 CDT_IN.GLBL_CMPY_CD
+                ,CDT_IN.EZCANCELFLAG
+                ,CDT_IN.AR_TRX_NUM
+                ,SUM(CDT_IN.DEAL_CLT_DSPT_AMT) AS DEAL_CLT_DSPT_AMT
+             FROM
+                 CLT_DSPT_TRX CDT_IN
+             WHERE
+                     CDT_IN.GLBL_CMPY_CD    = #glblCmpyCd#
+                 AND CDT_IN.CLT_DSPT_STS_CD = #cltDsptStsCdApproved#
+                 AND CDT_IN.EZCANCELFLAG    = '0'
+             GROUP BY
+                 CDT_IN.GLBL_CMPY_CD
+                ,CDT_IN.EZCANCELFLAG
+                ,CDT_IN.AR_TRX_NUM
+          ) CDT
+     WHERE
+           ATB.GLBL_CMPY_CD = #glblCmpyCd#
+       AND ATB.EZCANCELFLAG = '0'
+       AND ATB.AR_CASH_APPLY_STS_CD &lt;&gt; #arCashApplyStsVoid#
+       AND ATB.AR_TRX_TP_CD = #arTrxTpCdInv#
+       AND ATB.BILL_TO_CUST_CD = #billToCustCd#
+       AND ATB.INV_DUE_DT &lt; #exclDt#
+       AND NOT (ATB.FUNC_RMNG_BAL_GRS_AMT = 0
+       <!--QC 5724 UPDATE start -->
+       AND ATB.CASH_APP_DT &lt;= TO_CHAR(TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD') + #graceDays# , 'YYYYMMDD'))
+       <!--QC 5724 UPDATE end -->
+       AND ATB.GLBL_CMPY_CD = CDT.GLBL_CMPY_CD(+)
+       AND ATB.EZCANCELFLAG = CDT.EZCANCELFLAG(+)
+       AND ATB.AR_TRX_NUM   = CDT.AR_TRX_NUM(+)
+     ORDER BY
+           ATB.AR_TRX_NUM
+         , ATB.AR_TRX_DT
+    </statement>
+
+    <!--QC 6006 INSERT start -->
+    <statement id="getNotTrgtInv" parameterClass="Map" resultClass="Map">
+    SELECT
+          LFT.AR_LATE_FEE_AMT
+    FROM
+          AR_LATE_FEE_TRX_DTL LFT
+        , AR_TRX_BAL          ATB
+        , BILL_TO_CUST        BTC 
+    WHERE
+            ATB.AR_TRX_NUM           = #arTrxNum# 
+        AND ATB.AR_TRX_NUM           = LFT.AR_TRX_NUM 
+        AND BTC.BILL_TO_CUST_CD      = #billToCustCd# 
+        AND BTC.BILL_TO_CUST_CD      = LFT.BILL_TO_CUST_CD 
+        AND LFT.AR_LATE_FEE_AMT &lt; = BTC.LATE_FEE_AMT 
+        AND LFT.BILL_TO_LATE_FEE_FLG = #flag_Y#
+        AND LFT.EZCANCELFLAG = '0' 
+        AND ATB.EZCANCELFLAG = '0' 
+        AND BTC.EZCANCELFLAG = '0'
+        AND LFT.GLBL_CMPY_CD = #glblCmpyCd# 
+        AND LFT.GLBL_CMPY_CD = ATB.GLBL_CMPY_CD
+        AND ATB.GLBL_CMPY_CD = BTC.GLBL_CMPY_CD
+    </statement>
+    <!--QC 6006 INSERT end -->
+
+    <statement id="getCashApply" parameterClass="Map" resultClass="Map">
+    SELECT
+           ACA.FUNC_APPLY_AMT
+         , ACA.CASH_APP_DT
+      FROM
+           AR_CASH_APP ACA
+         , AR_TRX_BAL  ATB
+     WHERE
+           ACA.GLBL_CMPY_CD = #glblCmpyCd#
+       AND ACA.EZCANCELFLAG = '0'
+       AND ACA.AR_TRX_NUM   = #arTrxNum#
+       AND ACA.AR_SCR_CANC_FLG = #flgN#
+       AND ACA.GLBL_CMPY_CD = ATB.GLBL_CMPY_CD
+       AND ACA.EZCANCELFLAG = ATB.EZCANCELFLAG
+       AND ACA.AR_TRX_NUM   = ATB.AR_TRX_NUM
+     ORDER BY
+           ACA.CASH_APP_DT
+    </statement>
+</sqlMap>

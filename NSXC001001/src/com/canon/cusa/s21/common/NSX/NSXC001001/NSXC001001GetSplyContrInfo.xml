@@ -1,0 +1,258 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NSXC001001GetSplyContrInfo">
+
+    <typeAlias alias="SplyContrInfoBean"   type="com.canon.cusa.s21.common.NSX.NSXC001001.SplyContrInfoBean"/>
+
+    <statement id="getSplyContrList" parameterClass="Map" resultMap="result.SplyContrInfoBean">
+        WITH CONTR_V AS (
+            SELECT
+                CR.GLBL_CMPY_CD
+               ,CR.DS_CONTR_PK
+               ,CR.DS_CONTR_NUM
+               ,CR.DS_CONTR_SQ_NUM
+               ,CRD.DS_CONTR_DTL_PK
+               ,CRDP.SVC_CONFIG_MSTR_PK
+               ,CRDP.SVC_MACH_MSTR_PK
+               ,DATD.MDSE_CD
+               ,DATD.DS_ACPO_NUM
+               ,DATD.DS_ACPO_TRGT_LINE_NUM
+               ,DATD.TRGT_ORD_QTY
+               ,DATD.CARRY_OVER_QTY
+               ,DATD.SHIP_QTY
+               ,DATD.QTY_CTRL_NO_LIMIT_FLG
+               ,DATD.EZUPTIME
+               ,DATD.EZUPTIMEZONE
+            FROM
+                DS_CONTR         CR
+               ,DS_CONTR_DTL     CRD
+               ,DS_CONTR_DTL     CRDP
+               ,DS_ACPO          DA
+               ,DS_ACPO_TRGT_DTL DATD
+            WHERE
+                    CR.GLBL_CMPY_CD          = #glblCmpyCd#
+            <isNotNull property="dsContrPk">
+                AND CR.DS_CONTR_PK           = #dsContrPk#
+            </isNotNull>
+            <isNotNull property="dsContrNum">
+                AND CR.DS_CONTR_NUM          = #dsContrNum#
+                AND CR.DS_CONTR_SQ_NUM       = #dsContrSqNum#
+            </isNotNull>
+            <isNotNull property="mdseCd">
+                AND DATD.MDSE_CD             = #mdseCd#
+            </isNotNull>
+            <isNotNull property="svcConfigMstrPk">
+                AND CRDP.SVC_CONFIG_MSTR_PK  = #svcConfigMstrPk#
+            </isNotNull>
+            <isNotNull property="dsContrDtlPkList">
+                AND CRD.DS_CONTR_DTL_PK     IN
+                <iterate property="dsContrDtlPkList" var="dsContrDtlPk[]" open="(" close=")" conjunction=",">
+                    #dsContrDtlPk[]#
+                </iterate>
+            </isNotNull>
+                AND CR.GLBL_CMPY_CD          = CR.GLBL_CMPY_CD
+                AND CR.GLBL_CMPY_CD          = CRD.GLBL_CMPY_CD
+                AND CR.GLBL_CMPY_CD          = CRDP.GLBL_CMPY_CD
+                AND CR.GLBL_CMPY_CD          = DA.GLBL_CMPY_CD
+                AND CR.GLBL_CMPY_CD          = DATD.GLBL_CMPY_CD
+                AND CRDP.DS_CONTR_DTL_PK     = CRD.PRNT_DS_CONTR_DTL_PK
+                AND CR.DS_CONTR_PK           = CRD.DS_CONTR_PK
+                AND CRD.DS_CONTR_DTL_PK      = DA.DS_CONTR_DTL_PK
+                AND DA.DS_ACPO_NUM           = DATD.DS_ACPO_NUM
+                AND CR.EZCANCELFLAG          = '0'
+                AND CRD.EZCANCELFLAG         = '0'
+                AND CRDP.EZCANCELFLAG        = '0'
+                AND DA.EZCANCELFLAG          = '0'
+                AND DATD.EZCANCELFLAG        = '0'
+        )
+        , SHIPED_V AS (
+            SELECT
+                V.DS_ACPO_NUM
+               ,V.DS_ACPO_TRGT_LINE_NUM
+               ,SUM(SP.ORD_QTY)         AS ORD_QTY
+            FROM
+                SHPG_ORD_CONF    SOC
+               ,SHPG_ORD_DTL     SOD
+               ,SHPG_PLN         SP
+               ,CPO_DTL          CD
+               ,CONTR_V          V
+            WHERE
+                    SOC.GLBL_CMPY_CD        = #glblCmpyCd#
+                AND SOC.GLBL_CMPY_CD        = SOD.GLBL_CMPY_CD
+                AND SOC.GLBL_CMPY_CD        = SP.GLBL_CMPY_CD
+                AND SOC.GLBL_CMPY_CD        = CD.GLBL_CMPY_CD
+                AND SOC.SHIP_DT_TM_TS   &gt;= #slsDt#
+                AND SP.REV_RECOG_FLG        = 'Y'
+                AND SP.SHPG_STS_CD     NOT IN (#shpgStsCdSaved#, #shpgStsCdCancelled#)
+                AND SOC.SO_NUM              = SOD.SO_NUM
+                AND SOD.SHPG_PLN_NUM        = SP.SHPG_PLN_NUM
+                AND SP.TRX_HDR_NUM          = CD.CPO_ORD_NUM
+                AND SP.TRX_LINE_NUM         = CD.CPO_DTL_LINE_NUM
+                AND SP.TRX_LINE_SUB_NUM     = CD.CPO_DTL_LINE_SUB_NUM
+                AND CD.DS_CONTR_NUM         = V.DS_CONTR_NUM
+                AND CD.DS_CONTR_SQ_NUM      = V.DS_CONTR_SQ_NUM
+                AND (
+                            CD.SVC_CONFIG_MSTR_PK   IS NULL
+                        AND V.SVC_CONFIG_MSTR_PK    IS NULL
+                    OR  (
+                            CD.SVC_CONFIG_MSTR_PK   IS NOT NULL
+                        AND CD.SVC_CONFIG_MSTR_PK   = V.SVC_CONFIG_MSTR_PK
+                    ) 
+                )
+                AND (
+                        V.MDSE_CD = SP.MDSE_CD
+                    OR  EXISTS (
+                            SELECT *
+                            FROM
+                                ORD_TAKE_MDSE OTM
+                            WHERE
+                                V.GLBL_CMPY_CD     = OTM.GLBL_CMPY_CD
+                            AND V.MDSE_CD          = OTM.ORD_TAKE_MDSE_CD
+                            AND SP.MDSE_CD      LIKE OTM.ORD_TAKE_MDSE_CD || '%'
+                            AND OTM.EZCANCELFLAG   = '0'
+                        )
+                    )
+                AND NOT EXISTS (
+                        SELECT *
+                        FROM
+                            SVC_SPLY_SHIP_INFO SI
+                        WHERE
+                            SP.GLBL_CMPY_CD = SI.GLBL_CMPY_CD
+                        AND SP.SHPG_PLN_NUM = SI.SHPG_PLN_NUM
+                        AND SI.EZCANCELFLAG = '0'
+                    )
+                AND SOC.EZCANCELFLAG        = '0'
+                AND SOD.EZCANCELFLAG        = '0'
+                AND SP.EZCANCELFLAG         = '0'
+                AND CD.EZCANCELFLAG         = '0'
+            GROUP BY
+                V.DS_ACPO_NUM
+               ,V.DS_ACPO_TRGT_LINE_NUM
+        )
+        , INPROC_V AS (
+            SELECT
+                V.DS_ACPO_NUM
+               ,V.DS_ACPO_TRGT_LINE_NUM
+               ,SUM(SP.ORD_QTY)         AS INPROC_QTY
+            FROM
+                SHPG_PLN         SP
+               ,CPO_DTL          CD
+               ,CONTR_V          V
+            WHERE
+                    SP.GLBL_CMPY_CD         = #glblCmpyCd#
+                AND SP.GLBL_CMPY_CD         = SP.GLBL_CMPY_CD
+                AND SP.GLBL_CMPY_CD         = CD.GLBL_CMPY_CD
+                AND SP.REV_RECOG_FLG        = 'N'
+                AND SP.SHPG_STS_CD     NOT IN (#shpgStsCdSaved#, #shpgStsCdCancelled#)
+                AND SP.TRX_HDR_NUM          = CD.CPO_ORD_NUM
+                AND SP.TRX_LINE_NUM         = CD.CPO_DTL_LINE_NUM
+                AND SP.TRX_LINE_SUB_NUM     = CD.CPO_DTL_LINE_SUB_NUM
+                AND CD.DS_CONTR_NUM         = V.DS_CONTR_NUM
+                AND CD.DS_CONTR_SQ_NUM      = V.DS_CONTR_SQ_NUM
+                AND (
+                            CD.SVC_CONFIG_MSTR_PK   IS NULL
+                        AND V.SVC_CONFIG_MSTR_PK    IS NULL
+                    OR  (
+                            CD.SVC_CONFIG_MSTR_PK   IS NOT NULL
+                        AND CD.SVC_CONFIG_MSTR_PK    = V.SVC_CONFIG_MSTR_PK
+                    ) 
+                )
+                AND (
+                        V.MDSE_CD = SP.MDSE_CD
+                    OR  EXISTS (
+                            SELECT *
+                            FROM
+                                ORD_TAKE_MDSE OTM
+                            WHERE
+                                V.GLBL_CMPY_CD     = OTM.GLBL_CMPY_CD
+                            AND V.MDSE_CD          = OTM.ORD_TAKE_MDSE_CD
+                            AND SP.MDSE_CD      LIKE OTM.ORD_TAKE_MDSE_CD || '%'
+                            AND OTM.EZCANCELFLAG   = '0'
+                        )
+                    )
+                AND SP.EZCANCELFLAG         = '0'
+                AND CD.EZCANCELFLAG         = '0'
+            GROUP BY
+                V.DS_ACPO_NUM
+               ,V.DS_ACPO_TRGT_LINE_NUM
+        )
+        SELECT
+            CV.GLBL_CMPY_CD
+           ,CV.DS_CONTR_PK
+           ,CV.DS_CONTR_NUM
+           ,CV.DS_CONTR_SQ_NUM
+           ,CV.DS_CONTR_DTL_PK
+           ,CV.SVC_CONFIG_MSTR_PK
+           ,CV.MDSE_CD
+           ,CV.DS_ACPO_NUM
+           ,CV.DS_ACPO_TRGT_LINE_NUM
+           ,CV.TRGT_ORD_QTY
+           ,CV.CARRY_OVER_QTY
+           ,NVL(CV.SHIP_QTY, 0) + NVL(SV.ORD_QTY, 0) AS SHIP_QTY
+           ,NVL(IV.INPROC_QTY, 0) AS INPROC_QTY
+           ,(NVL(CV.TRGT_ORD_QTY, 0) + NVL(CV.CARRY_OVER_QTY, 0))
+              - (NVL(IV.INPROC_QTY, 0) + NVL(CV.SHIP_QTY, 0) + NVL(SV.ORD_QTY, 0)) AS AVAL_QTY
+           ,CV.QTY_CTRL_NO_LIMIT_FLG
+           ,NVL(MV1.MDSE_NM, MV2.MDSE_NM) AS MDSE_NM
+           ,NVL(MV1.MDL_ID, MV2.MDL_ID)   AS MDL_ID
+           ,NVL(MV1.MDL_NM, MV2.MDL_NM)   AS MDL_NM
+           ,SMM.SER_NUM
+           ,SMM.MDSE_CD AS MACH_SER_NUM
+           ,CV.EZUPTIME
+           ,CV.EZUPTIMEZONE
+        FROM
+            CONTR_V  CV
+           ,SHIPED_V SV
+           ,INPROC_V IV
+           ,SVC_MACH_MSTR   SMM
+           ,ORD_TAKE_MDSE   OM
+           ,MDL_MDSE_RELN_V MV1
+           ,MDL_MDSE_RELN_V MV2
+        WHERE
+                CV.GLBL_CMPY_CD          = OM.GLBL_CMPY_CD(+)
+            AND CV.GLBL_CMPY_CD          = SMM.GLBL_CMPY_CD(+)
+            AND CV.GLBL_CMPY_CD          = MV1.GLBL_CMPY_CD(+)
+            AND OM.GLBL_CMPY_CD          = MV2.GLBL_CMPY_CD(+)
+            AND CV.SVC_MACH_MSTR_PK      = SMM.SVC_MACH_MSTR_PK
+            AND CV.MDSE_CD               = MV1.MDSE_CD(+)
+            AND CV.MDSE_CD               = OM.ORD_TAKE_MDSE_CD(+)
+            AND OM.MDSE_CD               = MV2.MDSE_CD(+)
+            AND CV.DS_ACPO_NUM           = SV.DS_ACPO_NUM(+)
+            AND CV.DS_ACPO_NUM           = IV.DS_ACPO_NUM(+)
+            AND CV.DS_ACPO_TRGT_LINE_NUM = SV.DS_ACPO_TRGT_LINE_NUM(+)
+            AND CV.DS_ACPO_TRGT_LINE_NUM = IV.DS_ACPO_TRGT_LINE_NUM(+)
+            AND SMM.EZCANCELFLAG(+)      = '0'
+            AND OM.EZCANCELFLAG(+)       = '0'
+            AND MV1.EZCANCELFLAG(+)      = '0'
+            AND MV2.EZCANCELFLAG(+)      = '0'
+        ORDER BY
+            SMM.SER_NUM    NULLS LAST
+           ,SMM.MDSE_CD    NULLS LAST
+           ,CV.MDSE_CD
+    </statement>
+
+    <resultMap id="result.SplyContrInfoBean" class="SplyContrInfoBean">
+        <result property="glblCmpyCd"        column="GLBL_CMPY_CD"          javaType="String"/>
+        <result property="dsContrPk"         column="DS_CONTR_PK"           javaType="BigDecimal"/>
+        <result property="dsContrNum"        column="DS_CONTR_NUM"          javaType="String"/>
+        <result property="dsContrSeqNum"     column="DS_CONTR_SQ_NUM"       javaType="String"/>
+        <result property="dsContrDtlPk"      column="DS_CONTR_DTL_PK"       javaType="BigDecimal"/>
+        <result property="svcConfigMstrPk"   column="SVC_CONFIG_MSTR_PK"    javaType="BigDecimal"/>
+        <result property="dsAcpoNum"         column="DS_ACPO_NUM"           javaType="String"/>
+        <result property="dsAcpoTrgtLineNum" column="DS_ACPO_TRGT_LINE_NUM" javaType="String"/>
+        <result property="serNum"            column="SER_NUM"               javaType="String"/>
+        <result property="machMdseCd"        column="MACH_SER_NUM"          javaType="String"/>
+        <result property="mdlId"             column="MDL_ID"                javaType="BigDecimal"/>
+        <result property="mdlNm"             column="MDL_NM"                javaType="String"/>
+        <result property="splyMdseCd"        column="MDSE_CD"               javaType="String"/>
+        <result property="splyMdseNM"        column="MDSE_NM"               javaType="String"/>
+        <result property="trgtOrdQty"        column="TRGT_ORD_QTY"          javaType="BigDecimal"/>
+        <result property="carrOverQty"       column="CARRY_OVER_QTY"        javaType="BigDecimal"/>
+        <result property="inProcQty"         column="INPROC_QTY"            javaType="BigDecimal"/>
+        <result property="shipQty"           column="SHIP_QTY"              javaType="BigDecimal"/>
+        <result property="avalQty"           column="AVAL_QTY"              javaType="BigDecimal"/>
+        <result property="qtyCtrlNoLimitFlg" column="QTY_CTRL_NO_LIMIT_FLG" javaType="String"/>
+        <result property="equptime"          column="EZUPTIME"              javaType="String"/>
+        <result property="equptimezone"      column="EZUPTIMEZONE"          javaType="String"/>
+    </resultMap>
+
+</sqlMap>

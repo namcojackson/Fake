@@ -1,0 +1,250 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NSBB092001">
+    <statement id="getSvcTaskInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+             STK.SVC_TASK_NUM                                  SVC_TASK_NUM
+            ,FSR.FSR_NUM                                       FSR_NUM
+            ,FVI.FSR_VISIT_NUM                                 FSR_VISIT_NUM
+            ,FSR.CUST_CSE_NUM                                  CUST_CSE_NUM
+            ,FVI.FSR_VISIT_ETA_DT  || FVI.FSR_VISIT_ETA_TM     FSR_VISIT_ETA_TS
+            ,FVI.FSR_VISIT_ARV_DT  || FVI.FSR_VISIT_ARV_TM     FSR_VISIT_ARV_TS
+            ,FVI.FSR_VISIT_CPLT_DT  || FVI.FSR_VISIT_CPLT_TM   FSR_VISIT_CPLT_TS
+            ,DSC.DS_SVC_CALL_TP_DESC_TXT                       DS_SVC_CALL_TP_DESC_TXT
+            ,STS.SVC_TASK_STS_DESC_TXT                         SVC_TASK_STS_DESC_TXT
+            ,TMT.TECH_NM                                       TECH_NM
+            ,FVT.SVC_PBLM_CRCT_TP_CD                           SVC_PBLM_CRCT_TP_CD
+            ,SPC.SVC_PBLM_CRCT_TP_DESC_TXT                     SVC_PBLM_CRCT_TP_DESC_TXT
+        FROM
+             SVC_TASK               STK
+            ,FSR                    FSR
+            ,FSR_VISIT              FVI
+            ,SVC_TASK_STS           STS
+            ,DS_SVC_CALL_TP         DSC
+            ,TECH_MSTR              TMT
+            ,FSR_VISIT_TASK         FVT
+            ,SVC_PBLM_CRCT_TP       SPC
+        WHERE
+                STK.GLBL_CMPY_CD                          = #glblCmpyCd#
+            AND STK.EZCANCELFLAG                          = '0'
+            AND STK.FSR_NUM                               = FSR.FSR_NUM
+            AND STK.GLBL_CMPY_CD                          = FSR.GLBL_CMPY_CD
+            AND FSR.SVC_CALL_SRC_TP_CD                    = #svcCallSrcTpCd#
+            AND FSR.EZCANCELFLAG                          = '0'
+            AND FSR.FSR_NUM                               = FVI.FSR_NUM
+            AND FSR.GLBL_CMPY_CD                          = FVI.GLBL_CMPY_CD
+            AND FVI.EZCANCELFLAG                          = '0'
+            AND STK.SVC_TASK_NUM                          = FVI.SVC_TASK_NUM
+            AND STK.GLBL_CMPY_CD                          = FVI.GLBL_CMPY_CD
+            AND EXISTS (
+                SELECT
+                    1
+                FROM
+                    FSR_EVENT    EVE
+                WHERE
+                        EVE.GLBL_CMPY_CD                  = FVI.GLBL_CMPY_CD
+                    AND EVE.SVC_TASK_NUM                  = FVI.SVC_TASK_NUM
+                    <iterate property="svcDisptEventCdList" var="svcDisptEventCd[]" open="AND EVE.SVC_DISPT_EVENT_CD IN (" close=")" conjunction=",">
+                        #svcDisptEventCd[]#
+                    </iterate>
+                    <isNotNull property="dsBizLastProcTs">
+                    AND EVE.FSR_EVENT_EXE_TS           &gt; #dsBizLastProcTs#
+                    </isNotNull>
+                    AND EVE.EZCANCELFLAG                  = '0'
+                )
+            AND FVI.FSR_VISIT_STS_CD                      = STS.SVC_TASK_STS_CD(+)
+            AND FVI.GLBL_CMPY_CD                          = STS.GLBL_CMPY_CD(+)
+            AND STS.EZCANCELFLAG(+)                       = '0'
+            AND STK.DS_SVC_CALL_TP_CD                     = DSC.DS_SVC_CALL_TP_CD(+)
+            AND STK.GLBL_CMPY_CD                          = DSC.GLBL_CMPY_CD(+)
+            AND DSC.EZCANCELFLAG(+)                       = '0'
+            AND FVI.TECH_CD                               = TMT.TECH_TOC_CD(+)
+            AND FVI.GLBL_CMPY_CD                          = TMT.GLBL_CMPY_CD(+)
+            AND TMT.EZCANCELFLAG(+)                       = '0'
+            AND FVI.FSR_NUM                               = FVT.FSR_NUM(+)
+            AND FVI.FSR_VISIT_NUM                         = FVT.FSR_VISIT_NUM(+)
+            AND FVI.SVC_TASK_NUM                          = FVT.SVC_TASK_NUM(+)
+            AND FVI.GLBL_CMPY_CD                          = FVT.GLBL_CMPY_CD(+)
+            AND FVT.EZCANCELFLAG(+)                       = '0'
+            AND FVT.SVC_PBLM_CRCT_TP_CD                   = SPC.SVC_PBLM_CRCT_TP_CD(+)
+            AND FVT.GLBL_CMPY_CD                          = SPC.GLBL_CMPY_CD(+)
+            AND SPC.EZCANCELFLAG(+)                       = '0'
+            <isNotNull property="isCancelCase">
+            AND NOT EXISTS(
+                SELECT
+                    1
+                FROM
+                    CITS_SVC_TASK_UPD_STAGE   CS1
+                WHERE
+                        CS1.SVC_TASK_NUM                  = STK.SVC_TASK_NUM
+                    AND CS1.GLBL_CMPY_CD                  = STK.GLBL_CMPY_CD
+                    AND CS1.CITS_PLSFT_UPD_TP_CD          = #citsPlsftUpdTpCd#
+                    AND CS1.S21_FLD_SVC_PROC_CD    &lt;&gt; #fldSvcProcCd#
+                    AND CS1.EZCANCELFLAG                  = '0'
+                )
+            </isNotNull>
+            <isNotNull property="isAssignCase">
+            AND NOT EXISTS(
+                SELECT
+                    1
+                FROM
+                    CITS_SVC_TASK_UPD_STAGE   CS1
+                WHERE
+                        CS1.SVC_TASK_NUM                  = STK.SVC_TASK_NUM
+                    AND CS1.GLBL_CMPY_CD                  = STK.GLBL_CMPY_CD
+                    AND CS1.CITS_PLSFT_UPD_TP_CD          = #citsPlsftUpdTpCd#
+                    AND CS1.EZCANCELFLAG                  = '0'
+                )
+            </isNotNull>
+        ORDER BY
+            STK.SVC_TASK_NUM
+    </statement>
+    <statement id="getSvcMemoInfoForAddNotes" parameterClass="Map" resultClass="Map">
+        SELECT
+             SMO.SVC_CMNT_TXT              SVC_CMNT_TXT
+            ,SMO.SVC_MEMO_PK               SVC_MEMO_PK
+        FROM
+             SVC_MEMO    SMO
+        WHERE
+                SMO.GLBL_CMPY_CD         = #glblCmpyCd#
+            AND SMO.SVC_TASK_NUM         = #svcTaskNum#
+            <isNotNull property="dsBizLastProcTs">
+            AND SMO.LAST_UPD_TS       &gt; #dsBizLastProcTs#
+            </isNotNull>
+            AND SMO.EZCANCELFLAG         = '0'
+        ORDER BY
+            SMO.LAST_UPD_TS     ASC
+    </statement>
+    <statement id="getLaborPartsUsageInfo" parameterClass="Map" resultClass="Map">
+    <!-- Labor Info -->
+        SELECT
+             FVI.SVC_TASK_NUM                                    SVC_TASK_NUM
+            ,FSR.FSR_NUM                                         FSR_NUM
+            ,FVI.FSR_VISIT_NUM                                   FSR_VISIT_NUM
+            ,FSR.CUST_CSE_NUM                                    CUST_CSE_NUM
+            ,FVE.MDSE_CD                                         MDSE_CD
+            ,NULL                                                SVC_PRT_QTY
+            ,FVI.FSR_VISIT_ARV_DT   || FVI.FSR_VISIT_ARV_TM      FSR_VISIT_ARV_TS
+            ,FVI.FSR_VISIT_CPLT_DT  || FVI.FSR_VISIT_CPLT_TM     FSR_VISIT_CPLT_TS
+            ,FVT.SVC_PBLM_CRCT_TP_CD                             SVC_PBLM_CRCT_TP_CD
+            ,FVT.SVC_PBLM_LOC_TP_CD                              SVC_PBLM_LOC_TP_CD
+            ,FVT.SVC_PBLM_RSN_TP_CD                              SVC_PBLM_RSN_TP_CD
+            ,FVT.SVC_PBLM_TP_CD                                  SVC_PBLM_TP_CD
+            ,SPC.SVC_PBLM_CRCT_TP_DESC_TXT                       SVC_PBLM_CRCT_TP_DESC_TXT
+            ,SPL.SVC_PBLM_LOC_TP_DESC_TXT                        SVC_PBLM_LOC_TP_DESC_TXT
+            ,SPR.SVC_PBLM_RSN_TP_DESC_TXT                        SVC_PBLM_RSN_TP_DESC_TXT
+            ,SPT.SVC_PBLM_TP_DESC_TXT                            SVC_PBLM_TP_DESC_TXT
+            ,TMT.TECH_NM                                         TECH_NM
+            ,'1'                                                 PRIORITY_NUM
+        FROM
+             FSR                    FSR
+            ,FSR_VISIT              FVI
+            ,FSR_VISIT_TASK         FVT
+            ,FSR_VISIT_TM_EVENT     FVE
+            ,SVC_PBLM_CRCT_TP       SPC
+            ,SVC_PBLM_LOC_TP        SPL
+            ,SVC_PBLM_RSN_TP        SPR
+            ,SVC_PBLM_TP            SPT
+            ,TECH_MSTR              TMT
+        WHERE
+                FSR.GLBL_CMPY_CD        = #glblCmpyCd#
+            AND FSR.FSR_NUM             = #fsrNum#
+            AND FSR.EZCANCELFLAG        = '0'
+            AND FSR.FSR_NUM             = FVI.FSR_NUM
+            AND FSR.GLBL_CMPY_CD        = FVI.GLBL_CMPY_CD
+            AND FVI.SVC_TASK_NUM        = #svcTaskNum#
+            AND FVI.EZCANCELFLAG        = '0'
+            AND FVI.FSR_NUM             = FVT.FSR_NUM
+            AND FVI.FSR_VISIT_NUM       = FVT.FSR_VISIT_NUM
+            AND FVI.SVC_TASK_NUM        = FVT.SVC_TASK_NUM
+            AND FVI.GLBL_CMPY_CD        = FVT.GLBL_CMPY_CD
+            AND FVT.EZCANCELFLAG        = '0'
+            AND FVI.FSR_NUM             = FVE.FSR_NUM
+            AND FVI.FSR_VISIT_NUM       = FVE.FSR_VISIT_NUM
+            AND FVI.GLBL_CMPY_CD        = FVE.GLBL_CMPY_CD
+            AND FVE.SVC_TM_EVENT_CD     = #svcTmEventCd#
+            AND FVE.EZCANCELFLAG        = '0'
+            AND FVT.SVC_PBLM_CRCT_TP_CD = SPC.SVC_PBLM_CRCT_TP_CD(+)
+            AND FVT.GLBL_CMPY_CD        = SPC.GLBL_CMPY_CD(+)
+            AND SPC.EZCANCELFLAG(+)     = '0'
+            AND FVT.SVC_PBLM_LOC_TP_CD  = SPL.SVC_PBLM_LOC_TP_CD(+)
+            AND FVT.GLBL_CMPY_CD        = SPL.GLBL_CMPY_CD(+)
+            AND SPL.EZCANCELFLAG(+)     = '0'
+            AND FVT.SVC_PBLM_RSN_TP_CD  = SPR.SVC_PBLM_RSN_TP_CD(+)
+            AND FVT.GLBL_CMPY_CD        = SPR.GLBL_CMPY_CD(+)
+            AND SPR.EZCANCELFLAG(+)     = '0'
+            AND FVT.SVC_PBLM_TP_CD      = SPT.SVC_PBLM_TP_CD(+)
+            AND FVT.GLBL_CMPY_CD        = SPT.GLBL_CMPY_CD(+)
+            AND SPT.EZCANCELFLAG(+)     = '0'
+            AND FVI.TECH_CD             = TMT.TECH_TOC_CD(+)
+            AND FVI.GLBL_CMPY_CD        = TMT.GLBL_CMPY_CD(+)
+            AND TMT.EZCANCELFLAG(+)     = '0'
+            AND ROWNUM                  = 1
+    <!-- Parts Usage Info -->
+    UNION ALL
+        SELECT
+             FVI.SVC_TASK_NUM                                    SVC_TASK_NUM
+            ,FSR.FSR_NUM                                         FSR_NUM
+            ,FVI.FSR_VISIT_NUM                                   FSR_VISIT_NUM
+            ,FSR.CUST_CSE_NUM                                    CUST_CSE_NUM
+            ,FUS.MDSE_CD                                         MDSE_CD
+            ,FUS.SVC_PRT_QTY                                     SVC_PRT_QTY
+            ,FVI.FSR_VISIT_ARV_DT   || FVI.FSR_VISIT_ARV_TM      FSR_VISIT_ARV_TS
+            ,FVI.FSR_VISIT_CPLT_DT  || FVI.FSR_VISIT_CPLT_TM     FSR_VISIT_CPLT_TS
+            ,FVT.SVC_PBLM_CRCT_TP_CD                             SVC_PBLM_CRCT_TP_CD
+            ,FVT.SVC_PBLM_LOC_TP_CD                              SVC_PBLM_LOC_TP_CD
+            ,FVT.SVC_PBLM_RSN_TP_CD                              SVC_PBLM_RSN_TP_CD
+            ,FVT.SVC_PBLM_TP_CD                                  SVC_PBLM_TP_CD
+            ,SPC.SVC_PBLM_CRCT_TP_DESC_TXT                       SVC_PBLM_CRCT_TP_DESC_TXT
+            ,SPL.SVC_PBLM_LOC_TP_DESC_TXT                        SVC_PBLM_LOC_TP_DESC_TXT
+            ,SPR.SVC_PBLM_RSN_TP_DESC_TXT                        SVC_PBLM_RSN_TP_DESC_TXT
+            ,SPT.SVC_PBLM_TP_DESC_TXT                            SVC_PBLM_TP_DESC_TXT
+            ,TMT.TECH_NM                                         TECH_NM
+            ,'2'                                                 PRIORITY_NUM
+        FROM
+             FSR                    FSR
+            ,FSR_VISIT              FVI
+            ,FSR_VISIT_TASK         FVT
+            ,FSR_USG                FUS
+            ,SVC_PBLM_CRCT_TP       SPC
+            ,SVC_PBLM_LOC_TP        SPL
+            ,SVC_PBLM_RSN_TP        SPR
+            ,SVC_PBLM_TP            SPT
+            ,TECH_MSTR              TMT
+        WHERE
+                FSR.GLBL_CMPY_CD        = #glblCmpyCd#
+            AND FSR.FSR_NUM             = #fsrNum#
+            AND FSR.EZCANCELFLAG        = '0'
+            AND FSR.FSR_NUM             = FVI.FSR_NUM
+            AND FSR.GLBL_CMPY_CD        = FVI.GLBL_CMPY_CD
+            AND FVI.SVC_TASK_NUM        = #svcTaskNum#
+            AND FVI.EZCANCELFLAG        = '0'
+            AND FVI.FSR_NUM             = FVT.FSR_NUM
+            AND FVI.FSR_VISIT_NUM       = FVT.FSR_VISIT_NUM
+            AND FVI.SVC_TASK_NUM        = FVT.SVC_TASK_NUM
+            AND FVI.GLBL_CMPY_CD        = FVT.GLBL_CMPY_CD
+            AND FVT.EZCANCELFLAG        = '0'
+            AND FVI.FSR_NUM             = FUS.FSR_NUM
+            AND FVI.FSR_VISIT_NUM       = FUS.FSR_VISIT_NUM
+            AND FVI.SVC_TASK_NUM        = FUS.SVC_TASK_NUM
+            AND FVI.GLBL_CMPY_CD        = FUS.GLBL_CMPY_CD
+            AND FUS.EZCANCELFLAG        = '0'
+            AND FVT.SVC_PBLM_CRCT_TP_CD = SPC.SVC_PBLM_CRCT_TP_CD(+)
+            AND FVT.GLBL_CMPY_CD        = SPC.GLBL_CMPY_CD(+)
+            AND SPC.EZCANCELFLAG(+)     = '0'
+            AND FVT.SVC_PBLM_LOC_TP_CD  = SPL.SVC_PBLM_LOC_TP_CD(+)
+            AND FVT.GLBL_CMPY_CD        = SPL.GLBL_CMPY_CD(+)
+            AND SPL.EZCANCELFLAG(+)     = '0'
+            AND FVT.SVC_PBLM_RSN_TP_CD  = SPR.SVC_PBLM_RSN_TP_CD(+)
+            AND FVT.GLBL_CMPY_CD        = SPR.GLBL_CMPY_CD(+)
+            AND SPR.EZCANCELFLAG(+)     = '0'
+            AND FVT.SVC_PBLM_TP_CD      = SPT.SVC_PBLM_TP_CD(+)
+            AND FVT.GLBL_CMPY_CD        = SPT.GLBL_CMPY_CD(+)
+            AND SPT.EZCANCELFLAG(+)     = '0'
+            AND FVI.TECH_CD             = TMT.TECH_TOC_CD(+)
+            AND FVI.GLBL_CMPY_CD        = TMT.GLBL_CMPY_CD(+)
+            AND TMT.EZCANCELFLAG(+)     = '0'
+        ORDER BY
+                PRIORITY_NUM
+               ,MDSE_CD
+    </statement>
+</sqlMap>

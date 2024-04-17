@@ -1,0 +1,254 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NSBB096001">
+    <statement id="getTargetTask" parameterClass="Map" resultClass="Map">
+        SELECT
+            TASK.SVC_TASK_NUM
+            ,TASK.DS_SVC_CALL_TP_CD
+            ,TASK.XTRNL_CALL_TP_REF_TXT
+            ,TASK.SVC_PBLM_TP_CD
+            ,TASK.SVC_PBLM_TP_DESC_TXT
+            ,TASK.FLD_SVC_BR_CD
+            ,TASK.SVC_CONTR_BR_DESC_TXT
+            ,TASK.SVC_TASK_RCV_DT
+            ,TASK.SVC_TASK_RCV_TM
+            ,TASK.FSR_EVENT_EXE_TS
+            ,TASK.RANK
+            ,TASK.ELAPSED_TIME
+            ,TASK.SVC_CMNT_TXT
+            ,TASK.LOC_NM
+            ,TASK.SHIP_TO_ADDR
+            ,TASK.POST_CD
+            ,TASK.CTRY_CD
+<!-- QC#27592 Add Start -->
+            ,TASK.SVC_BY_LINE_BIZ_TP_CD
+<!-- QC#27592 Add End -->
+        FROM 
+                (
+                    SELECT
+                        TSK.SVC_TASK_NUM
+                        ,TSK.DS_SVC_CALL_TP_CD
+                        ,CTP.XTRNL_CALL_TP_REF_TXT
+                        ,FSR.SVC_PBLM_TP_CD
+                        ,PBL.SVC_PBLM_TP_DESC_TXT
+                        ,SMM.FLD_SVC_BR_CD
+                        ,CBR.SVC_CONTR_BR_DESC_TXT
+                        ,TSK.SVC_TASK_RCV_DT
+                        ,TSK.SVC_TASK_RCV_TM
+                        ,EVT.FSR_EVENT_EXE_TS
+                        ,RANK() OVER(PARTITION BY TSK.SVC_TASK_NUM ORDER BY EVT.FSR_EVENT_EXE_TS) AS RANK
+                        ,TRUNC((TO_DATE(#sysTmStamp#, 'YYYYMMDDHH24MISS') - TO_DATE(SUBSTR(EVT.FSR_EVENT_EXE_TS, 1, 14),'YYYYMMDDHH24MISS')) * 1440 , 0) AS ELAPSED_TIME
+                        ,MEM.SVC_CMNT_TXT
+                        ,STC.LOC_NM
+                        ,SPC.FIRST_LINE_ADDR
+                        || DECODE(SPC.SCD_LINE_ADDR,    null, '', ' ' || SPC.SCD_LINE_ADDR)
+                        || DECODE(SPC.THIRD_LINE_ADDR,  null, '', ' ' || SPC.THIRD_LINE_ADDR)
+                        || DECODE(SPC.FRTH_LINE_ADDR,   null, '', ' ' || SPC.FRTH_LINE_ADDR)
+                        || DECODE(SPC.CTY_ADDR,         null, '', ' ' || SPC.CTY_ADDR)
+                        || DECODE(SPC.ST_CD,            null, '', ' ' || SPC.ST_CD)
+                        || DECODE(SPC.POST_CD,          null, '', ' ' || SPC.POST_CD)
+                                                                                         AS SHIP_TO_ADDR
+                        ,SPC.POST_CD
+                        ,SPC.CTRY_CD
+<!-- QC#27592 Add Start -->
+                        ,SMM.SVC_BY_LINE_BIZ_TP_CD
+<!-- QC#27592 Add End -->
+                    FROM
+                        SVC_TASK        TSK
+                        ,FSR            FSR
+                        ,FSR_VISIT      VST
+                        ,DS_SVC_CALL_TP CTP
+                        ,SVC_TASK_STS   TST
+                        ,FSR_EVENT      EVT
+                        ,SVC_PBLM_TP    PBL
+                        ,SVC_CONTR_BR   CBR
+                        ,SVC_MACH_MSTR  SMM
+                        ,SVC_MEMO       MEM
+                        ,SELL_TO_CUST   STC
+                        ,SHIP_TO_CUST   SPC
+                    WHERE
+                        TSK.GLBL_CMPY_CD      = #glblCmpyCd#
+                    AND TSK.EZCANCELFLAG      = '0'
+                    AND TSK.GLBL_CMPY_CD      = VST.GLBL_CMPY_CD
+                    AND TSK.SVC_TASK_NUM      = VST.SVC_TASK_NUM
+                    AND VST.EZCANCELFLAG      = '0'
+                    AND VST.GLBL_CMPY_CD      = TST.GLBL_CMPY_CD
+                    AND VST.FSR_VISIT_STS_CD  = TST.SVC_TASK_STS_CD
+                    AND TST.SVC_TASK_SCHD_FLG = #flgY#
+                    AND TST.EZCANCELFLAG      = '0'
+                    AND TSK.GLBL_CMPY_CD      = FSR.GLBL_CMPY_CD
+                    AND TSK.FSR_NUM           = FSR.FSR_NUM
+                    AND FSR.EZCANCELFLAG      = '0'
+                    AND TSK.GLBL_CMPY_CD      = CTP.GLBL_CMPY_CD
+                    AND TSK.DS_SVC_CALL_TP_CD = CTP.DS_SVC_CALL_TP_CD
+                    AND CTP.AFT_HRS_FLG       = #flgY#
+                    AND CTP.EZCANCELFLAG      = '0'
+                    AND TSK.GLBL_CMPY_CD      = EVT.GLBL_CMPY_CD
+                    AND TSK.SVC_TASK_NUM      = EVT.SVC_TASK_NUM
+                    AND EVT.SVC_DISPT_EVENT_CD= #svcDisptEventCd#
+                    AND EVT.EZCANCELFLAG      = '0'
+                    AND FSR.GLBL_CMPY_CD      = PBL.GLBL_CMPY_CD
+                    AND FSR.SVC_PBLM_TP_CD    = PBL.SVC_PBLM_TP_CD
+                    AND PBL.EZCANCELFLAG      = '0'
+                    AND TSK.GLBL_CMPY_CD      = SMM.GLBL_CMPY_CD
+                    AND TSK.SVC_MACH_MSTR_PK  = SMM.SVC_MACH_MSTR_PK
+                    AND SMM.EZCANCELFLAG      = '0'
+                    AND SMM.GLBL_CMPY_CD      = CBR.GLBL_CMPY_CD
+                    AND SMM.FLD_SVC_BR_CD     = CBR.SVC_CONTR_BR_CD
+                    AND CBR.EZCANCELFLAG      = '0'
+                    AND TSK.GLBL_CMPY_CD      = MEM.GLBL_CMPY_CD
+                    AND TSK.SVC_TASK_NUM      = MEM.SVC_TASK_NUM
+                    AND MEM.SVC_MEMO_TP_CD    = #svcMemoTpCd#
+                    AND MEM.EZCANCELFLAG      = '0'
+                    AND FSR.GLBL_CMPY_CD      = STC.GLBL_CMPY_CD
+                    AND NVL(FSR.SHIP_TO_UPD_CUST_CD, FSR.SHIP_TO_CUST_ACCT_CD) = STC.SELL_TO_CUST_CD
+                    AND STC.EZCANCELFLAG      = '0'
+                    AND FSR.GLBL_CMPY_CD      = SPC.GLBL_CMPY_CD
+                    AND NVL(FSR.SHIP_TO_UPD_CUST_CD, FSR.SHIP_TO_CUST_CD) = SPC.SHIP_TO_CUST_CD
+                    AND SPC.EZCANCELFLAG      = '0'
+                    AND TRUNC((TO_DATE(#sysTmStamp#, 'YYYYMMDDHH24MISS') - TO_DATE(SUBSTR(EVT.FSR_EVENT_EXE_TS, 1, 14),'YYYYMMDDHH24MISS')) * 1440 , 0) &gt;= (NVL(TSK.SVC_TASK_NTFY_CNT,0) + 1) * #intvlToNtc# 
+                ) TASK
+        WHERE
+            TASK.RANK = 1
+        ORDER BY
+                TASK.SVC_TASK_NUM
+    </statement>
+
+    <statement id="getDtyMgr" parameterClass="Map" resultClass="Map">
+<!-- QC#27592 Mod Start -->
+<!--
+        SELECT
+            MGR.PSN_CD
+            ,PSN.EML_ADDR
+        FROM
+            SVC_RG_BR_RELN REL
+            ,DTY_MGR       MGR
+            ,S21_PSN       PSN
+        WHERE
+            REL.GLBL_CMPY_CD      = #glblCmpyCd#
+        AND REL.SVC_CONTR_BR_CD   = #svcContrBrCd#
+        AND REL.EZCANCELFLAG      = '0'
+        AND REL.GLBL_CMPY_CD      = MGR.GLBL_CMPY_CD
+        AND REL.SVC_RG_PK         = MGR.SVC_RG_PK
+        AND MGR.EFF_FROM_DT || MGR.EFF_FROM_TM &lt;= #sysTmStamp#
+        AND MGR.EFF_THRU_DT || MGR.EFF_THRU_TM &gt;= #sysTmStamp#
+        AND MGR.SVC_AVAL_FLG      = #flgY#
+        AND MGR.EZCANCELFLAG      = '0'
+        AND MGR.GLBL_CMPY_CD      = PSN.GLBL_CMPY_CD
+        AND MGR.PSN_CD            = PSN.PSN_CD
+        AND PSN.EZCANCELFLAG      = '0'
+-->
+<!-- START 2023/05/01 T.Usui [QC#61069, MOD] -->
+<!--
+    WITH RG_TIER AS (
+        SELECT
+            OHSD.GLBL_CMPY_CD
+            ,OHSD.ORG_TIER_CD + 1 AS ORG_TIER_CD
+        FROM
+             STRU_DFN SDF
+            ,ORG_HRCH_STRU_DFN OHSD
+        WHERE
+                SDF.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND SDF.RG_FLG           = #flgY#
+            AND SDF.EZCANCELFLAG     = '0'
+            AND SDF.GLBL_CMPY_CD     = OHSD.GLBL_CMPY_CD
+            AND SDF.STRU_DFN_CD      = OHSD.STRU_DFN_CD
+            AND OHSD.BIZ_AREA_ORG_CD = #service#
+            AND OHSD.EZCANCELFLAG    = '0'
+            AND OHSD.EFF_FROM_DT                   &lt;= #salesDate#
+            AND NVL(OHSD.EFF_THRU_DT, #salesDate#) &gt;= #salesDate#
+            AND ROWNUM               = 1
+    )
+    ,BR_TIER AS (
+        SELECT
+            OHSD.GLBL_CMPY_CD
+            ,OHSD.ORG_TIER_CD + 1 AS ORG_TIER_CD
+        FROM
+             STRU_DFN SDF
+            ,ORG_HRCH_STRU_DFN OHSD
+        WHERE
+                SDF.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND SDF.BR_FLG           = #flgY#
+            AND SDF.EZCANCELFLAG     = '0'
+            AND SDF.GLBL_CMPY_CD     = OHSD.GLBL_CMPY_CD
+            AND SDF.STRU_DFN_CD      = OHSD.STRU_DFN_CD
+            AND OHSD.BIZ_AREA_ORG_CD = #service#
+            AND OHSD.EZCANCELFLAG    = '0'
+            AND OHSD.EFF_FROM_DT                   &lt;= #salesDate#
+            AND NVL(OHSD.EFF_THRU_DT, #salesDate#) &gt;= #salesDate#
+            AND ROWNUM               = 1
+    )
+    ,BR_RG_MAP AS (
+        SELECT
+            CASE RG.ORG_TIER_CD
+                WHEN 1 THEN STRU.FIRST_ORG_CD
+                WHEN 2 THEN STRU.SCD_ORG_CD
+                WHEN 3 THEN STRU.THIRD_ORG_CD
+                WHEN 4 THEN STRU.FRTH_ORG_CD
+                WHEN 5 THEN STRU.FIFTH_ORG_CD
+                WHEN 6 THEN STRU.SIXTH_ORG_CD
+                WHEN 7 THEN STRU.SVNTH_ORG_CD
+                WHEN 8 THEN STRU.EIGHTH_ORG_CD
+                WHEN 9 THEN STRU.NINTH_ORG_CD
+                WHEN 10 THEN STRU.TENTH_ORG_CD
+                WHEN 11 THEN STRU.ELVTH_ORG_CD
+            END RG_CD
+            ,CASE BR.ORG_TIER_CD
+                WHEN 1 THEN SUBSTR(STRU.FIRST_ORG_NM, 1 ,3)
+                WHEN 2 THEN SUBSTR(STRU.SCD_ORG_NM, 1 ,3)
+                WHEN 3 THEN SUBSTR(STRU.THIRD_ORG_NM, 1 ,3)
+                WHEN 4 THEN SUBSTR(STRU.FRTH_ORG_NM, 1 ,3)
+                WHEN 5 THEN SUBSTR(STRU.FIFTH_ORG_NM, 1 ,3)
+                WHEN 6 THEN SUBSTR(STRU.SIXTH_ORG_NM, 1 ,3)
+                WHEN 7 THEN SUBSTR(STRU.SVNTH_ORG_NM, 1 ,3)
+                WHEN 8 THEN SUBSTR(STRU.EIGHTH_ORG_NM, 1 ,3)
+                WHEN 9 THEN SUBSTR(STRU.NINTH_ORG_NM, 1 ,3)
+                WHEN 10 THEN SUBSTR(STRU.TENTH_ORG_NM, 1 ,3)
+                WHEN 11 THEN SUBSTR(STRU.ELVTH_ORG_NM, 1 ,3)
+            END BR_CD
+        FROM
+            ORG_STRU STRU
+            ,RG_TIER RG
+            ,BR_TIER BR
+        WHERE
+            STRU.GLBL_CMPY_CD   = #glblCmpyCd#
+        AND STRU.EZCANCELFLAG   = '0'
+        AND STRU.FIRST_ORG_CD   = #service#
+        AND STRU.ORG_LAYER_NUM  = BR.ORG_TIER_CD
+    )
+-->
+    SELECT
+        *
+    FROM (
+        SELECT
+            MGR.PSN_CD
+            ,PSN.EML_ADDR
+        FROM
+            SVC_RG_BR_V    SRB
+            ,DTY_MGR       MGR
+            ,S21_PSN       PSN
+        WHERE
+            MGR.GLBL_CMPY_CD                                          = #glblCmpyCd#
+        AND MGR.EZCANCELFLAG                                          = '0'
+        AND SUBSTR(SRB.BR_ORG_NM,0,3)                                 = #fldSvcBrCd#
+        AND (MGR.BR_ORG_CD                                            IS NULL OR
+            MGR.BR_ORG_CD                                             = SRB.BR_ORG_CD)
+        AND MGR.ORG_CD                                                = SRB.RG_ORG_CD
+        AND ((#svcByLineBizTpCd# IN (#svcByLineBizTpCdLfs#,#svcByLineBizTpCdPps#) AND MGR.SVC_BY_LINE_BIZ_TP_CD IN (#svcByLineBizTpCdLfs#,#svcByLineBizTpCdPps#)) OR
+             (#svcByLineBizTpCd# NOT IN (#svcByLineBizTpCdLfs#,#svcByLineBizTpCdPps#) AND MGR.SVC_BY_LINE_BIZ_TP_CD = #svcByLineBizTpCd#)
+             )
+        AND MGR.EFF_FROM_DT || MGR.EFF_FROM_TM                    &lt;= #sysTmStamp#
+        AND NVL(MGR.EFF_THRU_DT || MGR.EFF_THRU_TM, #sysTmStamp#) &gt;= #sysTmStamp#
+        AND MGR.SVC_AVAL_FLG                                          = #flgY#
+        AND MGR.GLBL_CMPY_CD                                          = PSN.GLBL_CMPY_CD
+        AND PSN.EZCANCELFLAG                                          = '0'
+        AND MGR.PSN_CD                                                = PSN.PSN_CD
+        ORDER BY
+            MGR.BR_ORG_CD                                             NULLS LAST
+    )
+    WHERE
+        ROWNUM = 1
+
+<!-- END 2023/05/01 T.Usui [QC#61069, MOD] -->
+<!-- QC#27592 Mod End -->
+    </statement>
+</sqlMap>

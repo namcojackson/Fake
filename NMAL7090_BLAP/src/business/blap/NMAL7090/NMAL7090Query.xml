@@ -1,0 +1,559 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sqlMap namespace="NMAL7090Query">
+    <typeAlias alias="NMAL7090CMsg" type="business.blap.NMAL7090.NMAL7090CMsg" />
+    <typeAlias alias="NMAL7090SMsg" type="business.blap.NMAL7090.NMAL7090SMsg" />
+    <typeAlias alias="NMAL7090_ASMsg" type="business.blap.NMAL7090.NMAL7090_ASMsg" />
+    <typeAlias alias="NMAL7090_BSMsg" type="business.blap.NMAL7090.NMAL7090_BSMsg" />
+    <typeAlias alias="NMAL7090_CSMsg" type="business.blap.NMAL7090.NMAL7090_CSMsg" />
+    <statement id="getPrcListTpPulldownList" parameterClass="Map" resultClass="Map">
+        SELECT
+            PLT.PRC_LIST_TP_CD
+           ,PLT.PRC_LIST_TP_DESC_TXT
+        FROM
+            PRC_LIST_TP PLT
+        WHERE
+                PLT.GLBL_CMPY_CD = #glblCmpyCd#
+            AND PLT.EZCANCELFLAG = '0'
+        ORDER BY
+            PLT.PRC_LIST_TP_SORT_NUM ASC
+    </statement>
+    <statement id="getPrcListActTpPulldownList" parameterClass="Map" resultClass="Map">
+        SELECT
+            PLT.PRC_LIST_ACT_TP_CD
+           ,PLT.PRC_LIST_ACT_TP_DESC_TXT
+        FROM
+            PRC_LIST_ACT_TP PLT
+        WHERE
+                PLT.GLBL_CMPY_CD = #glblCmpyCd#
+            AND PLT.EZCANCELFLAG = '0'
+        ORDER BY
+            PLT.PRC_LIST_ACT_TP_SORT_NUM ASC
+    </statement>
+    <statement id="getRqstStsTpPulldownList" parameterClass="Map" resultClass="Map">
+        SELECT
+            RST.RQST_STS_TP_CD
+           ,RST.RQST_STS_TP_DESC_TXT
+        FROM
+            RQST_STS_TP RST
+        WHERE
+                RST.GLBL_CMPY_CD = #glblCmpyCd#
+            AND RST.EZCANCELFLAG = '0'
+        ORDER BY
+            RST.RQST_STS_TP_SORT_NUM ASC
+    </statement>
+    <statement id="getItemList" parameterClass="Map" resultMap="result.NMAL7090_ASMsg">
+        WITH TBL_A AS (
+            SELECT
+                 NVL(OTF.ORD_TAKE_MDSE_CD, SR.SUPD_FROM_MDSE_CD) AS OLD_ITEM_CD 
+                ,AMF.MDSE_DESC_SHORT_TXT                         AS OLD_ITEM_DESCRIPTION
+                ,AMF.THIS_MTH_TOT_STD_COST_AMT                   AS OLD_ITEM_COST
+                ,NVL(OTT.ORD_TAKE_MDSE_CD, SR.SUPD_TO_MDSE_CD)   AS NEW_ITEM_CD
+                ,AMT.MDSE_DESC_SHORT_TXT                         AS NEW_ITEM_DESCRIPTION
+                ,AMT.THIS_MTH_TOT_STD_COST_AMT                   AS NEW_ITEM_COST
+                ,SR.SUPD_CRAT_DT                                 AS ADD_DATE
+              FROM
+                 SUPD_RELN           SR
+                ,ALL_MDSE_V          AMF
+                ,ORD_TAKE_MDSE       OTF
+                ,ALL_MDSE_V          AMT
+                ,ORD_TAKE_MDSE       OTT
+              WHERE
+                    SR.GLBL_CMPY_CD         = #glblCmpyCd#
+            <isNotNull property="cMsg.supdCratDt_FR">
+                AND SR.SUPD_CRAT_DT <![CDATA[>=]]> #cMsg.supdCratDt_FR#
+            </isNotNull>
+            <isNotNull property="cMsg.supdCratDt_TO">
+                AND SR.SUPD_CRAT_DT <![CDATA[<=]]> #cMsg.supdCratDt_TO#
+            </isNotNull>
+                AND SR.EZCANCELFLAG         = '0'
+
+                AND SR.GLBL_CMPY_CD         = AMF.GLBL_CMPY_CD
+                AND SR.SUPD_FROM_MDSE_CD    = AMF.MDSE_CD
+                AND AMF.EZCANCELFLAG        = '0'
+
+                AND AMF.GLBL_CMPY_CD        = OTF.GLBL_CMPY_CD(+)
+                AND SUBSTR(AMF.MDSE_CD,0,8) = OTF.ORD_TAKE_MDSE_CD(+)
+                AND OTF.EZCANCELFLAG(+)     = '0'
+
+                AND SR.GLBL_CMPY_CD         = AMT.GLBL_CMPY_CD
+                AND SR.SUPD_TO_MDSE_CD      = AMT.MDSE_CD
+                AND AMT.EZCANCELFLAG        = '0'
+
+                AND AMT.GLBL_CMPY_CD        = OTT.GLBL_CMPY_CD(+)
+                AND SUBSTR(AMT.MDSE_CD,0,8) = OTT.ORD_TAKE_MDSE_CD(+)
+                AND OTT.EZCANCELFLAG(+)  = '0'
+<!-- UPDATE START 2016/05/06 QC#7724 -->
+                AND EXISTS(
+                  SELECT
+                      PRC_CATG_CD
+                    FROM PRC_LIST_EQUIP PLE
+                    WHERE
+                          PLE.GLBL_CMPY_CD      = #glblCmpyCd#
+                      AND PLE.PRC_QLFY_VAL_TXT  = NVL(OTF.ORD_TAKE_MDSE_CD, SR.SUPD_FROM_MDSE_CD)
+                      AND PLE.PRC_QLFY_TP_CD    = #prcQlfyTpCd#
+                      AND PLE.EZCANCELFLAG       = '0'
+                )                
+<!-- UPDATE START 2016/05/06 QC#7724 -->
+            ORDER BY SR.SUPD_CRAT_DT DESC
+            )
+            SELECT
+                   OLD_ITEM_CD 
+                  ,OLD_ITEM_DESCRIPTION
+                  ,OLD_ITEM_COST
+                  ,NEW_ITEM_CD
+                  ,NEW_ITEM_DESCRIPTION
+                  ,NEW_ITEM_COST
+                  ,ADD_DATE
+                FROM
+                    TBL_A
+                WHERE
+                      ROWNUM <![CDATA[<=]]> #rowNum#
+              <!-- FILTER CONDITION -->
+                <isNotNull property="filterOldItemNumber">
+                  AND OLD_ITEM_CD          LIKE #filterOldItemNumber#
+                </isNotNull>
+                <isNotNull property="filterOldItemDescription">
+                  AND OLD_ITEM_DESCRIPTION LIKE #filterOldItemDescription#
+                </isNotNull>
+                <isNotNull property="filterNewItemNumber">
+                  AND NEW_ITEM_CD          LIKE #filterNewItemNumber#
+                </isNotNull>
+                <isNotNull property="filterNewItemDescription">
+                  AND NEW_ITEM_DESCRIPTION LIKE #filterNewItemDescription#
+                </isNotNull>
+                <isNotNull property="filterAddDate">
+                  AND ADD_DATE             =    #filterAddDate#
+                </isNotNull>
+              <!-- FILTER CONDITION -->
+    </statement>
+    <resultMap id="result.NMAL7090_ASMsg" class="NMAL7090_ASMsg">
+        <result property="supdFromMdseCd_A"        column="OLD_ITEM_CD"          javaType="EZDSStringItem"/>
+        <result property="mdseDescShortTxt_AO"     column="OLD_ITEM_DESCRIPTION" javaType="EZDSStringItem"/>
+        <result property="thisMthTotStdCostAmt_AO" column="OLD_ITEM_COST"        javaType="EZDSBigDecimalItem"/>
+        <result property="supdToMdseCd_A"          column="NEW_ITEM_CD"          javaType="EZDSStringItem"/>
+        <result property="mdseDescShortTxt_AN"     column="NEW_ITEM_DESCRIPTION" javaType="EZDSStringItem"/>
+        <result property="thisMthTotStdCostAmt_AN" column="NEW_ITEM_COST"        javaType="EZDSBigDecimalItem"/>
+        <result property="supdCratDt_A"            column="ADD_DATE"             javaType="EZDSStringItem"/>
+    </resultMap>
+    <statement id="getCntPrcListEquip" parameterClass="Map" resultClass="Integer">
+        SELECT
+            COUNT(PRC_LIST_EQUIP_PK) AS CNT
+          FROM 
+            PRC_LIST_EQUIP PLE
+          WHERE
+                PLE.GLBL_CMPY_CD      = #glblCmpyCd#
+            AND PLE.PRC_QLFY_VAL_TXT  = #prcQlfyValTxt#
+            AND PLE.PRC_QLFY_TP_CD    = #prcQlfyTpCd#
+            AND PLE.EZCANCELFLAG       = '0'
+    </statement>
+    <statement id="getCntPrcListEquipReq" parameterClass="Map" resultClass="Integer">
+        SELECT
+            COUNT(PRC_LIST_EQUIP_RQST_PK) AS CNT
+          FROM
+            PRC_LIST_EQUIP_RQST PLR
+          WHERE
+                PLR.GLBL_CMPY_CD   = #glblCmpyCd#
+            AND PLR.OLD_MDSE_CD    = #supdFromMdseCd#
+            AND PLR.NEW_MDSE_CD    = #supdToMdseCd#
+            AND PLR.RQST_STS_TP_CD IN (#rqstStsTpCdNew#, #rqstStsTpCdRequested#)
+            AND PLR.EZCANCELFLAG   = '0'
+    </statement>
+    <statement id="getNewRequest" parameterClass="Map" resultMap="result.NMAL7090_BSMsg">
+        WITH TBL_B AS (
+            SELECT
+                 PLR.PRC_LIST_EQUIP_RQST_PK
+                ,PLR.OLD_MDSE_CD
+                ,PLR.OLD_MDSE_DESC_SHORT_TXT
+                ,PLR.OLD_TMTH_TOT_STD_COST_AMT
+                ,PLR.NEW_MDSE_CD
+                ,PLR.NEW_MDSE_DESC_SHORT_TXT
+                ,PLR.NEW_TMTH_TOT_STD_COST_AMT
+                ,PLR.PRC_LIST_TP_CD
+                ,PLR.PRC_LIST_ACT_TP_CD
+                ,PLR.PRC_LISTS_DESC_TXT
+                ,PLR.RETAN_ORIG_PRC_FLG
+                ,PLR.NEW_PRC_AMT
+                ,PLR.NEW_MIN_PRC_AMT
+                ,PLR.NEW_MAX_PRC_AMT
+                ,PLR.NEW_MLY_PMT_AMT
+                ,PLR.NEW_MIN_LEASE_PMT_AMT
+                ,PLR.NEW_MAX_LEASE_PMT_AMT
+                ,PLR.SUBMT_FLG
+                ,PLR.RQST_DSCD_FLG
+              FROM
+                PRC_LIST_EQUIP_RQST PLR
+              WHERE
+                    PLR.GLBL_CMPY_CD   = #glblCmpyCd#
+                AND PLR.RQST_STS_TP_CD = #rqstStsTpCdNew#
+                AND PLR.EZCANCELFLAG   = '0'
+            )
+            SELECT
+                   PRC_LIST_EQUIP_RQST_PK
+                  ,OLD_MDSE_CD
+                  ,OLD_MDSE_DESC_SHORT_TXT
+                  ,OLD_TMTH_TOT_STD_COST_AMT
+                  ,NEW_MDSE_CD
+                  ,NEW_MDSE_DESC_SHORT_TXT
+                  ,NEW_TMTH_TOT_STD_COST_AMT
+                  ,PRC_LIST_TP_CD
+                  ,PRC_LIST_ACT_TP_CD
+                  ,PRC_LISTS_DESC_TXT
+                  ,RETAN_ORIG_PRC_FLG
+                  ,NEW_PRC_AMT
+                  ,NEW_MIN_PRC_AMT
+                  ,NEW_MAX_PRC_AMT
+                  ,NEW_MLY_PMT_AMT
+                  ,NEW_MIN_LEASE_PMT_AMT
+                  ,NEW_MAX_LEASE_PMT_AMT
+                  ,SUBMT_FLG
+                  ,RQST_DSCD_FLG
+                FROM
+                    TBL_B
+                WHERE
+                      ROWNUM <![CDATA[<=]]> #rowNum#
+              <!-- FILTER CONDITION -->
+                <isNotNull property="filter_oldMdseCd">
+                  AND OLD_MDSE_CD             LIKE #filter_oldMdseCd#
+                </isNotNull>
+                <isNotNull property="filter_oldMdseDescShortTxt">
+                  AND OLD_MDSE_DESC_SHORT_TXT LIKE #filter_oldMdseDescShortTxt#
+                </isNotNull>
+                <isNotNull property="filter_newMdseCd">
+                  AND NEW_MDSE_CD             LIKE #filter_newMdseCd#
+                </isNotNull>
+                <isNotNull property="filter_newMdseDescShortTxt">
+                  AND NEW_MDSE_DESC_SHORT_TXT LIKE #filter_newMdseDescShortTxt#
+                </isNotNull>
+                <isNotNull property="filter_prcListTpCd">
+                  AND PRC_LIST_TP_CD          =    #filter_prcListTpCd#
+                </isNotNull>
+                <isNotNull property="filter_prcListActTpCd">
+                  AND PRC_LIST_ACT_TP_CD      =    #filter_prcListActTpCd#
+                </isNotNull>
+              <!-- FILTER CONDITION -->
+    </statement>
+    <resultMap id="result.NMAL7090_BSMsg" class="NMAL7090_BSMsg">
+        <result property="prcListEquipRqstPk_B"   column="PRC_LIST_EQUIP_RQST_PK"    javaType="EZDSBigDecimalItem"/>
+        <result property="oldMdseCd_B"            column="OLD_MDSE_CD"               javaType="EZDSStringItem"/>
+        <result property="oldMdseDescShortTxt_B"  column="OLD_MDSE_DESC_SHORT_TXT"   javaType="EZDSStringItem"/>
+        <result property="oldTmthTotStdCostAmt_B" column="OLD_TMTH_TOT_STD_COST_AMT" javaType="EZDSBigDecimalItem"/>
+        <result property="newMdseCd_B"            column="NEW_MDSE_CD"               javaType="EZDSStringItem"/>
+        <result property="newMdseDescShortTxt_B"  column="NEW_MDSE_DESC_SHORT_TXT"   javaType="EZDSStringItem"/>
+        <result property="newTmthTotStdCostAmt_B" column="NEW_TMTH_TOT_STD_COST_AMT" javaType="EZDSBigDecimalItem"/>
+        <result property="prcListTpCd_BS"         column="PRC_LIST_TP_CD"            javaType="EZDSStringItem"/>
+        <result property="prcListActTpCd_BS"      column="PRC_LIST_ACT_TP_CD"        javaType="EZDSStringItem"/>
+        <result property="prcListsDescTxt_B"      column="PRC_LISTS_DESC_TXT"        javaType="EZDSStringItem"/>
+        <result property="retanOrigPrcFlg_B"      column="RETAN_ORIG_PRC_FLG"        javaType="EZDSStringItem"/>
+        <result property="newPrcAmt_B"            column="NEW_PRC_AMT"               javaType="EZDSBigDecimalItem"/>
+        <result property="newMinPrcAmt_B"         column="NEW_MIN_PRC_AMT"           javaType="EZDSBigDecimalItem"/>
+        <result property="newMaxPrcAmt_B"         column="NEW_MAX_PRC_AMT"           javaType="EZDSBigDecimalItem"/>
+        <result property="newMlyPmtAmt_B"         column="NEW_MLY_PMT_AMT"           javaType="EZDSBigDecimalItem"/>
+        <result property="newMinLeasePmtAmt_B"    column="NEW_MIN_LEASE_PMT_AMT"     javaType="EZDSBigDecimalItem"/>
+        <result property="newMaxLeasePmtAmt_B"    column="NEW_MAX_LEASE_PMT_AMT"     javaType="EZDSBigDecimalItem"/>
+        <result property="submtFlg_B"             column="SUBMT_FLG"                 javaType="EZDSStringItem"/>
+        <result property="rqstDscdFlg_B"          column="RQST_DSCD_FLG"             javaType="EZDSStringItem"/>
+    </resultMap>
+    <statement id="getHistRequest" parameterClass="Map" resultMap="result.NMAL7090_CSMsg">
+        WITH TBL_C AS (
+          SELECT
+               PLR.PRC_LIST_EQUIP_RQST_PK
+              ,PLR.OLD_MDSE_CD
+              ,PLR.OLD_MDSE_DESC_SHORT_TXT
+              ,PLR.OLD_TMTH_TOT_STD_COST_AMT
+              ,PLR.NEW_MDSE_CD
+              ,PLR.NEW_MDSE_DESC_SHORT_TXT
+              ,PLR.NEW_TMTH_TOT_STD_COST_AMT
+              ,PLT.PRC_LIST_TP_CD
+              ,PLT.PRC_LIST_TP_DESC_TXT
+              ,PLA.PRC_LIST_ACT_TP_CD
+              ,PLA.PRC_LIST_ACT_TP_DESC_TXT
+              ,PLR.PRC_LISTS_DESC_TXT
+              ,PLR.RETAN_ORIG_PRC_FLG
+              ,PLR.NEW_PRC_AMT
+              ,PLR.NEW_MIN_PRC_AMT
+              ,PLR.NEW_MAX_PRC_AMT
+              ,PLR.NEW_MLY_PMT_AMT
+              ,PLR.NEW_MIN_LEASE_PMT_AMT
+              ,PLR.NEW_MAX_LEASE_PMT_AMT
+              ,RST.RQST_STS_TP_CD
+              ,RST.RQST_STS_TP_DESC_TXT
+              ,PLR.CRAT_USR_ID
+              ,APC.FIRST_NM       AS CRAT_FIRST_NM
+              ,APC.LAST_NM        AS CRAT_LAST_NM
+              ,PLR.CRAT_USR_ID || ' (' || APC.FIRST_NM || ' ' ||  APC.LAST_NM || ')' AS XX_ALL_PSN_NM_CC
+              ,PLR.CRAT_DT
+              ,PLR.LAST_UPD_USR_ID
+              ,APU.FIRST_NM       AS UPDT_FIRST_NM
+              ,APU.LAST_NM        AS UPDT_LAST_NM
+              ,PLR.LAST_UPD_USR_ID || ' (' || APU.FIRST_NM || ' ' ||  APU.LAST_NM || ')' AS XX_ALL_PSN_NM_CU
+              ,PLR.LAST_UPD_DT
+            FROM
+               PRC_LIST_EQUIP_RQST PLR
+              ,PRC_LIST_TP         PLT
+              ,PRC_LIST_ACT_TP     PLA
+              ,RQST_STS_TP         RST
+              ,AUTH_PSN            APC
+              ,AUTH_PSN            APU
+            WHERE
+                  PLR.GLBL_CMPY_CD    = #glblCmpyCd#
+              AND PLR.RQST_STS_TP_CD <![CDATA[<>]]> #rqstStsTpCdNew#
+              AND PLR.EZCANCELFLAG    = '0'
+
+              AND PLR.GLBL_CMPY_CD    = PLT.GLBL_CMPY_CD
+              AND PLR.PRC_LIST_TP_CD  = PLT.PRC_LIST_TP_CD
+              AND PLT.EZCANCELFLAG    = '0'
+
+              AND PLR.GLBL_CMPY_CD    = PLA.GLBL_CMPY_CD
+              AND PLR.PRC_LIST_ACT_TP_CD  = PLA.PRC_LIST_ACT_TP_CD
+              AND PLA.EZCANCELFLAG    = '0'
+
+              AND PLR.GLBL_CMPY_CD    = RST.GLBL_CMPY_CD
+              AND PLR.RQST_STS_TP_CD  = RST.RQST_STS_TP_CD
+              AND RST.EZCANCELFLAG    = '0'
+
+              AND PLR.CRAT_USR_ID     = APC.USR_NM(+)
+              AND APC.EZCANCELFLAG(+) = '0'
+
+              AND PLR.LAST_UPD_USR_ID = APU.USR_NM(+)
+              AND APU.EZCANCELFLAG(+) = '0'
+            ORDER BY PLR.EZUPTIME DESC
+            )
+            SELECT
+                   PRC_LIST_EQUIP_RQST_PK
+                  ,OLD_MDSE_CD
+                  ,OLD_MDSE_DESC_SHORT_TXT
+                  ,OLD_TMTH_TOT_STD_COST_AMT
+                  ,NEW_MDSE_CD
+                  ,NEW_MDSE_DESC_SHORT_TXT
+                  ,NEW_TMTH_TOT_STD_COST_AMT
+                  ,PRC_LIST_TP_CD
+                  ,PRC_LIST_TP_DESC_TXT
+                  ,PRC_LIST_ACT_TP_CD
+                  ,PRC_LIST_ACT_TP_DESC_TXT
+                  ,PRC_LISTS_DESC_TXT
+                  ,RETAN_ORIG_PRC_FLG
+                  ,NEW_PRC_AMT
+                  ,NEW_MIN_PRC_AMT
+                  ,NEW_MAX_PRC_AMT
+                  ,NEW_MLY_PMT_AMT
+                  ,NEW_MIN_LEASE_PMT_AMT
+                  ,NEW_MAX_LEASE_PMT_AMT
+                  ,RQST_STS_TP_CD
+                  ,RQST_STS_TP_DESC_TXT
+                  ,CRAT_USR_ID
+                  ,CRAT_FIRST_NM
+                  ,CRAT_LAST_NM
+                  ,XX_ALL_PSN_NM_CC
+                  ,CRAT_DT
+                  ,LAST_UPD_USR_ID
+                  ,UPDT_FIRST_NM
+                  ,UPDT_LAST_NM
+                  ,XX_ALL_PSN_NM_CU
+                  ,LAST_UPD_DT
+                FROM
+                    TBL_C
+                WHERE
+                      ROWNUM <![CDATA[<=]]> #rowNum#
+              <!-- FILTER CONDITION -->
+                <isNotNull property="filter_oldMdseCd">
+                  AND  OLD_MDSE_CD             LIKE  #filter_oldMdseCd#
+                </isNotNull>
+                <isNotNull property="filter_oldMdseDescShortTxt">
+                  AND  OLD_MDSE_DESC_SHORT_TXT LIKE  #filter_oldMdseDescShortTxt#
+                </isNotNull>
+                <isNotNull property="filter_newMdseCd">
+                  AND  NEW_MDSE_CD             LIKE  #filter_newMdseCd#
+                </isNotNull>
+                <isNotNull property="filter_newMdseDescShortTxt">
+                  AND  NEW_MDSE_DESC_SHORT_TXT LIKE  #filter_newMdseDescShortTxt#
+                </isNotNull>
+                <isNotNull property="filter_prcListTpCd">
+                  AND  PRC_LIST_TP_CD          =     #filter_prcListTpCd#
+                </isNotNull>
+                <isNotNull property="filter_prcListActTpCd">
+                  AND  PRC_LIST_ACT_TP_CD      =     #filter_prcListActTpCd#
+                </isNotNull>
+                <isNotNull property="filter_newPrcAmt">
+                  AND  NEW_PRC_AMT             LIKE  #filter_newPrcAmt#
+                </isNotNull>
+                <isNotNull property="filter_rqstStsTpCd">
+                  AND  RQST_STS_TP_CD          =     #filter_rqstStsTpCd#
+                </isNotNull>
+                <isNotNull property="filter_prcListEquipRqstPk">
+                  AND  PRC_LIST_EQUIP_RQST_PK  LIKE  #filter_prcListEquipRqstPk#
+                  AND  RQST_STS_TP_CD          !=    #filter_rqstStsTpCd_LogFile#
+                </isNotNull>
+              <!-- FILTER CONDITION -->
+    </statement>
+    <resultMap id="result.NMAL7090_CSMsg" class="NMAL7090_CSMsg">
+        <result property="prcListEquipRqstPk_C"   column="PRC_LIST_EQUIP_RQST_PK"    javaType="EZDSBigDecimalItem"/>
+        <result property="oldMdseCd_C"            column="OLD_MDSE_CD"               javaType="EZDSStringItem"/>
+        <result property="oldMdseDescShortTxt_C"  column="OLD_MDSE_DESC_SHORT_TXT"   javaType="EZDSStringItem"/>
+        <result property="oldTmthTotStdCostAmt_C" column="OLD_TMTH_TOT_STD_COST_AMT" javaType="EZDSBigDecimalItem"/>
+        <result property="newMdseCd_C"            column="NEW_MDSE_CD"               javaType="EZDSStringItem"/>
+        <result property="newMdseDescShortTxt_C"  column="NEW_MDSE_DESC_SHORT_TXT"   javaType="EZDSStringItem"/>
+        <result property="newTmthTotStdCostAmt_C" column="NEW_TMTH_TOT_STD_COST_AMT" javaType="EZDSBigDecimalItem"/>
+        <result property="prcListTpCd_C"          column="PRC_LIST_TP_CD"            javaType="EZDSStringItem"/>
+        <result property="prcListTpDescTxt_C"     column="PRC_LIST_TP_DESC_TXT"      javaType="EZDSStringItem"/>
+        <result property="prcListActTpCd_C"       column="PRC_LIST_ACT_TP_CD"        javaType="EZDSStringItem"/>
+        <result property="prcListActTpDescTxt_C"  column="PRC_LIST_ACT_TP_DESC_TXT"  javaType="EZDSStringItem"/>
+        <result property="prcListsDescTxt_C"      column="PRC_LISTS_DESC_TXT"        javaType="EZDSStringItem"/>
+        <result property="retanOrigPrcFlg_C"      column="RETAN_ORIG_PRC_FLG"        javaType="EZDSStringItem"/>
+        <result property="newPrcAmt_C"            column="NEW_PRC_AMT"               javaType="EZDSBigDecimalItem"/>
+        <result property="newMinPrcAmt_C"         column="NEW_MIN_PRC_AMT"           javaType="EZDSBigDecimalItem"/>
+        <result property="newMaxPrcAmt_C"         column="NEW_MAX_PRC_AMT"           javaType="EZDSBigDecimalItem"/>
+        <result property="newMlyPmtAmt_C"         column="NEW_MLY_PMT_AMT"           javaType="EZDSBigDecimalItem"/>
+        <result property="newMinLeasePmtAmt_C"    column="NEW_MIN_LEASE_PMT_AMT"     javaType="EZDSBigDecimalItem"/>
+        <result property="newMaxLeasePmtAmt_C"    column="NEW_MAX_LEASE_PMT_AMT"     javaType="EZDSBigDecimalItem"/>
+        <result property="rqstStsTpCd_C"          column="RQST_STS_TP_CD"            javaType="EZDSStringItem"/>
+        <result property="rqstStsTpDescTxt_C"     column="RQST_STS_TP_DESC_TXT"      javaType="EZDSStringItem"/>
+        <result property="prcListEquipRqstPk_C"   column="PRC_LIST_EQUIP_RQST_PK"    javaType="EZDSBigDecimalItem"/>
+        <result property="cratUsrId_C"            column="CRAT_USR_ID"               javaType="EZDSStringItem"/>
+        <result property="firstNm_CC"             column="CRAT_FIRST_NM"             javaType="EZDSStringItem"/>
+        <result property="lastNm_CC"              column="CRAT_LAST_NM"              javaType="EZDSStringItem"/>
+        <result property="xxAllPsnNm_CC"          column="XX_ALL_PSN_NM_CC"          javaType="EZDSStringItem"/>
+        <result property="cratDt_C"               column="CRAT_DT"                   javaType="EZDSStringItem"/>
+        <result property="lastUpdUsrId_C"         column="LAST_UPD_USR_ID"           javaType="EZDSStringItem"/>
+        <result property="firstNm_CU"             column="UPDT_FIRST_NM"             javaType="EZDSStringItem"/>
+        <result property="lastNm_CU"              column="UPDT_LAST_NM"              javaType="EZDSStringItem"/>
+        <result property="xxAllPsnNm_CU"          column="XX_ALL_PSN_NM_CU"          javaType="EZDSStringItem"/>
+        <result property="lastUpdDt_C"            column="LAST_UPD_DT"               javaType="EZDSStringItem"/>
+    </resultMap>
+    <statement id="getCntPrcListTpCd" parameterClass="Map" resultClass="Integer">
+        SELECT COUNT(PRC_LIST_EQUIP_PK)
+          FROM 
+             PRC_LIST_EQUIP PLE
+            ,PRC_CATG DPC
+          WHERE
+                PLE.GLBL_CMPY_CD   =  #glblCmpyCd#
+            AND PLE.PRC_CATG_CD    IN (#prcListIds#)
+            AND PLE.EZCANCELFLAG   =  '0'
+            AND PLE.GLBL_CMPY_CD   =  DPC.GLBL_CMPY_CD 
+            AND PLE.PRC_CATG_CD    =  DPC.PRC_CATG_CD
+            AND DPC.PRC_LIST_TP_CD =  #prcListTpCd#
+            AND DPC.EZCANCELFLAG   =  '0'
+    </statement>
+    <statement id="getCntOrdTakeMdse" parameterClass="Map" resultClass="Integer">
+        SELECT COUNT(ORD_TAKE_MDSE_CD)
+          FROM 
+            ORD_TAKE_MDSE OTM
+          WHERE
+                OTM.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND OTM.ORD_TAKE_MDSE_CD = #mdseCd#
+            AND OTM.EZCANCELFLAG     = '0'
+    </statement>
+    <statement id="getCntMdse" parameterClass="Map" resultClass="Integer">
+        SELECT COUNT(MDSE_CD)
+          FROM 
+            MDSE MDS
+          WHERE
+                MDS.GLBL_CMPY_CD = #glblCmpyCd#
+            AND MDS.MDSE_CD      = #mdseCd#
+            AND MDS.EZCANCELFLAG = '0'
+    </statement>
+    <statement id="getPrcListTpCd" parameterClass="Map" resultClass="String">
+        SELECT
+            PLT.PRC_LIST_TP_CD
+          FROM
+            PRC_LIST_TP PLT
+          WHERE
+                PLT.GLBL_CMPY_CD         = #glblCmpyCd#
+            AND PLT.PRC_LIST_TP_DESC_TXT = #prcListTpDescTxt#
+            AND PLT.EZCANCELFLAG         = '0'
+            AND ROWNUM                   = 1
+    </statement>
+    <statement id="getPrcListActTpCd" parameterClass="Map" resultClass="String">
+        SELECT
+            PLT.PRC_LIST_ACT_TP_CD
+          FROM
+            PRC_LIST_ACT_TP PLT
+          WHERE
+                PLT.GLBL_CMPY_CD             = #glblCmpyCd#
+            AND PLT.PRC_LIST_ACT_TP_DESC_TXT = #prcListActTpDescTxt#
+            AND PLT.EZCANCELFLAG             = '0'
+            AND ROWNUM                       = 1
+    </statement>
+    <statement id="getHistRequestForDownload" parameterClass="Map" resultClass="Map">
+       SELECT 
+            PLT.PRC_CATG_CD
+           ,PLT.OLD_MDSE_CD
+           ,PLT.OLD_MDSE_DESC_SHORT_TXT
+           ,PLT.NEW_MDSE_CD
+           ,PLT.NEW_MDSE_DESC_SHORT_TXT
+           ,PLT.LAST_UPD_USR_ID
+           ,PLT.LAST_UPD_DT
+           ,PLT.RETAN_ORIG_PRC_FLG
+           ,PLT.NEW_PRC_AMT
+           ,PLT.NEW_MIN_PRC_AMT
+           ,PLT.NEW_MAX_PRC_AMT
+           ,PLT.NEW_MLY_PMT_AMT
+           ,PLT.NEW_MIN_LEASE_PMT_AMT
+           ,PLT.NEW_MAX_LEASE_PMT_AMT
+           ,RST.RQST_RSLT_STS_TP_DESC_TXT
+         FROM 
+            PRC_LIST_EQUIP_TRX_RQST PLT
+           ,RQST_RSLT_STS_TP        RST
+         WHERE
+               PLT.GLBL_CMPY_CD           = #glblCmpyCd#
+           AND PLT.PRC_LIST_EQUIP_RQST_PK = #prcListEquipRqstPk#
+           AND PLT.EZCANCELFLAG           = '0'
+           AND PLT.GLBL_CMPY_CD           = RST.GLBL_CMPY_CD
+           AND PLT.RQST_RSLT_STS_TP_CD    = RST.RQST_RSLT_STS_TP_CD
+           AND RST.EZCANCELFLAG           = '0'
+           AND ROWNUM        <![CDATA[<=]]> #rowNum#
+    </statement>
+    <statement id="getNewRequestForDownload" parameterClass="Map" resultClass="Map">
+        SELECT
+             PLR.PRC_LIST_EQUIP_RQST_PK
+            ,PLR.OLD_MDSE_CD
+            ,PLR.OLD_MDSE_DESC_SHORT_TXT
+            ,PLR.OLD_TMTH_TOT_STD_COST_AMT
+            ,PLR.NEW_MDSE_CD
+            ,PLR.NEW_MDSE_DESC_SHORT_TXT
+            ,PLR.NEW_TMTH_TOT_STD_COST_AMT
+            ,PLT.PRC_LIST_TP_CD
+            ,PLT.PRC_LIST_TP_DESC_TXT
+            ,PLA.PRC_LIST_ACT_TP_CD
+            ,PLA.PRC_LIST_ACT_TP_DESC_TXT
+            ,PLR.PRC_LISTS_DESC_TXT
+            ,PLR.RETAN_ORIG_PRC_FLG
+            ,PLR.NEW_PRC_AMT
+            ,PLR.NEW_MIN_PRC_AMT
+            ,PLR.NEW_MAX_PRC_AMT
+            ,PLR.NEW_MLY_PMT_AMT
+            ,PLR.NEW_MIN_LEASE_PMT_AMT
+            ,PLR.NEW_MAX_LEASE_PMT_AMT
+            ,PLR.SUBMT_FLG
+            ,PLR.RQST_DSCD_FLG
+          FROM
+             PRC_LIST_EQUIP_RQST PLR
+            ,PRC_LIST_TP         PLT
+            ,PRC_LIST_ACT_TP     PLA
+          WHERE
+                PLR.GLBL_CMPY_CD        = #glblCmpyCd#
+            AND PLR.RQST_STS_TP_CD      = #rqstStsTpCdNew#
+            AND PLR.EZCANCELFLAG        = '0'
+
+            AND PLR.GLBL_CMPY_CD        = PLT.GLBL_CMPY_CD
+            AND PLR.PRC_LIST_TP_CD      = PLT.PRC_LIST_TP_CD
+            AND PLT.EZCANCELFLAG        = '0'
+
+            AND PLR.GLBL_CMPY_CD        = PLA.GLBL_CMPY_CD
+            AND PLR.PRC_LIST_ACT_TP_CD  = PLA.PRC_LIST_ACT_TP_CD
+            AND PLA.EZCANCELFLAG        = '0'
+            AND ROWNUM     <![CDATA[<=]]> #rowNum#
+    </statement>
+    <statement id="getItemInfo" parameterClass="Map" resultClass="Map">
+       SELECT 
+            AMV.MDSE_CD
+           ,AMV.MDSE_DESC_SHORT_TXT
+           ,AMV.THIS_MTH_TOT_STD_COST_AMT
+         FROM
+            ALL_MDSE_V AMV
+         WHERE
+               AMV.GLBL_CMPY_CD = #glblCmpyCd#
+           AND AMV.MDSE_CD      = #mdseCd#
+           AND AMV.EZCANCELFLAG = '0'
+           AND ROWNUM           = 1
+    </statement>
+</sqlMap>

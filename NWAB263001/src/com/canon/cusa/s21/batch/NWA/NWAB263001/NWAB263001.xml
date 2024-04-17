@@ -1,0 +1,257 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NWAB263001">
+
+   <typeAlias alias="SPLY_TRK_RPT_WRKTMsg"           type="business.db.SPLY_TRK_RPT_WRKTMsg"/>
+
+   <statement id="getTargetShipList" parameterClass="Map" resultClass="Map">
+            SELECT
+                 S.SHPG_PLN_NUM
+                ,S.TRX_HDR_NUM
+                ,C.SELL_TO_CUST_CD
+                ,PD.LINE_BIZ_TP_CD
+                ,STC.DS_ACCT_NM
+                <!-- START 2018/04/11 K.Kitachi [QC#11642, ADD] -->
+                ,C.CPO_SRC_TP_CD
+                <!-- END 2018/04/11 K.Kitachi [QC#11642, ADD] -->
+            FROM
+                 SHPG_PLN           S
+                ,CPO                C
+                ,DS_ORD_TP_PROC_DFN PD
+                ,SELL_TO_CUST       STC
+            WHERE
+                    S.GLBL_CMPY_CD                  = #glblCmpyCd#
+                AND S.EZCANCELFLAG                  = '0'
+                AND S.SHPG_STS_CD IN 
+                <iterate property="shpgStsCdList" var="shpgStsCdList[]" open="(" close=")" conjunction=",">
+                    #shpgStsCdList[]#
+                </iterate>
+                <!-- START 2018/04/11 K.Kitachi [QC#11642, MOD] -->
+                <!-- AND C.CPO_SRC_TP_CD                 = #isWebCpoSrcTpCd# -->
+                AND C.CPO_SRC_TP_CD IN 
+                <iterate property="cpoSrcTpCdList" var="cpoSrcTpCdList[]" open="(" close=")" conjunction=",">
+                    #cpoSrcTpCdList[]#
+                </iterate>
+                <!-- END 2018/04/11 K.Kitachi [QC#11642, MOD] -->
+                AND S.GLBL_CMPY_CD                  = C.GLBL_CMPY_CD
+                AND S.TRX_HDR_NUM                   = C.CPO_ORD_NUM
+                AND C.EZCANCELFLAG                  = '0'
+                AND C.GLBL_CMPY_CD                  = PD.GLBL_CMPY_CD
+                AND C.DS_ORD_TP_CD                  = PD.DS_ORD_TP_CD
+                AND PD.EZCANCELFLAG                 = '0'
+                AND C.GLBL_CMPY_CD                  = STC.GLBL_CMPY_CD
+                AND C.SELL_TO_CUST_CD               = STC.SELL_TO_CUST_CD
+                AND STC.EZCANCELFLAG                = '0'
+                AND NOT EXISTS (
+                    SELECT
+                        1
+                    FROM
+                         HIST_IS_WEB_SEND_CONF H
+                    WHERE
+                        H.GLBL_CMPY_CD          = S.GLBL_CMPY_CD
+                    AND H.SHPG_PLN_NUM          = S.SHPG_PLN_NUM
+                    AND H.EZCANCELFLAG          = '0'
+                )
+                AND EXISTS (
+                    SELECT
+                        1
+                    FROM
+                         DS_CPO_CTAC_PSN P
+                    WHERE
+                        P.GLBL_CMPY_CD          = C.GLBL_CMPY_CD
+                    AND P.CPO_ORD_NUM           = C.CPO_ORD_NUM
+                    AND P.CTAC_PSN_EML_ADDR     IS NOT NULL
+                    AND P.EZCANCELFLAG          = '0'
+                )
+                <!-- 2018/09/06 QC#28075 Add Start -->
+                 AND EXISTS (
+                    SELECT
+                        1
+                    FROM
+                         ORD_CATG_BIZ_CTX OCBC
+                    WHERE
+                        OCBC.GLBL_CMPY_CD       = C.GLBL_CMPY_CD
+                    AND OCBC.EZCANCELFLAG       = '0'
+                    AND OCBC.ORD_CATG_CTX_TP_CD = #ordCatgCtxTpCd#
+                    AND
+                    (
+                       (    OCBC.DS_ORD_CATG_CD       IS NULL
+                        AND OCBC.DS_ORD_TP_CD         IS NULL
+                        AND OCBC.DS_ORD_RSN_CD        IS NULL)
+                      OR
+                       (    OCBC.DS_ORD_CATG_CD       = C.DS_ORD_CATG_CD
+                        AND OCBC.DS_ORD_TP_CD         IS NULL
+                        AND OCBC.DS_ORD_RSN_CD        IS NULL)
+                      OR
+                       (    OCBC.DS_ORD_CATG_CD       = C.DS_ORD_CATG_CD
+                        AND OCBC.DS_ORD_TP_CD         = C.DS_ORD_TP_CD
+                        AND OCBC.DS_ORD_RSN_CD        IS NULL)
+                      OR
+                       (    OCBC.DS_ORD_CATG_CD       = C.DS_ORD_CATG_CD
+                       AND OCBC.DS_ORD_TP_CD         = C.DS_ORD_TP_CD
+                       AND OCBC.DS_ORD_RSN_CD        = C.DS_ORD_RSN_CD)
+                    )
+                )
+                <!-- 2018/09/06 QC#28075 Add End -->
+   </statement>
+
+    <!-- START 2018/04/11 K.Kitachi [QC#11642, ADD] -->
+    <statement id="getMailSendParam" parameterClass="Map" resultClass="Map">
+        SELECT
+            *
+        FROM
+            (
+                SELECT
+                     SP.SHPG_PLN_NUM
+                    ,SP.PRO_NUM
+                    ,SP.CARR_NM || ' ' || SSL.SHPG_SVC_LVL_DESC_TXT SHPG_METH_INFO
+                    ,C.CPO_ORD_NUM
+                    ,TO_CHAR(TO_DATE(C.CPO_ORD_TS, #s21DtFmt#), #mlOutDtFmt#, #mlOutDtNlsParam#) CPO_ORD_DT
+                    ,C.SELL_TO_FIRST_REF_CMNT_TXT
+                    ,SMM.SER_NUM
+                    ,MN.T_MDL_NM MDL_NM
+                    ,NVL(M1.MDSE_DESC_SHORT_TXT, M2.MDSE_DESC_SHORT_TXT) MDSE_DESC_SHORT_TXT
+                    ,SP.ORD_QTY
+                    <!-- 2018/08/26 QC#27711 mod start -->
+                    <!-- ,CP.CTAC_PSN_FIRST_NM || ' ' || CP.CTAC_PSN_LAST_NM CTAC_PSN_NM -->
+                    ,DCCP.CTAC_PSN_FIRST_NM || ' ' || DCCP.CTAC_PSN_LAST_NM CTAC_PSN_NM
+                    <!-- 2018/08/26 QC#27711 mod end -->
+                    ,STC.FIRST_LINE_ADDR
+                         || DECODE(STC.SCD_LINE_ADDR,   null, '', ' '  || STC.SCD_LINE_ADDR)
+                         || DECODE(STC.THIRD_LINE_ADDR, null, '', ' '  || STC.THIRD_LINE_ADDR)
+                         || DECODE(STC.FRTH_LINE_ADDR,  null, '', ' '  || STC.FRTH_LINE_ADDR)
+                         || DECODE(STC.CTY_ADDR,        null, '', ', ' || STC.CTY_ADDR)
+                         || DECODE(STC.ST_CD,           null, '', ', ' || STC.ST_CD)
+                         || DECODE(STC.POST_CD,         null, '', ', ' || STC.POST_CD) SHIP_TO_INFO
+                    ,ROW_NUMBER() OVER(
+                        PARTITION BY SP.SHPG_PLN_NUM
+                        <!-- 2018/08/26 QC#27711 mod start -->
+                        <!-- ORDER BY DCPR.LOC_NUM NULLS LAST, DCPR.DS_PRIM_LOC_FLG DESC, DCPR.DS_CTAC_PSN_RELN_PK DESC -->
+                        ORDER BY DCCP.DS_CPO_CTAC_PSN_PK DESC
+                        <!-- 2018/08/26 QC#27711 mod end -->
+                    ) ROW_NUM
+                    ,ROW_NUMBER() OVER(
+                        PARTITION BY SP.SHPG_PLN_NUM
+                        ORDER BY SP.SO_NUM, SP.SO_SLP_NUM
+                    ) SORT_NUM
+                FROM
+                     SHPG_PLN         SP
+                    ,CPO              C
+                    ,CPO_DTL          CD
+                    ,SVC_MACH_MSTR    SMM
+                    ,SVC_CONFIG_MSTR  SCM
+                    ,MDL_NM           MN
+                    ,MDSE             M1
+                    ,ORD_TAKE_MDSE    OTM
+                    ,MDSE             M2
+                    ,SHIP_TO_CUST     STC
+                    <!-- 2018/08/26 QC#27711 mod start -->
+                    <!-- ,DS_CTAC_PSN_RELN DCPR
+                    ,CTAC_PSN         CP -->
+                    ,DS_CPO_CTAC_PSN  DCCP
+                    <!-- 2018/08/26 QC#27711 mod end -->
+                    ,SHPG_SVC_LVL     SSL
+                WHERE
+                        SP.GLBL_CMPY_CD           = #glblCmpyCd#
+                    AND SP.SHPG_PLN_NUM           = #shpgPlnNum#
+                    AND SP.EZCANCELFLAG           = '0'
+                    AND SP.GLBL_CMPY_CD           = C.GLBL_CMPY_CD
+                    AND SP.TRX_HDR_NUM            = C.CPO_ORD_NUM
+                    AND C.EZCANCELFLAG            = '0'
+                    AND SP.GLBL_CMPY_CD           = CD.GLBL_CMPY_CD
+                    AND SP.TRX_HDR_NUM            = CD.CPO_ORD_NUM
+                    AND SP.TRX_LINE_NUM           = CD.CPO_DTL_LINE_NUM
+                    AND SP.TRX_LINE_SUB_NUM       = CD.CPO_DTL_LINE_SUB_NUM
+                    AND CD.EZCANCELFLAG           = '0'
+                    AND CD.GLBL_CMPY_CD           = SMM.GLBL_CMPY_CD
+                    AND CD.SVC_MACH_MSTR_PK       = SMM.SVC_MACH_MSTR_PK
+                    AND SMM.EZCANCELFLAG          = '0'
+                    <!-- 2018/09/26 S21_NA#28075 Mod Start -->
+                    <!-- AND CD.GLBL_CMPY_CD            = SCM.GLBL_CMPY_CD -->
+                    <!-- AND CD.SVC_CONFIG_MSTR_PK      = SCM.SVC_CONFIG_MSTR_PK -->
+                    AND SMM.GLBL_CMPY_CD           = SCM.GLBL_CMPY_CD
+                    AND SMM.SVC_CONFIG_MSTR_PK     = SCM.SVC_CONFIG_MSTR_PK
+                    <!-- 2018/06/26 S21_NA#28075 Mod Start -->
+                    AND SCM.EZCANCELFLAG          = '0'
+                    AND SCM.GLBL_CMPY_CD          = MN.T_GLBL_CMPY_CD
+                    AND SCM.MDL_ID                = MN.T_MDL_ID
+                    AND MN.EZCANCELFLAG           = '0'
+                    AND CD.GLBL_CMPY_CD           = M1.GLBL_CMPY_CD         (+)
+                    AND CD.MDSE_CD                = M1.MDSE_CD              (+)
+                    AND M1.EZCANCELFLAG       (+) = '0'
+                    AND CD.GLBL_CMPY_CD           = OTM.GLBL_CMPY_CD        (+)
+                    AND CD.MDSE_CD                = OTM.ORD_TAKE_MDSE_CD    (+)
+                    AND OTM.EZCANCELFLAG      (+) = '0'
+                    AND OTM.GLBL_CMPY_CD          = M2.GLBL_CMPY_CD         (+)
+                    AND OTM.MDSE_CD               = M2.MDSE_CD              (+)
+                    AND M2.EZCANCELFLAG       (+) = '0'
+                    AND C.GLBL_CMPY_CD            = STC.GLBL_CMPY_CD
+                    AND C.ADD_SHIP_TO_CUST_CD     = STC.SHIP_TO_CUST_CD
+                    AND STC.EZCANCELFLAG          = '0'
+                    <!-- 2018/08/26 QC#27711 mod start -->
+                    <!-- AND C.GLBL_CMPY_CD             = DCPR.GLBL_CMPY_CD
+                    AND (
+                            C.SELL_TO_CUST_CD      = DCPR.DS_ACCT_NUM
+                         OR STC.LOC_NUM            = DCPR.LOC_NUM
+                    )
+                    AND DCPR.CTAC_TP_CD            = #ctacTpCd#
+                    AND DCPR.EZCANCELFLAG          = '0'
+                    AND DCPR.GLBL_CMPY_CD          = CP.GLBL_CMPY_CD
+                    AND DCPR.CTAC_PSN_PK           = CP.CTAC_PSN_PK
+                    AND CP.EZCANCELFLAG            = '0' -->
+                    AND C.GLBL_CMPY_CD             = DCCP.GLBL_CMPY_CD
+                    AND C.CPO_ORD_NUM              = DCCP.CPO_ORD_NUM
+                    AND DCCP.CTAC_PSN_TP_CD        = #ctacTpCd#
+                    AND DCCP.EZCANCELFLAG          = '0'
+                    <!-- 2018/08/26 QC#27711 mod end -->
+                    AND SP.GLBL_CMPY_CD           = SSL.GLBL_CMPY_CD
+                    AND SP.REQ_SHPG_SVC_LVL_CD    = SSL.SHPG_SVC_LVL_CD
+                    AND SSL.EZCANCELFLAG          = '0'
+            )
+        WHERE
+            ROW_NUM = 1
+        ORDER BY
+            SORT_NUM
+    </statement>
+    <!-- END 2018/04/11 K.Kitachi [QC#11642, ADD] -->
+    <!-- 2019/02/26 S21_NA#30290 Add Start -->
+    <statement id="getWrkDelTargetList" parameterClass="Map" resultMap="result.getWrkDelTargetList">
+        SELECT 
+            RW.SPLY_TRK_RPT_WRK_PK
+        FROM 
+            SPLY_TRK_RPT_WRK RW
+        WHERE
+                RW.EZCANCELFLAG  = '0'
+            AND RW.GLBL_CMPY_CD = #glblCmpyCd#
+            AND RW.BIZ_APP_ID = #bizAppId#
+            AND RW.OTPT_OP_CD = #otptOpCd#
+
+    <!-- 2019/06/04 QC#50562 Mod Start -->
+    <!--    AND NOT EXISTS ( -->
+            AND EXISTS (
+    <!-- 2019/06/04 QC#50562 Mod End -->
+                SELECT 1 FROM 
+                 EIP_RPT_INP_PRM IP
+                ,EIP_RPT_RQST RR
+                WHERE 
+                    RW.GLBL_CMPY_CD = IP.GLBL_CMPY_CD
+                    AND IP.RPT_PRM_NM = #cpoOrdNum#
+                    AND IP.RPT_PRM_VAL_TXT = RW.CPO_ORD_NUM
+                    AND IP.EZCANCELFLAG = '0'
+
+                    AND IP.GLBL_CMPY_CD = RR.GLBL_CMPY_CD
+                    AND IP.EIP_RPT_RQST_PK = RR.EIP_RPT_RQST_PK
+    <!-- 2019/06/04 QC#50562 Mod Start -->
+    <!--            AND RR.RPT_RQST_STS_TXT = #stsFail#t -->
+                    AND RR.RPT_RQST_STS_TXT = #prtRqstSts#
+    <!-- 2019/06/04 QC#50562 Mod End -->
+                    AND RR.EZCANCELFLAG = '0'
+                )
+    </statement>
+    
+    <resultMap id="result.getWrkDelTargetList" class="SPLY_TRK_RPT_WRKTMsg" >
+    	<result property="splyTrkRptWrkPk"          column="SPLY_TRK_RPT_WRK_PK"        javaType="EZDTBigDecimalItem"/>
+    </resultMap>
+    <!-- 2019/02/26 S21_NA#30290 Add End -->
+
+</sqlMap>

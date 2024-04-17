@@ -1,0 +1,278 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NWAL1780Query">
+
+    <statement id="getDsOrdCatgList" parameterClass="Map" resultClass="Map">
+        SELECT
+            OC.DS_ORD_CATG_CD       AS DS_ORD_CATG_CD
+           ,OC.DS_ORD_CATG_DESC_TXT AS DS_ORD_CATG_DESC_TXT
+        FROM
+            DS_ORD_CATG           OC
+           ,DS_ORD_TP             OT
+           ,AVAL_DS_ORD_TP_APP_ID AI
+           ,DS_ORD_TP_PROC_DFN    OTPD
+        WHERE
+                OC.GLBL_CMPY_CD         = #glblCmpyCd#
+            AND OC.DS_ORD_CATG_DESC_TXT LIKE #dsOrdCatgDescTxt#
+            AND OC.EZCANCELFLAG         = '0'
+
+            AND OC.GLBL_CMPY_CD   = OT.GLBL_CMPY_CD
+            AND OC.DS_ORD_CATG_CD = OT.DS_ORD_CATG_CD
+            AND OT.EZCANCELFLAG   = '0'
+
+            AND OT.GLBL_CMPY_CD = AI.GLBL_CMPY_CD
+            AND OT.DS_ORD_TP_CD = AI.DS_ORD_TP_CD
+            AND AI.BIZ_APP_ID   = #bizId#
+            AND AI.EZCANCELFLAG = '0'
+
+            AND OT.GLBL_CMPY_CD   = OTPD.GLBL_CMPY_CD
+            AND OT.DS_ORD_TP_CD   = OTPD.DS_ORD_TP_CD
+            AND OTPD.ACTV_FLG     = 'Y'
+            AND OTPD.EZCANCELFLAG = '0'
+        GROUP BY
+            OC.DS_ORD_CATG_CD
+           ,OC.DS_ORD_CATG_DESC_TXT
+    </statement>
+
+    <statement id="getDsOrdTpTxt" parameterClass="Map" resultClass="Map">
+        SELECT 
+             DOT.DS_ORD_TP_CD       AS DS_ORD_TP_CD
+            ,DOT.DS_ORD_TP_DESC_TXT AS DS_ORD_TP_DESC_TXT
+        FROM
+             AVAL_DS_ORD_TP_APP_ID AD
+            ,DS_ORD_TP             DOT
+            ,DS_ORD_TP_PROC_DFN    DOTPD
+        WHERE
+                AD.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND AD.BIZ_APP_ID       = #bizId#
+            <isNotNull property="dsOrdCatgCd">
+            AND DOT.DS_ORD_CATG_CD  = #dsOrdCatgCd#
+            </isNotNull>
+            AND AD.EZCANCELFLAG     = '0'
+            AND AD.GLBL_CMPY_CD     = DOT.GLBL_CMPY_CD
+            AND AD.DS_ORD_TP_CD     = DOT.DS_ORD_TP_CD
+            AND DOT.EZCANCELFLAG    = '0'
+
+            AND DOT.GLBL_CMPY_CD    = DOTPD.GLBL_CMPY_CD
+            AND DOT.DS_ORD_TP_CD    = DOTPD.DS_ORD_TP_CD
+            AND DOTPD.ACTV_FLG      = 'Y'
+            AND DOTPD.EZCANCELFLAG  = '0'
+        ORDER BY
+            DOT.DS_ORD_TP_SORT_NUM
+    </statement>
+
+    <statement id="getQuote" parameterClass="Map" resultClass="Map">
+        SELECT
+            *
+        FROM
+            (
+             SELECT
+                 SPLY_QUOTE_NUM
+                ,CPO_ORD_NUM
+                ,SELL_TO_CUST_CD
+                ,SOLD_TO_CUST_LOC_CD
+                ,SOLD_TO_CUST_ACCT_NM
+                ,SOLD_TO_ADDR
+                ,SHIP_TO_CUST_ACCT_CD
+                ,SHIP_TO_CUST_CD
+                ,SHIP_TO_CUST_ACCT_NM
+                ,SHIP_TO_ADDR
+                ,DS_ORD_CATG_DESC_TXT
+                ,DS_ORD_TP_DESC_TXT
+                ,SPLY_QUOTE_DT
+                ,SPLY_QUOTE_STS_DESC_TXT
+                ,CUST_ISS_PO_NUM
+                ,CREATED_BY
+                ,SPLY_QUOTE_NM
+             FROM 
+                 (
+                  <isNotNull property="msg.mdseCd">
+                      WITH
+                          SQ_DTL AS (
+                                     SELECT
+                                         SQD.GLBL_CMPY_CD
+                                        ,SQD.SPLY_QUOTE_NUM
+                                     FROM
+                                         SPLY_QUOTE_DTL SQD
+                                     WHERE
+                                         SQD.GLBL_CMPY_CD   = #msg.glblCmpyCd#
+                                     <isNotNull property="msg.splyQuoteNum">
+                                     AND SQD.SPLY_QUOTE_NUM LIKE #msg.splyQuoteNum#
+                                     </isNotNull>
+                                     AND SQD.MDSE_CD        LIKE #msg.mdseCd#
+                                     AND SQD.EZCANCELFLAG   = '0'
+                                     GROUP BY
+                                         SQD.GLBL_CMPY_CD
+                                        ,SQD.SPLY_QUOTE_NUM
+                                     )
+                  </isNotNull>
+
+                  SELECT
+                      SQ.SPLY_QUOTE_NUM                AS SPLY_QUOTE_NUM
+                     ,SQ.CPO_ORD_NUM                   AS CPO_ORD_NUM
+                     ,SQ.SELL_TO_CUST_CD               AS SELL_TO_CUST_CD
+                     ,SQ.SOLD_TO_CUST_LOC_CD           AS SOLD_TO_CUST_LOC_CD
+                     ,STC_SO.DS_ACCT_NM                AS SOLD_TO_CUST_ACCT_NM
+                     ,(CASE WHEN BTC.FIRST_LINE_ADDR IS NOT NULL
+                            THEN BTC.FIRST_LINE_ADDR || ' ' ||
+                                 BTC.SCD_LINE_ADDR   || ' ' ||
+                                 BTC.THIRD_LINE_ADDR || ' ' ||
+                                 BTC.FRTH_LINE_ADDR  || ' ' ||
+                                 BTC.CTY_ADDR        || ',' ||
+                                 BTC.ST_CD           || ' ' ||
+                                 BTC.POST_CD
+                            END)                       AS SOLD_TO_ADDR
+                     ,SQ.SHIP_TO_CUST_ACCT_CD          AS SHIP_TO_CUST_ACCT_CD
+                     ,SQ.SHIP_TO_CUST_CD               AS SHIP_TO_CUST_CD
+                     ,STC_SI.DS_ACCT_NM                AS SHIP_TO_CUST_ACCT_NM
+                     ,(CASE WHEN SQ.SHIP_TO_FIRST_LINE_ADDR IS NOT NULL
+                            THEN SQ.SHIP_TO_FIRST_LINE_ADDR || ' ' ||
+                                 SQ.SHIP_TO_SCD_LINE_ADDR   || ' ' ||
+                                 SQ.SHIP_TO_THIRD_LINE_ADDR || ' ' ||
+                                 SQ.SHIP_TO_FRTH_LINE_ADDR  || ' ' ||
+                                 SQ.SHIP_TO_CTY_ADDR        || ',' ||
+                                 SQ.SHIP_TO_ST_CD           || ' ' ||
+                                 SQ.SHIP_TO_POST_CD
+                            END)                       AS SHIP_TO_ADDR
+                     ,DOC.DS_ORD_CATG_DESC_TXT         AS DS_ORD_CATG_DESC_TXT
+                     ,DOT.DS_ORD_TP_DESC_TXT           AS DS_ORD_TP_DESC_TXT
+                     ,SQ.SPLY_QUOTE_DT                 AS SPLY_QUOTE_DT
+                     ,SQS.SPLY_QUOTE_STS_DESC_TXT      AS SPLY_QUOTE_STS_DESC_TXT
+                     ,SQ.CUST_ISS_PO_NUM               AS CUST_ISS_PO_NUM
+                     ,(AP.USR_NM
+                           || DECODE (AP.USR_NM, NULL, '', '(')
+                           || AP.FIRST_NM
+                           || DECODE (AP.USR_NM, NULL, '', ' ')
+                           || AP.LAST_NM
+                           || DECODE (AP.USR_NM, NULL, '', ')')) AS CREATED_BY
+                     ,SQ.DS_ORD_TP_CD                 AS DS_ORD_TP_CD
+                     ,SQ.DS_ORD_CATG_CD               AS DS_ORD_CATG_CD
+                     ,SQ.SPLY_QUOTE_STS_CD            AS SPLY_QUOTE_STS_CD
+                     ,SQ.ADMIN_PSN_CD                 AS ADMIN_PSN_CD
+                     ,SQ.SPLY_QUOTE_NM               AS SPLY_QUOTE_NM
+                  FROM
+                      SPLY_QUOTE     SQ
+                     ,SPLY_QUOTE_STS SQS
+                     ,SELL_TO_CUST   STC_SO
+                     ,SELL_TO_CUST   STC_SI
+                     ,DS_ORD_TP      DOT
+                     ,DS_ORD_CATG    DOC
+                     ,AUTH_PSN       AP
+                     ,BILL_TO_CUST   BTC
+                     <isNotNull property="msg.mdseCd">
+                     ,SQ_DTL         SQD
+                     </isNotNull>
+                  WHERE
+                      SQ.GLBL_CMPY_CD         = #msg.glblCmpyCd#
+
+                  AND SQ.EZCANCELFLAG         = '0'
+
+                  AND SQ.GLBL_CMPY_CD      = SQS.GLBL_CMPY_CD (+)
+                  AND SQ.SPLY_QUOTE_STS_CD = SQS.SPLY_QUOTE_STS_CD (+)
+                  AND SQS.EZCANCELFLAG (+) = '0'
+
+                  AND SQ.GLBL_CMPY_CD         = STC_SO.GLBL_CMPY_CD (+)
+                  AND SQ.SELL_TO_CUST_CD      = STC_SO.SELL_TO_CUST_CD (+)
+                  AND STC_SO.EZCANCELFLAG (+) = '0'
+
+                  AND SQ.GLBL_CMPY_CD         = STC_SI.GLBL_CMPY_CD (+)
+                  AND SQ.SHIP_TO_CUST_ACCT_CD = STC_SI.SELL_TO_CUST_CD (+)
+                  AND STC_SI.EZCANCELFLAG (+) = '0'
+
+                  AND SQ.GLBL_CMPY_CD      = DOT.GLBL_CMPY_CD (+)
+                  AND SQ.DS_ORD_TP_CD      = DOT.DS_ORD_TP_CD (+)
+                  AND DOT.EZCANCELFLAG (+) = '0'
+
+                  AND SQ.GLBL_CMPY_CD       = DOC.GLBL_CMPY_CD (+)
+                  AND SQ.SPLY_QUOTE_CATG_CD = DOC.DS_ORD_CATG_CD (+)
+                  AND DOC.EZCANCELFLAG (+)  = '0'
+
+                  AND SQ.GLBL_CMPY_CD       = AP.GLBL_CMPY_CD (+)
+                  AND SQ.ADMIN_PSN_CD       = AP.USR_NM (+)
+                  AND AP.EZCANCELFLAG (+) = '0'
+
+                  AND SQ.GLBL_CMPY_CD        = BTC.GLBL_CMPY_CD (+)
+                  AND SQ.SOLD_TO_CUST_LOC_CD = BTC.BILL_TO_CUST_CD (+)
+                  AND BTC.EZCANCELFLAG (+)   = '0'
+
+                  <isNotNull property="msg.mdseCd">
+                  AND SQ.GLBL_CMPY_CD   = SQD.GLBL_CMPY_CD
+                  AND SQ.SPLY_QUOTE_NUM = SQD.SPLY_QUOTE_NUM
+                  </isNotNull>
+                  ORDER BY
+                      SPLY_QUOTE_NUM
+                 )
+             WHERE
+                  SPLY_QUOTE_NUM IS NOT NULL
+             <isNotNull property="msg.splyQuoteDt_FR">
+             AND SPLY_QUOTE_DT    &gt;= #msg.splyQuoteDt_FR#
+             </isNotNull>
+             <isNotNull property="msg.splyQuoteDt_TO">
+             AND SPLY_QUOTE_DT    &lt;= #msg.splyQuoteDt_TO#
+             </isNotNull>
+             <isNotNull property="msg.splyQuoteNum">
+             AND SPLY_QUOTE_NUM       LIKE #msg.splyQuoteNum#
+             </isNotNull>
+             <isNotNull property="msg.sellToCustCd">
+             AND SELL_TO_CUST_CD      LIKE #msg.sellToCustCd#
+             </isNotNull>
+             <isNotNull property="msg.soldToCustLocCd">
+             AND SOLD_TO_CUST_LOC_CD  LIKE #msg.soldToCustLocCd#
+             </isNotNull>
+             <isNotNull property="msg.shipToCustAcctCd">
+             AND SHIP_TO_CUST_ACCT_CD LIKE #msg.shipToCustAcctCd#
+             </isNotNull>
+             <isNotNull property="msg.shipToCustCd">
+             AND SHIP_TO_CUST_CD      LIKE #msg.shipToCustCd#
+             </isNotNull>
+             <isNotNull property="msg.dsOrdCatgCd">
+             AND DS_ORD_CATG_CD       = #msg.dsOrdCatgCd#
+             </isNotNull>
+             <isNotNull property="msg.dsOrdTpCd">
+             AND DS_ORD_TP_CD         = #msg.dsOrdTpCd#
+             </isNotNull>
+             <isNotNull property="msg.splyQuoteStsCd">
+             AND SPLY_QUOTE_STS_CD    = #msg.splyQuoteStsCd#
+             </isNotNull>
+             <isNotNull property="msg.custIssPoNum">
+             <!-- 2019/04/02 QA#30756 Mod Start -->
+             <!-- AND CUST_ISS_PO_NUM      LIKE #msg.custIssPoNum# -->
+             AND UPPER(CUST_ISS_PO_NUM)      LIKE #msg.custIssPoNum#
+             <!-- 2019/04/02 QA#30756 Mod End -->
+             </isNotNull>
+             <isNotNull property="msg.adminPsnCd">
+             AND ADMIN_PSN_CD         LIKE #msg.adminPsnCd#
+             </isNotNull>
+             <isNotNull property="msg.dsAcctNm_SO">
+             AND SOLD_TO_CUST_ACCT_NM LIKE #msg.dsAcctNm_SO# 
+             </isNotNull>
+             <isNotNull property="msg.dsAcctNm_SI">
+             AND SHIP_TO_CUST_ACCT_NM LIKE #msg.dsAcctNm_SI# 
+             </isNotNull>
+             <!-- 2018/03/02 S21_NA#22956 Add Start -->
+             <isNotNull property="msg.splyQuoteNm">
+             AND SPLY_QUOTE_NM        LIKE #msg.splyQuoteNm#
+             </isNotNull>
+             <!-- 2018/03/02 S21_NA#22956 Add End -->
+             
+            )
+        WHERE
+           ROWNUM &lt; #rowNum#
+    </statement>
+
+    <statement id="getSavedSearchOptionList" parameterClass="Map" resultClass="Map">
+        SELECT
+            SSO.SRCH_OPT_PK
+           ,SSO.SRCH_OPT_NM
+        FROM
+            SAVE_SRCH_OPT SSO 
+        WHERE
+            SSO.GLBL_CMPY_CD        = #glblCmpyCd#
+            AND SSO.SRCH_OPT_APL_ID = #srchOptAplId#
+            AND SSO.SRCH_OPT_USR_ID = #srchOptUsrId#
+            AND SSO.EZCANCELFLAG    = '0'
+        ORDER BY
+            SSO.SRCH_OPT_NM
+    </statement>
+
+</sqlMap>

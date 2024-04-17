@@ -1,0 +1,65 @@
+package business.servlet.NMAL6050.constant;
+
+public interface NMAL6050Constant {
+
+    /**
+     * Common button 1
+     */
+    String[] BTN_CMN_BTN_1 = {"btn1", "", "" };
+
+    /**
+     * Common button 2
+     */
+    String[] BTN_CMN_BTN_2 = {"btn2", "", "" };
+
+    /**
+     * Common button 3
+     */
+    String[] BTN_CMN_BTN_3 = {"btn3", "", "" };
+
+    /**
+     * Common button 4
+     */
+    String[] BTN_CMN_BTN_4 = {"btn4", "", "" };
+
+    /**
+     * Common button 5
+     */
+    String[] BTN_CMN_BTN_5 = {"btn5", "", "" };
+
+    /**
+     * Common button 6
+     */
+    String[] BTN_CMN_BTN_6 = {"btn6", "", "" };
+
+    /**
+     * Common button 7
+     */
+    String[] BTN_CMN_BTN_7 = {"btn7", "", "" };
+
+    /**
+     * Common button 8
+     */
+    String[] BTN_CMN_CLEAR = {"btn8", "CMN_Clear", "Clear" };
+
+    /**
+     * Common button 9
+     */
+    String[] BTN_CMN_BTN_9 = {"btn9", "", "" };
+
+    /**
+     * Common button 10
+     */
+    String[] BTN_CMN_CLOSE = {"btn10", "CMN_Close", "Close" };
+
+    /**
+     * Business button Search
+     */
+    String[] BTN_SEARCH = {"Search_ConditionCode", "Search" };
+
+    /**
+     * Screen ID
+     */
+    String SCREEN_ID = "NMAL6050Scrn00";
+
+}

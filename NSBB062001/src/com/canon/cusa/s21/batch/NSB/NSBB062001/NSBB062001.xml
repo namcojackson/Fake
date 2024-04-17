@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NSBB062001">
+    <statement id="getInputData" parameterClass="Map" resultClass="Map">
+        WITH
+            VISIT AS (
+                SELECT
+                     VISIT.GLBL_CMPY_CD
+                    ,VISIT.FSR_NUM
+                    ,VISIT.FSR_VISIT_NUM
+                    ,VISIT.SVC_TASK_NUM
+                    ,VISIT.TECH_CD
+                    ,VISIT.FSR_VISIT_ARV_DT
+                    ,VISIT.FSR_VISIT_ARV_TM
+                    ,FSR.SER_NUM
+                    ,FSR.FSR_CLO_DT
+                FROM
+                     FSR         FSR
+                    ,FSR_VISIT   VISIT
+                WHERE
+                        FSR.GLBL_CMPY_CD    = #glblCmpyCd#
+                    AND FSR.FSR_STS_CD      = #fsrStsCd_closed#
+                    AND FSR.EZUPTIME     &gt; TO_CHAR(TO_TIMESTAMP(ADD_MONTHS(LAST_DAY(TO_DATE(#slsDt#, 'YYYYMMDD')), #addMonth#)), 'YYYYMMDDHH24MISSFF3')
+                    AND FSR.EZUPTIME     &lt; TO_CHAR(TO_TIMESTAMP(TO_DATE(#slsDt#, 'YYYYMMDD') + 1), 'YYYYMMDDHH24MISSFF3')
+                    AND VISIT.GLBL_CMPY_CD  = FSR.GLBL_CMPY_CD
+                    AND VISIT.FSR_NUM       = FSR.FSR_NUM
+                    AND FSR.EZCANCELFLAG    = '0'
+                    AND VISIT.EZCANCELFLAG  = '0'
+            )
+        SELECT     
+             VISIT.FSR_NUM                                                  AS FSR_NUM
+            ,VISIT.TECH_CD                                                  AS TECH_CD
+            ,VISIT.FSR_VISIT_ARV_DT                                         AS FSR_VISIT_ARV_DT
+            ,TASK.DS_SVC_CALL_TP_CD                                         AS DS_SVC_CALL_TP_CD
+            ,SUBSTR(LBOR_TM.SVC_TM_EVENT_FROM_TM, 1,           #strLen_2#)  AS INTFC_START_WRK_HRS
+            ,SUBSTR(LBOR_TM.SVC_TM_EVENT_FROM_TM, #strFrom_3#, #strLen_2#)  AS INTFC_START_WRK_MN
+            ,SUBSTR(LBOR_TM.SVC_TM_EVENT_TO_TM,   1,           #strLen_2#)  AS INTFC_END_WRK_HRS
+            ,SUBSTR(LBOR_TM.SVC_TM_EVENT_TO_TM,   #strFrom_3#, #strLen_2#)  AS INTFC_END_WRK_MN
+            ,TASK.MDL_GRP_NM                                                AS MDL_GRP_NM
+            ,VISIT.SER_NUM                                                  AS SER_NUM
+            ,MACH.SVC_CONFIG_MSTR_PK                                        AS SVC_CONFIG_MSTR_PK
+            ,(SELECT
+                 DISTINCT FIRST_VALUE(CONTDTL.CONTR_EFF_FROM_DT)
+                        OVER(ORDER BY CONTDTL.CONTR_EFF_THRU_DT DESC,
+                            CONTDTL.CONTR_EFF_FROM_DT) F_DATE_VAL
+                    FROM
+                         DS_CONTR_DTL       CONTDTL
+                        ,DS_CONTR_DTL_STS_V DTLSTS
+                        ,DS_CONTR           CONTR
+                    WHERE
+                         CONTDTL.GLBL_CMPY_CD            = VISIT.GLBL_CMPY_CD
+                    AND CONTDTL.CONTR_EFF_FROM_DT    &lt;= VISIT.FSR_CLO_DT
+                    AND (
+                            (CONTDTL.CONTR_CLO_DT    &gt;= VISIT.FSR_CLO_DT)
+                         OR (CONTDTL.CONTR_CLO_DT IS NULL AND NVL(CONTDTL.CONTR_EFF_THRU_DT, #slsDt#) &gt;= VISIT.FSR_CLO_DT)
+                        )
+                    AND CONTDTL.SVC_MACH_MSTR_PK         = MACH.SVC_MACH_MSTR_PK
+                    AND DTLSTS.GLBL_CMPY_CD              = CONTDTL.GLBL_CMPY_CD
+                    AND DTLSTS.DS_CONTR_DTL_PK           = CONTDTL.DS_CONTR_DTL_PK
+                    <iterate property="dsContrCtrlStsCdList" var="dsContrCtrlSts[]" open="AND DTLSTS.DS_CONTR_CTRL_STS_CD NOT IN (" close=")" conjunction=",">
+                        #dsContrCtrlSts[]#
+                    </iterate>
+                    AND CONTR.GLBL_CMPY_CD               = CONTDTL.GLBL_CMPY_CD
+                    AND CONTR.DS_CONTR_PK                = CONTDTL.DS_CONTR_PK
+                    AND CONTR.DS_CONTR_CATG_CD           &lt;&gt; #dsCntrCatgCd_warranty#
+                    AND CONTDTL.EZCANCELFLAG             = '0'
+                    AND DTLSTS.EZCANCELFLAG              = '0'
+                    AND CONTR.EZCANCELFLAG               = '0'
+                )                                                           AS CONTR_EFF_FROM_DT
+            ,#omalDataType_A#                                               AS FILL_1_TXT_01
+            ,SUBSTR(VISIT.FSR_VISIT_ARV_TM, 1,           #strLen_2#)        AS INTFC_ARV_HRS
+            ,SUBSTR(VISIT.FSR_VISIT_ARV_TM, #strFrom_3#, #strLen_2#)        AS INTFC_ARV_MN
+            ,''                                                             AS FILL_1_TXT_02
+            ,MAX_ARV_DT.FSR_VISIT_ARV_DT                                    AS LAST_VISIT_FSR_VISIT_ARV_DT
+            ,VITA.SVC_PBLM_RSN_TP_CD                                        AS SVC_PBLM_RSN_TP_CD_01
+            ,VITA.SVC_PBLM_LOC_TP_CD                                        AS SVC_PBLM_LOC_TP_CD_01
+            ,VITA.SVC_PBLM_CRCT_TP_CD                                       AS SVC_PBLM_CRCT_TP_CD_01
+            ,VITA.SVC_PBLM_RSN_TP_CD                                        AS SVC_PBLM_RSN_TP_CD_02
+            ,VITA.SVC_PBLM_LOC_TP_CD                                        AS SVC_PBLM_LOC_TP_CD_02
+            ,VITA.SVC_PBLM_CRCT_TP_CD                                       AS SVC_PBLM_CRCT_TP_CD_02
+            ,VITA.SVC_LBOR_UNIT_AMT                                         AS SVC_LBOR_UNIT_AMT
+        FROM
+             VISIT
+            ,SVC_MACH_MSTR      MACH
+            ,SVC_CONFIG_MSTR    CONFIG
+            ,SVC_TASK           TASK
+            ,FSR_VISIT_TASK     VITA
+            ,DS_SVC_CALL_TP     SVCTP
+            ,(
+                SELECT
+                     EVENT.GLBL_CMPY_CD
+                    ,EVENT.FSR_NUM
+                    ,EVENT.FSR_VISIT_NUM
+                    ,MIN(SVC_TM_EVENT_FROM_TM)  AS SVC_TM_EVENT_FROM_TM
+                    ,MAX(SVC_TM_EVENT_TO_TM)    AS SVC_TM_EVENT_TO_TM
+                FROM
+                     VISIT
+                    ,FSR_VISIT_TM_EVENT EVENT
+                    ,SVC_TM_EVENT       TMEVT
+                WHERE
+                        EVENT.GLBL_CMPY_CD      = VISIT.GLBL_CMPY_CD
+                    AND EVENT.FSR_NUM           = VISIT.FSR_NUM
+                    AND EVENT.FSR_VISIT_NUM     = VISIT.FSR_VISIT_NUM
+                    AND TMEVT.GLBL_CMPY_CD      = EVENT.GLBL_CMPY_CD
+                    AND TMEVT.SVC_TM_EVENT_CD   = EVENT.SVC_TM_EVENT_CD
+                    AND TMEVT.INCL_LBOR_TM_FLG  = 'Y'
+                    AND EVENT.EZCANCELFLAG      = '0'
+                    AND TMEVT.EZCANCELFLAG      = '0'
+                GROUP BY
+                     EVENT.GLBL_CMPY_CD
+                    ,EVENT.FSR_NUM
+                    ,EVENT.FSR_VISIT_NUM
+            ) LBOR_TM
+            ,(
+                SELECT
+                     GLBL_CMPY_CD
+                    ,FSR_NUM
+                    ,SER_NUM
+                    ,TECH_CD
+                    ,MAX(FSR_VISIT_ARV_DT) AS FSR_VISIT_ARV_DT
+                FROM
+                     VISIT
+                GROUP BY
+                     GLBL_CMPY_CD
+                    ,FSR_NUM
+                    ,SER_NUM
+                    ,TECH_CD
+            ) MAX_ARV_DT
+        WHERE
+                VITA.GLBL_CMPY_CD(+)        = VISIT.GLBL_CMPY_CD
+            AND VITA.SVC_TASK_NUM(+)        = VISIT.SVC_TASK_NUM
+            AND VITA.FSR_NUM(+)             = VISIT.FSR_NUM
+            AND VITA.FSR_VISIT_NUM(+)       = VISIT.FSR_VISIT_NUM
+            AND TASK.GLBL_CMPY_CD           = VISIT.GLBL_CMPY_CD
+            AND TASK.FSR_NUM                = VISIT.FSR_NUM
+            AND TASK.SVC_TASK_NUM           = VISIT.SVC_TASK_NUM
+            AND MACH.GLBL_CMPY_CD           = TASK.GLBL_CMPY_CD
+            AND MACH.SVC_MACH_MSTR_PK       = TASK.SVC_MACH_MSTR_PK
+            AND CONFIG.GLBL_CMPY_CD         = MACH.GLBL_CMPY_CD
+            AND CONFIG.SVC_MACH_MSTR_PK     = MACH.SVC_MACH_MSTR_PK
+            AND SVCTP.GLBL_CMPY_CD          = TASK.GLBL_CMPY_CD
+            AND SVCTP.DS_SVC_CALL_TP_CD     = TASK.DS_SVC_CALL_TP_CD
+            AND LBOR_TM.GLBL_CMPY_CD(+)     = VISIT.GLBL_CMPY_CD
+            AND LBOR_TM.FSR_NUM(+)          = VISIT.FSR_NUM
+            AND LBOR_TM.FSR_VISIT_NUM(+)    = VISIT.FSR_VISIT_NUM
+            AND MAX_ARV_DT.GLBL_CMPY_CD     = VISIT.GLBL_CMPY_CD
+            AND MAX_ARV_DT.FSR_NUM          = VISIT.FSR_NUM
+            AND MAX_ARV_DT.SER_NUM          = VISIT.SER_NUM
+            AND (
+                    MAX_ARV_DT.TECH_CD      = VISIT.TECH_CD
+                OR (MAX_ARV_DT.TECH_CD IS NULL AND VISIT.TECH_CD IS NULL)
+                )
+            AND VITA.EZCANCELFLAG(+)        = '0'
+            AND TASK.EZCANCELFLAG           = '0'
+            AND MACH.EZCANCELFLAG           = '0'
+            AND CONFIG.EZCANCELFLAG         = '0'
+            AND SVCTP.EZCANCELFLAG          = '0'
+        ORDER BY
+             VISIT.FSR_NUM
+            ,VISIT.TECH_CD
+            ,TASK.MDL_GRP_NM
+            ,VISIT.SER_NUM
+    </statement>
+</sqlMap>

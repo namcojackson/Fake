@@ -1,0 +1,171 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NSXC001001ContrRenewalPreCheck">
+    <statement id="getContrDtlInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+             CONTR_RNW_TOT_CNT
+            ,MAX_CONTR_RNW_CNT
+            ,MAX_PRC_UP_RATIO
+            ,BASE_PRC_DEAL_AMT
+            ,XS_MTR_AMT_RATE
+        FROM
+            (
+            SELECT
+                 CONTR_RNW_TOT_CNT
+                ,NVL(DTL.MAX_CONTR_RNW_CNT, CON.MAX_CONTR_RNW_CNT) AS MAX_CONTR_RNW_CNT
+                <!-- START 2018/12/19 W.Honda [QC#29636,MOD] -->
+                <!-- ,NVL(DTL.MAX_PRC_UP_RATIO,  CON.MAX_PRC_UP_RATIO)  AS MAX_PRC_UP_RATIO -->
+                ,NVL(RES_LV3.RNW_MAX_PRC_UP_RATIO,  NVL(RES_LV2.RNW_MAX_PRC_UP_RATIO, RES_LV1.RNW_MAX_PRC_UP_RATIO))  AS MAX_PRC_UP_RATIO
+                <!-- END 2018/12/19 W.Honda [QC#29636,MOD] -->
+                ,PEF.BASE_PRC_DEAL_AMT
+                <isNotNull property="baseFlg">
+                ,NULL AS XS_MTR_AMT_RATE
+                </isNotNull>
+                <isNotNull property="usageFlg">
+                ,PEM.XS_MTR_AMT_RATE
+                </isNotNull>
+                ,ROW_NUMBER() OVER (PARTITION BY PEF.DS_CONTR_DTL_PK ORDER BY PEF.CONTR_PRC_EFF_FROM_DT DESC NULLS LAST) AS ROW_NUM 
+            FROM
+                 DS_CONTR_DTL           DTL
+                ,DS_CONTR_PRC_EFF       PEF
+                ,DS_CONTR_PRC_EFF_MTR   PEM
+                ,DS_CONTR               CON
+                <!-- START 2018/12/19 W.Honda [QC#29636,ADD] -->
+                ,DS_CONTR_RNW_ESCL      RES_LV1
+                ,DS_CONTR_RNW_ESCL      RES_LV2
+                ,DS_CONTR_RNW_ESCL      RES_LV3
+                <!-- START 2018/12/19 W.Honda [QC#29636,ADD] -->
+            WHERE
+                DTL.GLBL_CMPY_CD              = #glblCmpyCd#
+                AND DTL.DS_CONTR_DTL_PK       = #dsContrDtlPk#
+                AND DTL.EZCANCELFLAG          = '0'
+                AND DTL.GLBL_CMPY_CD          = PEF.GLBL_CMPY_CD
+                AND DTL.DS_CONTR_DTL_PK       = PEF.DS_CONTR_DTL_PK
+                AND PEF.EZCANCELFLAG          = '0'
+                <isNotNull property="baseFlg">
+                AND PEF.BASE_CHRG_FLG         = 'Y'
+                <!-- START 2018/12/19 W.Honda [QC#29636,ADD] -->
+                AND DTL.GLBL_CMPY_CD          = RES_LV1.GLBL_CMPY_CD(+)
+                AND DTL.DS_CONTR_PK           = RES_LV1.DS_CONTR_PK(+)
+                AND RES_LV1.DS_CONTR_DTL_PK(+) IS NULL
+                AND RES_LV1.DS_CONTR_MACH_LVL_NUM(+) = #machLvlNumLv1#
+                AND RES_LV1.DS_CONTR_BASE_USG_NM(+) IS NULL
+                AND RES_LV1.EZCANCELFLAG(+)   = '0'
+                AND DTL.GLBL_CMPY_CD          = RES_LV2.GLBL_CMPY_CD(+)
+                AND DTL.DS_CONTR_PK           = RES_LV2.DS_CONTR_PK(+)
+                AND DTL.DS_CONTR_DTL_PK       = RES_LV2.DS_CONTR_DTL_PK(+)
+                AND RES_LV2.DS_CONTR_MACH_LVL_NUM(+) = #machLvlNumLv2#
+                AND RES_LV2.DS_CONTR_BASE_USG_NM(+) IS NULL
+                AND RES_LV2.EZCANCELFLAG(+)   = '0'
+                AND DTL.GLBL_CMPY_CD          = RES_LV3.GLBL_CMPY_CD(+)
+                AND DTL.DS_CONTR_PK           = RES_LV3.DS_CONTR_PK(+)
+                AND DTL.DS_CONTR_DTL_PK       = RES_LV3.DS_CONTR_DTL_PK(+)
+                AND RES_LV3.DS_CONTR_MACH_LVL_NUM(+) = #machLvlNumLv3#
+                AND RES_LV3.DS_CONTR_BASE_USG_NM(+) = #baseUsgNumBase#
+                AND RES_LV3.EZCANCELFLAG(+)   = '0'
+                <!-- START 2018/12/19 W.Honda [QC#29636,ADD] -->
+                </isNotNull>
+                <isNotNull property="usageFlg">
+                AND PEF.DS_CONTR_BLLG_MTR_PK  = #dsContrBllgMtrPk#
+                AND PEF.USG_CHRG_FLG          = 'Y'
+                AND PEF.GLBL_CMPY_CD          = PEM.GLBL_CMPY_CD(+)
+                AND PEF.DS_CONTR_PRC_EFF_PK   = PEM.DS_CONTR_PRC_EFF_PK(+)
+                <!-- START 2018/06/18 U.Kim [QC#24903,ADD] -->
+                AND PEM.XS_MTR_COPY_QTY(+)    = #xsMtrCopyQty#
+                <!-- END 2018/06/18 U.Kim [QC#24903,ADD] -->
+                AND PEM.EZCANCELFLAG(+)       = '0'
+                <!-- START 2018/12/19 W.Honda [QC#29636,ADD] -->
+                AND DTL.GLBL_CMPY_CD          = RES_LV1.GLBL_CMPY_CD(+)
+                AND DTL.DS_CONTR_PK           = RES_LV1.DS_CONTR_PK(+)
+                AND RES_LV1.DS_CONTR_DTL_PK(+) IS NULL
+                AND RES_LV1.DS_CONTR_MACH_LVL_NUM(+) = #machLvlNumLv1#
+                AND RES_LV1.DS_CONTR_BASE_USG_NM(+) IS NULL
+                AND RES_LV1.EZCANCELFLAG(+)   = '0'
+                AND DTL.GLBL_CMPY_CD          = RES_LV2.GLBL_CMPY_CD(+)
+                AND DTL.DS_CONTR_PK           = RES_LV2.DS_CONTR_PK(+)
+                AND DTL.DS_CONTR_DTL_PK       = RES_LV2.DS_CONTR_DTL_PK(+)
+                AND RES_LV2.DS_CONTR_MACH_LVL_NUM(+) = #machLvlNumLv2#
+                AND RES_LV2.DS_CONTR_BASE_USG_NM(+) IS NULL
+                AND RES_LV2.EZCANCELFLAG(+)   = '0'
+                AND DTL.GLBL_CMPY_CD          = RES_LV3.GLBL_CMPY_CD(+)
+                AND DTL.DS_CONTR_PK           = RES_LV3.DS_CONTR_PK(+)
+                AND DTL.DS_CONTR_DTL_PK       = RES_LV3.DS_CONTR_DTL_PK(+)
+                AND RES_LV3.DS_CONTR_MACH_LVL_NUM(+) = #machLvlNumLv3#
+                AND RES_LV3.DS_CONTR_BASE_USG_NM(+) = #baseUsgNumUsg#
+                AND RES_LV3.EZCANCELFLAG(+)   = '0'
+                <!-- START 2018/12/19 W.Honda [QC#29636,ADD] -->
+                </isNotNull>
+                AND DTL.GLBL_CMPY_CD          = CON.GLBL_CMPY_CD
+                AND DTL.DS_CONTR_PK           = CON.DS_CONTR_PK
+                AND CON.EZCANCELFLAG          = '0'
+            )
+        WHERE
+            ROW_NUM = 1
+    </statement>
+<!-- START 2017/10/31 U.Kim [QC#21546-1, ADD] -->
+<!-- START 2018/06/18 U.Kim [QC#24903 ,DEL] -->
+<!--     <statement id="getOriginalBaseAmt" parameterClass="Map" resultClass="Map"> -->
+<!--         SELECT -->
+<!--              INV_DISP_UNIT_PRC_AMT -->
+<!--         FROM -->
+<!--             ( -->
+<!--                 SELECT -->
+<!--                     SIL.INV_DISP_UNIT_PRC_AMT -->
+<!--                 FROM -->
+<!--                      DS_CONTR_BLLG_SCHD DCBS -->
+<!--                     ,SVC_INV_LINE SIL -->
+<!--                 WHERE -->
+<!--                         DCBS.GLBL_CMPY_CD        = #glblCmpyCd# -->
+<!--                     AND DCBS.DS_CONTR_DTL_PK     = #dsContrDtlPk# -->
+<!--                     AND DCBS.BASE_CHRG_FLG       = 'Y' -->
+<!--                     AND DCBS.DS_CONTR_PRC_EFF_PK IS NOT NULL -->
+<!--                     AND DCBS.EZCANCELFLAG        = '0' -->
+<!--                     AND DCBS.GLBL_CMPY_CD        = SIL.GLBL_CMPY_CD -->
+<!--                     AND DCBS.SVC_INV_NUM         = SIL.SVC_INV_NUM -->
+<!--                     AND DCBS.DS_CONTR_DTL_PK     = SIL.DS_CONTR_DTL_PK -->
+<!--                     AND SIL.EZCANCELFLAG         = '0' -->
+<!--                 ORDER BY -->
+<!--                     SIL.BLLG_PER_FROM_DT ASC -->
+<!--             ) -->
+<!--         WHERE -->
+<!--             ROWNUM = 1 -->
+<!--     </statement> -->
+<!--     <statement id="getOriginalUsageAmt" parameterClass="Map" resultClass="Map"> -->
+<!--         SELECT -->
+<!--             XS_MTR_AMT_RATE -->
+<!--         FROM -->
+<!--             ( -->
+<!--             SELECT -->
+<!--                  D.XS_MTR_FROM_COPY_QTY -->
+<!--                 ,D.ORIG_XS_MTR_FROM_COPY_QTY -->
+<!--                 ,D.XS_MTR_AMT_RATE -->
+<!--             FROM -->
+<!--                  DS_CONTR_BLLG_SCHD A -->
+<!--                 ,SVC_INV_LINE B -->
+<!--                 ,SVC_INV_LINE_MTR C -->
+<!--                 ,SVC_INV_LINE_XS_MTR D -->
+<!--             WHERE -->
+<!--                     A.GLBL_CMPY_CD         = #glblCmpyCd# -->
+<!--                 AND A.DS_CONTR_DTL_PK      = #dsContrDtlPk# -->
+<!--                 AND A.USG_CHRG_FLG         = 'Y' -->
+<!--                 AND A.DS_CONTR_PRC_EFF_PK  IS NOT NULL -->
+<!--                 AND A.EZCANCELFLAG         = '0' -->
+<!--                 AND A.GLBL_CMPY_CD         = B.GLBL_CMPY_CD -->
+<!--                 AND A.SVC_INV_NUM          = B.SVC_INV_NUM -->
+<!--                 AND A.DS_CONTR_DTL_PK      = B.DS_CONTR_DTL_PK -->
+<!--                 AND B.EZCANCELFLAG         = '0' -->
+<!--                 AND B.GLBL_CMPY_CD         = C.GLBL_CMPY_CD -->
+<!--                 AND B.SVC_INV_LINE_PK      = C.SVC_INV_LINE_PK -->
+<!--                 AND C.DS_CONTR_BLLG_MTR_PK = #dsContrBllgMtrPk# -->
+<!--                 AND C.EZCANCELFLAG         = '0' -->
+<!--                 AND C.GLBL_CMPY_CD         = D.GLBL_CMPY_CD -->
+<!--                 AND C.SVC_INV_LINE_MTR_PK  = D.SVC_INV_LINE_MTR_PK -->
+<!--                 AND D.EZCANCELFLAG         = '0' -->
+<!--             ORDER BY -->
+<!--                 B.BLLG_PER_FROM_DT ASC -->
+<!--             ) -->
+<!--         WHERE -->
+<!--             ROWNUM = 1 -->
+<!--     </statement> -->
+<!-- END 2018/06/18 U.Kim [QC#24903, DEL] -->
+<!-- END 2017/10/31 U.Kim [QC#21546-1, ADD] -->
+</sqlMap>

@@ -1,0 +1,414 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sqlMap namespace="NLZC300001">
+
+    <statement id="getItemStockFromInvty" parameterClass="Map" resultClass="Map">
+        SELECT 
+             #mdseCd#                    MDSE_CD
+            ,R.INVTY_LOC_CD              INVTY_LOC_CD
+            ,NVL(I.INVTY_AVAL_QTY, 0)    INVTY_AVAL_QTY
+            ,R.RTL_WH_NM                 RTL_WH_NM
+            ,R.RTL_WH_CD                 RTL_WH_CD
+            ,R.RTL_SWH_CD                RTL_SWH_CD
+            ,R.LOC_TP_CD                 LOC_TP_CD
+        FROM
+           (            SELECT
+                             RSW.GLBL_CMPY_CD
+                            ,RSW.INVTY_LOC_CD
+                            ,RW.RTL_WH_NM
+                            ,RW.RTL_WH_CD
+                            ,RSW.RTL_SWH_CD
+                            ,RW.LOC_TP_CD
+                        FROM
+                            RTL_WH     RW
+                           ,RTL_SWH    RSW
+                        WHERE
+                            RW.GLBL_CMPY_CD       = #glblCmpyCd#
+                        AND RW.EZCANCELFLAG       = '0'
+                        AND RSW.GLBL_CMPY_CD      = RW.GLBL_CMPY_CD
+                        AND RSW.RTL_WH_CD         = RW.RTL_WH_CD
+                        <isNotNull property="invtyLocCd">
+                            AND RSW.INVTY_LOC_CD (+) = #invtyLocCd#
+                        </isNotNull>
+                        <isNotNull property="rtlWhCd">
+                            AND RSW.RTL_WH_CD (+) = #rtlWhCd#
+                        </isNotNull>
+                        <isNotNull property="rtlSwhCd">
+                            AND RSW.RTL_SWH_CD (+) = #rtlSwhCd#
+                        </isNotNull>
+                        AND RSW.EZCANCELFLAG      = '0'
+                        <isNotNull property="locTpList">
+                            AND   RW.LOC_TP_CD    IN (
+                            <iterate property="locTpList" var="locTpCd[]" open="" close="" conjunction=",">
+                                #locTpCd[]#
+                            </iterate>
+                            )
+                        </isNotNull>
+                        <isNotNull property="excludeInvtyOwnrList">
+                            AND   RW.INVTY_OWNR_CD    NOT IN (
+                            <iterate property="excludeInvtyOwnrList" var="excludeInvtyOwnrCd[]" open="" close="" conjunction=",">
+                                #excludeInvtyOwnrCd[]#
+                            </iterate>
+                            )
+                        </isNotNull>
+            ) R
+            ,INVTY I
+        WHERE
+                R.INVTY_LOC_CD     = I.INVTY_LOC_CD (+)
+            AND R.GLBL_CMPY_CD     = I.GLBL_CMPY_CD (+)
+            AND I.MDSE_CD (+)      = #mdseCd#
+            AND I.LOC_STS_CD (+)   = #locStsCd#
+            AND I.STK_STS_CD (+)   = #stkStsCd# <!-- 12/07/2015 add -->
+            AND I.EZCANCELFLAG (+) = '0'
+            <!-- 12/07/2015 add start -->
+            <!-- 12/07/2015 add end   -->
+        ORDER BY
+            NVL(I.INVTY_AVAL_QTY, 0) DESC
+           ,R.INVTY_LOC_CD
+    </statement>
+
+    <statement id="getShipToLocation" parameterClass="Map" resultClass="Map">
+        SELECT
+             STC.SHIP_TO_CUST_CD
+            ,STC.ST_CD
+            ,STC.POST_CD
+            ,STC.BILL_TO_CUST_CD
+            ,STC.SELL_TO_CUST_CD
+        FROM
+            SHIP_TO_CUST STC
+        WHERE
+                STC.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND STC.SHIP_TO_CUST_CD = #shipToCustCd#
+            AND STC.EZCANCELFLAG    = '0'
+    </statement>
+
+    <statement id="getCusaPartsInvty" parameterClass="Map" resultClass="Map">
+    <!-- 10/23/2015 mod start -->
+    <!--
+        SELECT
+             UUMC1.P_PARTS_NUM
+            ,UUMC1.P_CODE_WH
+            ,UUMC1.P_QTY_FLAG
+            ,UUMC1.P_DATE_STOCK_IN_EST
+        FROM
+            USZF_USMF_M4120_CSA_1 UUMC1
+        WHERE
+                UUMC1.P_PARTS_NUM  = pPartsNum
+            AND UUMC1.P_CODE_WH    = pCdWh
+        ORDER BY
+            UUMC1.P_CODE_WH
+    -->
+    <!--
+            SELECT
+             CPIV.P_PARTS_NUM
+            ,CPIV.P_CODE_WH
+            ,CPIV.P_QTY_ALLOCBL
+            ,CPV.P_DATE_STOCK_IN_EST
+            ,CPV.P_QTY_POSITION
+        FROM
+            CSA_PRT_INVTY_V CPIV
+        ,   CSA_PRT_WH_V    CPWV
+        ,   CSA_PRT_POYO_V  CPV
+        WHERE
+                CPIV.P_PARTS_NUM  = #pPartsNum#
+            <isNotNull property="pCdWh">
+            AND CPIV.P_CODE_WH    = #pCdWh#
+            </isNotNull>
+            AND CPIV.P_CODE_WH    = CPWV.P_CODE_WH
+            AND CPIV.P_CODE_WH    = CPV.P_CODE_WH
+            AND CPWV.P_CODE_WH    = CPV.P_CODE_WH
+            AND CPIV.P_PARTS_NUM  = CPV.P_PARTS_NUM
+        ORDER BY
+            CPIV.P_CODE_WH
+        ,   CPV.P_DATE_STOCK_IN_EST
+        -->
+       <!-- 10/23/2015 mod end -->
+        SELECT
+              CPWV.P_CODE_WH              P_CODE_WH
+            , CPWV.P_NAME_WH              P_NAME_WH
+            , #pPartsNum#                 P_PARTS_NUM
+            , NVL(CPIV.P_QTY_ALLOCBL, 0)  P_QTY_ALLOCBL
+            , CPV.P_DATE_STOCK_IN_EST     P_DATE_STOCK_IN_EST
+            , NVL(CPV.P_QTY_POSITION, 0)  P_QTY_POSITION
+        FROM
+            CSA_PRT_WH_V    CPWV
+        ,   CSA_PRT_INVTY_V CPIV
+        ,   CSA_PRT_POYO_V  CPV
+        WHERE
+                CPWV.P_CODE_WH        = CPIV.P_CODE_WH (+)
+            AND CPIV.P_PARTS_NUM (+)  = #pPartsNum#
+            AND CPIV.P_CODE_WH        = CPV.P_CODE_WH (+)
+            AND CPIV.P_PARTS_NUM      = CPV.P_PARTS_NUM (+)
+            <isNotNull property="pCdWh">
+            AND CPWV.P_CODE_WH        = #pCdWh#
+            </isNotNull>
+            <isNotNull property="avalLocCdArray">
+                AND   CPWV.P_CODE_WH    IN (
+                <iterate property="avalLocCdArray" var="locCd[]" open="" close="" conjunction=",">
+                    #locCd[]#
+                </iterate>
+                )
+            </isNotNull>
+        ORDER BY
+            P_CODE_WH
+        ,   P_DATE_STOCK_IN_EST
+    </statement>
+
+    <statement id="getCviInvty" parameterClass="Map" resultClass="Map">
+        SELECT
+             CI.MDSE_CD       PART_NUMBER
+            ,CI.CVI_INVTY_QTY QUANTITY
+        FROM
+            CVI_INVTY CI
+        WHERE
+            CI.GLBL_CMPY_CD          = #glblCmpyCd#
+        AND CI.MDSE_CD               = #partNumber#
+        AND CI.CVI_INVTY_TP_DESC_TXT IN
+        <iterate property="cviInvtyTpDescTxtList" var="cviInvtyTpDescTxt[]" open="(" close=")" conjunction=",">
+            #cviInvtyTpDescTxt[]#
+        </iterate>
+        ORDER BY
+            CI.MDSE_CD
+    </statement>
+
+    <statement id="getShipToCustFromCUSA" parameterClass="Map" resultClass="Map">
+        SELECT
+             CSTCV.SHIP_TO_CUST_CD
+            ,CSTCV.BILL_TO_CUST_CD
+            ,CSTCV.SELL_TO_CUST_CD
+            ,CSTCV.ST_CD
+            ,CSTCV.POST_CD
+        FROM
+             CSA_SHIP_TO_CUST_V    CSTCV
+            ,VND_SHIP_TO_XREF      VSTX
+            ,PRNT_CMPY_VND         PCV
+        WHERE
+                CSTCV.GLBL_CMPY_CD    = #cusaCmpyCd#
+            AND CSTCV.SHIP_TO_CUST_CD = VSTX.VND_SHIP_TO_CUST_CD
+            AND CSTCV.EZCANCELFLAG    = '0'
+            AND VSTX.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND VSTX.INVTY_LOC_CD     = #invtyLocCd#
+            AND VSTX.VND_XREF_TP_CD   = #vndXrefTpCd#
+            AND VSTX.VND_CD           = PCV.PRNT_CMPY_VND_CD
+            AND VSTX.EZCANCELFLAG     = '0'
+            AND PCV.GLBL_CMPY_CD      = VSTX.GLBL_CMPY_CD
+            AND PCV.VND_SYS_TP_CD     = #vndSysTpCd#
+            AND PCV.EZCANCELFLAG      = '0'
+    </statement>
+
+    <!-- 10/23/2015 add start -->
+    <statement id="getCusaInvtyLocCdList" parameterClass="Map" resultClass="Map">
+        SELECT
+            CWV.WH_CD  INVTY_LOC_CD
+           ,CWV.LOC_NM INVTY_LOC_NM
+        FROM
+            CSA_WH_V CWV
+        WHERE
+            CWV.GLBL_CMPY_CD    = #cusaCmpyCd#
+        AND CWV.RGTN_STS_CD     = #rgtnStsCd#
+        AND CWV.EZCANCELFLAG    = '0'
+        <isNotNull property="avalLocCdArray">
+            AND   CWV.WH_CD    IN (
+            <iterate property="avalLocCdArray" var="locCd[]" open="" close="" conjunction=",">
+                #locCd[]#
+            </iterate>
+            )
+        </isNotNull>
+    </statement>
+
+    <statement id="getCusaInvtyLocCd" parameterClass="Map" resultClass="Map">
+        SELECT
+            CWV.INVTY_LOC_CD    INVTY_LOC_CD
+           ,CWV.LOC_NM          INVTY_LOC_NM
+        FROM
+            CSA_WH_V CWV
+        WHERE
+            CWV.GLBL_CMPY_CD = #cusaCmpyCd#
+        AND CWV.WH_CD        = #invtyLocCd#
+        AND CWV.RGTN_STS_CD  = #rgtnStsCd#
+        AND CWV.EZCANCELFLAG = '0'
+    </statement>
+
+    <statement id="checkCusaPartsInvtyLocCd" parameterClass="Map" resultClass="Map">
+        SELECT
+            1
+        FROM
+            CSA_PRT_WH_V CPWV
+        WHERE
+            CPWV.P_CODE_WH    = #invtyLocCd#
+        AND CPWV.EZCANCELFLAG = '0'
+    </statement>
+    <!-- 10/23/2015 add end -->
+
+    <!-- 12/07/2015 add start -->
+    <statement id="getCviStkStsCdGood" parameterClass="Map" resultClass="Map">
+        SELECT
+             DS_COND_CONST_VAL_TXT_01
+            ,DS_COND_CONST_VAL_TXT_02
+            ,DS_COND_CONST_VAL_TXT_03
+            ,DS_COND_CONST_VAL_TXT_04
+            ,DS_COND_CONST_VAL_TXT_05
+            ,DS_COND_CONST_VAL_TXT_06
+            ,DS_COND_CONST_VAL_TXT_07
+            ,DS_COND_CONST_VAL_TXT_08
+            ,DS_COND_CONST_VAL_TXT_09
+            ,DS_COND_CONST_VAL_TXT_10
+        FROM
+            DS_COND_CONST
+        WHERE
+            GLBL_CMPY_CD         = #glblCmpyCd#
+        AND DS_COND_CONST_GRP_ID = #dsCondConstGrpId#
+        AND DS_COND_CONST_CD     = #dsCondConstCd#
+    </statement>
+    <!-- 12/07/2015 add end -->
+
+    <statement id="getSplyItemNum" parameterClass="Map" resultClass="String">
+        SELECT
+                D.SPLY_ITEM_NUM
+        FROM    ASL_HDR H
+               ,ASL_DTL D
+
+        WHERE H.GLBL_CMPY_CD = #glblCmpyCd#
+        AND   H.PRNT_VND_CD  = #prntVndCd#
+        AND   H.ASL_START_DT &lt;= #slsDt#
+        AND   NVL(H.ASL_END_DT, '99991231')   &gt;= #slsDt#
+        AND   H.EZCANCELFLAG = '0'
+        AND   D.GLBL_CMPY_CD = H.GLBL_CMPY_CD
+        AND   D.ASL_HDR_PK   = H.ASL_HDR_PK
+        AND   D.MDSE_CD      = #mdseCd#
+        AND   D.EZCANCELFLAG = '0'
+        AND   D.EFF_FROM_DT &lt;= #slsDt#
+        AND   NVL(D.EFF_THRU_DT, '99991231')   &gt;= #slsDt#
+        AND   ROWNUM = 1
+    </statement>
+
+    <statement  id="getCanonSellToShipToCode" parameterClass="Map" resultClass="Map">
+        SELECT
+                   SC.SHIP_TO_CUST_CD                         SHIP_TO_CUST_CD
+                 , NVL(SC.SELL_TO_CUST_CD, A.SELL_TO_CUST_CD) SELL_TO_CUST_CD
+                 , SC.BILL_TO_CUST_CD                         BILL_TO_CUST_CD
+        FROM (
+            SELECT
+                  GLBL_CMPY_CD GLBL_CMPY_CD
+                 ,CASE WHEN A.EDI_CUST_TP_CD = '1' THEN A.SELL_TO_SHIP_TO_CUST_CD ELSE NULL END SHIP_TO_CUST_CD
+                 ,CASE WHEN A.EDI_CUST_TP_CD = '2' THEN A.SELL_TO_SHIP_TO_CUST_CD ELSE NULL END SELL_TO_CUST_CD 
+            FROM
+                   CSA_TRD_PTNR_LOC_X_REF_V A
+            WHERE  
+                EZCANCELFLAG = '0'
+<!-- 
+            AND EDI_TRD_PTNR_CD        = #tpCd#
+-->
+            AND GLBL_CMPY_CD           = #glblCmpyCd#
+            AND UPPER(TRD_PTNR_LOC_CD) = UPPER(#trdPtnrShipToCustCd#)
+            AND EDI_CUST_TP_CD IN      
+                              (
+                              <iterate property="ediCustTpCdList" var="ediCustTpCd[]" open="" close="" conjunction=",">
+                                  #ediCustTpCd[]#
+                              </iterate>
+                              )
+            AND (
+                     EFF_FROM_DT IS NULL 
+                 OR 
+                     EFF_FROM_DT &lt;= #slsDt#
+                )
+            AND (
+                     EFF_THRU_DT IS NULL
+                 OR
+                     EFF_THRU_DT &gt;= #slsDt#
+                )
+            AND (
+                     CRS_REF_ACTV_FLG IS NULL
+                 OR
+                     CRS_REF_ACTV_FLG  = 'Y'
+                )
+            ORDER BY EDI_CUST_TP_CD DESC
+        ) A
+        , CSA_SHIP_TO_CUST_V SC
+        WHERE A.GLBL_CMPY_CD      = SC.GLBL_CMPY_CD (+)
+        AND   A.SHIP_TO_CUST_CD   = SC.SHIP_TO_CUST_CD (+)
+        AND   SC.EZCANCELFLAG (+) = '0'
+        AND   ROWNUM &lt; 2
+    </statement>
+
+    <statement  id="getCanonLocationCode" parameterClass="Map" resultClass="String">
+        SELECT
+               A.VND_LOC_CD VND_LOC_CD
+        FROM
+               VND_SHIP_TO_XREF A
+
+        WHERE  A.GLBL_CMPY_CD       = #glblCmpyCd#
+        AND    A.RTL_WH_CD          = #rtlWhCd#
+        AND    A.PRCH_GRP_CD        = #prchGrpCd#
+        AND    A.VND_XREF_TP_CD     = #vndXrefTpCd#
+
+        AND (
+                 A.EFF_FROM_DT IS NULL 
+             OR
+                 A.EFF_FROM_DT &lt;= #slsDt#
+            )
+        AND (
+                 A.EFF_THRU_DT IS NULL
+             OR
+                 A.EFF_THRU_DT &gt;= #slsDt#
+            )
+        AND   A.EZCANCELFLAG        = '0'
+        AND ROWNUM &lt; 2
+    </statement>
+
+    <statement  id="getRtlWhCodeByTechCode" parameterClass="Map" resultClass="String">
+        SELECT
+               RWH.RTL_WH_CD
+        FROM
+               RTL_WH RWH
+
+        WHERE  RWH.GLBL_CMPY_CD       = #glblCmpyCd#
+        AND    RWH.TECH_TOC_CD        = #techTocCd#
+        AND    RWH.EZCANCELFLAG       = '0'
+        AND    ROWNUM &lt; 2
+    </statement>
+    
+    <!-- 02/22/2023 add start -->
+    <statement id="getPrntVndCd" parameterClass="Map" resultClass="String">
+        SELECT
+               PV.PRNT_VND_CD PRNT_VND_CD
+        FROM
+               PRNT_VND PV
+              ,VND V
+        WHERE  PV.PRNT_VND_PK  = V.PRNT_VND_PK
+        AND    PV.GLBL_CMPY_CD = V.GLBL_CMPY_CD
+        AND    PV.EZCANCELFLAG = V.EZCANCELFLAG
+        AND    PV.GLBL_CMPY_CD = #glblCmpyCd#
+        AND    PV.EZCANCELFLAG = '0'
+        AND    V.VND_CD        = #vndCd#
+    </statement>
+    
+    <statement id="getThirdPtyInvty" parameterClass="Map" resultClass="Map">
+        SELECT
+               MDSE_CD PART_NUMBER
+              ,SUM(INVTY_QTY) QUANTITY
+        FROM
+               THIRD_PTY_INVTY
+        WHERE  GLBL_CMPY_CD = #glblCmpyCd#
+        AND    PRNT_VND_CD  = #prntVndCd#
+        AND    VND_CD       = #vndCd#
+        AND    MDSE_CD      = #mdseCd#
+        <!-- 10/03/2023 QC#61703 Start -->
+        <!-- AND    STK_STS_CD   = #stkStsCd# -->
+        AND STK_STS_CD IN (
+            <iterate property="stkStsCd" var="stkSts[]" open="" close="" conjunction=",">
+                #stkSts[]#
+            </iterate>
+        )
+        <!-- 10/03/2023 QC#61703 End -->
+        AND    EZCANCELFLAG = '0'
+        GROUP BY
+               PRNT_VND_CD
+              ,VND_CD
+              ,MDSE_CD
+              <!-- 10/03/2023 QC#61703 Start -->
+              <!-- ,STK_STS_CD -->
+              <!-- 10/03/2023 QC#61703 End -->
+    </statement>
+    <!-- 02/22/2023 add end -->
+
+</sqlMap>

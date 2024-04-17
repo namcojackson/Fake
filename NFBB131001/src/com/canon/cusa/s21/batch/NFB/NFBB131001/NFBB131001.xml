@@ -1,0 +1,282 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sqlMap namespace="NFBB131001">
+
+    <statement id="getTarget" parameterClass="Map" resultClass="Map">
+        SELECT
+            VIW.VND_INV_NUM
+           ,VIW.VND_CD
+           ,VIW.ORIG_VND_INV_NUM
+           ,VIW.INV_DT
+           ,VIW.INV_TP_CD
+           ,VIW.ORD_DT
+           ,VIW.INV_TOT_DEAL_NET_AMT
+           ,VIW.INV_TOT_DEAL_SLS_AMT
+           ,VIW.INV_TOT_DEAL_FRT_AMT
+           ,VIW.INV_TOT_DEAL_TAX_AMT
+           ,VIW.INV_TOT_DEAL_DISC_AMT
+           ,VIW.INV_TOT_DEAL_INS_AMT
+           ,VIW.CUST_ISS_PO_NUM
+           ,VIW.CR_DR_RSN_CD
+           ,VIW.DEAL_CCY_CD
+           ,VIW.ITRL_INTFC_ID
+           ,CDR.CR_DR_RSN_DESC_TXT
+        FROM
+            VND_INV_WRK     VIW
+           ,CSA_CR_DR_RSN_V CDR
+        WHERE
+            VIW.EZCANCELFLAG        = 0
+        AND VIW.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND VIW.VND_INV_PROC_STS_CD = #vndInvProcStsCdProc#
+        AND VIW.CM_PROC_STS_CD      = #cmProcStsCdN#
+        AND (   VIW.INV_TP_CD IS NULL
+             OR VIW.INV_TP_CD &lt;&gt; #invTpCdInv#
+            )
+        AND (
+                (    VIW.INV_AR_PROC_STS_CD = #processFlgP#
+                 AND VIW.CR_DR_RSN_CD       = #crDrRsnCd10#
+                )
+             OR (    VIW.CR_DR_RSN_CD &lt;&gt; #crDrRsnCd10#
+                 OR  VIW.CR_DR_RSN_CD IS NULL
+                )
+            )
+        AND NOT EXISTS (
+                        SELECT
+                            1
+                        FROM
+                            VND_INV_BOL_WRK VIBW
+                        WHERE
+                            VIW.EZCANCELFLAG = VIBW.EZCANCELFLAG
+                        AND VIW.GLBL_CMPY_CD = VIBW.GLBL_CMPY_CD
+                        AND VIW.VND_INV_NUM  = VIBW.VND_INV_NUM
+                        AND VIBW.PO_ORD_NUM IS NOT NULL
+                       )
+        AND VIW.CR_DR_RSN_CD        = CDR.CR_DR_RSN_CD(+)
+        AND CDR.GLBL_CMPY_CD(+)     = #glblCmpyCdCusa#
+        AND CDR.EZCANCELFLAG(+)     = '0'
+    </statement>
+
+    <statement id="getVndInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+            INLINE1.VND_PK
+           ,INLINE1.PRNT_VND_PK
+           ,INLINE1.INV_VND_CD
+           ,INLINE1.SPLY_COA_CMPY_CD
+           ,INLINE1.SPLY_COA_BR_CD
+           ,INLINE1.SPLY_COA_CC_CD
+           ,INLINE1.SPLY_COA_ACCT_CD
+           ,INLINE1.SPLY_COA_PROD_CD
+           ,INLINE1.SPLY_COA_CH_CD
+           ,INLINE1.SPLY_COA_AFFL_CD
+           ,INLINE1.SPLY_COA_PROJ_CD
+           ,INLINE1.SPLY_COA_EXTN_CD
+           <!-- START 2019/04/09 QC#31071 ADD-->
+           ,INLINE1.SPLY_PMT_FLG
+           <!-- END   2019/04/09 QC#31071 ADD-->
+           ,INLINE2.PRNT_VND_CD
+        FROM
+             VND      INLINE1
+            ,PRNT_VND INLINE2
+        WHERE
+            INLINE1.EZCANCELFLAG = '0'
+        AND INLINE1.GLBL_CMPY_CD = #glblCmpyCd#
+        AND INLINE1.INV_VND_CD   = #invVndCd#
+        AND INLINE2.EZCANCELFLAG = '0'
+        AND INLINE1.GLBL_CMPY_CD = INLINE2.GLBL_CMPY_CD
+        AND INLINE1.PRNT_VND_PK  = INLINE2.PRNT_VND_PK
+    </statement>
+
+    <statement id="getPoOrdNum" parameterClass="Map" resultClass="String">
+        SELECT DISTINCT
+            PO_ORD_NUM
+        FROM
+            VND_INV_BOL_WRK
+        WHERE
+            GLBL_CMPY_CD = #glblCmpyCd#
+        AND VND_INV_NUM  = #vndInvNum#
+        AND EZCANCELFLAG = '0'
+    </statement>
+
+    <statement id="getPrchReqDtl" parameterClass="Map" resultClass="Map">
+        SELECT
+            PRD.PRCH_REQ_NUM
+           ,PRD.PRCH_REQ_LINE_NUM
+           ,PRD.PRCH_REQ_LINE_SUB_NUM
+           ,PRD.MDSE_CD
+           ,PRD.SHIP_QTY
+        <!-- start 2016/12/13 QC#16132 MOD -->
+           ,NVL(DVD.VND_RTRN_COA_ACCT_CD, CPA.COA_ACCT_CD)  COA_ACCT_CD
+        <!-- end 2016/12/13 QC#16132 MOD -->
+           ,PR.PRCH_REQ_TP_CD
+        FROM
+            PRCH_REQ_DTL    PRD
+           ,PRCH_REQ        PR
+        <!-- start 2016/12/13 QC#16132 ADD -->
+           ,VND             DVD
+           ,MDSE            DMI
+           ,COA_PROJ_ACCT   CPA
+        <!-- end 2016/12/13 QC#16132 ADD -->
+        WHERE
+            PRD.GLBL_CMPY_CD            = #glblCmpyCd#
+        AND PRD.PRCH_REQ_NUM            = #prchReqNum#
+        AND PRD.MDSE_CD                 = #mdseCd#
+        AND PRD.PRCH_REQ_LINE_STS_CD    IN (#prchReqLineSts30#, #prchReqLineSts31#, #prchReqLineSts90#)
+        AND PRD.EZCANCELFLAG            = '0'
+        AND PRD.GLBL_CMPY_CD            = PR.GLBL_CMPY_CD
+        AND PRD.PRCH_REQ_NUM            = PR.PRCH_REQ_NUM
+        AND PR.EZCANCELFLAG             = '0'
+        <!-- start 2016/12/13 QC#16132 ADD -->
+        AND PRD.GLBL_CMPY_CD            = DVD.GLBL_CMPY_CD(+)
+        AND DVD.INV_VND_CD(+)           = #invVndCd#
+        AND DVD.EZCANCELFLAG(+)         = '0'
+        AND PRD.GLBL_CMPY_CD            = DMI.GLBL_CMPY_CD(+)
+        AND PRD.MDSE_CD                 = DMI.MDSE_CD(+)
+        AND DMI.EZCANCELFLAG(+)         = '0'
+        AND DMI.GLBL_CMPY_CD            = CPA.GLBL_CMPY_CD(+)
+        AND DMI.COA_MDSE_TP_CD          = CPA.COA_PROJ_CD(+)
+        AND CPA.COA_PROJ_ACCT_TP_CD(+)  = #coaProjAcctTpAccrual#
+        AND CPA.EZCANCELFLAG(+)         = '0'
+        <!-- end 2016/12/13 QC#16132 ADD -->
+        ORDER BY
+            PRD.PRCH_REQ_LINE_NUM
+           ,PRD.PRCH_REQ_LINE_SUB_NUM
+    </statement>
+
+    <statement id="sumVndInvLine" parameterClass="Map" resultClass="Map">
+    <!-- start 2018/03/27 QC#20316 MOD -->
+    <!--    SELECT
+              VILW.VND_INV_NUM
+            , VILW.VND_MDSE_CD
+            , VILW.MDSE_NM
+            , SUM(NVL(VILW.SHIP_QTY, 0)) AS SUM_SHIP_QTY
+            , SUM(NVL(VILW.VND_INV_LINE_DEAL_NET_AMT, 0)) AS SUM_VND_INV_LINE_DEAL_NET_AMT
+            , SUM(NVL(VILW.VND_INV_LINE_DEAL_FRT_AMT, 0)) AS SUM_VND_INV_LINE_DEAL_FRT_AMT
+            , SUM(NVL(VILW.VND_INV_LINE_DEAL_TAX_AMT, 0)) AS SUM_VND_INV_LINE_DEAL_TAX_AMT
+            , SUM(NVL(VILW.DEAL_GRS_TOT_PRC_AMT, 0)) AS SUM_DEAL_GRS_TOT_PRC_AMT
+        FROM
+            VND_INV_LINE_WRK    VILW
+        WHERE
+            VILW.GLBL_CMPY_CD = #glblCmpyCd#
+        AND VILW.VND_INV_NUM  = #vndInvNum#
+        AND VILW.EZCANCELFLAG = '0'
+        GROUP BY VILW.VND_INV_NUM, VILW.VND_MDSE_CD, VILW.MDSE_NM
+    -->
+        SELECT
+              VILW.VND_INV_NUM
+            , VILW.VND_MDSE_CD
+            , VILW.MDSE_NM
+            , NVL(VILW.SHIP_QTY, 0) AS SUM_SHIP_QTY
+            , NVL(VILW.VND_INV_LINE_DEAL_NET_AMT, 0) AS SUM_VND_INV_LINE_DEAL_NET_AMT
+            , NVL(VILW.VND_INV_LINE_DEAL_FRT_AMT, 0) AS SUM_VND_INV_LINE_DEAL_FRT_AMT
+            , NVL(VILW.VND_INV_LINE_DEAL_TAX_AMT, 0) AS SUM_VND_INV_LINE_DEAL_TAX_AMT
+            , NVL(VILW.DEAL_GRS_TOT_PRC_AMT, 0) AS SUM_DEAL_GRS_TOT_PRC_AMT
+        FROM
+            VND_INV_LINE_WRK    VILW
+        WHERE
+            VILW.GLBL_CMPY_CD = #glblCmpyCd#
+        AND VILW.VND_INV_NUM  = #vndInvNum#
+        AND VILW.EZCANCELFLAG = '0'
+        ORDER BY 
+            VILW.VND_INV_NUM ASC,
+            VILW.VND_INV_BOL_LINE_NUM ASC,
+            VILW.VND_INV_LINE_NUM ASC,
+            VILW.VND_INV_LINE_SUB_NUM ASC,
+            VILW.VND_INV_LINE_SUB_TRX_NUM ASC
+    <!-- end 2018/03/27 QC#20316 MOD -->
+    </statement>
+
+    <!-- start 2018/05/14 QC#25601 ADD -->
+    <statement id="getVndRtrnNum" parameterClass="Map" resultClass="String">
+        SELECT 
+            VND_RTRN_NUM
+        FROM
+            VND_RTRN
+        WHERE
+            GLBL_CMPY_CD = #glblCmpyCd#
+        AND VND_RTRN_NUM  = #vndRtrnNum#
+        AND EZCANCELFLAG = '0'
+        <!-- start 2020/05/20 QC#56270 ADD -->
+        AND (
+             BILL_TO_VND_CD IN (
+                                SELECT V.VND_CD
+                                FROM S21_CSA_APPS.VND      V
+                                    ,S21_CSA_APPS.PRNT_VND PV
+                                WHERE PV.PRNT_VND_PK = V.PRNT_VND_PK
+                                     <iterate property="coaAfflCd" var="coaAfflCd[]" open="AND PV.COA_AFFL_CD NOT IN (" close=")" conjunction=",">
+                                          #coaAfflCd[]#
+                                     </iterate>
+                                )
+            OR
+            DEBIT_TO_VND_CD IN (
+                                SELECT V.VND_CD
+                                FROM S21_CSA_APPS.VND      V
+                                    ,S21_CSA_APPS.PRNT_VND PV
+                                WHERE PV.PRNT_VND_PK = V.PRNT_VND_PK
+                                     <iterate property="coaAfflCd" var="coaAfflCd[]" open="AND PV.COA_AFFL_CD NOT IN (" close=")" conjunction=",">
+                                          #coaAfflCd[]#
+                                     </iterate>
+                               )
+           OR
+           SHIP_TO_VND_CD IN (
+                              SELECT V.VND_CD
+                              FROM S21_CSA_APPS.VND      V
+                                  ,S21_CSA_APPS.PRNT_VND PV
+                              WHERE PV.PRNT_VND_PK = V.PRNT_VND_PK
+                                     <iterate property="coaAfflCd" var="coaAfflCd[]" open="AND PV.COA_AFFL_CD NOT IN (" close=")" conjunction=",">
+                                          #coaAfflCd[]#
+                                     </iterate>
+                             )
+           )
+           <!-- end   2020/05/20 QC#56270 ADD -->
+    </statement>
+    <!-- end 2018/05/14 QC#25601 ADD -->
+
+   <!-- START 2019/04/09 QC#31071 ADD-->
+   <statement id="getPaySiteVndInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+            INLINE2.VND_PK
+           ,INLINE2.PRNT_VND_PK
+           ,INLINE1.INV_VND_CD
+           ,INLINE2.SPLY_COA_CMPY_CD
+           ,INLINE2.SPLY_COA_BR_CD
+           ,INLINE2.SPLY_COA_CC_CD
+           ,INLINE2.SPLY_COA_ACCT_CD
+           ,INLINE2.SPLY_COA_PROD_CD
+           ,INLINE2.SPLY_COA_CH_CD
+           ,INLINE2.SPLY_COA_AFFL_CD
+           ,INLINE2.SPLY_COA_PROJ_CD
+           ,INLINE2.SPLY_COA_EXTN_CD
+           ,INLINE2.SPLY_PMT_FLG
+           ,INLINE1.PRNT_VND_CD
+        FROM
+             (
+                SELECT
+                     PV.GLBL_CMPY_CD    AS GLBL_CMPY_CD
+                    ,PV.PRNT_VND_CD     AS PRNT_VND_CD
+                    ,V1.VND_CD          AS VND_CD
+                    ,MIN(V2.VND_CD)     AS INV_VND_CD
+                FROM
+                     PRNT_VND PV
+                    ,VND V1
+                    ,VND V2
+                WHERE 
+                    PV.GLBL_CMPY_CD     = #glblCmpyCd#
+                AND PV.GLBL_CMPY_CD     = V1.GLBL_CMPY_CD
+                AND PV.GLBL_CMPY_CD     = V2.GLBL_CMPY_CD(+)
+                AND PV.PRNT_VND_PK      = V1.PRNT_VND_PK
+                AND PV.PRNT_VND_PK      = V2.PRNT_VND_PK(+)
+                AND V1.VND_CD           = #invVndCd#
+                AND V1.SPLY_PMT_FLG     = #splyPmtFlgN#
+                AND V2.SPLY_PMT_FLG(+)  = #splyPmtFlgY#
+                AND PV.EZCANCELFLAG     = '0'
+                AND V1.EZCANCELFLAG     = '0'
+                AND V2.EZCANCELFLAG(+)  = '0'
+                GROUP BY PV.GLBL_CMPY_CD, PV.PRNT_VND_CD, PV.PRNT_VND_NM, V1.VND_CD
+             )        INLINE1
+            ,VND      INLINE2
+        WHERE
+            INLINE1.GLBL_CMPY_CD = INLINE2.GLBL_CMPY_CD
+        AND INLINE1.INV_VND_CD   = INLINE2.VND_CD
+        AND INLINE2.EZCANCELFLAG = '0'
+    </statement>
+    <!-- END   2019/04/09 QC#31071 ADD-->
+</sqlMap>

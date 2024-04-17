@@ -1,0 +1,1781 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NPAB130001">
+
+    <statement id="getPoAndVendorReturnData" parameterClass="Map">
+    <!-- START 05/11/2016 R.Shimamoto [V2.0 MOD]  -->
+    <!-- PO -->
+    WITH SCUBE_MDSE_V AS (
+                    SELECT
+                        A1.MDSE_CD
+                        ,A1.SPLY_ITEM_NUM
+                        ,A1.GLBL_CMPY_CD
+                        ,CPV.P_CODE_VENDR   AS CUSA_VND_CD
+                    FROM
+                        (SELECT
+                              AD.GLBL_CMPY_CD
+                             ,AD.MDSE_CD
+                             ,SPLY_ITEM_NUM
+                             ,AD.ASL_DTL_PK
+                             ,MAX(NVL(AD.EFF_FROM_DT, #effFromDtDefalut#)) OVER (PARTITION BY AD.MDSE_CD) MAX_EFF_FROM_DT
+                             ,AD.EFF_FROM_DT
+                        FROM
+                            ASL_DTL AD
+                            ,PRNT_CMPY_VND PV
+                        WHERE  AD.GLBL_CMPY_CD      =    PV.GLBL_CMPY_CD
+                        AND    AD.EZCANCELFLAG      =    '0'
+                        AND    PV.PRNT_CMPY_VND_CD  =    AD.VND_CD
+                        <isNotNull property="vndSysTpCdList">
+                           <iterate property="vndSysTpCdList" var="vndSysTpCdList[]" open="AND PV.VND_SYS_TP_CD IN (" close=")" conjunction=",">
+                             #vndSysTpCdList[]#
+                           </iterate> 
+                        </isNotNull>
+                        AND    PV.EZCANCELFLAG      =    '0'
+                        ) A1
+                        ,CSA_PRT_V     CPV
+                        ,DS_COND_CONST DCC
+                    WHERE  A1.EFF_FROM_DT           = A1.MAX_EFF_FROM_DT
+                    AND    CPV.P_PARTS_NUM          = A1.SPLY_ITEM_NUM
+                    <isNotNull property="exclMdseCdList">
+                        <iterate property="exclMdseCdList" var="exclMdseCdList[]" open="AND A1.MDSE_CD NOT IN (" close=")" conjunction=",">
+                        #exclMdseCdList[]#
+                        </iterate> 
+                    </isNotNull>
+                    AND    CPV.P_CODE_VENDR         = DCC.DS_COND_CONST_VAL_TXT_01
+                    AND    DCC.GLBL_CMPY_CD         = A1.GLBL_CMPY_CD
+                    AND    DCC.DS_COND_CONST_GRP_ID = #dsCondConstGrpId#
+                    AND    CPV.EZCANCELFLAG         = '0'
+                    AND    DCC.EZCANCELFLAG         = '0'
+            )
+    SELECT
+            V1.PO_ORD_NUM
+            ,V1.PO_APVL_DT
+            ,V1.VND_CD
+            ,V1.MDSE_CD
+            ,SUM(V1.PO_BAL_QTY)  PO_BAL_QTY
+            ,V1.SHPG_SVC_LVL_CD
+            ,V1.CINC_GLBL_WH_CD
+            ,NULL AS CINC_SPLY_GLBL_WH_CD
+            ,(SELECT
+                        MAX(RH.LTST_WH_IN_ETA_DT)
+                    FROM
+                        RWS_HDR RH
+                        ,RWS_DTL RD 
+                    WHERE
+                        V1.GLBL_CMPY_CD              = RH.GLBL_CMPY_CD
+                        AND  V1.PO_ORD_NUM           = RH.PO_RCV_TRX_HDR_NUM
+                        AND  RH.GLBL_CMPY_CD         = RD.GLBL_CMPY_CD
+                        AND  RH.RWS_NUM              = RD.RWS_NUM
+                        <!-- START 2018/08/03 S.Katsuma [QC#25713,DEL] -->
+                        <!-- AND  RD.PO_RCV_TRX_LINE_NUM  = V1.PO_ORD_DTL_LINE_NUM -->
+                        <!-- END 2018/08/03 S.Katsuma [QC#25713,DEL] -->
+                        AND  RH.EZCANCELFLAG         = '0'
+                        AND  RD.EZCANCELFLAG         = '0'
+            ) AS ARV_DT
+            ,V1.GLBL_CMPY_CD
+            ,V1.TRD_PTNR_SHPG_METH_CD
+            ,(SELECT
+                GL.GLBL_CMPY_CD
+            FROM
+                VND VD
+                ,GLBL_CMPY GL
+            WHERE
+                V1.GLBL_CMPY_CD            = VD.GLBL_CMPY_CD
+                AND  V1.VND_CD             = VD.VND_CD  
+                AND  GL.COA_AFFL_CD        = VD.COA_AFFL_CD
+                AND  VD.EZCANCELFLAG       = '0'
+                AND  GL.EZCANCELFLAG       = '0'
+            ) AS CINC_SPLY_GLBL_CMPY_CD
+            ,NULL AS CINC_PO_GLBL_CATG_CD
+            ,V1.CUSA_VND_CD
+        FROM
+            (
+            SELECT
+                PO.PO_ORD_NUM
+                ,PO.PO_APVL_DT
+                ,PO.VND_CD
+                ,PD.PO_ORD_DTL_LINE_NUM
+                ,PD.MDSE_CD
+                ,PD.SHPG_SVC_LVL_CD
+                ,PD.PO_BAL_QTY
+                ,(SELECT
+                      CASE
+                            WHEN A.CNT_A &gt; 0 THEN (SELECT
+                                                        CGWC.CINC_GLBL_WH_CD
+                                                  FROM
+                                                        CINC_GLBL_WH_CONV CGWC
+                                                  WHERE RW.GLBL_CMPY_CD    = CGWC.GLBL_CMPY_CD
+                                                  AND RW.RTL_WH_CD         = CGWC.RTL_WH_CD
+                                                  AND CGWC.WH_OWNR_CD      = #whOwnrCdAst#
+                                                  AND CGWC.LOC_TP_CD       = #locTpCdAst#
+                                                  AND CGWC.EZCANCELFLAG    = '0')
+                            WHEN B.CNT_B &gt; 0 THEN (SELECT
+                                                        CGWC.CINC_GLBL_WH_CD
+                                                  FROM
+                                                        CINC_GLBL_WH_CONV CGWC
+                                                  WHERE RW.GLBL_CMPY_CD    = CGWC.GLBL_CMPY_CD
+                                                  AND RW.WH_OWNR_CD        = CGWC.WH_OWNR_CD
+                                                  AND CGWC.RTL_WH_CD       = #rtlWhCdAst#
+                                                  AND CGWC.LOC_TP_CD       = #locTpCdAst#
+                                                  AND CGWC.EZCANCELFLAG    = '0')
+                            WHEN C.CNT_C &gt; 0 THEN (SELECT
+                                                        CGWC.CINC_GLBL_WH_CD
+                                                  FROM
+                                                        CINC_GLBL_WH_CONV CGWC
+                                                  WHERE RW.GLBL_CMPY_CD    = CGWC.GLBL_CMPY_CD
+                                                  AND RW.LOC_TP_CD         = CGWC.LOC_TP_CD
+                                                  AND CGWC.RTL_WH_CD       = #rtlWhCdAst#
+                                                  AND CGWC.WH_OWNR_CD      = #whOwnrCdAst#
+                                                  AND CGWC.EZCANCELFLAG    = '0')
+                            ELSE (SELECT
+                                       CGWC.CINC_GLBL_WH_CD
+                                  FROM
+                                       CINC_GLBL_WH_CONV CGWC
+                                  WHERE CGWC.GLBL_CMPY_CD  = #glblCmpyCd#
+                                  AND CGWC.RTL_WH_CD       = #rtlWhCdAst#
+                                  AND CGWC.WH_OWNR_CD      = #whOwnrCdAst#
+                                  AND CGWC.LOC_TP_CD       = #locTpCdAst#
+                                  AND CGWC.EZCANCELFLAG    = '0')
+                            END AS CINC_GLBL_WH_CD_EN
+                FROM
+                    (SELECT
+                            COUNT(CGWC.CINC_GLBL_WH_CD) CNT_A
+                        FROM
+                            CINC_GLBL_WH_CONV CGWC
+                        WHERE
+                            RW.GLBL_CMPY_CD          = CGWC.GLBL_CMPY_CD
+                            AND RW.RTL_WH_CD         = CGWC.RTL_WH_CD
+                            AND CGWC.WH_OWNR_CD      = #whOwnrCdAst#
+                            AND CGWC.LOC_TP_CD       = #locTpCdAst#
+                            AND CGWC.EZCANCELFLAG    = '0'
+                            AND ROWNUM               = #numOne#
+                    ) A
+                    ,(SELECT
+                            COUNT(CGWC.CINC_GLBL_WH_CD) CNT_B
+                        FROM
+                            CINC_GLBL_WH_CONV CGWC
+                        WHERE
+                            RW.GLBL_CMPY_CD          = CGWC.GLBL_CMPY_CD
+                            AND RW.WH_OWNR_CD        = CGWC.WH_OWNR_CD
+                            AND CGWC.RTL_WH_CD       = #rtlWhCdAst#
+                            AND CGWC.LOC_TP_CD       = #locTpCdAst#
+                            AND CGWC.EZCANCELFLAG    = '0'
+                            AND ROWNUM               = #numOne#
+                    ) B
+                    ,(SELECT
+                            COUNT(CGWC.CINC_GLBL_WH_CD) CNT_C
+                        FROM
+                            CINC_GLBL_WH_CONV CGWC
+                        WHERE
+                            RW.GLBL_CMPY_CD          = CGWC.GLBL_CMPY_CD
+                            AND RW.LOC_TP_CD         = CGWC.LOC_TP_CD
+                            AND CGWC.RTL_WH_CD       = #rtlWhCdAst#
+                            AND CGWC.WH_OWNR_CD      = #whOwnrCdAst#
+                            AND CGWC.EZCANCELFLAG    = '0'
+                            AND ROWNUM               = #numOne#
+                    ) C
+               ) AS CINC_GLBL_WH_CD
+                ,(SELECT
+                        SR.TRD_PTNR_SHPG_METH_CD
+                    FROM
+                        TRD_PTNR_SHPG_X_REF SR
+                    WHERE
+                        SR.GLBL_CMPY_CD             = PD.GLBL_CMPY_CD
+                        AND  SR.VND_CD              = #vndCdCinc#
+                        AND  SR.SHPG_SVC_LCL_CD     = PD.SHPG_SVC_LVL_CD
+                        AND  SR.CARR_CD             = #carrCd#
+                        AND  SR.FRT_COND_CD         = #frtCondCd#
+                        AND  SR.EZCANCELFLAG        = '0'
+                ) AS TRD_PTNR_SHPG_METH_CD
+                ,PD.GLBL_CMPY_CD
+                ,SMV.CUSA_VND_CD
+            FROM
+                PO PO
+                ,PO_DTL PD
+                ,PO_LINE_TP PLT
+                ,DS_INVTY_LOC_V DIL
+                ,RTL_WH RW
+                ,SCUBE_MDSE_V SMV
+                ,INVTY_OWNR IO
+            WHERE
+                PO.GLBL_CMPY_CD             = #glblCmpyCd#
+                --PO_DTL JOIN
+                AND  PO.GLBL_CMPY_CD        = PD.GLBL_CMPY_CD
+                AND  PO.PO_ORD_NUM          = PD.PO_ORD_NUM
+                --Status
+                AND (PD.PO_STS_CD           = #poStsValidated#
+                    OR  PD.PO_STS_CD        = #poStsConfirmed#
+                    OR  PD.PO_STS_CD        = #poStsReceiving#
+                    OR  PD.PO_STS_CD        = #poStsError#)
+                AND  PD.PO_BAL_QTY          &gt; #qtyZero#
+                <isNotNull property="exclLocCdList">
+                <iterate property="exclLocCdList" var="exclLocCdList[]" open="AND PO.INVTY_LOC_CD NOT IN (" close=")" conjunction=",">
+                #exclLocCdList[]#
+                </iterate> 
+                </isNotNull>
+                <isNotNull property="exclLocCdList">
+                <iterate property="exclLocCdList" var="exclLocCdList[]" open="AND PD.INVTY_LOC_CD NOT IN (" close=")" conjunction=",">
+                #exclLocCdList[]#
+                </iterate> 
+                </isNotNull>
+                -- PO_LINE_TP JOIN
+                AND PD.GLBL_CMPY_CD        = PLT.GLBL_CMPY_CD
+                AND PD.PO_LINE_TP_CD       = PLT.PO_LINE_TP_CD
+                AND PLT.RWS_AUTO_CRAT_FLG  = #rwsAutoCratFlg#
+                --DS_INVTY_LOC_V JOIN
+                AND PD.GLBL_CMPY_CD        = DIL.GLBL_CMPY_CD
+                AND PD.INVTY_LOC_CD        = DIL.INVTY_LOC_CD
+                <isNotNull property="technician">
+                AND  DIL.INVTY_LOC_TP_CD   != #technician#
+                </isNotNull>
+                <!-- Add Start 2020/02/04 QC#55572 -->
+                <isNotNull property="exclSwhCdList">
+                AND <iterate property="exclSwhCdList" var="exclSwhCdList[]" open="DIL.RTL_SWH_CD NOT IN (" close=")" conjunction=",">
+                    #exclSwhCdList[]#
+                    </iterate>
+                </isNotNull>
+                <!-- Add End 2020/02/04 QC#55572 -->
+                --SCUBE_MDSE_V JOIN
+                AND PD.GLBL_CMPY_CD        = SMV.GLBL_CMPY_CD
+                AND PD.MDSE_CD             = SMV.MDSE_CD
+                --RTL_WH JOIN
+                AND DIL.GLBL_CMPY_CD       = RW.GLBL_CMPY_CD
+                AND DIL.RTL_WH_CD          = RW.RTL_WH_CD
+                --INVTY_OWNR JOIN
+                AND RW.GLBL_CMPY_CD        = IO.GLBL_CMPY_CD
+                AND RW.INVTY_OWNR_CD       = IO.INVTY_OWNR_CD
+                AND IO.CMPY_INVTY_FLG      = #cmpyInvtyFlg#
+                AND PO.EZCANCELFLAG        = '0'
+                AND PD.EZCANCELFLAG        = '0'
+                AND DIL.EZCANCELFLAG       = '0'
+                AND RW.EZCANCELFLAG        = '0'
+                AND PLT.EZCANCELFLAG       = '0'
+                AND IO.EZCANCELFLAG        = '0'
+            ) V1
+            GROUP BY 
+                V1.VND_CD
+                ,V1.PO_APVL_DT
+                ,V1.PO_ORD_NUM
+                ,V1.MDSE_CD
+                ,V1.TRD_PTNR_SHPG_METH_CD
+                ,V1.SHPG_SVC_LVL_CD
+                ,V1.CINC_GLBL_WH_CD
+                ,V1.GLBL_CMPY_CD
+                ,V1.CUSA_VND_CD
+                <!-- START 2018/08/03 S.Katsuma [QC#25713,DEL] -->
+                <!-- ,V1.PO_ORD_DTL_LINE_NUM -->
+                <!-- END 2018/08/03 S.Katsuma [QC#25713,DEL] -->
+    UNION
+    
+    <!-- VendorReturn -->
+    SELECT
+            V2.VND_RTRN_NUM
+            ,V2.VND_RTRN_SUBMT_DT
+            ,V2.BILL_TO_VND_CD
+            ,V2.MDSE_CD
+            ,SUM(V2.RTRN_QTY * (-1))
+            ,V2.REQ_SHPG_SVC_LVL_CD
+            ,V2.CINC_GLBL_WH_CD
+            ,NULL AS CINC_SPLY_GLBL_WH_CD
+            ,V2.RSD_DT
+            ,V2.GLBL_CMPY_CD
+            ,(SELECT
+                    SR.TRD_PTNR_SHPG_METH_CD
+              FROM
+                    TRD_PTNR_SHPG_X_REF SR
+              WHERE
+                    SR.GLBL_CMPY_CD             = V2.GLBL_CMPY_CD
+                    AND  SR.SHPG_SVC_LCL_CD     = V2.REQ_SHPG_SVC_LVL_CD
+                    AND  SR.VND_CD              = #vndCdCinc#
+                    AND  SR.CARR_CD             = #carrCd# 
+                    AND  SR.FRT_COND_CD         = #frtCondCd#
+                    AND  SR.EZCANCELFLAG        = '0'
+            ) AS TRD_PTNR_SHPG_METH_CD
+            ,(SELECT
+                    GL.GLBL_CMPY_CD
+              FROM
+                    VND VD
+                   ,GLBL_CMPY GL
+              WHERE
+                    V2.GLBL_CMPY_CD             = VD.GLBL_CMPY_CD
+                    AND  V2.BILL_TO_VND_CD      = VD.VND_CD  
+                    AND  GL.COA_AFFL_CD         = VD.COA_AFFL_CD
+                    AND  VD.EZCANCELFLAG        = '0'
+                    AND  GL.EZCANCELFLAG        = '0'
+            ) AS CINC_SPLY_GLBL_CMPY_CD
+            ,NULL AS CINC_PO_GLBL_CATG_CD
+            ,V2.CUSA_VND_CD
+        FROM
+            (
+            SELECT
+                  VR.VND_RTRN_NUM
+                 ,VR.VND_RTRN_SUBMT_DT
+                 ,VR.BILL_TO_VND_CD
+                 ,VRD.MDSE_CD
+                 ,VRD.RTRN_QTY
+                 ,SP.REQ_SHPG_SVC_LVL_CD
+                 ,(SELECT
+                      CASE
+                            WHEN A.CNT_A &gt; 0 THEN (SELECT
+                                                        CGWC.CINC_GLBL_WH_CD
+                                                  FROM
+                                                        CINC_GLBL_WH_CONV CGWC
+                                                  WHERE RW.GLBL_CMPY_CD    = CGWC.GLBL_CMPY_CD
+                                                  AND RW.RTL_WH_CD         = CGWC.RTL_WH_CD
+                                                  AND CGWC.WH_OWNR_CD      = #whOwnrCdAst#
+                                                  AND CGWC.LOC_TP_CD       = #locTpCdAst#
+                                                  AND CGWC.EZCANCELFLAG    = '0')
+                            WHEN B.CNT_B &gt; 0 THEN (SELECT
+                                                        CGWC.CINC_GLBL_WH_CD
+                                                  FROM
+                                                        CINC_GLBL_WH_CONV CGWC
+                                                  WHERE RW.GLBL_CMPY_CD    = CGWC.GLBL_CMPY_CD
+                                                  AND RW.WH_OWNR_CD        = CGWC.WH_OWNR_CD
+                                                  AND CGWC.RTL_WH_CD       = #rtlWhCdAst#
+                                                  AND CGWC.LOC_TP_CD       = #locTpCdAst#
+                                                  AND CGWC.EZCANCELFLAG    = '0')
+                            WHEN C.CNT_C &gt; 0 THEN (SELECT
+                                                        CGWC.CINC_GLBL_WH_CD
+                                                  FROM
+                                                        CINC_GLBL_WH_CONV CGWC
+                                                  WHERE RW.GLBL_CMPY_CD    = CGWC.GLBL_CMPY_CD
+                                                  AND RW.LOC_TP_CD         = CGWC.LOC_TP_CD
+                                                  AND CGWC.RTL_WH_CD       = #rtlWhCdAst#
+                                                  AND CGWC.WH_OWNR_CD      = #whOwnrCdAst#
+                                                  AND CGWC.EZCANCELFLAG    = '0')
+                            ELSE (SELECT
+                                       CGWC.CINC_GLBL_WH_CD
+                                  FROM
+                                       CINC_GLBL_WH_CONV CGWC
+                                  WHERE CGWC.GLBL_CMPY_CD  = #glblCmpyCd#
+                                  AND CGWC.RTL_WH_CD       = #rtlWhCdAst#
+                                  AND CGWC.WH_OWNR_CD      = #whOwnrCdAst#
+                                  AND CGWC.LOC_TP_CD       = #locTpCdAst#
+                                  AND CGWC.EZCANCELFLAG    = '0')
+                            END AS CINC_GLBL_WH_CD_EN
+                FROM
+                    (SELECT
+                            COUNT(CGWC.CINC_GLBL_WH_CD) CNT_A
+                        FROM
+                            CINC_GLBL_WH_CONV CGWC
+                        WHERE
+                            RW.GLBL_CMPY_CD          = CGWC.GLBL_CMPY_CD
+                            AND RW.RTL_WH_CD         = CGWC.RTL_WH_CD
+                            AND CGWC.WH_OWNR_CD      = #whOwnrCdAst#
+                            AND CGWC.LOC_TP_CD       = #locTpCdAst#
+                            AND ROWNUM               = #numOne#
+                            AND CGWC.EZCANCELFLAG    = '0'
+                    ) A
+                    ,(SELECT
+                            COUNT(CGWC.CINC_GLBL_WH_CD) CNT_B
+                        FROM
+                            CINC_GLBL_WH_CONV CGWC
+                        WHERE
+                            RW.GLBL_CMPY_CD          = CGWC.GLBL_CMPY_CD
+                            AND RW.WH_OWNR_CD        = CGWC.WH_OWNR_CD
+                            AND CGWC.RTL_WH_CD       = #rtlWhCdAst#
+                            AND CGWC.LOC_TP_CD       = #locTpCdAst#
+                            AND ROWNUM               = #numOne#
+                            AND CGWC.EZCANCELFLAG    = '0'
+                    ) B
+                    ,(SELECT
+                            COUNT(CGWC.CINC_GLBL_WH_CD) CNT_C
+                        FROM
+                            CINC_GLBL_WH_CONV CGWC
+                        WHERE
+                            RW.GLBL_CMPY_CD          = CGWC.GLBL_CMPY_CD
+                            AND RW.LOC_TP_CD         = CGWC.LOC_TP_CD
+                            AND CGWC.RTL_WH_CD       = #rtlWhCdAst#
+                            AND CGWC.WH_OWNR_CD      = #whOwnrCdAst#
+                            AND ROWNUM               = #numOne#
+                            AND CGWC.EZCANCELFLAG    = '0'
+                    ) C
+               ) AS CINC_GLBL_WH_CD
+               ,VR.RSD_DT
+               ,VR.GLBL_CMPY_CD
+               ,SMV.CUSA_VND_CD
+            FROM
+                  VND_RTRN VR
+                 ,VND_RTRN_DTL VRD
+                 ,SHPG_PLN SP
+                 ,DS_INVTY_LOC_V DIL
+                 ,RTL_WH RW
+                 ,SCUBE_MDSE_V SMV
+                 ,INVTY_OWNR IO
+            WHERE
+                  VR.GLBL_CMPY_CD          = #glblCmpyCd#
+             AND  VR.GLBL_CMPY_CD          = VRD.GLBL_CMPY_CD
+             AND  SP.GLBL_CMPY_CD(+)       = VRD.GLBL_CMPY_CD
+             AND  VR.VND_RTRN_NUM          = VRD.VND_RTRN_NUM
+             --Status
+             AND (VRD.VND_RTRN_DTL_CANC_DT IS NULL
+             AND  VRD.VND_RTRN_DTL_CLO_DT  IS NULL)
+             AND  SP.GLBL_CMPY_CD(+)       = VRD.GLBL_CMPY_CD
+             AND  SP.TRX_HDR_NUM(+)        = VRD.VND_RTRN_NUM
+             AND  SP.TRX_LINE_NUM(+)       = VRD.TRX_LINE_NUM
+             AND  SP.TRX_LINE_SUB_NUM(+)   = VRD.TRX_LINE_SUB_NUM
+             AND  VR.EZCANCELFLAG          = '0'
+             AND  VRD.EZCANCELFLAG         = '0'
+             AND  SP.EZCANCELFLAG(+)       = '0'
+             AND  VRD.RTRN_QTY            != #qtyZero#
+             --DS_INVTY_LOC_V JOIN
+             AND  VR.GLBL_CMPY_CD          = DIL.GLBL_CMPY_CD
+             AND  VR.INVTY_LOC_CD          = DIL.INVTY_LOC_CD
+             <isNotNull property="technician">
+             AND  DIL.INVTY_LOC_TP_CD     != #technician#
+             </isNotNull>
+             <isNotNull property="exclLocCdList">
+             <iterate property="exclLocCdList" var="exclLocCdList[]" open="AND VR.INVTY_LOC_CD NOT IN (" close=")" conjunction=",">
+             #exclLocCdList[]#
+             </iterate> 
+             </isNotNull>
+             <!-- Add Start 2020/02/04 QC#55572 -->
+             <isNotNull property="exclSwhCdList">
+             AND <iterate property="exclSwhCdList" var="exclSwhCdList[]" open="DIL.RTL_SWH_CD NOT IN (" close=")" conjunction=",">
+                 #exclSwhCdList[]#
+                 </iterate>
+             </isNotNull>
+             <!-- Add End 2020/02/04 QC#55572 -->
+             --SCUBE_MDSE_V JOIN
+             AND VRD.GLBL_CMPY_CD          = SMV.GLBL_CMPY_CD
+             AND VRD.MDSE_CD               = SMV.MDSE_CD
+             --RTL_WH JOIN
+             AND DIL.GLBL_CMPY_CD          = RW.GLBL_CMPY_CD
+             AND DIL.RTL_WH_CD             = RW.RTL_WH_CD
+             --INVTY_OWNR JOIN
+             AND RW.GLBL_CMPY_CD           = IO.GLBL_CMPY_CD
+             AND RW.INVTY_OWNR_CD          = IO.INVTY_OWNR_CD
+             AND IO.CMPY_INVTY_FLG         = #cmpyInvtyFlg#
+             AND IO.EZCANCELFLAG           = '0'
+             AND DIL.EZCANCELFLAG          = '0'
+             AND RW.EZCANCELFLAG           = '0'
+             --Status
+             AND EXISTS(
+                       SELECT
+                           1
+                       FROM
+                           PRCH_REQ PR
+                           ,PRCH_REQ_APVL_STS PRAS
+                       WHERE
+                           PR.GLBL_CMPY_CD             = VR.GLBL_CMPY_CD
+                           AND PR.PRCH_REQ_NUM         = VR.VND_RTRN_NUM
+                           AND PR.PRCH_REQ_STS_CD      NOT IN(#prchReqStsCdClosed#, #prchReqStsCdCancelled#)
+                           --OrderType
+                           AND PR.PRCH_REQ_REC_TP_CD   IN (#prchReqRecTpCdInventoryRequest#)
+                           AND PR.PRCH_REQ_TP_CD       IN (#prchReqTpCdVendorReturn#)
+                           AND PR.GLBL_CMPY_CD         = PRAS.GLBL_CMPY_CD
+                           AND PR.PRCH_REQ_APVL_STS_CD = PRAS.PRCH_REQ_APVL_STS_CD
+                           AND PRAS.PRCH_REQ_APVL_FLG  = #prchReqApvlFlg#
+                           AND ROWNUM                  = #numOne#
+                           AND PR.EZCANCELFLAG         = '0'
+                           AND PRAS.EZCANCELFLAG       = '0'
+                       )
+       ) V2
+       GROUP BY 
+              V2.VND_RTRN_NUM
+              ,V2.VND_RTRN_SUBMT_DT
+              ,V2.BILL_TO_VND_CD
+              ,V2.MDSE_CD
+              ,V2.REQ_SHPG_SVC_LVL_CD
+              ,V2.RSD_DT
+              ,V2.CINC_GLBL_WH_CD
+              ,V2.GLBL_CMPY_CD
+              ,V2.CUSA_VND_CD
+    UNION
+    
+    <!-- WH Transfer  -->
+    SELECT
+        V3.CPO_ORD_NUM
+        ,TRIM(SUBSTR(V3.CPO_ORD_TS, #dateTrimStartIdx#, #dateTrimEndIdx#))  CPO_ORD_TS
+        ,V3.RTL_WH_CD
+        ,V3.MDSE_CD
+        ,SUM(V3.ORD_QTY) ORD_QTY
+        ,V3.SHPG_SVC_LVL_CD
+        ,V3.CINC_GLBL_WH_CD
+        ,V3.CINC_SPLY_GLBL_WH_CD
+        ,MAX(V3.RDD_DT) RDD_DT
+        ,V3.GLBL_CMPY_CD
+        ,(SELECT
+                CASE
+                    WHEN V3.TPSMC1 IS NOT NULL THEN V3.TPSMC1
+                    WHEN TPSMC2.TRD_PTNR_SHPG_METH_CD IS NOT NULL THEN TPSMC2.TRD_PTNR_SHPG_METH_CD
+                END AS TRD_PTNR_SHPG_METH_CD
+        FROM
+            (SELECT
+                SR.TRD_PTNR_SHPG_METH_CD
+            FROM
+                TRD_PTNR_SHPG_X_REF SR
+            WHERE
+                SR.GLBL_CMPY_CD             = V3.GLBL_CMPY_CD
+                AND  SR.SHPG_SVC_LCL_CD     = V3.SHPG_SVC_LVL_CD
+                AND  SR.VND_CD              = #vndCdCinc#
+                AND  SR.CARR_CD             = #carrCd#
+                AND  SR.FRT_COND_CD         = #frtCondCd#
+                AND  SR.EZCANCELFLAG        = '0'
+            ) TPSMC2
+        ) AS TRD_PTNR_SHPG_METH_CD
+        ,NULL AS CINC_SPLY_GLBL_CMPY_CD
+        ,V3.CINC_PO_GLBL_CATG_CD
+        ,V3.CUSA_VND_CD
+    FROM
+        (
+        SELECT
+        CP.CPO_ORD_NUM
+        ,CP.CPO_ORD_TS
+        <!-- QC#61578 Mod Start -->
+        --,CD.RTL_WH_CD
+        ,NVL(
+            (SELECT
+                CGWC.CINC_GLBL_WH_CD
+            FROM
+                CINC_GLBL_WH_CONV CGWC
+            WHERE
+                INVTY_LOC_CD_FROM.GLBL_CMPY_CD          = CGWC.GLBL_CMPY_CD
+                AND INVTY_LOC_CD_FROM.WH_OWNR_CD        = CGWC.WH_OWNR_CD
+                AND CGWC.RTL_WH_CD                      = #rtlWhCdAst#
+                AND CGWC.LOC_TP_CD                      = #locTpCdAst#
+                AND CGWC.EZCANCELFLAG                   = '0'
+                AND CGWC.WH_OWNR_CD                     = #mnx#)
+        ,CD.RTL_WH_CD) RTL_WH_CD
+        <!-- QC#61578 Mod End -->
+        ,CD.MDSE_CD
+        ,CD.ORD_QTY
+        ,CD.SHPG_SVC_LVL_CD
+        ,(SELECT
+            CASE
+                WHEN A.CNT_A &gt; 0 THEN (SELECT
+                                          CGWC.CINC_GLBL_WH_CD
+                                        FROM
+                                          CINC_GLBL_WH_CONV CGWC
+                                        WHERE INVTY_LOC_CD_TO.GLBL_CMPY_CD    = CGWC.GLBL_CMPY_CD
+                                        AND INVTY_LOC_CD_TO.RTL_WH_CD         = CGWC.RTL_WH_CD
+                                        AND CGWC.WH_OWNR_CD                   = #whOwnrCdAst#
+                                        AND CGWC.LOC_TP_CD                    = #locTpCdAst#
+                                        AND CGWC.EZCANCELFLAG                 = '0')
+                WHEN B.CNT_B &gt; 0 THEN (SELECT
+                                         CGWC.CINC_GLBL_WH_CD
+                                       FROM
+                                         CINC_GLBL_WH_CONV CGWC
+                                       WHERE INVTY_LOC_CD_TO.GLBL_CMPY_CD    = CGWC.GLBL_CMPY_CD
+                                       AND INVTY_LOC_CD_TO.WH_OWNR_CD        = CGWC.WH_OWNR_CD
+                                       AND CGWC.RTL_WH_CD                    = #rtlWhCdAst#
+                                       AND CGWC.LOC_TP_CD                    = #locTpCdAst#
+                                       AND CGWC.EZCANCELFLAG                 = '0')
+                WHEN C.CNT_C &gt; 0 THEN (SELECT
+                                         CGWC.CINC_GLBL_WH_CD
+                                       FROM
+                                         CINC_GLBL_WH_CONV CGWC
+                                       WHERE INVTY_LOC_CD_TO.GLBL_CMPY_CD    = CGWC.GLBL_CMPY_CD
+                                       AND INVTY_LOC_CD_TO.INVTY_LOC_TP_CD   = CGWC.LOC_TP_CD
+                                       AND CGWC.RTL_WH_CD                    = #rtlWhCdAst#
+                                       AND CGWC.WH_OWNR_CD                   = #whOwnrCdAst#
+                                       AND CGWC.EZCANCELFLAG                 = '0')
+                ELSE (SELECT
+                        CGWC.CINC_GLBL_WH_CD
+                    FROM
+                        CINC_GLBL_WH_CONV CGWC
+                    WHERE CGWC.GLBL_CMPY_CD  = #glblCmpyCd#
+                    AND CGWC.RTL_WH_CD       = #rtlWhCdAst#
+                    AND CGWC.WH_OWNR_CD      = #whOwnrCdAst#
+                    AND CGWC.LOC_TP_CD       = #locTpCdAst#
+                    AND CGWC.EZCANCELFLAG    = '0')
+                END AS CINC_GLBL_WH_CD_EN
+       FROM
+           (SELECT
+                COUNT(CGWC.CINC_GLBL_WH_CD) CNT_A
+            FROM
+                CINC_GLBL_WH_CONV CGWC
+            WHERE
+                INVTY_LOC_CD_TO.GLBL_CMPY_CD          = CGWC.GLBL_CMPY_CD
+                AND INVTY_LOC_CD_TO.RTL_WH_CD         = CGWC.RTL_WH_CD
+                AND CGWC.WH_OWNR_CD                   = #whOwnrCdAst#
+                AND CGWC.LOC_TP_CD                    = #locTpCdAst#
+                AND ROWNUM                            = #numOne#
+                AND CGWC.EZCANCELFLAG                 = '0'
+            ) A
+            ,(SELECT
+                COUNT(CGWC.CINC_GLBL_WH_CD) CNT_B
+            FROM
+                CINC_GLBL_WH_CONV CGWC
+            WHERE
+                INVTY_LOC_CD_TO.GLBL_CMPY_CD          = CGWC.GLBL_CMPY_CD
+                AND INVTY_LOC_CD_TO.WH_OWNR_CD        = CGWC.WH_OWNR_CD
+                AND CGWC.RTL_WH_CD                    = #rtlWhCdAst#
+                AND CGWC.LOC_TP_CD                    = #locTpCdAst#
+                AND ROWNUM                            = #numOne#
+                AND CGWC.EZCANCELFLAG                 = '0'
+            ) B
+            ,(SELECT
+                COUNT(CGWC.CINC_GLBL_WH_CD) CNT_C
+            FROM
+                CINC_GLBL_WH_CONV CGWC
+            WHERE
+                INVTY_LOC_CD_TO.GLBL_CMPY_CD          = CGWC.GLBL_CMPY_CD
+                AND INVTY_LOC_CD_TO.INVTY_LOC_TP_CD   = CGWC.LOC_TP_CD
+                AND CGWC.RTL_WH_CD                    = #rtlWhCdAst#
+                AND CGWC.WH_OWNR_CD                   = #whOwnrCdAst#
+                AND ROWNUM                            = #numOne#
+                AND CGWC.EZCANCELFLAG                 = '0'
+            ) C
+        ) AS CINC_GLBL_WH_CD
+        ,(SELECT
+                CASE
+                    WHEN A.CNT_A &gt; 0 THEN (SELECT
+                                              CGWC.CINC_GLBL_WH_CD
+                                           FROM
+                                              CINC_GLBL_WH_CONV CGWC
+                                           WHERE INVTY_LOC_CD_FROM.GLBL_CMPY_CD    = CGWC.GLBL_CMPY_CD
+                                           AND INVTY_LOC_CD_FROM.RTL_WH_CD         = CGWC.RTL_WH_CD
+                                           AND CGWC.WH_OWNR_CD                     = #whOwnrCdAst#
+                                           AND CGWC.LOC_TP_CD                      = #locTpCdAst#
+                                           AND CGWC.EZCANCELFLAG                   = '0')
+                    WHEN B.CNT_B &gt; 0 THEN (SELECT
+                                              CGWC.CINC_GLBL_WH_CD
+                                           FROM
+                                              CINC_GLBL_WH_CONV CGWC
+                                           WHERE INVTY_LOC_CD_FROM.GLBL_CMPY_CD    = CGWC.GLBL_CMPY_CD
+                                           AND INVTY_LOC_CD_FROM.WH_OWNR_CD        = CGWC.WH_OWNR_CD
+                                           AND CGWC.RTL_WH_CD                      = #rtlWhCdAst#
+                                           AND CGWC.LOC_TP_CD                      = #locTpCdAst#
+                                           AND CGWC.EZCANCELFLAG                   = '0')
+                    WHEN C.CNT_C &gt; 0 THEN (SELECT
+                                              CGWC.CINC_GLBL_WH_CD
+                                           FROM
+                                              CINC_GLBL_WH_CONV CGWC
+                                           WHERE INVTY_LOC_CD_FROM.GLBL_CMPY_CD    = CGWC.GLBL_CMPY_CD
+                                           AND INVTY_LOC_CD_FROM.INVTY_LOC_TP_CD   = CGWC.LOC_TP_CD
+                                           AND CGWC.RTL_WH_CD                      = #rtlWhCdAst#
+                                           AND CGWC.WH_OWNR_CD                     = #whOwnrCdAst#
+                                           AND CGWC.EZCANCELFLAG                   = '0')
+                    ELSE (SELECT
+                            CGWC.CINC_GLBL_WH_CD
+                        FROM
+                            CINC_GLBL_WH_CONV CGWC
+                        WHERE CGWC.GLBL_CMPY_CD  = #glblCmpyCd#
+                        AND CGWC.RTL_WH_CD       = #rtlWhCdAst#
+                        AND CGWC.WH_OWNR_CD      = #whOwnrCdAst#
+                        AND CGWC.LOC_TP_CD       = #locTpCdAst#
+                        AND CGWC.EZCANCELFLAG    = '0')
+                    END AS CINC_GLBL_WH_CD_EN
+       FROM
+           (SELECT
+                            COUNT(CGWC.CINC_GLBL_WH_CD) CNT_A
+                        FROM
+                            CINC_GLBL_WH_CONV CGWC
+                        WHERE
+                            INVTY_LOC_CD_FROM.GLBL_CMPY_CD          = CGWC.GLBL_CMPY_CD
+                            AND INVTY_LOC_CD_FROM.RTL_WH_CD         = CGWC.RTL_WH_CD
+                            AND CGWC.WH_OWNR_CD                     = #whOwnrCdAst#
+                            AND CGWC.LOC_TP_CD                      = #locTpCdAst#
+                            AND ROWNUM                              = #numOne#
+                            AND CGWC.EZCANCELFLAG                   = '0'
+                    ) A
+                    ,(SELECT
+                            COUNT(CGWC.CINC_GLBL_WH_CD) CNT_B
+                        FROM
+                            CINC_GLBL_WH_CONV CGWC
+                        WHERE
+                            INVTY_LOC_CD_FROM.GLBL_CMPY_CD          = CGWC.GLBL_CMPY_CD
+                            AND INVTY_LOC_CD_FROM.WH_OWNR_CD        = CGWC.WH_OWNR_CD
+                            AND CGWC.RTL_WH_CD                      = #rtlWhCdAst#
+                            AND CGWC.LOC_TP_CD                      = #locTpCdAst#
+                            AND ROWNUM                              = #numOne#
+                            AND CGWC.EZCANCELFLAG                   = '0'
+                    ) B
+                    ,(SELECT
+                            COUNT(CGWC.CINC_GLBL_WH_CD) CNT_C
+                        FROM
+                            CINC_GLBL_WH_CONV CGWC
+                        WHERE
+                            INVTY_LOC_CD_FROM.GLBL_CMPY_CD          = CGWC.GLBL_CMPY_CD
+                            AND INVTY_LOC_CD_FROM.INVTY_LOC_TP_CD   = CGWC.LOC_TP_CD
+                            AND CGWC.RTL_WH_CD                      = #rtlWhCdAst#
+                            AND CGWC.WH_OWNR_CD                     = #whOwnrCdAst#
+                            AND ROWNUM                              = #numOne#
+                            AND CGWC.EZCANCELFLAG                   = '0'
+                    ) C
+        ) AS CINC_SPLY_GLBL_WH_CD
+        ,CD.RDD_DT
+        ,(SELECT
+            CASE
+                WHEN A1.CNT_A1 &gt; 0 THEN (SELECT
+                                             WTCCC.CINC_PO_GLBL_CATG_CD
+                                         FROM
+                                             WH_TRNSF_CINC_CATG_CONV WTCCC
+                                         WHERE
+                                             INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                                             AND WTCCC.FROM_RTL_WH_CD       = INVTY_LOC_CD_FROM.RTL_WH_CD
+                                             AND WTCCC.FROM_WH_OWNR_CD      = #fromWhOwnrCdAst#
+                                             AND WTCCC.FROM_LOC_TP_CD       = #fromLocTpCdAst#
+                                             AND WTCCC.TO_RTL_WH_CD         = INVTY_LOC_CD_TO.RTL_WH_CD
+                                             AND WTCCC.TO_WH_OWNR_CD        = #toWhOwnrCdAst#
+                                             AND WTCCC.TO_LOC_TP_CD         = #toLocTpCdAst#
+                                             AND WTCCC.EZCANCELFLAG         = '0')
+                WHEN A2.CNT_A2 &gt; 0 THEN (SELECT
+                                             WTCCC.CINC_PO_GLBL_CATG_CD
+                                         FROM
+                                             WH_TRNSF_CINC_CATG_CONV WTCCC
+                                         WHERE
+                                             INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                                             AND WTCCC.FROM_RTL_WH_CD       = INVTY_LOC_CD_FROM.RTL_WH_CD
+                                             AND WTCCC.FROM_WH_OWNR_CD      = #fromWhOwnrCdAst#
+                                             AND WTCCC.FROM_LOC_TP_CD       = #fromLocTpCdAst#
+                                             AND WTCCC.TO_WH_OWNR_CD        = INVTY_LOC_CD_TO.WH_OWNR_CD
+                                             AND WTCCC.TO_RTL_WH_CD         = #toRtlWhCdAst#
+                                             AND WTCCC.TO_LOC_TP_CD         = #toLocTpCdAst#
+                                             AND WTCCC.EZCANCELFLAG         = '0')
+                WHEN A3.CNT_A3 &gt; 0 THEN (SELECT
+                                             WTCCC.CINC_PO_GLBL_CATG_CD
+                                         FROM
+                                             WH_TRNSF_CINC_CATG_CONV WTCCC
+                                         WHERE
+                                             INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                                             AND WTCCC.FROM_RTL_WH_CD       = INVTY_LOC_CD_FROM.RTL_WH_CD
+                                             AND WTCCC.FROM_WH_OWNR_CD      = #fromWhOwnrCdAst#
+                                             AND WTCCC.FROM_LOC_TP_CD       = #fromLocTpCdAst#
+                                             AND WTCCC.TO_LOC_TP_CD         = INVTY_LOC_CD_TO.INVTY_LOC_TP_CD
+                                             AND WTCCC.TO_RTL_WH_CD         = #toRtlWhCdAst#
+                                             AND WTCCC.TO_WH_OWNR_CD        = #toWhOwnrCdAst#
+                                             AND WTCCC.EZCANCELFLAG         = '0')
+                WHEN B1.CNT_B1 &gt; 0 THEN (SELECT
+                                             WTCCC.CINC_PO_GLBL_CATG_CD
+                                         FROM
+                                             WH_TRNSF_CINC_CATG_CONV WTCCC
+                                         WHERE
+                                             INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                                             AND WTCCC.FROM_RTL_WH_CD       = #fromRtlWhCdAst#
+                                             AND WTCCC.FROM_WH_OWNR_CD      = INVTY_LOC_CD_FROM.WH_OWNR_CD
+                                             AND WTCCC.FROM_LOC_TP_CD       = #fromLocTpCdAst#
+                                             AND WTCCC.TO_RTL_WH_CD         = INVTY_LOC_CD_TO.RTL_WH_CD
+                                             AND WTCCC.TO_WH_OWNR_CD        = #toWhOwnrCdAst#
+                                             AND WTCCC.TO_LOC_TP_CD         = #toLocTpCdAst#
+                                             AND WTCCC.EZCANCELFLAG         = '0')
+                WHEN B2.CNT_B2 &gt; 0 THEN (SELECT
+                                            WTCCC.CINC_PO_GLBL_CATG_CD
+                                         FROM
+                                             WH_TRNSF_CINC_CATG_CONV WTCCC
+                                         WHERE
+                                             INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                                             AND WTCCC.FROM_RTL_WH_CD       = #fromRtlWhCdAst#
+                                             AND WTCCC.FROM_WH_OWNR_CD      = INVTY_LOC_CD_FROM.WH_OWNR_CD
+                                             AND WTCCC.FROM_LOC_TP_CD       = #fromLocTpCdAst#
+                                             AND WTCCC.TO_RTL_WH_CD         = #toRtlWhCdAst#
+                                             AND WTCCC.TO_WH_OWNR_CD        = INVTY_LOC_CD_TO.WH_OWNR_CD
+                                             AND WTCCC.TO_LOC_TP_CD         = #toLocTpCdAst#
+                                             AND WTCCC.EZCANCELFLAG         = '0')
+                WHEN B3.CNT_B3 &gt; 0 THEN (SELECT
+                                             WTCCC.CINC_PO_GLBL_CATG_CD
+                                         FROM
+                                             WH_TRNSF_CINC_CATG_CONV WTCCC
+                                         WHERE
+                                             INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                                             AND WTCCC.FROM_RTL_WH_CD       = #fromRtlWhCdAst#
+                                             AND WTCCC.FROM_WH_OWNR_CD      = INVTY_LOC_CD_FROM.WH_OWNR_CD
+                                             AND WTCCC.FROM_LOC_TP_CD       = #fromLocTpCdAst#
+                                             AND WTCCC.TO_RTL_WH_CD         = #toRtlWhCdAst#
+                                             AND WTCCC.TO_WH_OWNR_CD        = #toWhOwnrCdAst#
+                                             AND WTCCC.TO_LOC_TP_CD         = INVTY_LOC_CD_TO.INVTY_LOC_TP_CD
+                                             AND WTCCC.EZCANCELFLAG         = '0') 
+                WHEN C1.CNT_C1 &gt; 0 THEN (SELECT
+                                             WTCCC.CINC_PO_GLBL_CATG_CD
+                                         FROM
+                                             WH_TRNSF_CINC_CATG_CONV WTCCC
+                                         WHERE
+                                             INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                                             AND WTCCC.FROM_RTL_WH_CD       = #fromRtlWhCdAst#
+                                             AND WTCCC.FROM_WH_OWNR_CD      = #fromWhOwnrCdAst#
+                                             AND WTCCC.FROM_LOC_TP_CD       = INVTY_LOC_CD_FROM.INVTY_LOC_TP_CD
+                                             AND WTCCC.TO_RTL_WH_CD         = INVTY_LOC_CD_TO.RTL_WH_CD
+                                             AND WTCCC.TO_WH_OWNR_CD        = #toWhOwnrCdAst#
+                                             AND WTCCC.TO_LOC_TP_CD         = #toLocTpCdAst#
+                                             AND WTCCC.EZCANCELFLAG         = '0')
+                WHEN C2.CNT_C2 &gt; 0 THEN (SELECT
+                                              WTCCC.CINC_PO_GLBL_CATG_CD
+                                         FROM
+                                              WH_TRNSF_CINC_CATG_CONV WTCCC
+                                         WHERE
+                                             INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                                             AND WTCCC.FROM_RTL_WH_CD       = #fromRtlWhCdAst#
+                                             AND WTCCC.FROM_WH_OWNR_CD      = #fromWhOwnrCdAst#
+                                             AND WTCCC.FROM_LOC_TP_CD       = INVTY_LOC_CD_FROM.INVTY_LOC_TP_CD
+                                             AND WTCCC.TO_RTL_WH_CD         = #toRtlWhCdAst#
+                                             AND WTCCC.TO_WH_OWNR_CD        = INVTY_LOC_CD_TO.WH_OWNR_CD
+                                             AND WTCCC.TO_LOC_TP_CD         = #toLocTpCdAst#
+                                             AND WTCCC.EZCANCELFLAG         = '0')
+                WHEN C3.CNT_C3 &gt; 0 THEN (SELECT
+                                             WTCCC.CINC_PO_GLBL_CATG_CD
+                                         FROM
+                                             WH_TRNSF_CINC_CATG_CONV WTCCC
+                                         WHERE
+                                             INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                                             AND WTCCC.FROM_RTL_WH_CD       = #fromRtlWhCdAst#
+                                             AND WTCCC.FROM_WH_OWNR_CD      = #fromWhOwnrCdAst#
+                                             AND WTCCC.FROM_LOC_TP_CD       = INVTY_LOC_CD_FROM.INVTY_LOC_TP_CD
+                                             AND WTCCC.TO_RTL_WH_CD         = #toRtlWhCdAst#
+                                             AND WTCCC.TO_WH_OWNR_CD        = #toWhOwnrCdAst#
+                                             AND WTCCC.TO_LOC_TP_CD         = INVTY_LOC_CD_TO.INVTY_LOC_TP_CD
+                                             AND WTCCC.EZCANCELFLAG         = '0')
+                ELSE (SELECT
+                          WTCCC.CINC_PO_GLBL_CATG_CD
+                      FROM
+                          WH_TRNSF_CINC_CATG_CONV WTCCC
+                      WHERE
+                          INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                          AND WTCCC.FROM_RTL_WH_CD       = #fromRtlWhCdAst#
+                          AND WTCCC.FROM_WH_OWNR_CD      = #fromWhOwnrCdAst#
+                          AND WTCCC.FROM_LOC_TP_CD       = #fromLocTpCdAst#
+                          AND WTCCC.TO_RTL_WH_CD         = #toRtlWhCdAst#
+                          AND WTCCC.TO_WH_OWNR_CD        = #toWhOwnrCdAst#
+                          AND WTCCC.TO_LOC_TP_CD         = #toLocTpCdAst#
+                          AND WTCCC.EZCANCELFLAG         = '0')
+                END AS CINC_PO_GLBL_ORD_CATG_CD
+        FROM
+            (SELECT
+                COUNT(WTCCC.CINC_PO_GLBL_CATG_CD) CNT_A1
+            FROM
+                WH_TRNSF_CINC_CATG_CONV WTCCC
+            WHERE
+                INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                AND WTCCC.FROM_RTL_WH_CD       = INVTY_LOC_CD_FROM.RTL_WH_CD
+                AND WTCCC.FROM_WH_OWNR_CD      = #fromWhOwnrCdAst#
+                AND WTCCC.FROM_LOC_TP_CD       = #fromLocTpCdAst#
+                AND WTCCC.TO_RTL_WH_CD         = INVTY_LOC_CD_TO.RTL_WH_CD
+                AND WTCCC.TO_WH_OWNR_CD        = #toWhOwnrCdAst#
+                AND WTCCC.TO_LOC_TP_CD         = #toLocTpCdAst#
+                AND ROWNUM                     = #numOne#
+                AND WTCCC.EZCANCELFLAG         = '0'
+            ) A1
+            ,(SELECT
+                COUNT(WTCCC.CINC_PO_GLBL_CATG_CD) CNT_A2
+            FROM
+                WH_TRNSF_CINC_CATG_CONV WTCCC
+            WHERE
+                INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                AND WTCCC.FROM_RTL_WH_CD       = INVTY_LOC_CD_FROM.RTL_WH_CD
+                AND WTCCC.FROM_WH_OWNR_CD      = #fromWhOwnrCdAst#
+                AND WTCCC.FROM_LOC_TP_CD       = #fromLocTpCdAst#
+                AND WTCCC.TO_WH_OWNR_CD        = INVTY_LOC_CD_TO.WH_OWNR_CD
+                AND WTCCC.TO_RTL_WH_CD         = #toRtlWhCdAst#
+                AND WTCCC.TO_LOC_TP_CD         = #toLocTpCdAst#
+                AND ROWNUM                     = #numOne#
+                AND WTCCC.EZCANCELFLAG         = '0'
+            ) A2
+            ,(SELECT
+                COUNT(WTCCC.CINC_PO_GLBL_CATG_CD) CNT_A3
+            FROM
+                  WH_TRNSF_CINC_CATG_CONV WTCCC
+            WHERE
+              INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+              AND WTCCC.FROM_RTL_WH_CD       = INVTY_LOC_CD_FROM.RTL_WH_CD
+              AND WTCCC.FROM_WH_OWNR_CD      = #fromWhOwnrCdAst#
+              AND WTCCC.FROM_LOC_TP_CD       = #fromLocTpCdAst#
+              AND WTCCC.TO_LOC_TP_CD         = INVTY_LOC_CD_TO.INVTY_LOC_TP_CD
+              AND WTCCC.TO_RTL_WH_CD         = #toRtlWhCdAst#
+              AND WTCCC.TO_WH_OWNR_CD        = #toWhOwnrCdAst#
+              AND ROWNUM                     = #numOne#
+              AND WTCCC.EZCANCELFLAG         = '0'
+            ) A3
+           ,(SELECT
+                COUNT(WTCCC.CINC_PO_GLBL_CATG_CD) CNT_B1
+            FROM
+                WH_TRNSF_CINC_CATG_CONV WTCCC
+            WHERE
+                INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                AND WTCCC.FROM_RTL_WH_CD       = #fromRtlWhCdAst#
+                AND WTCCC.FROM_WH_OWNR_CD      = INVTY_LOC_CD_FROM.WH_OWNR_CD
+                AND WTCCC.FROM_LOC_TP_CD       = #fromLocTpCdAst#
+                AND WTCCC.TO_RTL_WH_CD         = INVTY_LOC_CD_TO.RTL_WH_CD
+                AND WTCCC.TO_WH_OWNR_CD        = #toWhOwnrCdAst#
+                AND WTCCC.TO_LOC_TP_CD         = #toLocTpCdAst#
+                AND ROWNUM                     = #numOne#
+                AND WTCCC.EZCANCELFLAG         = '0'
+            ) B1
+            ,(SELECT
+                COUNT(WTCCC.CINC_PO_GLBL_CATG_CD) CNT_B2
+            FROM
+                WH_TRNSF_CINC_CATG_CONV WTCCC
+            WHERE
+                INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                AND WTCCC.FROM_RTL_WH_CD       = #fromRtlWhCdAst#
+                AND WTCCC.FROM_WH_OWNR_CD      = INVTY_LOC_CD_FROM.WH_OWNR_CD
+                AND WTCCC.FROM_LOC_TP_CD       = #fromLocTpCdAst#
+                AND WTCCC.TO_RTL_WH_CD         = #toRtlWhCdAst#
+                AND WTCCC.TO_WH_OWNR_CD        = INVTY_LOC_CD_TO.WH_OWNR_CD
+                AND WTCCC.TO_LOC_TP_CD         = #toLocTpCdAst#
+                AND ROWNUM                     = #numOne#
+                AND WTCCC.EZCANCELFLAG         = '0'
+            ) B2
+            ,(SELECT
+                COUNT(WTCCC.CINC_PO_GLBL_CATG_CD) CNT_B3
+            FROM
+                WH_TRNSF_CINC_CATG_CONV WTCCC
+            WHERE
+                INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                AND WTCCC.FROM_RTL_WH_CD       = #fromRtlWhCdAst#
+                AND WTCCC.FROM_WH_OWNR_CD      = INVTY_LOC_CD_FROM.WH_OWNR_CD
+                AND WTCCC.FROM_LOC_TP_CD       = #fromLocTpCdAst#
+                AND WTCCC.TO_RTL_WH_CD         = #toRtlWhCdAst#
+                AND WTCCC.TO_WH_OWNR_CD        = #toWhOwnrCdAst#
+                AND WTCCC.TO_LOC_TP_CD         = INVTY_LOC_CD_TO.INVTY_LOC_TP_CD
+                AND ROWNUM                     = #numOne#
+                AND WTCCC.EZCANCELFLAG         = '0'
+            ) B3
+            ,(SELECT
+                COUNT(WTCCC.CINC_PO_GLBL_CATG_CD) CNT_C1
+            FROM
+                WH_TRNSF_CINC_CATG_CONV WTCCC
+            WHERE
+                INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                AND WTCCC.FROM_RTL_WH_CD       = #fromRtlWhCdAst#
+                AND WTCCC.FROM_WH_OWNR_CD      = #fromWhOwnrCdAst#
+                AND WTCCC.FROM_LOC_TP_CD       = INVTY_LOC_CD_FROM.INVTY_LOC_TP_CD
+                AND WTCCC.TO_RTL_WH_CD         = INVTY_LOC_CD_TO.RTL_WH_CD
+                AND WTCCC.TO_WH_OWNR_CD        = #toWhOwnrCdAst#
+                AND WTCCC.TO_LOC_TP_CD         = #toLocTpCdAst#
+                AND ROWNUM                     = #numOne#
+                AND WTCCC.EZCANCELFLAG         = '0'
+            ) C1
+            ,(SELECT
+                COUNT(WTCCC.CINC_PO_GLBL_CATG_CD) CNT_C2
+            FROM
+                WH_TRNSF_CINC_CATG_CONV WTCCC
+            WHERE
+                INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                AND WTCCC.FROM_RTL_WH_CD       = #fromRtlWhCdAst#
+                AND WTCCC.FROM_WH_OWNR_CD      = #fromWhOwnrCdAst#
+                AND WTCCC.FROM_LOC_TP_CD       = INVTY_LOC_CD_FROM.INVTY_LOC_TP_CD
+                AND WTCCC.TO_RTL_WH_CD         = #toRtlWhCdAst#
+                AND WTCCC.TO_WH_OWNR_CD        = INVTY_LOC_CD_TO.WH_OWNR_CD
+                AND WTCCC.TO_LOC_TP_CD         = #toLocTpCdAst#
+                AND ROWNUM                     = #numOne#
+                AND WTCCC.EZCANCELFLAG         = '0'
+            ) C2
+            ,(SELECT
+                COUNT(WTCCC.CINC_PO_GLBL_CATG_CD) CNT_C3
+            FROM
+                WH_TRNSF_CINC_CATG_CONV WTCCC
+            WHERE
+                INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                AND WTCCC.FROM_RTL_WH_CD       = #fromRtlWhCdAst#
+                AND WTCCC.FROM_WH_OWNR_CD      = #fromWhOwnrCdAst#
+                AND WTCCC.FROM_LOC_TP_CD       = INVTY_LOC_CD_FROM.INVTY_LOC_TP_CD
+                AND WTCCC.TO_RTL_WH_CD         = #toRtlWhCdAst#
+                AND WTCCC.TO_WH_OWNR_CD        = #toWhOwnrCdAst#
+                AND WTCCC.TO_LOC_TP_CD         = INVTY_LOC_CD_TO.INVTY_LOC_TP_CD
+                AND ROWNUM                     = #numOne#
+                AND WTCCC.EZCANCELFLAG         = '0'
+            ) C3
+        ) AS CINC_PO_GLBL_CATG_CD
+        ,(SELECT
+            SR.TRD_PTNR_SHPG_METH_CD
+          FROM
+            TRD_PTNR_SHPG_X_REF SR
+          WHERE
+            SR.GLBL_CMPY_CD             = CD.GLBL_CMPY_CD
+            AND  SR.SHPG_SVC_LCL_CD     = CD.SHPG_SVC_LVL_CD
+            AND  SR.VND_CD              = #vndCdCinc#
+            AND  SR.CARR_CD             = CD.CARR_CD
+            AND  SR.FRT_COND_CD         = #frtCondCd#
+            AND  SR.EZCANCELFLAG        = '0'
+        ) AS TPSMC1
+        ,CP.GLBL_CMPY_CD
+        ,SMV.CUSA_VND_CD
+        ,CD.CARR_CD
+    FROM
+        CPO CP
+        ,CPO_DTL CD
+        ,PRCH_REQ PR
+        ,PRCH_REQ_DTL PRD
+        ,PRCH_REQ_APVL_STS PRAS
+        ,SCUBE_MDSE_V SMV
+        ,(SELECT
+              DIL.INVTY_LOC_CD
+              ,DIL.RTL_WH_CD
+              ,RW.WH_OWNR_CD
+              ,DIL.INVTY_LOC_TP_CD
+              ,DIL.GLBL_CMPY_CD
+          FROM
+              DS_INVTY_LOC_V DIL
+              ,RTL_WH RW
+              ,INVTY_OWNR IO
+          WHERE
+              DIL.GLBL_CMPY_CD       = #glblCmpyCd#
+          <isNotNull property="technician">
+          AND  DIL.INVTY_LOC_TP_CD   != #technician#
+          </isNotNull>
+          --RTL_WH JOIN
+          AND DIL.GLBL_CMPY_CD       = RW.GLBL_CMPY_CD
+          AND DIL.RTL_WH_CD          = RW.RTL_WH_CD
+          --INVTY_OWNR JOIN
+          AND RW.GLBL_CMPY_CD        = IO.GLBL_CMPY_CD
+          AND RW.INVTY_OWNR_CD       = IO.INVTY_OWNR_CD
+          AND IO.CMPY_INVTY_FLG      = #cmpyInvtyFlg#
+          AND DIL.EZCANCELFLAG       = '0'
+          AND RW.EZCANCELFLAG        = '0'
+          AND IO.EZCANCELFLAG        = '0'
+          <!-- Add Start 2020/02/04 QC#55572 -->
+          <isNotNull property="exclSwhCdList">
+          AND <iterate property="exclSwhCdList" var="exclSwhCdList[]" open="DIL.RTL_SWH_CD NOT IN (" close=")" conjunction=",">
+              #exclSwhCdList[]#
+              </iterate>
+          </isNotNull>
+          <!-- Add End 2020/02/04 QC#55572 -->
+          ) INVTY_LOC_CD_FROM
+          ,(SELECT
+              DIL.INVTY_LOC_CD
+              ,DIL.RTL_WH_CD
+              ,RW.WH_OWNR_CD
+              ,DIL.INVTY_LOC_TP_CD
+              ,DIL.GLBL_CMPY_CD
+          FROM
+              DS_INVTY_LOC_V DIL
+              ,RTL_WH RW
+              ,INVTY_OWNR IO
+          WHERE
+              DIL.GLBL_CMPY_CD       = #glblCmpyCd#
+          <isNotNull property="technician">
+          AND  DIL.INVTY_LOC_TP_CD   != #technician#
+          </isNotNull>
+          --RTL_WH JOIN
+          AND DIL.GLBL_CMPY_CD       = RW.GLBL_CMPY_CD
+          AND DIL.RTL_WH_CD          = RW.RTL_WH_CD
+          --INVTY_OWNR JOIN
+          AND RW.GLBL_CMPY_CD        = IO.GLBL_CMPY_CD
+          AND RW.INVTY_OWNR_CD       = IO.INVTY_OWNR_CD
+          AND IO.CMPY_INVTY_FLG      = #cmpyInvtyFlg#
+          AND DIL.EZCANCELFLAG       = '0'
+          AND RW.EZCANCELFLAG        = '0'
+          AND IO.EZCANCELFLAG        = '0'
+          <!-- Add Start 2020/02/04 QC#55572 -->
+          <isNotNull property="exclSwhCdList">
+          AND <iterate property="exclSwhCdList" var="exclSwhCdList[]" open="DIL.RTL_SWH_CD NOT IN (" close=")" conjunction=",">
+              #exclSwhCdList[]#
+              </iterate>
+          </isNotNull>
+          <!-- Add End 2020/02/04 QC#55572 -->
+          ) INVTY_LOC_CD_TO
+    WHERE
+        CP.GLBL_CMPY_CD                  = #glblCmpyCd#
+        AND CD.GLBL_CMPY_CD              = INVTY_LOC_CD_FROM.GLBL_CMPY_CD
+        AND CD.GLBL_CMPY_CD              = INVTY_LOC_CD_TO.GLBL_CMPY_CD
+        AND CD.INVTY_LOC_CD              = INVTY_LOC_CD_FROM.INVTY_LOC_CD
+        AND CD.SHIP_TO_CUST_CD           = INVTY_LOC_CD_TO.INVTY_LOC_CD
+        AND CD.ORD_QTY                   > #qtyZero#
+        --CPO_DTL JOIN
+        AND CP.GLBL_CMPY_CD              = CD.GLBL_CMPY_CD
+        AND CP.CPO_ORD_NUM               = CD.CPO_ORD_NUM
+        <isNotNull property="exclLocCdList">
+          <iterate property="exclLocCdList" var="exclLocCdList[]" open="AND CD.SHIP_TO_CUST_CD NOT IN (" close=")" conjunction=",">
+            #exclLocCdList[]#
+          </iterate> 
+        </isNotNull>
+        --SCUBE_MDSE_V JOIN
+        AND CD.GLBL_CMPY_CD               = SMV.GLBL_CMPY_CD
+        AND CD.MDSE_CD                    = SMV.MDSE_CD
+        AND CP.GLBL_CMPY_CD               = PR.GLBL_CMPY_CD
+        AND PR.GLBL_CMPY_CD               = PRAS.GLBL_CMPY_CD
+        AND PR.PRCH_REQ_APVL_STS_CD       = PRAS.PRCH_REQ_APVL_STS_CD
+        AND PR.PRCH_REQ_STS_CD NOT        IN (#prchReqStsCdClosed#, #prchReqStsCdCancelled#)
+        AND PRAS.PRCH_REQ_APVL_FLG        = #prchReqApvlFlg#
+        AND CP.ORD_SRC_REF_NUM            = PR.PRCH_REQ_NUM
+        --PRCH_REQ_DTL JOIN
+        AND PR.PRCH_REQ_NUM               = PRD.PRCH_REQ_NUM
+        AND CD.ORD_SRC_REF_LINE_NUM       = PRD.PRCH_REQ_LINE_NUM
+        AND CD.ORD_SRC_REF_LINE_SUB_NUM   = PRD.PRCH_REQ_LINE_SUB_NUM
+        AND PR.PRCH_REQ_REC_TP_CD         IN (#prchReqRecTpCdInventoryRequest#)
+        AND PR.PRCH_REQ_TP_CD             IN (#prchReqTpCdWhTransfer#)
+        AND CP.EZCANCELFLAG               = '0'
+        AND CD.EZCANCELFLAG               = '0'
+        AND PR.EZCANCELFLAG               = '0'
+        AND PRD.EZCANCELFLAG              = '0'
+        AND PRAS.EZCANCELFLAG             = '0'
+        AND (NOT EXISTS(
+                    SELECT
+                        1
+                    FROM
+                        RWS_HDR RH
+                        ,RWS_DTL RD
+                    WHERE
+                        RH.GLBL_CMPY_CD = CP.GLBL_CMPY_CD
+                    AND RH.TRX_ORD_NUM  = CP.CPO_ORD_NUM
+                    AND RH.GLBL_CMPY_CD = RD.GLBL_CMPY_CD
+                    AND RH.RWS_NUM      = RD.RWS_NUM
+                    AND ROWNUM          = #numOne#
+                    AND RH.EZCANCELFLAG = '0'
+                    AND RD.EZCANCELFLAG = '0'
+             ) OR (
+             EXISTS(
+                SELECT
+                        1
+                   FROM
+                        RWS_HDR RH
+                        ,RWS_DTL RD
+                        ,RWS_STS RS
+                    WHERE
+                        RH.GLBL_CMPY_CD = CP.GLBL_CMPY_CD
+                    AND RH.TRX_ORD_NUM  = CP.CPO_ORD_NUM
+                    AND RH.GLBL_CMPY_CD = RD.GLBL_CMPY_CD
+                    AND RH.RWS_NUM      = RD.RWS_NUM
+                    AND RD.GLBL_CMPY_CD = RS.GLBL_CMPY_CD
+                    AND RD.RWS_STS_CD   = RS.RWS_STS_CD
+                    AND RS.RWS_OPEN_FLG = #rwsOpenFlg#
+                    AND ROWNUM          = #numOne#
+                    AND RH.EZCANCELFLAG = '0'
+                    AND RD.EZCANCELFLAG = '0'
+                    AND RS.EZCANCELFLAG = '0'
+        )))
+    ) V3
+    WHERE V3.CINC_GLBL_WH_CD    !=    V3.CINC_SPLY_GLBL_WH_CD
+    GROUP BY
+        V3.CPO_ORD_NUM
+        ,V3.CPO_ORD_TS
+        ,V3.RTL_WH_CD
+        ,V3.MDSE_CD
+        ,V3.SHPG_SVC_LVL_CD
+        ,V3.CINC_GLBL_WH_CD
+        ,V3.CINC_SPLY_GLBL_WH_CD
+        ,V3.GLBL_CMPY_CD
+        ,V3.CINC_PO_GLBL_CATG_CD
+        ,V3.CUSA_VND_CD
+        ,V3.CARR_CD
+        ,V3.TPSMC1
+
+    <!-- Tech Transfer  -->
+    <isNull property="technician">
+    UNION
+    SELECT
+        V4.INVTY_ORD_NUM
+        ,TRIM(SUBSTR(V4.INVTY_ORD_SUBMT_TS, #dateTrimStartIdx#, #dateTrimEndIdx#))  INVTY_ORD_SUBMT_TS
+        ,V4.FROM_RTL_WH_CD
+        ,V4.MDSE_CD
+        ,SUM(V4.ORD_QTY) ORD_QTY
+        ,V4.SHPG_SVC_LVL_CD
+        ,V4.CINC_GLBL_WH_CD
+        ,V4.CINC_SPLY_GLBL_WH_CD
+        ,MAX(V4.DC_TRNSF_RDD_DT) DC_TRNSF_RDD_DT
+        ,V4.GLBL_CMPY_CD
+        ,(SELECT
+                    SR.TRD_PTNR_SHPG_METH_CD
+              FROM
+                    TRD_PTNR_SHPG_X_REF SR
+              WHERE
+                    SR.GLBL_CMPY_CD             = V4.GLBL_CMPY_CD
+                    AND  SR.SHPG_SVC_LCL_CD     = V4.SHPG_SVC_LVL_CD
+                    AND  SR.VND_CD              = #vndCdCinc#
+                    AND  SR.CARR_CD             = #carrCd#
+                    AND  SR.FRT_COND_CD         = #frtCondCd#
+                    AND  SR.EZCANCELFLAG        = '0'
+          ) AS TRD_PTNR_SHPG_METH_CD
+        ,NULL AS CINC_SPLY_GLBL_CMPY_CD
+        ,V4.CINC_PO_GLBL_CATG_CD
+        ,V4.CUSA_VND_CD
+    FROM
+        (
+        SELECT
+        INO.INVTY_ORD_NUM
+        ,INO.INVTY_ORD_SUBMT_TS
+        ,IOD.FROM_RTL_WH_CD
+        ,IOD.MDSE_CD
+        ,IOD.ORD_QTY
+        ,INO.SHPG_SVC_LVL_CD
+        ,(SELECT
+            CASE
+                WHEN A.CNT_A &gt; 0 THEN (SELECT
+                                          CGWC.CINC_GLBL_WH_CD
+                                        FROM
+                                          CINC_GLBL_WH_CONV CGWC
+                                        WHERE INVTY_LOC_CD_TO.GLBL_CMPY_CD    = CGWC.GLBL_CMPY_CD
+                                        AND INVTY_LOC_CD_TO.RTL_WH_CD         = CGWC.RTL_WH_CD
+                                        AND CGWC.WH_OWNR_CD                   = #whOwnrCdAst#
+                                        AND CGWC.LOC_TP_CD                    = #locTpCdAst#
+                                        AND CGWC.EZCANCELFLAG                 = '0')
+                WHEN B.CNT_B &gt; 0 THEN (SELECT
+                                         CGWC.CINC_GLBL_WH_CD
+                                       FROM
+                                         CINC_GLBL_WH_CONV CGWC
+                                       WHERE INVTY_LOC_CD_TO.GLBL_CMPY_CD    = CGWC.GLBL_CMPY_CD
+                                       AND INVTY_LOC_CD_TO.WH_OWNR_CD        = CGWC.WH_OWNR_CD
+                                       AND CGWC.RTL_WH_CD                    = #rtlWhCdAst#
+                                       AND CGWC.LOC_TP_CD                    = #locTpCdAst#
+                                       AND CGWC.EZCANCELFLAG                 = '0')
+                WHEN C.CNT_C &gt; 0 THEN (SELECT
+                                         CGWC.CINC_GLBL_WH_CD
+                                       FROM
+                                         CINC_GLBL_WH_CONV CGWC
+                                       WHERE INVTY_LOC_CD_TO.GLBL_CMPY_CD    = CGWC.GLBL_CMPY_CD
+                                       AND INVTY_LOC_CD_TO.INVTY_LOC_TP_CD   = CGWC.LOC_TP_CD
+                                       AND CGWC.RTL_WH_CD                    = #rtlWhCdAst#
+                                       AND CGWC.WH_OWNR_CD                   = #whOwnrCdAst#
+                                       AND CGWC.EZCANCELFLAG                 = '0')
+                ELSE (SELECT
+                        CGWC.CINC_GLBL_WH_CD
+                    FROM
+                        CINC_GLBL_WH_CONV CGWC
+                    WHERE CGWC.GLBL_CMPY_CD  = #glblCmpyCd#
+                    AND CGWC.RTL_WH_CD       = #rtlWhCdAst#
+                    AND CGWC.WH_OWNR_CD      = #whOwnrCdAst#
+                    AND CGWC.LOC_TP_CD       = #locTpCdAst#
+                    AND CGWC.EZCANCELFLAG    = '0')
+                END AS CINC_GLBL_WH_CD_EN
+       FROM
+           (SELECT
+                COUNT(CGWC.CINC_GLBL_WH_CD) CNT_A
+            FROM
+                CINC_GLBL_WH_CONV CGWC
+            WHERE
+                INVTY_LOC_CD_TO.GLBL_CMPY_CD          = CGWC.GLBL_CMPY_CD
+                AND INVTY_LOC_CD_TO.RTL_WH_CD         = CGWC.RTL_WH_CD
+                AND CGWC.WH_OWNR_CD                   = #whOwnrCdAst#
+                AND CGWC.LOC_TP_CD                    = #locTpCdAst#
+                AND ROWNUM                            = #numOne#
+                AND CGWC.EZCANCELFLAG                 = '0'
+            ) A
+            ,(SELECT
+                COUNT(CGWC.CINC_GLBL_WH_CD) CNT_B
+            FROM
+                CINC_GLBL_WH_CONV CGWC
+            WHERE
+                INVTY_LOC_CD_TO.GLBL_CMPY_CD          = CGWC.GLBL_CMPY_CD
+                AND INVTY_LOC_CD_TO.WH_OWNR_CD        = CGWC.WH_OWNR_CD
+                AND CGWC.RTL_WH_CD                    = #rtlWhCdAst#
+                AND CGWC.LOC_TP_CD                    = #locTpCdAst#
+                AND ROWNUM                            = #numOne#
+                AND CGWC.EZCANCELFLAG                 = '0'
+            ) B
+            ,(SELECT
+                COUNT(CGWC.CINC_GLBL_WH_CD) CNT_C
+            FROM
+                CINC_GLBL_WH_CONV CGWC
+            WHERE
+                INVTY_LOC_CD_TO.GLBL_CMPY_CD          = CGWC.GLBL_CMPY_CD
+                AND INVTY_LOC_CD_TO.INVTY_LOC_TP_CD   = CGWC.LOC_TP_CD
+                AND CGWC.RTL_WH_CD                    = #rtlWhCdAst#
+                AND CGWC.WH_OWNR_CD                   = #whOwnrCdAst#
+                AND ROWNUM                            = #numOne#
+                AND CGWC.EZCANCELFLAG                 = '0'
+            ) C
+        ) AS CINC_GLBL_WH_CD
+        ,(SELECT
+                CASE
+                    WHEN A.CNT_A &gt; 0 THEN (SELECT
+                                              CGWC.CINC_GLBL_WH_CD
+                                           FROM
+                                              CINC_GLBL_WH_CONV CGWC
+                                           WHERE INVTY_LOC_CD_FROM.GLBL_CMPY_CD    = CGWC.GLBL_CMPY_CD
+                                           AND INVTY_LOC_CD_FROM.RTL_WH_CD         = CGWC.RTL_WH_CD
+                                           AND CGWC.WH_OWNR_CD                     = #whOwnrCdAst#
+                                           AND CGWC.LOC_TP_CD                      = #locTpCdAst#
+                                           AND CGWC.EZCANCELFLAG                   = '0')
+                    WHEN B.CNT_B &gt; 0 THEN (SELECT
+                                              CGWC.CINC_GLBL_WH_CD
+                                           FROM
+                                              CINC_GLBL_WH_CONV CGWC
+                                           WHERE INVTY_LOC_CD_FROM.GLBL_CMPY_CD    = CGWC.GLBL_CMPY_CD
+                                           AND INVTY_LOC_CD_FROM.WH_OWNR_CD        = CGWC.WH_OWNR_CD
+                                           AND CGWC.RTL_WH_CD                      = #rtlWhCdAst#
+                                           AND CGWC.LOC_TP_CD                      = #locTpCdAst#
+                                           AND CGWC.EZCANCELFLAG                   = '0')
+                    WHEN C.CNT_C &gt; 0 THEN (SELECT
+                                              CGWC.CINC_GLBL_WH_CD
+                                           FROM
+                                              CINC_GLBL_WH_CONV CGWC
+                                           WHERE INVTY_LOC_CD_FROM.GLBL_CMPY_CD    = CGWC.GLBL_CMPY_CD
+                                           AND INVTY_LOC_CD_FROM.INVTY_LOC_TP_CD   = CGWC.LOC_TP_CD
+                                           AND CGWC.RTL_WH_CD                      = #rtlWhCdAst#
+                                           AND CGWC.WH_OWNR_CD                     = #whOwnrCdAst#
+                                           AND CGWC.EZCANCELFLAG                   = '0')
+                    ELSE (SELECT
+                            CGWC.CINC_GLBL_WH_CD
+                        FROM
+                            CINC_GLBL_WH_CONV CGWC
+                        WHERE CGWC.GLBL_CMPY_CD  = #glblCmpyCd#
+                        AND CGWC.RTL_WH_CD       = #rtlWhCdAst#
+                        AND CGWC.WH_OWNR_CD      = #whOwnrCdAst#
+                        AND CGWC.LOC_TP_CD       = #locTpCdAst#
+                        AND CGWC.EZCANCELFLAG    = '0')
+                    END AS CINC_GLBL_WH_CD_EN
+       FROM
+           (SELECT
+                            COUNT(CGWC.CINC_GLBL_WH_CD) CNT_A
+                        FROM
+                            CINC_GLBL_WH_CONV CGWC
+                        WHERE
+                            INVTY_LOC_CD_FROM.GLBL_CMPY_CD          = CGWC.GLBL_CMPY_CD
+                            AND INVTY_LOC_CD_FROM.RTL_WH_CD         = CGWC.RTL_WH_CD
+                            AND CGWC.WH_OWNR_CD                     = #whOwnrCdAst#
+                            AND CGWC.LOC_TP_CD                      = #locTpCdAst#
+                            AND ROWNUM                              = #numOne#
+                            AND CGWC.EZCANCELFLAG                   = '0'
+                    ) A
+                    ,(SELECT
+                            COUNT(CGWC.CINC_GLBL_WH_CD) CNT_B
+                        FROM
+                            CINC_GLBL_WH_CONV CGWC
+                        WHERE
+                            INVTY_LOC_CD_FROM.GLBL_CMPY_CD          = CGWC.GLBL_CMPY_CD
+                            AND INVTY_LOC_CD_FROM.WH_OWNR_CD        = CGWC.WH_OWNR_CD
+                            AND CGWC.RTL_WH_CD                      = #rtlWhCdAst#
+                            AND CGWC.LOC_TP_CD                      = #locTpCdAst#
+                            AND ROWNUM                              = #numOne#
+                            AND CGWC.EZCANCELFLAG                   = '0'
+                    ) B
+                    ,(SELECT
+                            COUNT(CGWC.CINC_GLBL_WH_CD) CNT_C
+                        FROM
+                            CINC_GLBL_WH_CONV CGWC
+                        WHERE
+                            INVTY_LOC_CD_FROM.GLBL_CMPY_CD          = CGWC.GLBL_CMPY_CD
+                            AND INVTY_LOC_CD_FROM.INVTY_LOC_TP_CD   = CGWC.LOC_TP_CD
+                            AND CGWC.RTL_WH_CD                      = #rtlWhCdAst#
+                            AND CGWC.WH_OWNR_CD                     = #whOwnrCdAst#
+                            AND ROWNUM                              = #numOne#
+                            AND CGWC.EZCANCELFLAG                   = '0'
+                    ) C
+        ) AS CINC_SPLY_GLBL_WH_CD
+        ,INO.DC_TRNSF_RDD_DT
+        ,(SELECT
+            CASE
+                WHEN A1.CNT_A1 &gt; 0 THEN (SELECT
+                                             WTCCC.CINC_PO_GLBL_CATG_CD
+                                         FROM
+                                             WH_TRNSF_CINC_CATG_CONV WTCCC
+                                         WHERE
+                                             INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                                             AND WTCCC.FROM_RTL_WH_CD       = INVTY_LOC_CD_FROM.RTL_WH_CD
+                                             AND WTCCC.FROM_WH_OWNR_CD      = #fromWhOwnrCdAst#
+                                             AND WTCCC.FROM_LOC_TP_CD       = #fromLocTpCdAst#
+                                             AND WTCCC.TO_RTL_WH_CD         = INVTY_LOC_CD_TO.RTL_WH_CD
+                                             AND WTCCC.TO_WH_OWNR_CD        = #toWhOwnrCdAst#
+                                             AND WTCCC.TO_LOC_TP_CD         = #toLocTpCdAst#
+                                             AND WTCCC.EZCANCELFLAG         = '0')
+                WHEN A2.CNT_A2 &gt; 0 THEN (SELECT
+                                             WTCCC.CINC_PO_GLBL_CATG_CD
+                                         FROM
+                                             WH_TRNSF_CINC_CATG_CONV WTCCC
+                                         WHERE
+                                             INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                                             AND WTCCC.FROM_RTL_WH_CD       = INVTY_LOC_CD_FROM.RTL_WH_CD
+                                             AND WTCCC.FROM_WH_OWNR_CD      = #fromWhOwnrCdAst#
+                                             AND WTCCC.FROM_LOC_TP_CD       = #fromLocTpCdAst#
+                                             AND WTCCC.TO_WH_OWNR_CD        = INVTY_LOC_CD_TO.WH_OWNR_CD
+                                             AND WTCCC.TO_RTL_WH_CD         = #toRtlWhCdAst#
+                                             AND WTCCC.TO_LOC_TP_CD         = #toLocTpCdAst#
+                                             AND WTCCC.EZCANCELFLAG         = '0')
+                WHEN A3.CNT_A3 &gt; 0 THEN (SELECT
+                                             WTCCC.CINC_PO_GLBL_CATG_CD
+                                         FROM
+                                             WH_TRNSF_CINC_CATG_CONV WTCCC
+                                         WHERE
+                                             INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                                             AND WTCCC.FROM_RTL_WH_CD       = INVTY_LOC_CD_FROM.RTL_WH_CD
+                                             AND WTCCC.FROM_WH_OWNR_CD      = #fromWhOwnrCdAst#
+                                             AND WTCCC.FROM_LOC_TP_CD       = #fromLocTpCdAst#
+                                             AND WTCCC.TO_LOC_TP_CD         = INVTY_LOC_CD_TO.INVTY_LOC_TP_CD
+                                             AND WTCCC.TO_RTL_WH_CD         = #toRtlWhCdAst#
+                                             AND WTCCC.TO_WH_OWNR_CD        = #toWhOwnrCdAst#
+                                             AND WTCCC.EZCANCELFLAG         = '0')
+                WHEN B1.CNT_B1 &gt; 0 THEN (SELECT
+                                             WTCCC.CINC_PO_GLBL_CATG_CD
+                                         FROM
+                                             WH_TRNSF_CINC_CATG_CONV WTCCC
+                                         WHERE
+                                             INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                                             AND WTCCC.FROM_RTL_WH_CD       = #fromRtlWhCdAst#
+                                             AND WTCCC.FROM_WH_OWNR_CD      = INVTY_LOC_CD_FROM.WH_OWNR_CD
+                                             AND WTCCC.FROM_LOC_TP_CD       = #fromLocTpCdAst#
+                                             AND WTCCC.TO_RTL_WH_CD         = INVTY_LOC_CD_TO.RTL_WH_CD
+                                             AND WTCCC.TO_WH_OWNR_CD        = #toWhOwnrCdAst#
+                                             AND WTCCC.TO_LOC_TP_CD         = #toLocTpCdAst#
+                                             AND WTCCC.EZCANCELFLAG         = '0')
+                WHEN B2.CNT_B2 &gt; 0 THEN (SELECT
+                                            WTCCC.CINC_PO_GLBL_CATG_CD
+                                         FROM
+                                             WH_TRNSF_CINC_CATG_CONV WTCCC
+                                         WHERE
+                                             INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                                             AND WTCCC.FROM_RTL_WH_CD       = #fromRtlWhCdAst#
+                                             AND WTCCC.FROM_WH_OWNR_CD      = INVTY_LOC_CD_FROM.WH_OWNR_CD
+                                             AND WTCCC.FROM_LOC_TP_CD       = #fromLocTpCdAst#
+                                             AND WTCCC.TO_RTL_WH_CD         = #toRtlWhCdAst#
+                                             AND WTCCC.TO_WH_OWNR_CD        = INVTY_LOC_CD_TO.WH_OWNR_CD
+                                             AND WTCCC.TO_LOC_TP_CD         = #toLocTpCdAst#
+                                             AND WTCCC.EZCANCELFLAG         = '0')
+                WHEN B3.CNT_B3 &gt; 0 THEN (SELECT
+                                             WTCCC.CINC_PO_GLBL_CATG_CD
+                                         FROM
+                                             WH_TRNSF_CINC_CATG_CONV WTCCC
+                                         WHERE
+                                             INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                                             AND WTCCC.FROM_RTL_WH_CD       = #fromRtlWhCdAst#
+                                             AND WTCCC.FROM_WH_OWNR_CD      = INVTY_LOC_CD_FROM.WH_OWNR_CD
+                                             AND WTCCC.FROM_LOC_TP_CD       = #fromLocTpCdAst#
+                                             AND WTCCC.TO_RTL_WH_CD         = #toRtlWhCdAst#
+                                             AND WTCCC.TO_WH_OWNR_CD        = #toWhOwnrCdAst#
+                                             AND WTCCC.TO_LOC_TP_CD         = INVTY_LOC_CD_TO.INVTY_LOC_TP_CD
+                                             AND WTCCC.EZCANCELFLAG         = '0') 
+                WHEN C1.CNT_C1 &gt; 0 THEN (SELECT
+                                             WTCCC.CINC_PO_GLBL_CATG_CD
+                                         FROM
+                                             WH_TRNSF_CINC_CATG_CONV WTCCC
+                                         WHERE
+                                             INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                                             AND WTCCC.FROM_RTL_WH_CD       = #fromRtlWhCdAst#
+                                             AND WTCCC.FROM_WH_OWNR_CD      = #fromWhOwnrCdAst#
+                                             AND WTCCC.FROM_LOC_TP_CD       = INVTY_LOC_CD_FROM.INVTY_LOC_TP_CD
+                                             AND WTCCC.TO_RTL_WH_CD         = INVTY_LOC_CD_TO.RTL_WH_CD
+                                             AND WTCCC.TO_WH_OWNR_CD        = #toWhOwnrCdAst#
+                                             AND WTCCC.TO_LOC_TP_CD         = #toLocTpCdAst#
+                                             AND WTCCC.EZCANCELFLAG         = '0')
+                WHEN C2.CNT_C2 &gt; 0 THEN (SELECT
+                                              WTCCC.CINC_PO_GLBL_CATG_CD
+                                         FROM
+                                              WH_TRNSF_CINC_CATG_CONV WTCCC
+                                         WHERE
+                                             INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                                             AND WTCCC.FROM_RTL_WH_CD       = #fromRtlWhCdAst#
+                                             AND WTCCC.FROM_WH_OWNR_CD      = #fromWhOwnrCdAst#
+                                             AND WTCCC.FROM_LOC_TP_CD       = INVTY_LOC_CD_FROM.INVTY_LOC_TP_CD
+                                             AND WTCCC.TO_RTL_WH_CD         = #toRtlWhCdAst#
+                                             AND WTCCC.TO_WH_OWNR_CD        = INVTY_LOC_CD_TO.WH_OWNR_CD
+                                             AND WTCCC.TO_LOC_TP_CD         = #toLocTpCdAst#
+                                             AND WTCCC.EZCANCELFLAG         = '0')
+                WHEN C3.CNT_C3 &gt; 0 THEN (SELECT
+                                             WTCCC.CINC_PO_GLBL_CATG_CD
+                                         FROM
+                                             WH_TRNSF_CINC_CATG_CONV WTCCC
+                                         WHERE
+                                             INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                                             AND WTCCC.FROM_RTL_WH_CD       = #fromRtlWhCdAst#
+                                             AND WTCCC.FROM_WH_OWNR_CD      = #fromWhOwnrCdAst#
+                                             AND WTCCC.FROM_LOC_TP_CD       = INVTY_LOC_CD_FROM.INVTY_LOC_TP_CD
+                                             AND WTCCC.TO_RTL_WH_CD         = #toRtlWhCdAst#
+                                             AND WTCCC.TO_WH_OWNR_CD        = #toWhOwnrCdAst#
+                                             AND WTCCC.TO_LOC_TP_CD         = INVTY_LOC_CD_TO.INVTY_LOC_TP_CD
+                                             AND WTCCC.EZCANCELFLAG         = '0')
+                ELSE (SELECT
+                          WTCCC.CINC_PO_GLBL_CATG_CD
+                      FROM
+                          WH_TRNSF_CINC_CATG_CONV WTCCC
+                      WHERE
+                          INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                          AND WTCCC.FROM_RTL_WH_CD       = #fromRtlWhCdAst#
+                          AND WTCCC.FROM_WH_OWNR_CD      = #fromWhOwnrCdAst#
+                          AND WTCCC.FROM_LOC_TP_CD       = #fromLocTpCdAst#
+                          AND WTCCC.TO_RTL_WH_CD         = #toRtlWhCdAst#
+                          AND WTCCC.TO_WH_OWNR_CD        = #toWhOwnrCdAst#
+                          AND WTCCC.TO_LOC_TP_CD         = #toLocTpCdAst#
+                          AND WTCCC.EZCANCELFLAG         = '0')
+                END AS CINC_PO_GLBL_ORD_CATG_CD
+        FROM
+            (SELECT
+                COUNT(WTCCC.CINC_PO_GLBL_CATG_CD) CNT_A1
+            FROM
+                WH_TRNSF_CINC_CATG_CONV WTCCC
+            WHERE
+                INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                AND WTCCC.FROM_RTL_WH_CD       = INVTY_LOC_CD_FROM.RTL_WH_CD
+                AND WTCCC.FROM_WH_OWNR_CD      = #fromWhOwnrCdAst#
+                AND WTCCC.FROM_LOC_TP_CD       = #fromLocTpCdAst#
+                AND WTCCC.TO_RTL_WH_CD         = INVTY_LOC_CD_TO.RTL_WH_CD
+                AND WTCCC.TO_WH_OWNR_CD        = #toWhOwnrCdAst#
+                AND WTCCC.TO_LOC_TP_CD         = #toLocTpCdAst#
+                AND ROWNUM                     = #numOne#
+                AND WTCCC.EZCANCELFLAG         = '0'
+            ) A1
+            ,(SELECT
+                COUNT(WTCCC.CINC_PO_GLBL_CATG_CD) CNT_A2
+            FROM
+                WH_TRNSF_CINC_CATG_CONV WTCCC
+            WHERE
+                INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                AND WTCCC.FROM_RTL_WH_CD       = INVTY_LOC_CD_FROM.RTL_WH_CD
+                AND WTCCC.FROM_WH_OWNR_CD      = #fromWhOwnrCdAst#
+                AND WTCCC.FROM_LOC_TP_CD       = #fromLocTpCdAst#
+                AND WTCCC.TO_WH_OWNR_CD        = INVTY_LOC_CD_TO.WH_OWNR_CD
+                AND WTCCC.TO_RTL_WH_CD         = #toRtlWhCdAst#
+                AND WTCCC.TO_LOC_TP_CD         = #toLocTpCdAst#
+                AND ROWNUM                     = #numOne#
+                AND WTCCC.EZCANCELFLAG         = '0'
+            ) A2
+            ,(SELECT
+                COUNT(WTCCC.CINC_PO_GLBL_CATG_CD) CNT_A3
+            FROM
+                  WH_TRNSF_CINC_CATG_CONV WTCCC
+            WHERE
+              INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+              AND WTCCC.FROM_RTL_WH_CD       = INVTY_LOC_CD_FROM.RTL_WH_CD
+              AND WTCCC.FROM_WH_OWNR_CD      = #fromWhOwnrCdAst#
+              AND WTCCC.FROM_LOC_TP_CD       = #fromLocTpCdAst#
+              AND WTCCC.TO_LOC_TP_CD         = INVTY_LOC_CD_TO.INVTY_LOC_TP_CD
+              AND WTCCC.TO_RTL_WH_CD         = #toRtlWhCdAst#
+              AND WTCCC.TO_WH_OWNR_CD        = #toWhOwnrCdAst#
+              AND ROWNUM                     = #numOne#
+              AND WTCCC.EZCANCELFLAG         = '0'
+            ) A3
+           ,(SELECT
+                COUNT(WTCCC.CINC_PO_GLBL_CATG_CD) CNT_B1
+            FROM
+                WH_TRNSF_CINC_CATG_CONV WTCCC
+            WHERE
+                INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                AND WTCCC.FROM_RTL_WH_CD       = #fromRtlWhCdAst#
+                AND WTCCC.FROM_WH_OWNR_CD      = INVTY_LOC_CD_FROM.WH_OWNR_CD
+                AND WTCCC.FROM_LOC_TP_CD       = #fromLocTpCdAst#
+                AND WTCCC.TO_RTL_WH_CD         = INVTY_LOC_CD_TO.RTL_WH_CD
+                AND WTCCC.TO_WH_OWNR_CD        = #toWhOwnrCdAst#
+                AND WTCCC.TO_LOC_TP_CD         = #toLocTpCdAst#
+                AND ROWNUM                     = #numOne#
+                AND WTCCC.EZCANCELFLAG         = '0'
+            ) B1
+            ,(SELECT
+                COUNT(WTCCC.CINC_PO_GLBL_CATG_CD) CNT_B2
+            FROM
+                WH_TRNSF_CINC_CATG_CONV WTCCC
+            WHERE
+                INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                AND WTCCC.FROM_RTL_WH_CD       = #fromRtlWhCdAst#
+                AND WTCCC.FROM_WH_OWNR_CD      = INVTY_LOC_CD_FROM.WH_OWNR_CD
+                AND WTCCC.FROM_LOC_TP_CD       = #fromLocTpCdAst#
+                AND WTCCC.TO_RTL_WH_CD         = #toRtlWhCdAst#
+                AND WTCCC.TO_WH_OWNR_CD        = INVTY_LOC_CD_TO.WH_OWNR_CD
+                AND WTCCC.TO_LOC_TP_CD         = #toLocTpCdAst#
+                AND ROWNUM                     = #numOne#
+                AND WTCCC.EZCANCELFLAG         = '0'
+            ) B2
+            ,(SELECT
+                COUNT(WTCCC.CINC_PO_GLBL_CATG_CD) CNT_B3
+            FROM
+                WH_TRNSF_CINC_CATG_CONV WTCCC
+            WHERE
+                INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                AND WTCCC.FROM_RTL_WH_CD       = #fromRtlWhCdAst#
+                AND WTCCC.FROM_WH_OWNR_CD      = INVTY_LOC_CD_FROM.WH_OWNR_CD
+                AND WTCCC.FROM_LOC_TP_CD       = #fromLocTpCdAst#
+                AND WTCCC.TO_RTL_WH_CD         = #toRtlWhCdAst#
+                AND WTCCC.TO_WH_OWNR_CD        = #toWhOwnrCdAst#
+                AND WTCCC.TO_LOC_TP_CD         = INVTY_LOC_CD_TO.INVTY_LOC_TP_CD
+                AND ROWNUM                     = #numOne#
+                AND WTCCC.EZCANCELFLAG         = '0'
+            ) B3
+            ,(SELECT
+                COUNT(WTCCC.CINC_PO_GLBL_CATG_CD) CNT_C1
+            FROM
+                WH_TRNSF_CINC_CATG_CONV WTCCC
+            WHERE
+                INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                AND WTCCC.FROM_RTL_WH_CD       = #fromRtlWhCdAst#
+                AND WTCCC.FROM_WH_OWNR_CD      = #fromWhOwnrCdAst#
+                AND WTCCC.FROM_LOC_TP_CD       = INVTY_LOC_CD_FROM.INVTY_LOC_TP_CD
+                AND WTCCC.TO_RTL_WH_CD         = INVTY_LOC_CD_TO.RTL_WH_CD
+                AND WTCCC.TO_WH_OWNR_CD        = #toWhOwnrCdAst#
+                AND WTCCC.TO_LOC_TP_CD         = #toLocTpCdAst#
+                AND ROWNUM                     = #numOne#
+                AND WTCCC.EZCANCELFLAG         = '0'
+            ) C1
+            ,(SELECT
+                COUNT(WTCCC.CINC_PO_GLBL_CATG_CD) CNT_C2
+            FROM
+                WH_TRNSF_CINC_CATG_CONV WTCCC
+            WHERE
+                INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                AND WTCCC.FROM_RTL_WH_CD       = #fromRtlWhCdAst#
+                AND WTCCC.FROM_WH_OWNR_CD      = #fromWhOwnrCdAst#
+                AND WTCCC.FROM_LOC_TP_CD       = INVTY_LOC_CD_FROM.INVTY_LOC_TP_CD
+                AND WTCCC.TO_RTL_WH_CD         = #toRtlWhCdAst#
+                AND WTCCC.TO_WH_OWNR_CD        = INVTY_LOC_CD_TO.WH_OWNR_CD
+                AND WTCCC.TO_LOC_TP_CD         = #toLocTpCdAst#
+                AND ROWNUM                     = #numOne#
+                AND WTCCC.EZCANCELFLAG         = '0'
+            ) C2
+            ,(SELECT
+                COUNT(WTCCC.CINC_PO_GLBL_CATG_CD) CNT_C3
+            FROM
+                WH_TRNSF_CINC_CATG_CONV WTCCC
+            WHERE
+                INVTY_LOC_CD_FROM.GLBL_CMPY_CD = WTCCC.GLBL_CMPY_CD
+                AND WTCCC.FROM_RTL_WH_CD       = #fromRtlWhCdAst#
+                AND WTCCC.FROM_WH_OWNR_CD      = #fromWhOwnrCdAst#
+                AND WTCCC.FROM_LOC_TP_CD       = INVTY_LOC_CD_FROM.INVTY_LOC_TP_CD
+                AND WTCCC.TO_RTL_WH_CD         = #toRtlWhCdAst#
+                AND WTCCC.TO_WH_OWNR_CD        = #toWhOwnrCdAst#
+                AND WTCCC.TO_LOC_TP_CD         = INVTY_LOC_CD_TO.INVTY_LOC_TP_CD
+                AND ROWNUM                     = #numOne#
+                AND WTCCC.EZCANCELFLAG         = '0'
+            ) C3
+        ) AS CINC_PO_GLBL_CATG_CD
+        ,INO.GLBL_CMPY_CD
+        ,SMV.CUSA_VND_CD
+    FROM
+        INVTY_ORD INO
+        ,INVTY_ORD_DTL IOD
+        ,SCUBE_MDSE_V SMV
+        ,(SELECT DISTINCT
+              DIL.INVTY_LOC_CD
+              ,DIL.RTL_WH_CD
+              ,RW.WH_OWNR_CD
+              ,DIL.INVTY_LOC_TP_CD
+              ,DIL.GLBL_CMPY_CD
+          FROM
+              DS_INVTY_LOC_V DIL
+              ,RTL_WH RW
+              ,INVTY_OWNR IO
+          WHERE
+              DIL.GLBL_CMPY_CD       = #glblCmpyCd#
+          <isNotNull property="technician">
+          AND  DIL.INVTY_LOC_TP_CD   != #technician#
+          </isNotNull>
+          --RTL_WH JOIN
+          AND DIL.GLBL_CMPY_CD       = RW.GLBL_CMPY_CD
+          AND DIL.RTL_WH_CD          = RW.RTL_WH_CD
+          --INVTY_OWNR JOIN
+          AND RW.GLBL_CMPY_CD        = IO.GLBL_CMPY_CD
+          AND RW.INVTY_OWNR_CD       = IO.INVTY_OWNR_CD
+          AND IO.CMPY_INVTY_FLG      = #cmpyInvtyFlg#
+          AND DIL.EZCANCELFLAG       = '0'
+          AND RW.EZCANCELFLAG        = '0'
+          AND IO.EZCANCELFLAG        = '0'
+          <!-- Add Start 2020/02/04 QC#55572 -->
+          <isNotNull property="exclSwhCdList">
+          AND <iterate property="exclSwhCdList" var="exclSwhCdList[]" open="DIL.RTL_SWH_CD NOT IN (" close=")" conjunction=",">
+              #exclSwhCdList[]#
+              </iterate>
+          </isNotNull>
+          <!-- Add End 2020/02/04 QC#55572 -->
+          ) INVTY_LOC_CD_FROM
+          ,(SELECT
+              DIL.INVTY_LOC_CD
+              ,DIL.RTL_WH_CD
+              ,RW.WH_OWNR_CD
+              ,DIL.INVTY_LOC_TP_CD
+              ,DIL.GLBL_CMPY_CD
+          FROM
+              DS_INVTY_LOC_V DIL
+              ,RTL_WH RW
+              ,INVTY_OWNR IO
+          WHERE
+              DIL.GLBL_CMPY_CD       = #glblCmpyCd#
+          <isNotNull property="technician">
+          AND  DIL.INVTY_LOC_TP_CD   != #technician#
+          </isNotNull>
+          --RTL_WH JOIN
+          AND DIL.GLBL_CMPY_CD       = RW.GLBL_CMPY_CD
+          AND DIL.RTL_WH_CD          = RW.RTL_WH_CD
+          --INVTY_OWNR JOIN
+          AND RW.GLBL_CMPY_CD        = IO.GLBL_CMPY_CD
+          AND RW.INVTY_OWNR_CD       = IO.INVTY_OWNR_CD
+          AND IO.CMPY_INVTY_FLG      = #cmpyInvtyFlg#
+          AND DIL.EZCANCELFLAG       = '0'
+          AND RW.EZCANCELFLAG        = '0'
+          AND IO.EZCANCELFLAG        = '0'
+          <!-- Add Start 2020/02/04 QC#55572 -->
+          <isNotNull property="exclSwhCdList">
+          AND <iterate property="exclSwhCdList" var="exclSwhCdList[]" open="DIL.RTL_SWH_CD NOT IN (" close=")" conjunction=",">
+              #exclSwhCdList[]#
+              </iterate>
+          </isNotNull>
+          <!-- Add End 2020/02/04 QC#55572 -->
+          ) INVTY_LOC_CD_TO
+    WHERE
+        --INVTY_ORD JOIN
+        INO.GLBL_CMPY_CD                  = #glblCmpyCd#
+        --INVTY_ORD_DTL JOIN
+        AND INO.GLBL_CMPY_CD              = IOD.GLBL_CMPY_CD
+        AND INO.INVTY_ORD_NUM             = IOD.INVTY_ORD_NUM
+        AND IOD.ORD_QTY                   > #qtyZero#
+        AND (INO.INVTY_ORD_CANC_TS IS NULL
+        AND  INO.INVTY_ORD_CLOSE_TS  IS NULL)
+        AND IOD.GLBL_CMPY_CD              = INVTY_LOC_CD_FROM.GLBL_CMPY_CD
+        AND IOD.GLBL_CMPY_CD              = INVTY_LOC_CD_TO.GLBL_CMPY_CD
+        AND IOD.INVTY_LOC_CD              = INVTY_LOC_CD_FROM.INVTY_LOC_CD
+        AND IOD.TO_INVTY_LOC_CD           = INVTY_LOC_CD_TO.INVTY_LOC_CD
+        <isNotNull property="exclLocCdList">
+          <iterate property="exclLocCdList" var="exclLocCdList[]" open="AND IOD.TO_RTL_WH_CD NOT IN (" close=")" conjunction=",">
+            #exclLocCdList[]#
+          </iterate> 
+        </isNotNull>
+        --SCUBE_MDSE_V JOIN
+        AND IOD.GLBL_CMPY_CD              = SMV.GLBL_CMPY_CD
+        AND IOD.MDSE_CD                   = SMV.MDSE_CD
+        AND INO.EZCANCELFLAG              = '0'
+        AND IOD.EZCANCELFLAG              = '0'
+        AND EXISTS(
+                       SELECT
+                           1
+                       FROM
+                           PRCH_REQ PR
+                           ,PRCH_REQ_DTL PRD
+                           ,PRCH_REQ_APVL_STS PRAS
+                       WHERE
+                           --PRCH_REQ JOIN
+                           IOD.GLBL_CMPY_CD            = PR.GLBL_CMPY_CD
+                           AND PR.PRCH_REQ_STS_CD NOT  IN(#prchReqStsCdClosed#, #prchReqStsCdCancelled#)
+                           AND PR.PRCH_REQ_REC_TP_CD   IN (#prchReqRecTpCdTechRequest#, #prchReqRecTpCdTechReturn#)
+                           --PRCH_REQ_APVL_STS JOIN
+                           AND PR.PRCH_REQ_APVL_STS_CD = PRAS.PRCH_REQ_APVL_STS_CD
+                           AND PRAS.PRCH_REQ_APVL_FLG  = #prchReqApvlFlg#
+                           --PRCH_REQ_DTL JOIN
+                           AND PR.GLBL_CMPY_CD         = PRD.GLBL_CMPY_CD
+                           AND PR.PRCH_REQ_NUM         = PRD.PRCH_REQ_NUM
+                           AND PRD.INVTY_ORD_NUM       = IOD.INVTY_ORD_NUM
+                           AND PRD.INVTY_ORD_LINE_NUM  = IOD.INVTY_ORD_LINE_NUM
+                           AND IOD.INVTY_ORD_NUM       = IOD.INVTY_ORD_NUM
+                           AND ROWNUM                  = #numOne#
+                           AND PR.EZCANCELFLAG         = '0'
+                           AND PRAS.EZCANCELFLAG       = '0'
+                           AND PRD.EZCANCELFLAG        = '0'
+                       )
+    ) V4
+    WHERE V4.CINC_GLBL_WH_CD    !=    V4.CINC_SPLY_GLBL_WH_CD
+    GROUP BY
+        V4.INVTY_ORD_NUM
+        ,V4.INVTY_ORD_SUBMT_TS
+        ,V4.FROM_RTL_WH_CD
+        ,V4.MDSE_CD
+        ,V4.SHPG_SVC_LVL_CD
+        ,V4.CINC_GLBL_WH_CD
+        ,V4.CINC_SPLY_GLBL_WH_CD
+        ,V4.GLBL_CMPY_CD
+        ,V4.CUSA_VND_CD
+        ,V4.CINC_PO_GLBL_CATG_CD
+    </isNull>
+    </statement>
+    <!-- END 05/11/2016 R.Shimamoto [V2.0 MOD]  -->
+    <statement id="getWrkDeleteData" parameterClass="Map">
+    SELECT
+          GLBL_CMPY_CD
+         ,CINC_GLBL_WH_CD
+         ,INTFC_PO_ORD_DT
+         ,INTFC_PO_ORD_NUM
+         ,CINC_CO_NUM
+         ,INTFC_PRT_MDSE_CD
+         ,PRT_SIZE_TXT
+         ,CINC_GLBL_SHPG_METH_CD
+         ,INTFC_CRAT_DT
+    FROM
+          INTFC_PO_RMN_WRK
+    WHERE
+          GLBL_CMPY_CD     = #glblCmpyCd#
+     AND  INTFC_CRAT_DT &lt; #2daysAgo#
+     AND  EZCANCELFLAG     = '0'
+    </statement>
+
+    <!-- Start 12/16/2013 Y.Imazu [QC3258 Add] -->
+    <statement id="getWrkDeleteDataForRerun" parameterClass="Map">
+    SELECT
+          GLBL_CMPY_CD
+         ,CINC_GLBL_WH_CD
+         ,INTFC_PO_ORD_DT
+         ,INTFC_PO_ORD_NUM
+         ,CINC_CO_NUM
+         ,INTFC_PRT_MDSE_CD
+         ,PRT_SIZE_TXT
+         ,CINC_GLBL_SHPG_METH_CD
+         ,INTFC_CRAT_DT
+    FROM
+          INTFC_PO_RMN_WRK
+    WHERE
+          GLBL_CMPY_CD  = #glblCmpyCd#
+     AND  INTFC_CRAT_DT = #batchProcDt#
+     AND  EZCANCELFLAG  = '0'
+    </statement>
+    <!-- End 12/16/2013 Y.Imazu [QC3258 Add] -->
+</sqlMap>

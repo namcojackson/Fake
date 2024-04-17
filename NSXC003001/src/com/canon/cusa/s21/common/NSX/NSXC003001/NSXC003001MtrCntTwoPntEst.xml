@@ -1,0 +1,460 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NSXC003001MtrCntTwoPntEst">
+    <statement id="getRollOverCnt" parameterClass="Map" resultClass="Map">
+        SELECT
+             A.SVC_PHYS_MTR_PK
+            ,A.CNTR_DIGIT_NUM
+            ,POWER(10, A.CNTR_DIGIT_NUM)    CNTR_MAX_CNT
+            ,COUNT(B.SVC_PHYS_MTR_READ_PK)  ROLL_OVER_TIMES
+            ,COUNT(B.SVC_PHYS_MTR_READ_PK) * POWER(10, A.CNTR_DIGIT_NUM)
+                                            ROLL_OVER_CNT
+        FROM
+             SVC_PHYS_MTR       A
+            ,SVC_PHYS_MTR_READ  B
+        WHERE
+                A.GLBL_CMPY_CD        = #glblCmpyCd#
+            AND A.SVC_PHYS_MTR_PK     = #svcPhysMtrPk#
+            AND A.CNTR_DIGIT_NUM      IS NOT NULL
+            AND A.CNTR_DIGIT_NUM      &gt; 0
+            AND A.EZCANCELFLAG        = '0'
+            AND A.GLBL_CMPY_CD        = B.GLBL_CMPY_CD
+            AND A.SVC_PHYS_MTR_PK     = B.SVC_PHYS_MTR_PK
+            AND B.CNTR_RESET_TP_CD    = #rollOver#
+            AND B.VLD_MTR_FLG         = 'Y'
+            <!-- add start 2020/04/24 QC#56678 -->
+            AND B.CARRY_OVER_TP_CD    = '0'
+            <!-- add end 2020/04/24 QC#56678 -->
+<!-- mod start 2018/06/04 QC#26052 -->
+<!-- mod start 2020/03/03 QC#56123 -->
+            <!-- AND B.DS_MTR_READ_TP_GRP_CD = #dsMtrReadTpGrpCd# -->
+            <iterate property="dsMtrReadTpGrpCdList" var="dsMtrReadTpGrpCd[]" open="AND B.DS_MTR_READ_TP_GRP_CD IN (" close=")" conjunction=",">
+                #dsMtrReadTpGrpCd[]#
+            </iterate>
+<!-- mod end 2020/03/03 QC#56123 -->
+            <isNull property="sameDt">
+            AND (
+                    (    B.MTR_READ_DT               =     #startMtrReadDt#
+                     AND B.SVC_PHYS_MTR_READ_GRP_SQ  &gt;  #startSvcPhysMtrReadGrpSq#)
+                 OR
+                    (    B.MTR_READ_DT               &gt;  #startMtrReadDt#
+                     AND B.MTR_READ_DT               &lt;  #endMtrReadDt#)
+                 OR
+                    (    B.MTR_READ_DT               =     #endMtrReadDt#
+                     AND B.SVC_PHYS_MTR_READ_GRP_SQ  &lt;= #endSvcPhysMtrReadGrpSq#)
+                )
+            </isNull>
+            <isEqual property="sameDt" compareValue="Y">
+            AND (        B.MTR_READ_DT               =     #startMtrReadDt#
+                     AND B.SVC_PHYS_MTR_READ_GRP_SQ  &gt;  #startSvcPhysMtrReadGrpSq#
+                     AND B.SVC_PHYS_MTR_READ_GRP_SQ  &lt;= #endSvcPhysMtrReadGrpSq#)
+            </isEqual>
+<!-- mod end 2018/06/04 QC#26052 -->
+<!-- add start 2019/08/23 QC#52934 -->
+            <isNotNull property="exclSvcPhysMtrReadPk">
+            AND B.SVC_PHYS_MTR_READ_PK            &lt;&gt; #exclSvcPhysMtrReadPk#
+            </isNotNull>
+<!-- add end 2019/08/23 QC#52934 -->
+            AND B.EZCANCELFLAG        = '0'
+        GROUP BY
+             A.SVC_PHYS_MTR_PK
+            ,A.CNTR_DIGIT_NUM
+    </statement>
+
+    <statement id="getExchCnt" parameterClass="Map" resultClass="Map">
+<!-- START 2018/10/15 K.Kojima [QC#28748,ADD] -->
+        WITH TARGET_MTR_READ AS (
+            SELECT
+                 A.GLBL_CMPY_CD
+                ,A.SVC_PHYS_MTR_READ_PK
+                ,A.SVC_PHYS_MTR_PK
+                ,A.MTR_READ_DT
+                ,A.READ_MTR_CNT
+                ,A.SVC_PHYS_MTR_READ_GRP_SQ
+                ,A.CNTR_RESET_TP_CD
+                ,A.VLD_MTR_FLG
+                ,A.EZCANCELFLAG
+            FROM
+                SVC_PHYS_MTR_READ  A
+            WHERE
+                    A.GLBL_CMPY_CD        = #glblCmpyCd#
+                AND A.SVC_PHYS_MTR_PK     = #svcPhysMtrPk#
+                AND A.VLD_MTR_FLG         = 'Y'
+                <!-- add start 2020/04/24 QC#56678 -->
+                AND A.CARRY_OVER_TP_CD    = '0'
+                <!-- add end 2020/04/24 QC#56678 -->
+                <isNull property="sameDt">
+                AND A.MTR_READ_DT     &gt;= #startMtrReadDt#
+                AND A.MTR_READ_DT     &lt;= #endMtrReadDt#
+                </isNull>
+                <isEqual property="sameDt" compareValue="Y">
+                AND A.MTR_READ_DT         = #startMtrReadDt#
+                </isEqual>
+                AND A.EZCANCELFLAG        = '0'
+<!-- add start 2020/03/03 QC#56123 -->
+                <iterate property="dsMtrReadTpGrpCdList" var="dsMtrReadTpGrpCd[]" open="AND A.DS_MTR_READ_TP_GRP_CD IN (" close=")" conjunction=",">
+                    #dsMtrReadTpGrpCd[]#
+                </iterate>
+<!-- add end 2020/03/03 QC#56123 -->
+        )
+<!-- END 2018/10/15 K.Kojima [QC#28748,ADD] -->
+<!-- START 2018/10/15 K.Kojima [QC#28748,MOD] -->
+<!--    WITH EXCHT_MTR_READ AS ( -->
+        ,EXCHT_MTR_READ AS (
+<!-- END 2018/10/15 K.Kojima [QC#28748,MOD] -->
+            SELECT
+                 A.GLBL_CMPY_CD
+                ,A.SVC_PHYS_MTR_READ_PK
+                ,A.SVC_PHYS_MTR_PK
+                ,A.MTR_READ_DT
+                ,A.SVC_PHYS_MTR_READ_GRP_SQ
+<!-- START 2018/10/24 K.Kojima [QC#28924,ADD] -->
+                ,A.READ_MTR_CNT
+<!-- END 2018/10/24 K.Kojima [QC#28924,ADD] -->
+            FROM
+<!-- START 2018/10/15 K.Kojima [QC#28748,MOD] -->
+<!--            SVC_PHYS_MTR_READ  A -->
+                TARGET_MTR_READ    A
+<!-- END 2018/10/15 K.Kojima [QC#28748,MOD] -->
+            WHERE
+                    A.GLBL_CMPY_CD        = #glblCmpyCd#
+                AND A.SVC_PHYS_MTR_PK     = #svcPhysMtrPk#
+                AND A.CNTR_RESET_TP_CD    = #exchange#
+                AND A.VLD_MTR_FLG         = 'Y'
+<!-- mod start 2018/06/04 QC#26052 -->
+                <isNull property="sameDt">
+                AND (
+                        (    A.MTR_READ_DT               =     #startMtrReadDt#
+                         AND A.SVC_PHYS_MTR_READ_GRP_SQ  &gt;  #startSvcPhysMtrReadGrpSq#)
+                     OR
+                        (    A.MTR_READ_DT               &gt;  #startMtrReadDt#
+                         AND A.MTR_READ_DT               &lt;  #endMtrReadDt#)
+                     OR
+                        (    A.MTR_READ_DT               =     #endMtrReadDt#
+                         AND A.SVC_PHYS_MTR_READ_GRP_SQ  &lt;= #endSvcPhysMtrReadGrpSq#)
+                    )
+                </isNull>
+                <isEqual property="sameDt" compareValue="Y">
+                AND (        A.MTR_READ_DT               =     #startMtrReadDt#
+                         AND A.SVC_PHYS_MTR_READ_GRP_SQ  &gt;  #startSvcPhysMtrReadGrpSq#
+                         AND A.SVC_PHYS_MTR_READ_GRP_SQ  &lt;= #endSvcPhysMtrReadGrpSq#)
+                </isEqual>
+<!-- mod end 2018/06/04 QC#26052 -->
+<!-- add start 2019/08/23 QC#52934 -->
+                <isNotNull property="exclSvcPhysMtrReadPk">
+                AND A.SVC_PHYS_MTR_READ_PK            &lt;&gt; #exclSvcPhysMtrReadPk#
+                </isNotNull>
+<!-- add end 2019/08/23 QC#52934 -->
+                AND A.EZCANCELFLAG        = '0'
+         )
+        ,PRE_EXCHT_MTR_READ AS (
+            SELECT
+                 A.SVC_PHYS_MTR_READ_PK
+<!-- START 2018/10/24 K.Kojima [QC#28924,ADD] -->
+                ,A.READ_MTR_CNT AS CUR_READ_MTR_CNT
+<!-- END 2018/10/24 K.Kojima [QC#28924,ADD] -->
+                ,B.SVC_PHYS_MTR_PK
+                ,B.MTR_READ_DT
+                ,B.SVC_PHYS_MTR_READ_GRP_SQ
+                ,B.READ_MTR_CNT
+                ,ROW_NUMBER() OVER (PARTITION BY A.SVC_PHYS_MTR_READ_PK ORDER BY B.MTR_READ_DT DESC, B.SVC_PHYS_MTR_READ_GRP_SQ DESC) AS ROW_NUM
+            FROM
+                 EXCHT_MTR_READ     A
+<!-- START 2018/10/15 K.Kojima [QC#28748,MOD] -->
+<!--            ,SVC_PHYS_MTR_READ  B -->
+                ,TARGET_MTR_READ    B
+<!-- START 2018/10/15 K.Kojima [QC#28748,MOD] -->
+            WHERE
+                    A.GLBL_CMPY_CD        = B.GLBL_CMPY_CD
+                AND A.SVC_PHYS_MTR_PK     = B.SVC_PHYS_MTR_PK
+                AND B.VLD_MTR_FLG         = 'Y'
+<!-- mod start 2018/06/04 QC#26052 -->
+                <isNull property="sameDt">
+                AND (
+                        (    B.MTR_READ_DT               =     #startMtrReadDt#
+                         AND B.SVC_PHYS_MTR_READ_GRP_SQ  &gt;= #startSvcPhysMtrReadGrpSq#)
+                     OR
+                        (    B.MTR_READ_DT               &gt;  #startMtrReadDt#
+                         AND B.MTR_READ_DT               &lt;  A.MTR_READ_DT)
+                     OR
+                        (    B.MTR_READ_DT               =     A.MTR_READ_DT
+                         AND B.SVC_PHYS_MTR_READ_GRP_SQ  &lt;  A.SVC_PHYS_MTR_READ_GRP_SQ)
+                    )
+                </isNull>
+                <isEqual property="sameDt" compareValue="Y">
+                AND (        B.MTR_READ_DT               =     #startMtrReadDt#
+                         AND B.SVC_PHYS_MTR_READ_GRP_SQ  &gt;= #startSvcPhysMtrReadGrpSq#
+                         AND B.SVC_PHYS_MTR_READ_GRP_SQ  &lt;  A.SVC_PHYS_MTR_READ_GRP_SQ)
+                </isEqual>
+<!-- mod end 2018/06/04 QC#26052 -->
+                AND B.EZCANCELFLAG        = '0'
+        )
+        SELECT
+             A.SVC_PHYS_MTR_PK
+<!-- START 2018/10/24 K.Kojima [QC#28924,MOD] -->
+<!--        ,SUM(A.READ_MTR_CNT) EXCH_CNT -->
+            ,SUM(A.READ_MTR_CNT - A.CUR_READ_MTR_CNT) EXCH_CNT
+<!-- END 2018/10/24 K.Kojima [QC#28924,MOD] -->
+        FROM
+            PRE_EXCHT_MTR_READ  A
+        WHERE
+            A.ROW_NUM = 1
+        GROUP BY
+            A.SVC_PHYS_MTR_PK
+    </statement>
+
+    <statement id="getCntrMaxCnt" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            POWER(10, A.CNTR_DIGIT_NUM)
+        FROM
+            SVC_PHYS_MTR       A
+        WHERE
+                A.GLBL_CMPY_CD        = #glblCmpyCd#
+            AND A.SVC_PHYS_MTR_PK     = #svcPhysMtrPk#
+            AND A.CNTR_DIGIT_NUM      IS NOT NULL
+            AND A.CNTR_DIGIT_NUM      &gt; 0
+            AND A.EZCANCELFLAG        = '0'
+    </statement>
+    <statement id="getRollOverExchList" parameterClass="Map" resultClass="Map">
+        SELECT
+             B.SVC_PHYS_MTR_READ_PK     SVC_PHYS_MTR_READ_PK
+            ,B.CNTR_RESET_TP_CD         CNTR_RESET_TP_CD
+        FROM
+             SVC_PHYS_MTR       A
+            ,SVC_PHYS_MTR_READ  B
+        WHERE
+                A.GLBL_CMPY_CD        = #glblCmpyCd#
+            AND A.SVC_PHYS_MTR_PK     = #svcPhysMtrPk#
+            AND A.CNTR_DIGIT_NUM      IS NOT NULL
+            AND A.CNTR_DIGIT_NUM      &gt; 0
+            AND A.EZCANCELFLAG        = '0'
+            AND A.GLBL_CMPY_CD        = B.GLBL_CMPY_CD
+            AND A.SVC_PHYS_MTR_PK     = B.SVC_PHYS_MTR_PK
+<!-- mod start 2018/06/04 QC#26052 -->
+<!--             AND B.CNTR_RESET_TP_CD    IN (#rollOver#, #exchange#) -->
+<!-- mod start 2020/03/03 QC#56123 -->
+            <!-- AND ((B.CNTR_RESET_TP_CD  = #rollOver#  AND B.DS_MTR_READ_TP_GRP_CD = #dsMtrReadTpGrpCd#) -->
+            <!--  OR  (B.CNTR_RESET_TP_CD  = #exchange#)) -->
+            AND B.CNTR_RESET_TP_CD    IN (#rollOver#, #exchange#)
+            <iterate property="dsMtrReadTpGrpCdList" var="dsMtrReadTpGrpCd[]" open="AND B.DS_MTR_READ_TP_GRP_CD IN (" close=")" conjunction=",">
+                #dsMtrReadTpGrpCd[]#
+            </iterate>
+<!-- mod end 2020/03/03 QC#56123 -->
+<!-- mod end 2018/06/04 QC#26052 -->
+            AND B.VLD_MTR_FLG         = 'Y'
+<!-- mod start 2018/06/04 QC#26052 -->
+            <!-- add start 2020/04/24 QC#56678 -->
+            AND B.CARRY_OVER_TP_CD    = '0'
+            <!-- add end 2020/04/24 QC#56678 -->
+            <isNull property="sameDt">
+            AND (
+                    (    B.MTR_READ_DT               =     #startMtrReadDt#
+                     AND B.SVC_PHYS_MTR_READ_GRP_SQ  &gt;  #startSvcPhysMtrReadGrpSq#)
+                 OR
+                    (    B.MTR_READ_DT               &gt;  #startMtrReadDt#
+                     AND B.MTR_READ_DT               &lt;  #endMtrReadDt#)
+                 OR
+                    (    B.MTR_READ_DT               =     #endMtrReadDt#
+                     AND B.SVC_PHYS_MTR_READ_GRP_SQ  &lt;= #endSvcPhysMtrReadGrpSq#)
+                )
+            </isNull>
+            <isEqual property="sameDt" compareValue="Y">
+            AND (        B.MTR_READ_DT               =     #startMtrReadDt#
+                     AND B.SVC_PHYS_MTR_READ_GRP_SQ  &gt;  #startSvcPhysMtrReadGrpSq#
+                     AND B.SVC_PHYS_MTR_READ_GRP_SQ  &lt;= #endSvcPhysMtrReadGrpSq#)
+            </isEqual>
+<!-- mod end 2018/06/04 QC#26052 -->
+<!-- add start 2019/08/23 QC#52934 -->
+            <isNotNull property="exclSvcPhysMtrReadPk">
+            AND B.SVC_PHYS_MTR_READ_PK            &lt;&gt; #exclSvcPhysMtrReadPk#
+            </isNotNull>
+<!-- add end 2019/08/23 QC#52934 -->
+            AND B.EZCANCELFLAG        = '0'
+        ORDER BY
+             B.MTR_READ_DT
+            ,B.SVC_PHYS_MTR_READ_GRP_SQ
+    </statement>
+
+    <statement id="getExclPer" parameterClass="Map" resultClass="Map">
+<!-- START 2018/10/15 K.Kojima [QC#28748,ADD] -->
+        WITH TARGET_MTR_READ AS (
+            SELECT
+                 A.GLBL_CMPY_CD
+                ,A.SVC_PHYS_MTR_READ_PK
+                ,A.SVC_PHYS_MTR_PK
+                ,A.MTR_READ_DT
+                ,A.READ_MTR_CNT
+                ,A.SVC_PHYS_MTR_READ_GRP_SQ
+                ,A.CNTR_RESET_TP_CD
+                ,A.VLD_MTR_FLG
+                ,A.EZCANCELFLAG
+            FROM
+                SVC_PHYS_MTR_READ  A
+            WHERE
+                    A.GLBL_CMPY_CD        = #glblCmpyCd#
+                AND A.SVC_PHYS_MTR_PK     = #svcPhysMtrPk#
+                AND A.VLD_MTR_FLG         = 'Y'
+                <!-- add start 2020/04/24 QC#56678 -->
+                AND A.CARRY_OVER_TP_CD    = '0'
+                <!-- add end 2020/04/24 QC#56678 -->
+                <isNull property="sameDt">
+                AND A.MTR_READ_DT     &gt;= #startMtrReadDt#
+                AND A.MTR_READ_DT     &lt;= #endMtrReadDt#
+                </isNull>
+                <isEqual property="sameDt" compareValue="Y">
+                AND A.MTR_READ_DT         = #startMtrReadDt#
+                </isEqual>
+                AND A.EZCANCELFLAG        = '0'
+<!-- add start 2020/03/03 QC#56123 -->
+                <iterate property="dsMtrReadTpGrpCdList" var="dsMtrReadTpGrpCd[]" open="AND A.DS_MTR_READ_TP_GRP_CD IN (" close=")" conjunction=",">
+                    #dsMtrReadTpGrpCd[]#
+                </iterate>
+<!-- add end 2020/03/03 QC#56123 -->
+        )
+<!-- END 2018/10/15 K.Kojima [QC#28748,ADD] -->
+<!-- START 2018/10/15 K.Kojima [QC#28748,MOD] -->
+<!--    WITH EXCHT_MTR_READ AS ( -->
+        ,EXCHT_MTR_READ AS (
+<!-- END 2018/10/15 K.Kojima [QC#28748,MOD] -->
+            SELECT
+                 A.GLBL_CMPY_CD
+                ,A.SVC_PHYS_MTR_READ_PK
+                ,A.SVC_PHYS_MTR_PK
+                ,A.MTR_READ_DT
+                ,A.SVC_PHYS_MTR_READ_GRP_SQ
+            FROM
+<!-- START 2018/10/15 K.Kojima [QC#28748,MOD] -->
+<!--            SVC_PHYS_MTR_READ  A -->
+                TARGET_MTR_READ    A
+<!-- END 2018/10/15 K.Kojima [QC#28748,MOD] -->
+            WHERE
+                    A.GLBL_CMPY_CD        = #glblCmpyCd#
+                AND A.SVC_PHYS_MTR_PK     = #svcPhysMtrPk#
+                AND A.CNTR_RESET_TP_CD    = #exchange#
+                AND A.VLD_MTR_FLG         = 'Y'
+<!-- mod start 2018/06/04 QC#26052 -->
+                <isNull property="sameDt">
+                AND (
+                        (    A.MTR_READ_DT               =     #startMtrReadDt#
+                         AND A.SVC_PHYS_MTR_READ_GRP_SQ  &gt;  #startSvcPhysMtrReadGrpSq#)
+                     OR
+                        (    A.MTR_READ_DT               &gt;  #startMtrReadDt#
+                         AND A.MTR_READ_DT               &lt;  #endMtrReadDt#)
+                     OR
+                        (    A.MTR_READ_DT               =     #endMtrReadDt#
+                         AND A.SVC_PHYS_MTR_READ_GRP_SQ  &lt;= #endSvcPhysMtrReadGrpSq#)
+                    )
+                </isNull>
+                <isEqual property="sameDt" compareValue="Y">
+                AND (        A.MTR_READ_DT               =     #startMtrReadDt#
+                         AND A.SVC_PHYS_MTR_READ_GRP_SQ  &gt;  #startSvcPhysMtrReadGrpSq#
+                         AND A.SVC_PHYS_MTR_READ_GRP_SQ  &lt;= #endSvcPhysMtrReadGrpSq#)
+                </isEqual>
+<!-- mod end 2018/06/04 QC#26052 -->
+                AND A.EZCANCELFLAG        = '0'
+         )
+        ,PRE_EXCHT_MTR_READ AS (
+            SELECT
+                 A.SVC_PHYS_MTR_READ_PK
+                ,B.SVC_PHYS_MTR_PK
+                ,B.MTR_READ_DT
+                ,TO_DATE(A.MTR_READ_DT, 'YYYYMMDD') - TO_DATE(B.MTR_READ_DT, 'YYYYMMDD') AS EXCL_PER
+                ,B.SVC_PHYS_MTR_READ_GRP_SQ
+                ,B.READ_MTR_CNT
+                ,ROW_NUMBER() OVER (PARTITION BY A.SVC_PHYS_MTR_READ_PK ORDER BY B.MTR_READ_DT DESC, B.SVC_PHYS_MTR_READ_GRP_SQ DESC) AS ROW_NUM
+            FROM
+                 EXCHT_MTR_READ     A
+<!-- START 2018/10/15 K.Kojima [QC#28748,MOD] -->
+<!--            ,SVC_PHYS_MTR_READ  B -->
+                ,TARGET_MTR_READ    B
+<!-- START 2018/10/15 K.Kojima [QC#28748,MOD] -->
+            WHERE
+                    A.GLBL_CMPY_CD        = B.GLBL_CMPY_CD
+                AND A.SVC_PHYS_MTR_PK     = B.SVC_PHYS_MTR_PK
+                AND B.VLD_MTR_FLG         = 'Y'
+<!-- mod start 2018/06/04 QC#26052 -->
+                <isNull property="sameDt">
+                AND (
+                        (    B.MTR_READ_DT               =     #startMtrReadDt#
+                         AND B.SVC_PHYS_MTR_READ_GRP_SQ  &gt;= #startSvcPhysMtrReadGrpSq#)
+                     OR
+                        (    B.MTR_READ_DT               &gt;  #startMtrReadDt#
+                         AND B.MTR_READ_DT               &lt;  A.MTR_READ_DT)
+                     OR
+                        (    B.MTR_READ_DT               =     A.MTR_READ_DT
+                         AND B.SVC_PHYS_MTR_READ_GRP_SQ  &lt;  A.SVC_PHYS_MTR_READ_GRP_SQ)
+                    )
+                </isNull>
+                <isEqual property="sameDt" compareValue="Y">
+                AND (        B.MTR_READ_DT               =     #startMtrReadDt#
+                         AND B.SVC_PHYS_MTR_READ_GRP_SQ  &gt;= #startSvcPhysMtrReadGrpSq#
+                         AND B.SVC_PHYS_MTR_READ_GRP_SQ  &lt;  A.SVC_PHYS_MTR_READ_GRP_SQ)
+                </isEqual>
+<!-- mod end 2018/06/04 QC#26052 -->
+                AND B.EZCANCELFLAG        = '0'
+        )
+        SELECT
+             A.SVC_PHYS_MTR_PK
+            ,SUM(A.EXCL_PER)    EXCL_PER
+        FROM
+            PRE_EXCHT_MTR_READ  A
+        WHERE
+            A.ROW_NUM = 1
+        GROUP BY
+            A.SVC_PHYS_MTR_PK
+    </statement>
+    <statement id="getReadMtrCntInExch" parameterClass="Map" resultClass="Map">
+        SELECT
+             B.READ_MTR_CNT
+            ,B.MTR_READ_DT
+        FROM
+            (
+            SELECT
+                 A.GLBL_CMPY_CD
+                ,A.SVC_PHYS_MTR_READ_PK
+                ,A.SVC_PHYS_MTR_PK
+                ,A.MTR_READ_DT
+                ,A.READ_MTR_CNT
+                ,A.SVC_PHYS_MTR_READ_GRP_SQ
+            FROM
+                SVC_PHYS_MTR_READ  A
+            WHERE
+                    A.GLBL_CMPY_CD        = #glblCmpyCd#
+                AND A.SVC_PHYS_MTR_PK     = #svcPhysMtrPk#
+                AND A.CNTR_RESET_TP_CD    = #exchange#
+                AND A.VLD_MTR_FLG         = 'Y'
+                <!-- add start 2020/04/24 QC#56678 -->
+                AND A.CARRY_OVER_TP_CD    = '0'
+                <!-- add end 2020/04/24 QC#56678 -->
+<!-- add start 2020/03/03 QC#56123 -->
+                <iterate property="dsMtrReadTpGrpCdList" var="dsMtrReadTpGrpCd[]" open="AND A.DS_MTR_READ_TP_GRP_CD IN (" close=")" conjunction=",">
+                    #dsMtrReadTpGrpCd[]#
+                </iterate>
+<!-- add end 2020/03/03 QC#56123 -->
+<!-- mod start 2018/06/04 QC#26052 -->
+                <isNull property="sameDt">
+                AND (
+                        (    A.MTR_READ_DT               =     #startMtrReadDt#
+                         AND A.SVC_PHYS_MTR_READ_GRP_SQ  &gt;  #startSvcPhysMtrReadGrpSq#)
+                     OR
+                        (    A.MTR_READ_DT               &gt;  #startMtrReadDt#
+                         AND A.MTR_READ_DT               &lt;  #endMtrReadDt#)
+                     OR
+                        (    A.MTR_READ_DT               =     #endMtrReadDt#
+                         AND A.SVC_PHYS_MTR_READ_GRP_SQ  &lt;= #endSvcPhysMtrReadGrpSq#)
+                    )
+                </isNull>
+                <isEqual property="sameDt" compareValue="Y">
+                AND (        A.MTR_READ_DT               =     #startMtrReadDt#
+                         AND A.SVC_PHYS_MTR_READ_GRP_SQ  &gt;  #startSvcPhysMtrReadGrpSq#
+                         AND A.SVC_PHYS_MTR_READ_GRP_SQ  &lt;= #endSvcPhysMtrReadGrpSq#)
+                </isEqual>
+<!-- mod end 2018/06/04 QC#26052 -->
+                AND A.EZCANCELFLAG        = '0'
+            ORDER BY
+                A.MTR_READ_DT               DESC
+               ,A.SVC_PHYS_MTR_READ_GRP_SQ  DESC
+            ) B
+        WHERE
+                ROWNUM = 1
+    </statement>
+</sqlMap>

@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NFDL0170Query">
+
+    <typeAlias alias="NFDL0170CMsg"		type="business.blap.NFDL0170.NFDL0170CMsg"/>
+    <typeAlias alias="NFDL0170_ASMsg"  type="business.blap.NFDL0170.NFDL0170_ASMsg"/>
+
+    <statement id="getCustList" parameterClass="Map" resultMap="result.getCustList">
+        SELECT
+             X.BILL_TO_CUST_ACCT_CD
+            <!-- START 2018/11/15 S.Ohki [QC#29256,MOD] -->
+            <!-- ,X.BILL_TO_CUST_ACCT_NM -->
+            ,X.DS_ACCT_NM    AS BILL_TO_CUST_ACCT_NM
+            <!-- END   2018/11/15 S.Ohki [QC#29256,MOD] -->
+            ,X.LOC_NUM
+        FROM
+            (SELECT
+                 I.BILL_TO_CUST_ACCT_CD
+                <!-- START 2018/11/15 S.Ohki [QC#29256,MOD] -->
+                <!-- ,I.BILL_TO_CUST_ACCT_NM -->
+                ,SL.DS_ACCT_NM
+                <!-- END   2018/11/15 S.Ohki [QC#29256,MOD] -->
+                ,BL.LOC_NUM
+            FROM
+                 INV I
+                ,SVC_INV SI
+                ,INV_BOL IB
+                ,(
+                   SELECT
+                      GLBL_CMPY_CD 
+                     ,SVC_INV_NUM
+                     ,MDL_NM
+                     ,SER_NUM
+                     ,EZCANCELFLAG
+                     ,ROW_NUMBER() OVER(
+                         PARTITION BY
+                           A.SVC_INV_NUM
+                         ORDER BY
+                           A.SVC_INV_LINE_NUM        ASC
+                     ) AS ORD
+                   FROM
+                      SVC_INV_LINE A
+                   WHERE
+                      A.GLBL_CMPY_CD = #glblCmpyCd#
+                      <isNotNull property="mdlNm_H">
+                      AND A.MDL_NM  LIKE #mdlNm_H#
+                      </isNotNull>
+                      <isNotNull property="serNum_H">
+                      AND A.SER_NUM  LIKE #serNum_H#
+                      </isNotNull>
+                      AND A.EZCANCELFLAG = '0'
+                 ) SIL
+                ,ACCT_LOC AL 
+                ,BILL_TO_CUST BL 
+                <!-- START 2018/11/15 S.Ohki [QC#29256,ADD] -->
+                ,SELL_TO_CUST SL
+                <!-- END   2018/11/15 S.Ohki [QC#29256,ADD] -->
+            WHERE
+                I.GLBL_CMPY_CD                      = #glblCmpyCd#
+                <isEqual property="searchFlg" compareValue="Y">
+                AND I.INV_NUM                   LIKE #invNum_FR#
+                </isEqual>
+                <isEqual property="searchFlg" compareValue="N">
+                   <isNotNull property="invNum_FR">
+                   AND I.INV_NUM                   &gt;= #invNum_FR#
+                   </isNotNull>
+                   <isNotNull property="invNum_TO">
+                   AND I.INV_NUM                   &lt;= #invNum_TO#
+                   </isNotNull>
+                </isEqual>
+                <isNotNull property="billToCustAcctNm_H">
+                AND UPPER(I.BILL_TO_CUST_ACCT_NM)         LIKE #billToCustAcctNm_H# <!-- 2019/03/08 QC#30698 Add Start -->
+                </isNotNull>
+                <isNotNull property="billToCustAcctCd_H">
+                AND I.BILL_TO_CUST_ACCT_CD         LIKE #billToCustAcctCd_H#
+                </isNotNull>
+                <!-- START 2018/06/05 Y.Matsui [QC#26456,ADD] -->
+                <isNotNull property="custIssPoNum_H">
+                AND UPPER(I.CUST_ISS_PO_NUM)              LIKE UPPER(#custIssPoNum_H#) <!-- 2019/03/25 QC#30758 Add 'UPPER' function -->
+                </isNotNull>
+                <!-- END   2018/06/05 Y.Matsui [QC#26456,ADD] -->
+                AND SI.GLBL_CMPY_CD(+)              = I.GLBL_CMPY_CD
+                AND SI.SVC_INV_NUM(+)               = I.INV_NUM
+                AND IB.GLBL_CMPY_CD(+)              = I.GLBL_CMPY_CD
+                <isNotNull property="shipToLocNm_H">
+                AND UPPER(IB.SHIP_TO_CUST_ACCT_NM)         LIKE #shipToLocNm_H# <!-- 2019/03/08 QC#30698 Add Start -->
+                </isNotNull>
+                <isNotNull property="shipToCustCd_H">
+                AND IB.SHIP_TO_CUST_ACCT_CD         LIKE #shipToCustCd_H#
+                </isNotNull>
+                AND IB.INV_NUM(+)                   = I.INV_NUM
+                <isNotEqual property="cMsg.xxChkBox_CL" compareValue="Y">
+                AND NOT EXISTS(
+                        SELECT
+                            'X'
+                        FROM
+                            AR_TRX_BAL   AB
+                        WHERE
+                                AB.GLBL_CMPY_CD     = I.GLBL_CMPY_CD
+                            AND AB.AR_TRX_NUM       = I.INV_NUM
+                            <iterate property="inCloInv" var="inCloInv[]" open="AND AB.AR_CASH_APPLY_STS_CD IN(" close=")" conjunction=",">
+                                                      #inCloInv[]#
+                            </iterate>
+                            AND AB.EZCANCELFLAG     = '0'
+                            AND NOT EXISTS(
+                                SELECT
+                                    'X'
+                                FROM
+                                    ISTL_PMT_TERM   PT
+                                WHERE
+                                        PT.GLBL_CMPY_CD     = AB.GLBL_CMPY_CD
+                                    AND PT.ISTL_PMT_TERM_CD = AB.PMT_TERM_CD
+                                    AND PT.EZCANCELFLAG     = '0'
+                              )
+                        UNION
+                        SELECT
+                            MAX('X')
+                        FROM
+                            AR_TRX_BAL   AB
+                        WHERE
+                                AB.GLBL_CMPY_CD     = I.GLBL_CMPY_CD
+                            AND AB.ORIG_INV_NUM     = I.INV_NUM
+                            <iterate property="inCloInv" var="inCloInv[]" open="AND AB.AR_CASH_APPLY_STS_CD IN(" close=")" conjunction=",">
+                                                      #inCloInv[]#
+                            </iterate>
+                            AND AB.EZCANCELFLAG     = '0'
+                            AND EXISTS(
+                                SELECT
+                                    'X'
+                                FROM
+                                    ISTL_PMT_TERM   PT
+                                WHERE
+                                        PT.GLBL_CMPY_CD     = AB.GLBL_CMPY_CD
+                                    AND PT.ISTL_PMT_TERM_CD = AB.PMT_TERM_CD
+                                    AND PT.EZCANCELFLAG     = '0'
+                              )
+                        GROUP BY
+                            AB.ORIG_INV_NUM
+                    )
+                </isNotEqual>
+                AND SIL.GLBL_CMPY_CD(+)             = I.GLBL_CMPY_CD
+                AND SIL.SVC_INV_NUM(+)              = I.INV_NUM
+                <isNotNull property="mdlNm_H">
+                AND SIL.MDL_NM  LIKE #mdlNm_H#
+                </isNotNull>
+                <isNotNull property="grpInvNum_H">
+                AND I.GRP_INV_NUM  LIKE #grpInvNum_H#
+                </isNotNull>
+                <isNotNull property="serNum_H">
+                AND SIL.SER_NUM  LIKE #serNum_H#
+                </isNotNull>
+                <isNotNull property="cMsg.srcSysDocNum">
+                AND I.SRC_SYS_DOC_NUM LIKE #cMsg.srcSysDocNum#
+                </isNotNull>
+                AND I.EZCANCELFLAG                  = '0'
+                AND SI.EZCANCELFLAG(+)              = '0'
+                AND IB.EZCANCELFLAG(+)              = '0'
+                AND SIL.EZCANCELFLAG(+)             = '0'
+                AND SIL.ORD(+)                      = 1
+                AND AL.GLBL_CMPY_CD                 = I.GLBL_CMPY_CD
+                AND AL.DS_ACCT_NUM                  = I.BILL_TO_CUST_ACCT_CD
+                AND AL.EZCANCELFLAG                 = '0'
+                AND BL.GLBL_CMPY_CD                 = AL.GLBL_CMPY_CD
+                AND BL.LOC_NUM                      = AL.LOC_NUM
+                AND BL.EZCANCELFLAG                 = '0'
+                <!-- START 2018/06/05 Y.Matsui [QC#26456,ADD] -->
+                AND BL.BILL_TO_CUST_CD              = I.BILL_TO_CUST_CD
+                <!-- END   2018/06/05 Y.Matsui [QC#26456,ADD] -->
+                <!-- START 2018/11/15 S.Ohki [QC#29256,ADD] -->
+                AND SL.GLBL_CMPY_CD                 = I.GLBL_CMPY_CD
+                AND SL.SELL_TO_CUST_CD              = I.BILL_TO_CUST_ACCT_CD
+                AND SL.EZCANCELFLAG                 = '0'
+                <!-- END   2018/11/15 S.Ohki [QC#29256,ADD] -->
+            GROUP BY
+                 I.BILL_TO_CUST_ACCT_CD
+                <!-- START 2018/11/15 S.Ohki [QC#29256,MOD] -->
+                <!-- ,I.BILL_TO_CUST_ACCT_NM -->
+                ,SL.DS_ACCT_NM
+                <!-- END   2018/11/15 S.Ohki [QC#29256,MOD] -->
+                ,BL.LOC_NUM
+            ORDER BY
+                 I.BILL_TO_CUST_ACCT_CD
+                <!-- START 2018/11/15 S.Ohki [QC#29256,MOD] -->
+                <!-- ,I.BILL_TO_CUST_ACCT_NM -->
+                ,SL.DS_ACCT_NM
+                <!-- END   2018/11/15 S.Ohki [QC#29256,MOD] -->
+                 ) X
+      WHERE
+        ROWNUM &lt;= #rowNum#
+    </statement>
+    <resultMap id="result.getCustList" class="NFDL0170_ASMsg">
+        <result property="billToCustAcctCd_A"        column="BILL_TO_CUST_ACCT_CD"         javaType="EZDSStringItem"/>
+        <result property="billToCustAcctNm_A"        column="BILL_TO_CUST_ACCT_NM"         javaType="EZDSStringItem"/>
+        <result property="locNum_A"                  column="LOC_NUM"                      javaType="EZDSStringItem"/>
+    </resultMap>
+</sqlMap>

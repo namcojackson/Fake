@@ -1,0 +1,1579 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sqlMap namespace="NFBB118001">
+
+    <statement id="SELECT_RECORD" parameterClass="Map">
+        SELECT
+        <!-- CM_INV_ACCT_HDR -->
+            CAIH.AP_VND_CD
+        ,   CAIH.AP_VND_INV_NUM
+        ,   CAIH.AP_VND_INV_SQ_NUM
+        ,   CAIH.INV_DT
+        ,   CAIH.PO_NUM                                 CAIH_PO_NUM
+        ,   CAIH.PMT_DUE_DT
+        ,   CAIH.VND_PMT_TERM_CD
+        ,   CAIH.ACCT_BANK_CD
+        ,   CAIH.ACCT_BANK_ACCT_PAY_TP_CD
+        ,   CAIH.INV_TP_CD
+        ,   NVL(CAIH.AC_SC_TOT_GND_INV_AMT,0)           AC_SC_TOT_GND_INV_AMT
+        ,   V.SPLY_COA_CMPY_CD
+        ,   V.SPLY_COA_BR_CD
+        ,   V.SPLY_COA_CC_CD
+        ,   V.SPLY_COA_ACCT_CD
+        ,   V.SPLY_COA_PROD_CD
+        ,   V.SPLY_COA_CH_CD
+        ,   V.SPLY_COA_AFFL_CD
+        ,   V.SPLY_COA_PROJ_CD
+        ,   V.SPLY_COA_EXTN_CD
+        ,   PV.PRNT_VND_CD
+        <!-- CM_INV_ACCT_DIST -->
+        ,   CAID.MDSE_CD
+        ,   CAID.AP_INV_TP_CD
+        ,   CAID.PO_NUM                                 CAID_PO_NUM
+        ,   CAID.DELY_ORD_NUM
+        ,   CAID.INV_TP_CD
+        ,   CAID.INV_QTY
+        ,   CAID.PO_QTY
+        ,   CAID.INV_RCV_QTY
+        ,   CAID.VND_CD
+        ,   CAID.VND_INV_NUM
+        <!-- START 2018/03/26 QC#20316 ADD -->
+        ,   CAID.AP_VND_INV_LINE_NUM
+        <!-- END   2018/03/26 QC#20316 ADD -->
+        <!-- START 2018/11/20 S.Ohki QC#28660 DEL -->
+        <!-- ,   SUM(CAID.INV_QTY) OVER(PARTITION BY CAIH.PO_NUM, CAID.PO_ORD_DTL_LINE_NUM) SUM_INV_QTY -->
+        <!-- END   2018/11/20 S.Ohki QC#28660 DEL -->
+        <!-- START 2018/05/16 QC#26080 MOD -->
+        <!-- START 2018/11/21 QC#28660 MOD -->
+        ,NVL((
+                SELECT
+                   SUM(CAID1.INV_QTY) SUM_INV_QTY
+                FROM
+                    CM_AP_INV_DTL      CAID1
+                   ,CM_AP_INV_HDR      CAIH1
+                   <!-- START 2018/11/20 S.Ohki QC#28660 ADD -->
+                   ,PO_DTL             PD1
+                   <!-- END   2018/11/20 S.Ohki QC#28660 ADD -->
+                WHERE
+                     CAID1.GLBL_CMPY_CD        = CAID.GLBL_CMPY_CD
+                 AND CAID1.PO_NUM              = CAID.PO_NUM
+                 AND CAID1.MDSE_CD             = CAID.MDSE_CD
+                 AND CAID1.PO_ORD_DTL_LINE_NUM = CAID.PO_ORD_DTL_LINE_NUM
+                 AND CAID1.GLBL_CMPY_CD        = CAIH.GLBL_CMPY_CD
+                 AND CAID1.AP_VND_CD           = CAIH1.AP_VND_CD
+                 AND CAID1.AP_VND_INV_NUM      = CAIH1.AP_VND_INV_NUM
+                 AND CAID1.AP_VND_INV_SQ_NUM   = CAIH1.AP_VND_INV_SQ_NUM
+                 AND (CAIH1.ACCT_INV_STS_CD   != #cancel# OR CAIH1.ACCT_INV_STS_CD IS NULL)
+                 AND CAIH1.EZCANCELFLAG        = '0'
+                 <!-- START 2018/11/20 S.Ohki QC#28660 ADD -->
+                 AND PD1.GLBL_CMPY_CD        = CAID1.GLBL_CMPY_CD
+                 AND PD1.PO_ORD_NUM          = CAID1.PO_NUM
+                 AND PD1.PO_ORD_DTL_LINE_NUM = CAID1.PO_ORD_DTL_LINE_NUM
+                 AND PD1.EZCANCELFLAG        = '0'
+                 AND ( (CAIH1.CM_AP_INV_TP_CD  = #cmApInvTpCdCrMemo#  
+                     AND     PD1.ENT_DEAL_NET_UNIT_PRC_AMT * CAID1.INV_QTY 
+                     <!-- START 2020/02/17  M.Ishii QC#55833 MOD --> 
+                     <!-- BETWEEN ROUND(NVL(CAID1.AC_OC_FOB_COST_AMT, 0) * (100 - NVL(V.INV_TOL_RATE, 0)) / 100, 2)
+                     AND     ROUND(NVL(CAID1.AC_OC_FOB_COST_AMT, 0) * (100 + NVL(V.INV_TOL_RATE, 0)) / 100, 2)) -->
+                     BETWEEN ROUND(NVL(CAID1.AC_OC_FOB_COST_AMT, 0) * (100 + NVL(V.INV_TOL_RATE, 0)) / 100, 2)
+                     AND     ROUND(NVL(CAID1.AC_OC_FOB_COST_AMT, 0) * (100 - NVL(V.INV_TOL_RATE, 0)) / 100, 2))
+                     <!-- END 2020/02/17  M.Ishii QC#55833 MOD -->
+                     OR (CAIH1.CM_AP_INV_TP_CD  &lt;&gt; #cmApInvTpCdCrMemo#  OR CAIH1.CM_AP_INV_TP_CD IS NULL)
+                 )
+                 <!-- END   2018/11/20 S.Ohki QC#28660 ADD -->
+                 GROUP BY CAID1.MDSE_CD
+            ),(
+                SELECT
+                   SUM(CAID1.INV_QTY) SUM_INV_QTY
+                FROM
+                    CM_AP_INV_DTL      CAID1
+                   ,CM_AP_INV_HDR      CAIH1
+                WHERE
+                     CAID1.GLBL_CMPY_CD        = CAID.GLBL_CMPY_CD
+                 AND CAID1.VND_RTRN_NUM        = CAID.VND_RTRN_NUM
+                 AND CAID1.MDSE_CD             = CAID.MDSE_CD
+                 AND CAID1.PO_ORD_DTL_LINE_NUM = CAID.PO_ORD_DTL_LINE_NUM
+                 AND CAID1.GLBL_CMPY_CD        = CAIH.GLBL_CMPY_CD
+                 AND CAID1.AP_VND_CD           = CAIH1.AP_VND_CD
+                 AND CAID1.AP_VND_INV_NUM      = CAIH1.AP_VND_INV_NUM
+                 AND CAID1.AP_VND_INV_SQ_NUM   = CAIH1.AP_VND_INV_SQ_NUM
+                 AND (CAIH1.ACCT_INV_STS_CD   != #cancel# OR CAIH1.ACCT_INV_STS_CD IS NULL)
+                 AND CAIH1.EZCANCELFLAG        = '0'
+                 AND CAIH1.CM_AP_INV_TP_CD  = #cmApInvTpCdCrMemo#  
+                 GROUP BY CAID1.MDSE_CD
+            )) TOT_INV_QTY
+        <!-- END   2018/11/21 QC#28660 MOD -->
+        <!-- END   2018/05/16 QC#26080 MOD -->
+        <!-- START 2018/03/26 QC#20316 MOD -->
+        ,   SUM(CAID.INV_RCV_QTY) OVER(PARTITION BY CAIH.PO_NUM, CAID.PO_ORD_DTL_LINE_NUM) / COUNT(*) OVER(PARTITION BY CAIH.PO_NUM, CAID.PO_ORD_DTL_LINE_NUM) SUM_INV_RCV_QTY
+        <!-- END   2018/03/26 QC#20316 MOD -->
+        ,   0                                           AP_REJ_QTY
+        ,   NVL(CAID.THIS_MTH_FOB_COST_AMT,0)           THIS_MTH_FOB_COST_AMT
+        ,   NVL(CAIH.AC_SC_TOT_FOB_COST_AMT,0)          AC_SC_TOT_FOB_COST_AMT
+        ,   NVL(CAIH.AC_SC_TOT_FRT_COST_AMT,0)          AC_SC_TOT_FRT_COST_AMT
+        ,   NVL(CAIH.AC_SC_TOT_TAX_AMT,0)               AC_SC_TOT_TAX_AMT
+        <!-- START 2023/01/05 S.Nakatani [QC#60248,ADD] -->
+        ,   NVL(CAIH.AC_SC_TOT_HDLG_COST_AMT,0)          AC_SC_TOT_HDLG_COST_AMT
+        <!-- END 2023/01/05 S.Nakatani [QC#60248,ADD] -->
+        ,   NVL(CAID.ENT_PO_DTL_DEAL_NET_AMT,0)         AC_INV_JRNL_COST_AMT
+        ,   DECODE(CAID.INV_QTY,CAID.INV_RCV_QTY,DECODE(CAID.INV_QTY,CAID.PO_QTY,'N','Y'),'Y') 
+                                                        PMT_HLD_FLG
+        ,   CDAF.CM_COA_CMPY_CD                         FRT_COA_CMPY_CD
+        ,   CDAF.CM_COA_BR_CD                           FRT_COA_BR_CD
+        ,   CDAF.CM_COA_CC_CD                           FRT_COA_CC_CD
+        ,   CDAF.CM_COA_ACCT_CD                         FRT_COA_ACCT_CD
+        ,   CDAF.CM_COA_PROD_CD                         FRT_COA_PROD_CD
+        ,   CDAF.CM_COA_CH_CD                           FRT_COA_CH_CD
+        ,   CDAF.CM_COA_AFFL_CD                         FRT_COA_AFFL_CD
+        ,   CDAF.CM_COA_PROJ_CD                         FRT_COA_PROJ_CD
+        ,   CDAF.CM_COA_EXTN_CD                         FRT_COA_EXTN_CD
+        ,   CDAT.CM_COA_CMPY_CD                         TAX_COA_CMPY_CD
+        ,   CDAT.CM_COA_BR_CD                           TAX_COA_BR_CD
+        ,   CDAT.CM_COA_CC_CD                           TAX_COA_CC_CD
+        ,   CDAT.CM_COA_ACCT_CD                         TAX_COA_ACCT_CD
+        ,   CDAT.CM_COA_PROD_CD                         TAX_COA_PROD_CD
+        ,   CDAT.CM_COA_CH_CD                           TAX_COA_CH_CD
+        ,   CDAT.CM_COA_AFFL_CD                         TAX_COA_AFFL_CD
+        ,   CDAT.CM_COA_PROJ_CD                         TAX_COA_PROJ_CD
+        ,   CDAT.CM_COA_EXTN_CD                         TAX_COA_EXTN_CD
+        <!-- START 2023/01/05 S.Nakatani [QC#60248,ADD] -->
+        ,   CDAH.CM_COA_CMPY_CD                         HDLG_COA_CMPY_CD
+        ,   CDAH.CM_COA_BR_CD                           HDLG_COA_BR_CD
+        ,   CDAH.CM_COA_CC_CD                           HDLG_COA_CC_CD
+        ,   CDAH.CM_COA_ACCT_CD                         HDLG_COA_ACCT_CD
+        ,   CDAH.CM_COA_PROD_CD                         HDLG_COA_PROD_CD
+        ,   CDAH.CM_COA_CH_CD                           HDLG_COA_CH_CD
+        ,   CDAH.CM_COA_AFFL_CD                         HDLG_COA_AFFL_CD
+        ,   CDAH.CM_COA_PROJ_CD                         HDLG_COA_PROJ_CD
+        ,   CDAH.CM_COA_EXTN_CD                         HDLG_COA_EXTN_CD
+        <!-- END 2023/01/05 S.Nakatani [QC#60248,ADD] -->
+        ,   CASE
+                WHEN
+                    PD.PO_LINE_TP_CD IN (#poLineTpItt#, #poLineTpExp#)
+                THEN
+                    POA.COA_CMPY_CD
+                END                                     MDSE_COA_CMPY_CD
+        ,   CASE
+                WHEN
+                    PD.PO_LINE_TP_CD IN (#poLineTpItt#, #poLineTpExp#)
+                THEN
+                    POA.COA_BR_CD
+                END                                     MDSE_COA_BR_CD
+        ,   CASE
+                WHEN
+                    PD.PO_LINE_TP_CD IN (#poLineTpItt#, #poLineTpExp#)
+                THEN
+                    POA.COA_CC_CD
+                END                                     MDSE_COA_CC_CD
+        ,   CASE
+                WHEN
+                    PD.PO_LINE_TP_CD IN (#poLineTpItt#, #poLineTpExp#)
+                THEN
+                    POA.COA_ACCT_CD
+                ELSE
+                    CPA.COA_ACCT_CD
+                END                                     MDSE_COA_ACCT_CD
+        ,   CASE
+                WHEN
+                    PD.PO_LINE_TP_CD IN (#poLineTpItt#, #poLineTpExp#)
+                THEN
+                    POA.COA_PROD_CD
+                END                                     MDSE_COA_PROD_CD
+        ,   CASE
+                WHEN
+                    PD.PO_LINE_TP_CD IN (#poLineTpItt#, #poLineTpExp#)
+                THEN
+                    POA.COA_CH_CD
+                END                                     MDSE_COA_CH_CD
+        ,   CASE
+                WHEN
+                    PD.PO_LINE_TP_CD IN (#poLineTpItt#, #poLineTpExp#)
+                THEN
+                    POA.COA_AFFL_CD
+                ELSE
+                    V.COA_AFFL_CD
+                END                                     MDSE_COA_AFFL_CD
+        ,   CASE
+                WHEN
+                    PD.PO_LINE_TP_CD IN (#poLineTpItt#, #poLineTpExp#)
+                THEN
+                    POA.COA_PROJ_CD
+                END                                     MDSE_COA_PROJ_CD
+        ,   CASE
+                WHEN
+                    PD.PO_LINE_TP_CD IN (#poLineTpItt#, #poLineTpExp#)
+                THEN
+                    POA.COA_EXTN_CD
+                END                                     MDSE_COA_EXTN_CD
+        ,   CDAV.CM_COA_CMPY_CD                         VAR_COA_CMPY_CD
+        ,   CDAV.CM_COA_BR_CD                           VAR_COA_BR_CD
+        ,   CDAV.CM_COA_CC_CD                           VAR_COA_CC_CD
+        ,   CDAV.CM_COA_ACCT_CD                         VAR_COA_ACCT_CD
+        ,   CDAV.CM_COA_PROD_CD                         VAR_COA_PROD_CD
+        ,   CDAV.CM_COA_CH_CD                           VAR_COA_CH_CD
+        ,   CDAV.CM_COA_AFFL_CD                         VAR_COA_AFFL_CD
+        ,   CDAV.CM_COA_PROJ_CD                         VAR_COA_PROJ_CD
+        ,   CDAV.CM_COA_EXTN_CD                         VAR_COA_EXTN_CD
+        ,   NVL(CAIH.AC_SC_TOT_FOB_COST_AMT,0) - NVL(CAID_SUM.AC_INV_VAR_COST_AMT,0)
+                                                        AC_INV_VAR_COST_AMT
+        ,   CAID.PO_ORD_DTL_LINE_NUM                    PO_ORD_DTL_LINE_NUM
+        <!--  // START 2017/12/14 T.Hakodate [SOL#060,ADD]  -->
+        ,   PD.PO_RCV_QTY                               PO_RCV_QTY
+        ,   PD.PO_LINE_TP_CD                            PO_LINE_TP_CD
+        <!--  // END   2017/12/14 T.Hakodate [SOL#060,ADD]  -->
+        ,   PD.PO_MATCH_TP_CD                           PO_MATCH_TP_CD
+        ,   NVL(CAID.ENT_DEAL_NET_UNIT_PRC_AMT,0)       ENT_DEAL_NET_UNIT_PRC_AMT
+        ,   NVL(CAID.ENT_PO_DTL_DEAL_NET_AMT,0)         ENT_PO_DTL_DEAL_NET_AMT
+        ,   NVL(CAID.ENT_FUNC_NET_UNIT_PRC_AMT,0)       ENT_FUNC_NET_UNIT_PRC_AMT
+        ,   NVL(CAID.ENT_PO_DTL_FUNC_NET_AMT,0)         ENT_PO_DTL_FUNC_NET_AMT
+        ,   NVL(CAID.EXCH_RATE,0)                       EXCH_RATE
+        ,   NVL(M.INVTY_CTRL_FLG,'Y')                   INVTY_CTRL_FLG
+        ,   V.INV_TOL_RATE                              INV_TOL_RATE
+        <!-- START 2018/05/07 QC#25828 MOD -->
+        ,   ROUND(NVL(CAID.AC_OC_FOB_COST_AMT, 0) * (100 - NVL(V.INV_TOL_RATE, 0)) / 100, 2)
+                                                        FROM_TOL_NET_PRC_AMT
+        ,   ROUND(NVL(CAID.AC_OC_FOB_COST_AMT, 0) * (100 + NVL(V.INV_TOL_RATE, 0)) / 100, 2)
+                                                        THRU_TOL_NET_PRC_AMT
+        <!-- END   2018/05/07 QC#25828 MOD -->
+        ,   CAID.AC_OC_FOB_COST_AMT                     AC_OC_FOB_COST_AMT
+        <!-- START 2018/03/26 QC#20316 MOD -->
+        ,   LPAD(TO_CHAR(ROW_NUMBER() OVER (PARTITION BY CAID.AP_VND_CD, CAID.AP_VND_INV_NUM ORDER BY CAID.AP_VND_CD, CAID.AP_VND_INV_NUM, CAID.AP_VND_INV_SQ_NUM, CAID.AP_VND_INV_LINE_NUM)), 3, '0')
+        <!-- END   2018/03/26 QC#20316 MOD -->
+                                                        CM_INV_ACCT_DIST_LINE_NUM
+        ,   P.DEST_RTL_WH_CD
+        ,   PD.MDSE_DESC_SHORT_TXT                      MDSE_DESC_SHORT_TXT
+        ,   PD.PO_DISP_UOM_CD                           UOM_CD
+        <!-- START 2018/03/26 QC#20316 ADD -->
+        ,   COUNT(*) OVER(PARTITION BY CAIH.PO_NUM, CAID.PO_ORD_DTL_LINE_NUM) INV_LINE_CNT
+        <!-- END   2018/03/26 QC#20316 ADD -->
+        <!-- START 2018/07/31 QC#27025-1 ADD -->
+        ,   PD.ENT_DEAL_NET_UNIT_PRC_AMT                PD_ENT_DEAL_NET_UNIT_PRC_AMT
+        <!-- END   2018/07/31 QC#27025-1 ADD -->
+        <!-- START 2018/11/15 QC#28982 ADD -->
+        ,   PD.ENT_FUNC_NET_UNIT_PRC_AMT                PD_ENT_FUNC_NET_UNIT_PRC_AMT
+        <!-- END   2018/11/15 QC#28982 ADD -->
+        <!-- START 2018/10/18 QC#28734 ADD -->
+        ,   NVL((
+                SELECT
+                    SUM(CSI.RCV_QTY)
+                FROM
+                    CM_STK_IN CSI
+                WHERE
+                    CAID.GLBL_CMPY_CD           = CSI.GLBL_CMPY_CD(+)
+                AND CAID.PO_NUM                 = CSI.PO_ORD_NUM(+)
+                AND CAID.PO_ORD_DTL_LINE_NUM    = CSI.PO_ORD_DTL_LINE_NUM(+)
+                AND CSI.EZCANCELFLAG(+)         = '0'
+                GROUP BY
+                    CSI.PO_ORD_NUM
+                   ,CSI.PO_ORD_DTL_LINE_NUM
+            ),0)                                        SUM_CSI_RCV_QTY
+        <!-- END   2018/10/18 QC#28734 ADD -->
+        <!-- START 2018/10/25 QC#54275 ADD -->
+        ,   P.VND_CD                                    PO_VND_CD
+        <!-- END   2018/10/25 QC#54275 ADD -->
+        FROM
+            CM_AP_INV_HDR     CAIH
+        ,   CM_AP_INV_DTL     CAID
+        ,   (
+                SELECT
+                    CAID.GLBL_CMPY_CD
+                ,   CAID.AP_VND_CD
+                ,   CAID.AP_VND_INV_NUM
+                ,   CAID.AP_VND_INV_SQ_NUM
+                ,   SUM(NVL(CAID.ENT_DEAL_NET_UNIT_PRC_AMT,0) * NVL(CAID.INV_QTY, 0)) AC_INV_VAR_COST_AMT
+                FROM
+                    CM_AP_INV_DTL     CAID
+                WHERE
+                    GLBL_CMPY_CD = #glblCmpyCd#
+                AND EZCANCELFLAG = '0'
+                GROUP BY
+                    CAID.GLBL_CMPY_CD
+                ,   CAID.AP_VND_CD
+                ,   CAID.AP_VND_INV_NUM
+                ,   CAID.AP_VND_INV_SQ_NUM
+            )                 CAID_SUM
+        ,   VND               V
+        ,   CM_DEF_ACCT       CDAF <!-- For Freight -->
+        ,   CM_DEF_ACCT       CDAT <!-- For Tax -->
+        <!-- START 2023/01/05 S.Nakatani [QC#60248,ADD] -->
+        ,   CM_DEF_ACCT       CDAH <!-- For Handling Fee -->
+        <!-- END 2023/01/05 S.Nakatani [QC#60248,ADD] -->
+        ,   CM_DEF_ACCT       CDAV <!-- For Variance -->
+        ,   PO_ACCT           POA
+        ,   PO_DTL            PD
+        ,   MDSE              M
+        ,   PO                P
+        ,   COA_PROJ_ACCT     CPA
+        ,   (
+                SELECT
+                    V.GLBL_CMPY_CD
+                ,   V.INV_VND_CD
+                ,   MAX(PV.PRNT_VND_CD)           PRNT_VND_CD
+                ,   MAX(PV.PRNT_VND_NM)           PRNT_VND_NM
+                ,   MAX(V.VND_PMT_METH_CD)       VND_PMT_METH_CD
+                ,   MAX(V.VND_PMT_TERM_CD)       VND_PMT_TERM_CD
+                ,   MAX(V.VND_PMT_TERM_DESC_TXT) VND_PMT_TERM_DESC_TXT
+                FROM
+                    PRNT_VND PV
+                ,   VND      V 
+                WHERE
+                    PV.GLBL_CMPY_CD   = #glblCmpyCd#
+                AND PV.GLBL_CMPY_CD   = V.GLBL_CMPY_CD
+                AND PV.PRNT_VND_PK    = V.PRNT_VND_PK
+                AND PV.EZCANCELFLAG   = '0'
+                AND V.EZCANCELFLAG    = '0'
+                GROUP BY
+                    V.GLBL_CMPY_CD
+                ,   V.INV_VND_CD
+            )                 PV
+        WHERE
+            CAIH.GLBL_CMPY_CD          = #glblCmpyCd#
+        AND CAIH.GLBL_CMPY_CD          = CAID.GLBL_CMPY_CD
+        AND CAIH.AP_VND_CD             = CAID.AP_VND_CD
+        AND CAIH.AP_VND_INV_NUM        = CAID.AP_VND_INV_NUM
+        AND CAIH.AP_VND_INV_SQ_NUM     = CAID.AP_VND_INV_SQ_NUM
+        AND CAIH.AP_INV_TP_CD          = CAID.AP_INV_TP_CD
+        AND CAIH.GLBL_CMPY_CD          = CAID_SUM.GLBL_CMPY_CD
+        AND CAIH.AP_VND_CD             = CAID_SUM.AP_VND_CD
+        AND CAIH.AP_VND_INV_NUM        = CAID_SUM.AP_VND_INV_NUM
+        AND CAIH.AP_VND_INV_SQ_NUM     = CAID_SUM.AP_VND_INV_SQ_NUM
+        AND CAID.GLBL_CMPY_CD          = CAID_SUM.GLBL_CMPY_CD
+        AND CAID.AP_VND_CD             = CAID_SUM.AP_VND_CD
+        AND CAID.AP_VND_INV_NUM        = CAID_SUM.AP_VND_INV_NUM
+        AND CAID.AP_VND_INV_SQ_NUM     = CAID_SUM.AP_VND_INV_SQ_NUM
+        AND CAIH.EZCANCELFLAG          = '0'
+        AND CAID.EZCANCELFLAG          = '0'
+        AND CAIH.GLBL_CMPY_CD          = V.GLBL_CMPY_CD(+)
+        AND CAIH.AP_VND_CD             = V.INV_VND_CD(+)
+        AND V.EZCANCELFLAG(+)          = '0'
+        AND CAIH.GLBL_CMPY_CD          = CDAF.GLBL_CMPY_CD(+)
+        AND #cmDefAcctCdFrt#           = CDAF.CM_DEF_ACCT_CD(+)
+        AND CDAF.EZCANCELFLAG(+)       = '0'
+        AND CAIH.GLBL_CMPY_CD          = CDAT.GLBL_CMPY_CD(+)
+        AND #cmDefAcctCdTax#           = CDAT.CM_DEF_ACCT_CD(+)
+        AND CDAT.EZCANCELFLAG(+)       = '0'
+        <!-- START 2023/01/05 S.Nakatani [QC#60248,ADD] -->
+        AND CAIH.GLBL_CMPY_CD          = CDAH.GLBL_CMPY_CD(+)
+        AND #cmDefAcctCdHdlg#          = CDAH.CM_DEF_ACCT_CD(+)
+        AND CDAH.EZCANCELFLAG(+)       = '0'
+        <!-- END 2023/01/05 S.Nakatani [QC#60248,ADD] -->
+        AND CAIH.GLBL_CMPY_CD          = CDAV.GLBL_CMPY_CD(+)
+        AND #cmDefAcctCdVar#           = CDAV.CM_DEF_ACCT_CD(+)
+        AND CDAV.EZCANCELFLAG(+)       = '0'
+        AND CAID.GLBL_CMPY_CD          = POA.GLBL_CMPY_CD(+)
+        AND CAID.PO_NUM                = POA.PO_ORD_NUM(+)
+        AND CAID.PO_ORD_DTL_LINE_NUM   = POA.PO_ORD_DTL_LINE_NUM(+)
+        AND POA.PO_ACCT_TP_CD(+)       = #poAcctTpCd#
+        AND POA.EZCANCELFLAG(+)        = '0'
+        AND CAID.GLBL_CMPY_CD          = PD.GLBL_CMPY_CD(+)
+        AND CAID.PO_NUM                = PD.PO_ORD_NUM(+)
+        AND CAID.PO_ORD_DTL_LINE_NUM   = PD.PO_ORD_DTL_LINE_NUM(+)
+        AND PD.EZCANCELFLAG(+)        = '0'
+        AND CAID.GLBL_CMPY_CD          = M.GLBL_CMPY_CD(+)
+        AND CAID.MDSE_CD               = M.MDSE_CD(+)
+        AND M.EZCANCELFLAG(+)          = '0'
+        AND M.GLBL_CMPY_CD             = CPA.GLBL_CMPY_CD(+)
+        AND M.COA_MDSE_TP_CD           = CPA.COA_PROJ_CD(+)
+        AND CPA.COA_PROJ_ACCT_TP_CD(+) = #coaProjAcctTpAccrual#
+        AND CPA.EZCANCELFLAG(+)        = '0'
+        AND CAIH.AP_VND_CD             = PV.INV_VND_CD(+)
+        AND CAIH.GLBL_CMPY_CD          = P.GLBL_CMPY_CD(+)
+        AND CAIH.PO_NUM                = P.PO_ORD_NUM(+)
+        AND P.EZCANCELFLAG(+)         = '0'
+        <!-- START 2018/03/26 QC#20316 MOD -->
+        AND NOT EXISTS
+                (
+                    SELECT
+                        1
+                    FROM
+                        CM_INV_ACCT_DIST CIAD
+                    WHERE
+                        CIAD.GLBL_CMPY_CD      = CAID.GLBL_CMPY_CD
+                    AND CIAD.AP_VND_CD         = CAID.AP_VND_CD
+                    AND CIAD.AP_VND_INV_NUM    = CAID.AP_VND_INV_NUM
+                    AND CIAD.AP_VND_INV_SQ_NUM = CAID.AP_VND_INV_SQ_NUM
+                    AND CIAD.AP_VND_INV_LINE_NUM = CAID.AP_VND_INV_LINE_NUM
+                    AND CIAD.EZCANCELFLAG      = '0'
+                )
+        <!-- END   2018/03/26 QC#20316 MOD -->
+        ORDER BY
+            CAIH.AP_VND_CD
+        ,   CAIH.AP_VND_INV_NUM
+        ,   CAIH.AP_VND_INV_SQ_NUM
+        ,   CM_INV_ACCT_DIST_LINE_NUM
+    </statement>
+
+    <statement id="SELECT_CM_INV_PMT_HLD_BY_PARTIAL_KEY" parameterClass="Map">
+        SELECT
+            CIPH.AP_VND_CD
+        ,   CIPH.AP_VND_INV_NUM
+        ,   CIPH.AP_VND_INV_SQ_NUM
+        <!-- START 2018/03/30 QC#24277 ADD -->
+        ,   CIPH.AP_VND_INV_LINE_NUM
+        <!-- END   2018/03/30 QC#24277 ADD -->
+        ,   CIPH.PMT_HLD_CD
+        ,   CIPH.PMT_HLD_RSN_CD
+        FROM
+            CM_INV_PMT_HLD CIPH
+        WHERE
+            CIPH.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND CIPH.AP_VND_CD           = #apVndCd#
+        AND CIPH.AP_VND_INV_NUM      = #apVndInvNum#
+        AND CIPH.AP_VND_INV_SQ_NUM   = #apVndInvSqNum#
+        AND CIPH.EZCANCELFLAG        = '0'
+    </statement>
+    
+    <statement id="SELECT_CM_AP_INV_DTL_BY_PARTIAL_KEY" parameterClass="Map" resultClass="Map">
+        SELECT
+            AP_VND_CD
+        ,   AP_VND_INV_NUM
+        ,   AP_VND_INV_SQ_NUM
+        ,   VND_CD
+        ,   VND_INV_NUM
+        ,   MDSE_CD
+        ,   DELY_ORD_NUM
+        ,   AP_INV_TP_CD
+        ,   PO_NUM
+        ,   PO_ORD_DTL_LINE_NUM
+        ,   NVL(INV_QTY,0) INV_QTY
+        FROM
+            CM_AP_INV_DTL
+        WHERE
+            GLBL_CMPY_CD        = #glblCmpyCd#
+        AND AP_VND_CD           = #apVndCd#
+        AND AP_VND_INV_NUM      = #apVndInvNum#
+        AND AP_VND_INV_SQ_NUM   = #apVndInvSqNum#
+        AND EZCANCELFLAG        = '0'
+        ORDER BY
+            AP_VND_CD
+        ,   AP_VND_INV_NUM
+        ,   AP_VND_INV_SQ_NUM
+        ,   VND_CD
+        ,   VND_INV_NUM
+        ,   MDSE_CD
+        ,   DELY_ORD_NUM
+        ,   AP_INV_TP_CD
+        ,   PO_NUM
+    </statement>
+
+    <statement id="SELECT_HOLD_RECORD" parameterClass="Map">
+            SELECT
+        <!-- CM_INV_ACCT_HDR -->
+            CAIH.AP_VND_CD
+        ,   CAIH.AP_VND_INV_NUM
+        ,   CAIH.AP_VND_INV_SQ_NUM
+        ,   CAIH.INV_DT
+        ,   CAIH.PO_NUM                                 CAIH_PO_NUM
+        ,   CAIH.PMT_DUE_DT
+        ,   CAIH.VND_PMT_TERM_CD
+        ,   CAIH.ACCT_BANK_CD
+        ,   CAIH.ACCT_BANK_ACCT_PAY_TP_CD
+        ,   CAIH.INV_TP_CD
+        ,   NVL(CAIH.AC_SC_TOT_GND_INV_AMT,0)           AC_SC_TOT_GND_INV_AMT
+        ,   V.SPLY_COA_CMPY_CD
+        ,   V.SPLY_COA_BR_CD
+        ,   V.SPLY_COA_CC_CD
+        ,   V.SPLY_COA_ACCT_CD
+        ,   V.SPLY_COA_PROD_CD
+        ,   V.SPLY_COA_CH_CD
+        ,   V.SPLY_COA_AFFL_CD
+        ,   V.SPLY_COA_PROJ_CD
+        ,   V.SPLY_COA_EXTN_CD
+        ,   PV.PRNT_VND_CD
+        <!-- CM_INV_ACCT_DIST -->
+        <!-- START 2018/03/26 QC#24277 ADD -->
+        ,   CAID.AP_VND_INV_LINE_NUM
+        <!-- END   2018/03/26 QC#24277 ADD -->
+        ,   CAID.MDSE_CD
+        ,   CAID.AP_INV_TP_CD
+        ,   CAID.PO_NUM                                 CAID_PO_NUM
+        ,   CAID.DELY_ORD_NUM
+        ,   CAID.INV_TP_CD
+        ,   CAID.INV_QTY
+        ,   CAID.VND_CD
+        ,   CAID.VND_INV_NUM
+        <!-- START 2017/07/21 S.Katsuma QC#19335 ADD -->
+        <!-- START 2018/11/20 S.Ohki QC#28660 DEL -->
+        <!-- ,   SUM(CAID.INV_QTY) OVER(PARTITION BY CAIH.PO_NUM, CAID.PO_ORD_DTL_LINE_NUM) SUM_INV_QTY -->
+        <!-- END   2018/11/20 S.Ohki QC#28660 DEL -->
+        <!-- END 2017/07/21 S.Katsuma QC#19335 ADD -->
+        <!-- START 2018/05/16 QC#26080 MOD -->
+        <!-- START 2018/11/20 S.Ohki QC#28660 DEL -->
+        <!-- ,   SUM(CAID.INV_QTY) OVER(PARTITION BY CAIH.PO_NUM, CAID.PO_ORD_DTL_LINE_NUM) SUM_INV_QTY -->
+        <!-- END   2018/11/20 S.Ohki QC#28660 DEL -->
+        <!-- START 2018/11/21 QC#28660 MOD -->
+        ,NVL((
+                SELECT
+                   SUM(CAID1.INV_QTY) SUM_INV_QTY
+                FROM
+                    CM_AP_INV_DTL      CAID1
+                   ,CM_AP_INV_HDR      CAIH1
+                   <!-- START 2018/11/20 S.Ohki QC#28660 ADD -->
+                   ,PO_DTL             PD1
+                   <!-- END   2018/11/20 S.Ohki QC#28660 ADD -->
+                WHERE
+                     CAID1.GLBL_CMPY_CD        = CAID.GLBL_CMPY_CD
+                 AND CAID1.PO_NUM              = CAID.PO_NUM
+                 AND CAID1.MDSE_CD             = CAID.MDSE_CD
+                 AND CAID1.PO_ORD_DTL_LINE_NUM = CAID.PO_ORD_DTL_LINE_NUM
+                 AND CAID1.GLBL_CMPY_CD        = CAIH.GLBL_CMPY_CD
+                 AND CAID1.AP_VND_CD           = CAIH1.AP_VND_CD
+                 AND CAID1.AP_VND_INV_NUM      = CAIH1.AP_VND_INV_NUM
+                 AND CAID1.AP_VND_INV_SQ_NUM   = CAIH1.AP_VND_INV_SQ_NUM
+                 AND (CAIH1.ACCT_INV_STS_CD   != #cancel# OR CAIH1.ACCT_INV_STS_CD IS NULL)
+                 AND CAIH1.EZCANCELFLAG        = '0'
+                 <!-- START 2018/11/20 S.Ohki QC#28660 ADD -->
+                 AND PD1.GLBL_CMPY_CD          = CAID1.GLBL_CMPY_CD
+                 AND PD1.PO_ORD_NUM            = CAID1.PO_NUM
+                 AND PD1.PO_ORD_DTL_LINE_NUM   = CAID1.PO_ORD_DTL_LINE_NUM
+                 AND PD1.EZCANCELFLAG          = '0'
+                 AND (  (CAIH1.CM_AP_INV_TP_CD  = #cmApInvTpCdCrMemo#  
+                     AND     PD1.ENT_DEAL_NET_UNIT_PRC_AMT * CAID1.INV_QTY
+                     <!-- START 2020/02/17  M.Ishii QC#55833 MOD --> 
+                     <!-- BETWEEN ROUND(NVL(CAID1.AC_OC_FOB_COST_AMT, 0) * (100 - NVL(V.INV_TOL_RATE, 0)) / 100, 2)
+                     AND     ROUND(NVL(CAID1.AC_OC_FOB_COST_AMT, 0) * (100 + NVL(V.INV_TOL_RATE, 0)) / 100, 2)) -->
+                     BETWEEN ROUND(NVL(CAID1.AC_OC_FOB_COST_AMT, 0) * (100 + NVL(V.INV_TOL_RATE, 0)) / 100, 2)
+                     AND     ROUND(NVL(CAID1.AC_OC_FOB_COST_AMT, 0) * (100 - NVL(V.INV_TOL_RATE, 0)) / 100, 2))
+                     <!-- END 2020/02/17  M.Ishii QC#55833 MOD -->
+                     OR (CAIH1.CM_AP_INV_TP_CD  &lt;&gt; #cmApInvTpCdCrMemo# OR CAIH1.CM_AP_INV_TP_CD IS NULL)
+                 )
+                 <!-- END   2018/11/20 S.Ohki QC#28660 ADD -->
+                 GROUP BY CAID1.MDSE_CD
+            ),(
+                SELECT
+                   SUM(CAID1.INV_QTY) SUM_INV_QTY
+                FROM
+                    CM_AP_INV_DTL      CAID1
+                   ,CM_AP_INV_HDR      CAIH1
+                WHERE
+                     CAID1.GLBL_CMPY_CD        = CAID.GLBL_CMPY_CD
+                 AND CAID1.VND_RTRN_NUM        = CAID.VND_RTRN_NUM
+                 AND CAID1.MDSE_CD             = CAID.MDSE_CD
+                 AND CAID1.PO_ORD_DTL_LINE_NUM = CAID.PO_ORD_DTL_LINE_NUM
+                 AND CAID1.GLBL_CMPY_CD        = CAIH.GLBL_CMPY_CD
+                 AND CAID1.AP_VND_CD           = CAIH1.AP_VND_CD
+                 AND CAID1.AP_VND_INV_NUM      = CAIH1.AP_VND_INV_NUM
+                 AND CAID1.AP_VND_INV_SQ_NUM   = CAIH1.AP_VND_INV_SQ_NUM
+                 AND (CAIH1.ACCT_INV_STS_CD   != #cancel# OR CAIH1.ACCT_INV_STS_CD IS NULL)
+                 AND CAIH1.EZCANCELFLAG        = '0'
+                 AND CAIH1.CM_AP_INV_TP_CD  = #cmApInvTpCdCrMemo#  
+                 GROUP BY CAID1.MDSE_CD
+            )) TOT_INV_QTY
+        <!-- END   2018/11/21 QC#28660 MOD -->
+        <!-- END   2018/05/16 QC#26080 MOD -->
+        ,   CAID.PO_QTY
+        ,   CAID.INV_RCV_QTY
+        <!-- START 2017/07/21 S.Katsuma QC#19335 ADD -->
+        <!-- START 2018/03/26 QC#20316 ADD -->
+        ,   SUM(CAID.INV_RCV_QTY) OVER(PARTITION BY CAIH.PO_NUM, CAID.PO_ORD_DTL_LINE_NUM) / COUNT(*) OVER(PARTITION BY CAIH.PO_NUM, CAID.PO_ORD_DTL_LINE_NUM) SUM_INV_RCV_QTY
+        <!-- END   2018/03/26 QC#20316 ADD -->
+        <!-- END 2017/07/21 S.Katsuma QC#19335 ADD -->
+        ,   0                                           AP_REJ_QTY
+        --,   CAID.UOM_CD  --TODO not exists on CM_AP_INV_DIST table.
+        ,   NVL(CAID.THIS_MTH_FOB_COST_AMT,0)           THIS_MTH_FOB_COST_AMT
+        --,   CAID.AC_INV_TAX_AMT --TODO not exists on CM_AP_INV_DIST table.
+        ,   NVL(CAIH.AC_SC_TOT_FOB_COST_AMT,0)          AC_SC_TOT_FOB_COST_AMT
+        ,   NVL(CAIH.AC_SC_TOT_FRT_COST_AMT,0)          AC_SC_TOT_FRT_COST_AMT
+        ,   NVL(CAIH.AC_SC_TOT_TAX_AMT,0)               AC_SC_TOT_TAX_AMT
+        <!-- START 2023/01/05 S.Nakatani [QC#60248,ADD] -->
+        ,   NVL(CAIH.AC_SC_TOT_HDLG_COST_AMT,0)          AC_SC_TOT_HDLG_COST_AMT
+        <!-- END 2023/01/05 S.Nakatani [QC#60248,ADD] -->
+        ,   NVL(CAID.ENT_PO_DTL_DEAL_NET_AMT,0)         AC_INV_JRNL_COST_AMT
+        ,   DECODE(CAID.INV_QTY,CAID.INV_RCV_QTY,DECODE(CAID.INV_QTY,CAID.PO_QTY,'N','Y'),'Y') 
+                                                        PMT_HLD_FLG
+        ,   CDAF.CM_COA_CMPY_CD                         FRT_COA_CMPY_CD
+        ,   CDAF.CM_COA_BR_CD                           FRT_COA_BR_CD
+        ,   CDAF.CM_COA_CC_CD                           FRT_COA_CC_CD
+        ,   CDAF.CM_COA_ACCT_CD                         FRT_COA_ACCT_CD
+        ,   CDAF.CM_COA_PROD_CD                         FRT_COA_PROD_CD
+        ,   CDAF.CM_COA_CH_CD                           FRT_COA_CH_CD
+        ,   CDAF.CM_COA_AFFL_CD                         FRT_COA_AFFL_CD
+        ,   CDAF.CM_COA_PROJ_CD                         FRT_COA_PROJ_CD
+        ,   CDAF.CM_COA_EXTN_CD                         FRT_COA_EXTN_CD
+        ,   CDAT.CM_COA_CMPY_CD                         TAX_COA_CMPY_CD
+        ,   CDAT.CM_COA_BR_CD                           TAX_COA_BR_CD
+        ,   CDAT.CM_COA_CC_CD                           TAX_COA_CC_CD
+        ,   CDAT.CM_COA_ACCT_CD                         TAX_COA_ACCT_CD
+        ,   CDAT.CM_COA_PROD_CD                         TAX_COA_PROD_CD
+        ,   CDAT.CM_COA_CH_CD                           TAX_COA_CH_CD
+        ,   CDAT.CM_COA_AFFL_CD                         TAX_COA_AFFL_CD
+        ,   CDAT.CM_COA_PROJ_CD                         TAX_COA_PROJ_CD
+        ,   CDAT.CM_COA_EXTN_CD                         TAX_COA_EXTN_CD
+        <!-- START 2023/01/05 S.Nakatani [QC#60248,ADD] -->
+        ,   CDAH.CM_COA_CMPY_CD                         HDLG_COA_CMPY_CD
+        ,   CDAH.CM_COA_BR_CD                           HDLG_COA_BR_CD
+        ,   CDAH.CM_COA_CC_CD                           HDLG_COA_CC_CD
+        ,   CDAH.CM_COA_ACCT_CD                         HDLG_COA_ACCT_CD
+        ,   CDAH.CM_COA_PROD_CD                         HDLG_COA_PROD_CD
+        ,   CDAH.CM_COA_CH_CD                           HDLG_COA_CH_CD
+        ,   CDAH.CM_COA_AFFL_CD                         HDLG_COA_AFFL_CD
+        ,   CDAH.CM_COA_PROJ_CD                         HDLG_COA_PROJ_CD
+        ,   CDAH.CM_COA_EXTN_CD                         HDLG_COA_EXTN_CD
+        <!-- END 2023/01/05 S.Nakatani [QC#60248,ADD] -->
+        ,   CASE
+                WHEN
+                    PD.PO_LINE_TP_CD IN (#poLineTpItt#, #poLineTpExp#)
+                THEN
+                    POA.COA_CMPY_CD
+                END                                     MDSE_COA_CMPY_CD
+        ,   CASE
+                WHEN
+                    PD.PO_LINE_TP_CD IN (#poLineTpItt#, #poLineTpExp#)
+                THEN
+                    POA.COA_BR_CD
+                END                                     MDSE_COA_BR_CD
+        ,   CASE
+                WHEN
+                    PD.PO_LINE_TP_CD IN (#poLineTpItt#, #poLineTpExp#)
+                THEN
+                    POA.COA_CC_CD
+                END                                     MDSE_COA_CC_CD
+        ,   CASE
+                WHEN
+                    PD.PO_LINE_TP_CD IN (#poLineTpItt#, #poLineTpExp#)
+                THEN
+                    POA.COA_ACCT_CD
+                ELSE
+                    CPA.COA_ACCT_CD
+                END                                     MDSE_COA_ACCT_CD
+        ,   CASE
+                WHEN
+                    PD.PO_LINE_TP_CD IN (#poLineTpItt#, #poLineTpExp#)
+                THEN
+                    POA.COA_PROD_CD
+                END                                     MDSE_COA_PROD_CD
+        ,   CASE
+                WHEN
+                    PD.PO_LINE_TP_CD IN (#poLineTpItt#, #poLineTpExp#)
+                THEN
+                    POA.COA_CH_CD
+                END                                     MDSE_COA_CH_CD
+        ,   CASE
+                WHEN
+                    PD.PO_LINE_TP_CD IN (#poLineTpItt#, #poLineTpExp#)
+                THEN
+                    POA.COA_AFFL_CD
+                ELSE
+                    V.COA_AFFL_CD
+                END                                     MDSE_COA_AFFL_CD
+        ,   CASE
+                WHEN
+                    PD.PO_LINE_TP_CD IN (#poLineTpItt#, #poLineTpExp#)
+                THEN
+                    POA.COA_PROJ_CD
+                END                                     MDSE_COA_PROJ_CD
+        ,   CASE
+                WHEN
+                    PD.PO_LINE_TP_CD IN (#poLineTpItt#, #poLineTpExp#)
+                THEN
+                    POA.COA_EXTN_CD
+                END                                     MDSE_COA_EXTN_CD
+        ,   CDAV.CM_COA_CMPY_CD                         VAR_COA_CMPY_CD
+        ,   CDAV.CM_COA_BR_CD                           VAR_COA_BR_CD
+        ,   CDAV.CM_COA_CC_CD                           VAR_COA_CC_CD
+        ,   CDAV.CM_COA_ACCT_CD                         VAR_COA_ACCT_CD
+        ,   CDAV.CM_COA_PROD_CD                         VAR_COA_PROD_CD
+        ,   CDAV.CM_COA_CH_CD                           VAR_COA_CH_CD
+        ,   CDAV.CM_COA_AFFL_CD                         VAR_COA_AFFL_CD
+        ,   CDAV.CM_COA_PROJ_CD                         VAR_COA_PROJ_CD
+        ,   CDAV.CM_COA_EXTN_CD                         VAR_COA_EXTN_CD
+        ,   NVL(CAIH.AC_SC_TOT_FOB_COST_AMT,0) - NVL(CAID_SUM.AC_INV_VAR_COST_AMT,0)
+                                                        AC_INV_VAR_COST_AMT
+        ,   CAID.PO_ORD_DTL_LINE_NUM                    PO_ORD_DTL_LINE_NUM
+        <!--  // START 2017/12/14 T.Hakodate [SOL#060,ADD]  -->
+        ,   PD.PO_RCV_QTY                               PO_RCV_QTY
+        ,   PD.PO_LINE_TP_CD                            PO_LINE_TP_CD
+        <!--  // END   2017/12/14 T.Hakodate [SOL#060,ADD]  -->
+        ,   PD.PO_MATCH_TP_CD                           PO_MATCH_TP_CD
+        ,   NVL(CAID.ENT_DEAL_NET_UNIT_PRC_AMT,0)       ENT_DEAL_NET_UNIT_PRC_AMT
+        ,   NVL(CAID.ENT_PO_DTL_DEAL_NET_AMT,0)         ENT_PO_DTL_DEAL_NET_AMT
+        ,   NVL(CAID.ENT_FUNC_NET_UNIT_PRC_AMT,0)       ENT_FUNC_NET_UNIT_PRC_AMT
+        ,   NVL(CAID.ENT_PO_DTL_FUNC_NET_AMT,0)         ENT_PO_DTL_FUNC_NET_AMT
+        ,   NVL(CAID.EXCH_RATE,0)                       EXCH_RATE
+        ,   NVL(M.INVTY_CTRL_FLG,'Y')                   INVTY_CTRL_FLG
+        ,   V.INV_TOL_RATE                              INV_TOL_RATE
+        <!-- START 2018/05/07 QC#25828 MOD -->
+        ,   ROUND(NVL(CAID.AC_OC_FOB_COST_AMT, 0) * (100 - NVL(V.INV_TOL_RATE, 0)) / 100, 2)
+                                                        FROM_TOL_NET_PRC_AMT
+        ,   ROUND(NVL(CAID.AC_OC_FOB_COST_AMT, 0) * (100 + NVL(V.INV_TOL_RATE, 0)) / 100, 2)
+                                                        THRU_TOL_NET_PRC_AMT
+        <!-- END   2018/05/07 QC#25828 MOD -->
+        ,   CAID.AC_OC_FOB_COST_AMT                     AC_OC_FOB_COST_AMT
+        ,   LPAD(TO_CHAR(ROW_NUMBER() OVER (PARTITION BY CAID.AP_VND_CD, CAID.AP_VND_INV_NUM ORDER BY CAID.AP_VND_CD, CAID.AP_VND_INV_NUM, CAID.AP_VND_INV_SQ_NUM, CAID.VND_CD, CAID.VND_INV_NUM, CAID.AP_INV_TP_CD, CAID.MDSE_CD, CAID.DELY_ORD_NUM, CAID.PO_NUM)), 3, '0')
+                                                        CM_INV_ACCT_DIST_LINE_NUM
+        ,   PD.MDSE_DESC_SHORT_TXT                      MDSE_DESC_SHORT_TXT
+        ,   PD.PO_DISP_UOM_CD                           UOM_CD
+        ,   P.DEST_RTL_WH_CD
+        <!-- START 2018/03/26 QC#20316 ADD -->
+        ,   COUNT(*) OVER(PARTITION BY CAIH.PO_NUM, CAID.PO_ORD_DTL_LINE_NUM) INV_LINE_CNT
+        <!-- END   2018/03/26 QC#20316 ADD -->
+        <!-- START 2018/07/30 QC#27025-1 ADD -->
+        ,   PD.ENT_DEAL_NET_UNIT_PRC_AMT                PD_ENT_DEAL_NET_UNIT_PRC_AMT
+        <!-- END   2018/07/30 QC#27025-1 ADD -->
+        <!-- START 2018/11/15 QC#28982 ADD -->
+        ,   PD.ENT_FUNC_NET_UNIT_PRC_AMT                PD_ENT_FUNC_NET_UNIT_PRC_AMT
+        <!-- END   2018/11/15 QC#28982 ADD -->
+        <!-- START 2018/10/18 QC#28734 ADD -->
+        ,   NVL((
+                SELECT
+                    SUM(CSI.RCV_QTY)
+                FROM
+                    CM_STK_IN CSI
+                WHERE
+                    CAID.GLBL_CMPY_CD           = CSI.GLBL_CMPY_CD(+)
+                AND CAID.PO_NUM                 = CSI.PO_ORD_NUM(+)
+                AND CAID.PO_ORD_DTL_LINE_NUM    = CSI.PO_ORD_DTL_LINE_NUM(+)
+                AND CSI.EZCANCELFLAG(+)         = '0'
+                GROUP BY
+                    CSI.PO_ORD_NUM
+                   ,CSI.PO_ORD_DTL_LINE_NUM
+            ),0)                                        SUM_CSI_RCV_QTY
+        <!-- END   2018/10/18 QC#28734 ADD -->
+        <!-- START 2018/10/25 QC#54275 ADD -->
+        ,   P.VND_CD                                    PO_VND_CD
+        <!-- END   2018/10/25 QC#54275 ADD -->
+        FROM
+            CM_AP_INV_HDR     CAIH
+        ,   CM_AP_INV_DTL     CAID
+        <!-- START 2019/07/11 QC#51406 ADD -->
+        ,   CM_INV_ACCT_DIST  CIAD
+        <!-- END   2019/07/11 QC#51406 ADD -->
+        ,   (
+                SELECT
+                    CAID.GLBL_CMPY_CD
+                ,   CAID.AP_VND_CD
+                ,   CAID.AP_VND_INV_NUM
+                ,   CAID.AP_VND_INV_SQ_NUM
+                ,   SUM(NVL(CAID.ENT_DEAL_NET_UNIT_PRC_AMT,0) * NVL(CAID.INV_QTY, 0)) AC_INV_VAR_COST_AMT
+                FROM
+                    CM_AP_INV_DTL     CAID
+                WHERE
+                    GLBL_CMPY_CD = #glblCmpyCd#
+                AND EZCANCELFLAG = '0'
+                GROUP BY
+                    CAID.GLBL_CMPY_CD
+                ,   CAID.AP_VND_CD
+                ,   CAID.AP_VND_INV_NUM
+                ,   CAID.AP_VND_INV_SQ_NUM
+            )                 CAID_SUM
+        ,   VND               V
+        ,   CM_DEF_ACCT       CDAF <!-- For Freight -->
+        ,   CM_DEF_ACCT       CDAT <!-- For Tax -->
+        <!-- START 2023/01/05 S.Nakatani [QC#60248,ADD] -->
+        ,   CM_DEF_ACCT       CDAH <!-- For Handling Fee -->
+        <!-- END 2023/01/05 S.Nakatani [QC#60248,ADD] -->
+        ,   CM_DEF_ACCT       CDAV <!-- For Variance -->
+        ,   PO_ACCT           POA
+        ,   PO_DTL            PD
+        ,   MDSE              M
+        ,   PO                P
+        ,   COA_PROJ_ACCT     CPA
+        ,   (
+                SELECT
+                    V.GLBL_CMPY_CD
+                ,   V.INV_VND_CD
+                ,   MAX(PV.PRNT_VND_CD)           PRNT_VND_CD
+                ,   MAX(PV.PRNT_VND_NM)           PRNT_VND_NM
+                ,   MAX(V.VND_PMT_METH_CD)       VND_PMT_METH_CD
+                ,   MAX(V.VND_PMT_TERM_CD)       VND_PMT_TERM_CD
+                ,   MAX(V.VND_PMT_TERM_DESC_TXT) VND_PMT_TERM_DESC_TXT
+                FROM
+                    PRNT_VND PV
+                ,   VND      V 
+                WHERE
+                    PV.GLBL_CMPY_CD   = #glblCmpyCd#
+                AND PV.GLBL_CMPY_CD   = V.GLBL_CMPY_CD
+                AND PV.PRNT_VND_PK    = V.PRNT_VND_PK
+                AND PV.EZCANCELFLAG   = '0'
+                AND V.EZCANCELFLAG    = '0'
+                GROUP BY
+                    V.GLBL_CMPY_CD
+                ,   V.INV_VND_CD
+            )                 PV
+        WHERE
+            CAIH.GLBL_CMPY_CD          = #glblCmpyCd#
+        AND CAIH.GLBL_CMPY_CD          = CAID.GLBL_CMPY_CD
+        AND CAIH.AP_VND_CD             = CAID.AP_VND_CD
+        AND CAIH.AP_VND_INV_NUM        = CAID.AP_VND_INV_NUM
+        AND CAIH.AP_VND_INV_SQ_NUM     = CAID.AP_VND_INV_SQ_NUM
+        AND CAIH.AP_INV_TP_CD          = CAID.AP_INV_TP_CD
+        <!-- START 2019/07/11 QC#51406 ADD -->
+        AND CAID.GLBL_CMPY_CD          = CIAD.GLBL_CMPY_CD
+        AND CAID.AP_VND_CD             = CIAD.AP_VND_CD
+        AND CAID.AP_VND_INV_NUM        = CIAD.AP_VND_INV_NUM
+        AND CAID.AP_VND_INV_SQ_NUM     = CIAD.AP_VND_INV_SQ_NUM
+        AND CAID.AP_VND_INV_LINE_NUM   = CIAD.AP_VND_INV_LINE_NUM
+        AND CIAD.AP_LINE_TP_CD         = #apLineTpCdItem#
+        <!-- END   2019/07/11 QC#51406 ADD -->
+        AND CAIH.GLBL_CMPY_CD          = CAID_SUM.GLBL_CMPY_CD
+        AND CAIH.AP_VND_CD             = CAID_SUM.AP_VND_CD
+        AND CAIH.AP_VND_INV_NUM        = CAID_SUM.AP_VND_INV_NUM
+        AND CAIH.AP_VND_INV_SQ_NUM     = CAID_SUM.AP_VND_INV_SQ_NUM
+        AND CAID.GLBL_CMPY_CD          = CAID_SUM.GLBL_CMPY_CD
+        AND CAID.AP_VND_CD             = CAID_SUM.AP_VND_CD
+        AND CAID.AP_VND_INV_NUM        = CAID_SUM.AP_VND_INV_NUM
+        AND CAID.AP_VND_INV_SQ_NUM     = CAID_SUM.AP_VND_INV_SQ_NUM
+        AND CAIH.EZCANCELFLAG          = '0'
+        AND CAID.EZCANCELFLAG          = '0'
+        <!-- START 2019/07/11 QC#51406 ADD -->
+        AND CIAD.EZCANCELFLAG          = '0'
+        <!-- END   2019/07/11 QC#51406 ADD -->
+        AND CAIH.GLBL_CMPY_CD          = V.GLBL_CMPY_CD(+)
+        AND CAIH.AP_VND_CD             = V.INV_VND_CD(+)
+        AND V.EZCANCELFLAG(+)          = '0'
+        AND CAIH.GLBL_CMPY_CD          = CDAF.GLBL_CMPY_CD(+)
+        AND #cmDefAcctCdFrt#           = CDAF.CM_DEF_ACCT_CD(+)
+        AND CDAF.EZCANCELFLAG(+)       = '0'
+        AND CAIH.GLBL_CMPY_CD          = CDAT.GLBL_CMPY_CD(+)
+        AND #cmDefAcctCdTax#           = CDAT.CM_DEF_ACCT_CD(+)
+        AND CDAT.EZCANCELFLAG(+)       = '0'
+        <!-- START 2023/01/05 S.Nakatani [QC#60248,ADD] -->
+        AND CAIH.GLBL_CMPY_CD          = CDAH.GLBL_CMPY_CD(+)
+        AND #cmDefAcctCdHdlg#          = CDAH.CM_DEF_ACCT_CD(+)
+        AND CDAH.EZCANCELFLAG(+)       = '0'
+        <!-- END 2023/01/05 S.Nakatani [QC#60248,ADD] -->
+        AND CAIH.GLBL_CMPY_CD          = CDAV.GLBL_CMPY_CD(+)
+        AND #cmDefAcctCdVar#           = CDAV.CM_DEF_ACCT_CD(+)
+        AND CDAV.EZCANCELFLAG(+)       = '0'
+        AND CAID.GLBL_CMPY_CD          = POA.GLBL_CMPY_CD(+)
+        AND CAID.PO_NUM                = POA.PO_ORD_NUM(+)
+        AND CAID.PO_ORD_DTL_LINE_NUM   = POA.PO_ORD_DTL_LINE_NUM(+)
+        AND POA.PO_ACCT_TP_CD(+)       = #poAcctTpCd#
+        AND POA.EZCANCELFLAG(+)        = '0'
+        AND CAID.GLBL_CMPY_CD          = PD.GLBL_CMPY_CD(+)
+        AND CAID.PO_NUM                = PD.PO_ORD_NUM(+)
+        AND CAID.PO_ORD_DTL_LINE_NUM   = PD.PO_ORD_DTL_LINE_NUM(+)
+        AND PD.EZCANCELFLAG(+)        = '0'
+        AND CAID.GLBL_CMPY_CD          = M.GLBL_CMPY_CD(+)
+        AND CAID.MDSE_CD               = M.MDSE_CD(+)
+        AND M.EZCANCELFLAG(+)          = '0'
+        AND M.GLBL_CMPY_CD             = CPA.GLBL_CMPY_CD(+)
+        AND M.COA_MDSE_TP_CD           = CPA.COA_PROJ_CD(+)
+        AND CPA.COA_PROJ_ACCT_TP_CD(+) = #coaProjAcctTpAccrual#
+        AND CPA.EZCANCELFLAG(+)        = '0'
+<!-- START 2018/03/26 QC#20316 MOD -->
+        AND CAIH.AP_VND_CD            = PV.INV_VND_CD(+)
+        AND CAIH.GLBL_CMPY_CD          = P.GLBL_CMPY_CD(+)
+        AND CAIH.PO_NUM                = P.PO_ORD_NUM(+)
+        AND P.EZCANCELFLAG(+)         = '0'
+        AND CAIH.PMT_HLD_FLG          = 'Y'
+        <!-- start 2017 12/13 QC#23038 MOD -->
+        <!-- AND CIAH.AP_INV_CATG_CD       = #apInvCatgCdIsEDI# -->
+        <iterate property="apInvCatgCdIsEDI" var="apInvCatgCdIsEDIList[]" open="AND CAIH.AP_INV_CATG_CD IN (" close=")" conjunction=",">
+        #apInvCatgCdIsEDIList[]#
+        </iterate>
+<!-- END   2018/03/26 QC#20316 MOD -->
+        <!-- end   2017 12/13 QC#23038 MOD -->
+        <!-- start 2018 01/30 QC#18602-Sol#102 MOD -->
+        AND P.DS_PO_TP_CD             != #dsPoTpCd# 
+        <!-- end   2018 01/30 QC#18602-Sol#102 MOD -->
+        ORDER BY
+            CAIH.AP_VND_CD
+        ,   CAIH.AP_VND_INV_NUM
+        ,   CAIH.AP_VND_INV_SQ_NUM
+        <!-- START 2019/07/11 QC#51406 MOD -->
+        ,   CIAD.CM_INV_ACCT_DIST_LINE_NUM
+        <!-- END   2019/07/11 QC#51406 MOD -->
+    </statement>
+    <!-- start 2016/11/10 QC#14800 ADD -->
+    <statement id="SELECT_COA_CONST_BY_SHIP_TO_CUST" parameterClass="Map" resultClass="Map">
+        SELECT
+            CC.COA_CMPY_CD
+        ,   CC.COA_BR_CD
+        ,   CC.COA_CC_CD
+        ,   CC.COA_ACCT_CD
+        ,   CC.COA_PROD_CD
+        ,   CC.COA_CH_CD
+        ,   CC.COA_AFFL_CD
+        ,   CC.COA_PROJ_CD
+        ,   CC.COA_EXTN_CD
+        FROM
+            COA_CONST CC
+        ,  (SELECT
+                VIBW.SHIP_TO_CUST_CD
+            FROM
+                VND_INV_BOL_WRK  VIBW
+            ,   VND_INV_WRK VIW
+            WHERE
+                VIBW.GLBL_CMPY_CD = #glblCmpyCd#
+            AND VIBW.VND_INV_NUM  = #apVndInvNum#
+            AND VIW.VND_CD        = #apVndCd#
+            AND VIW.VND_INV_NUM   = VIBW.VND_INV_NUM
+            AND VIBW.EZCANCELFLAG   = '0'
+            ) VIBW
+        WHERE
+              CC.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND   CC.COA_CONST_CD        = VIBW.SHIP_TO_CUST_CD
+        AND   CC.COA_CONST_GRP_ID    = #coaConstGrpId#
+        AND   CC.COA_CONST_RESRC_ID  = #coaConstResrcId#
+        AND   CC.EZCANCELFLAG        = '0'
+        ORDER BY
+            CC.GLBL_CMPY_CD
+        ,   CC.COA_CONST_GRP_ID
+        ,   CC.COA_CONST_RESRC_ID
+        ,   CC.COA_CONST_CD
+    </statement>
+    <!-- end 2016/11/10 QC#14800 ADD -->
+
+    <statement id="SELECT_POUPDATE_RECORD" parameterClass="Map" resultClass="Map">
+        SELECT
+             PD.PO_ORD_NUM              AS PO_ORD_NUM
+            ,PD.MDSE_CD                 AS MDSE_CD
+            ,NVL(PD.PO_INV_BAL_QTY, 0)  AS PO_INV_BAL_QTY
+            ,PD.PO_ORD_DTL_LINE_NUM     AS PO_ORD_DTL_LINE_NUM
+            ,PD.PO_STS_CD               AS PO_STS_CD
+            ,PD.PO_LINE_STS_CD          AS PO_LINE_STS_CD
+        FROM
+             PO_DTL     PD
+        WHERE
+                PD.GLBL_CMPY_CD         = #glblCmpyCd#
+            AND PD.EZCANCELFLAG         = '0'
+            AND PD.PO_ORD_NUM           = #poOrdNum#
+            AND (
+                    (
+                        PD.PO_LINE_STS_CD = #poLineStsCdIsOpen#
+                        <iterate property="poStsCdIsOpenList" var="poStsCdIsOpenList[]" open="AND PD.PO_STS_CD IN (" close=")" conjunction=",">
+                        #poStsCdIsOpenList[]#
+                        </iterate>
+                    )
+                    OR
+                    (
+                        <iterate property="poLinsStsCdIsOpenForXXList" var="poLinsStsCdIsOpenForXXList[]" open="PD.PO_LINE_STS_CD IN (" close=")" conjunction=",">
+                        #poLinsStsCdIsOpenForXXList[]#
+                        </iterate>
+                    )
+                )
+        ORDER BY
+            PD.PO_ORD_NUM
+        ,   PD.MDSE_CD
+        ,   PD.PO_ORD_DTL_LINE_NUM
+    </statement>
+    <!-- start 2017/01/23 QC#17090 ADD -->
+    <!-- start 2018/10/24 QC#28857 MOD -->
+    <statement id="SELECT_COA_CD_FOR_VAR" parameterClass="Map" resultClass="Map">
+        SELECT
+            LBT.COA_CC_CD
+        ,   CPA.COA_ACCT_CD
+        ,   MDSE.COA_PROD_CD
+        ,   MDSE.COA_MDSE_TP_CD
+        ,   CDA.CM_COA_BR_CD
+        ,   CDA.CM_COA_CH_CD
+        ,   CDA.CM_COA_AFFL_CD
+        ,   CDA.CM_COA_EXTN_CD
+        FROM
+            MDSE_DLY_SNAP_SHOT    MDSE
+        ,   LINE_BIZ_TP           LBT
+        ,   COA_PROJ_ACCT         CPA
+        ,   CM_DEF_ACCT           CDA
+        WHERE
+              MDSE.GLBL_CMPY_CD           = #glblCmpyCd#
+        AND   MDSE.EZCANCELFLAG           = '0'
+        AND   MDSE.MDSE_CD                = #mdseCd#
+        AND   MDSE.LTST_REC_FLG           = #flgY#
+        AND   MDSE.GLBL_CMPY_CD           = LBT.GLBL_CMPY_CD(+)
+        AND   MDSE.LINE_BIZ_TP_CD         = LBT.LINE_BIZ_TP_CD(+)
+        AND   MDSE.EZCANCELFLAG           = LBT.EZCANCELFLAG(+)
+        AND   MDSE.GLBL_CMPY_CD           = CPA.GLBL_CMPY_CD(+)
+        AND   MDSE.COA_MDSE_TP_CD         = CPA.COA_PROJ_CD(+)
+        AND   MDSE.EZCANCELFLAG           = CPA.EZCANCELFLAG(+)
+        AND   CPA.COA_PROJ_ACCT_TP_CD(+)  = #coaProjAcctTpCd#
+        AND   MDSE.GLBL_CMPY_CD           = CDA.GLBL_CMPY_CD(+)
+        AND   #cmDefAcctCdVar#            = CDA.CM_DEF_ACCT_CD(+)
+        AND   MDSE.EZCANCELFLAG           = CDA.EZCANCELFLAG(+)
+    </statement>
+    <!-- end 2018/10/24 QC#28857 MOD -->
+    <!-- end 2017/01/23 QC#17090 ADD -->
+
+    <!-- start 2017/12/18 QC#18422 ADD -->
+    <!-- start 2018/04/02 QC#20316 MOD -->
+    <statement id="getCmStockIn" parameterClass="Map" resultClass="Map">
+        SELECT
+            CSI.ENT_DEAL_NET_UNIT_PRC_AMT   ENT_DEAL_NET_UNIT_PRC_AMT
+           ,CSI.ENT_FUNC_NET_UNIT_PRC_AMT   ENT_FUNC_NET_UNIT_PRC_AMT
+        FROM
+            CM_AP_INV_DTL              CAID
+           ,CM_STK_IN                  CSI
+        WHERE 1=1
+        AND CAID.GLBL_CMPY_CD          = #glblCmpyCd#
+        AND CAID.AP_VND_CD             = #apVndCd#
+        AND CAID.AP_VND_INV_NUM        = #apVndInvNum#
+        AND CAID.AP_VND_INV_SQ_NUM     = #apVndInvSqNum#
+        AND CAID.AP_VND_INV_LINE_NUM   = #apVndInvLineNum#
+        AND CAID.EZCANCELFLAG          = '0'
+        AND CAID.GLBL_CMPY_CD          = CSI.GLBL_CMPY_CD
+        AND CAID.PO_NUM                = CSI.PO_ORD_NUM
+        AND CAID.PO_ORD_DTL_LINE_NUM   = CSI.PO_ORD_DTL_LINE_NUM
+        AND CAID.EZCANCELFLAG          = '0'
+    </statement>
+    <!-- end 2018/04/02 QC#20316 MOD -->
+    <!-- end 2017/12/18 QC#18422 ADD -->
+
+    <!-- start 2018/11/08 QC#28982 ADD -->
+    <statement id="getMaxAcctDistLineNumber" parameterClass="Map" resultClass="String">
+        SELECT
+            MAX(CIAD.CM_INV_ACCT_DIST_LINE_NUM)
+        FROM
+            CM_INV_ACCT_DIST           CIAD
+        WHERE 1=1
+        AND CIAD.GLBL_CMPY_CD          = #glblCmpyCd#
+        AND CIAD.AP_VND_CD             = #apVndCd#
+        AND CIAD.AP_VND_INV_NUM        = #apVndInvNum#
+        AND CIAD.AP_VND_INV_SQ_NUM     = #apVndInvSqNum#
+        AND CIAD.AP_VND_INV_LINE_NUM   = #apVndInvLineNum#
+        AND CIAD.EZCANCELFLAG          = '0'
+        GROUP BY 
+            CIAD.GLBL_CMPY_CD
+           ,CIAD.AP_VND_CD
+           ,CIAD.AP_VND_INV_NUM
+           ,CIAD.AP_VND_INV_SQ_NUM
+           ,CIAD.AP_VND_INV_LINE_NUM
+    </statement>
+
+    <statement id="getInvAcctDistRecord" parameterClass="Map" resultClass="Map">
+        SELECT
+            CIAD.GLBL_CMPY_CD
+           ,CIAD.AP_VND_CD
+           ,CIAD.AP_VND_INV_NUM
+           ,CIAD.AP_VND_INV_SQ_NUM
+           ,CIAD.AP_VND_INV_LINE_NUM
+           ,CIAD.CM_INV_ACCT_DIST_LINE_NUM
+        FROM
+            CM_INV_ACCT_DIST           CIAD
+        WHERE 1=1
+        AND CIAD.GLBL_CMPY_CD          = #glblCmpyCd#
+        AND CIAD.AP_VND_CD             = #apVndCd#
+        AND CIAD.AP_VND_INV_NUM        = #apVndInvNum#
+        AND CIAD.AP_VND_INV_SQ_NUM     = #apVndInvSqNum#
+        AND CIAD.AP_VND_INV_LINE_NUM   = #apVndInvLineNum#
+        AND CIAD.AP_LINE_TP_CD         = #apLineTpCd#
+        AND CIAD.EZCANCELFLAG          = '0'
+    </statement>
+
+    <statement id="SELECT_PO_VARIANCE_UPDATE_RECORD" parameterClass="Map">
+            SELECT
+            CAIH.AP_VND_CD
+        ,   CAIH.AP_VND_INV_NUM
+        ,   CAIH.AP_VND_INV_SQ_NUM
+        ,   CAIH.INV_DT
+        ,   CAIH.PO_NUM                                 CAIH_PO_NUM
+        ,   CAIH.PMT_DUE_DT
+        ,   CAIH.VND_PMT_TERM_CD
+        ,   CAIH.ACCT_BANK_CD
+        ,   CAIH.ACCT_BANK_ACCT_PAY_TP_CD
+        ,   CAIH.INV_TP_CD
+        ,   NVL(CAIH.AC_SC_TOT_GND_INV_AMT,0)           AC_SC_TOT_GND_INV_AMT
+        ,   V.SPLY_COA_CMPY_CD
+        ,   V.SPLY_COA_BR_CD
+        ,   V.SPLY_COA_CC_CD
+        ,   V.SPLY_COA_ACCT_CD
+        ,   V.SPLY_COA_PROD_CD
+        ,   V.SPLY_COA_CH_CD
+        ,   V.SPLY_COA_AFFL_CD
+        ,   V.SPLY_COA_PROJ_CD
+        ,   V.SPLY_COA_EXTN_CD
+        ,   PV.PRNT_VND_CD
+        ,   CAID.AP_VND_INV_LINE_NUM
+        ,   CAID.MDSE_CD
+        ,   CAID.AP_INV_TP_CD
+        ,   CAID.PO_NUM                                 CAID_PO_NUM
+        ,   CAID.DELY_ORD_NUM
+        ,   CAID.INV_TP_CD
+        ,   CAID.INV_QTY
+        ,   CAID.VND_CD
+        ,   CAID.VND_INV_NUM
+        ,   CAID.PO_QTY
+        ,   CAID.INV_RCV_QTY
+        ,   0                                           AP_REJ_QTY
+        ,   NVL(CAID.THIS_MTH_FOB_COST_AMT,0)           THIS_MTH_FOB_COST_AMT
+        ,   NVL(CAIH.AC_SC_TOT_FOB_COST_AMT,0)          AC_SC_TOT_FOB_COST_AMT
+        ,   NVL(CAIH.AC_SC_TOT_FRT_COST_AMT,0)          AC_SC_TOT_FRT_COST_AMT
+        ,   NVL(CAIH.AC_SC_TOT_TAX_AMT,0)               AC_SC_TOT_TAX_AMT
+        ,   NVL(CAID.ENT_PO_DTL_DEAL_NET_AMT,0)         AC_INV_JRNL_COST_AMT
+        ,   DECODE(CAID.INV_QTY,CAID.INV_RCV_QTY,DECODE(CAID.INV_QTY,CAID.PO_QTY,'N','Y'),'Y') 
+                                                        PMT_HLD_FLG
+        ,   CASE
+                WHEN
+                    PD.PO_LINE_TP_CD IN (#poLineTpItt#, #poLineTpExp#)
+                THEN
+                    POA.COA_CMPY_CD
+                END                                     MDSE_COA_CMPY_CD
+        ,   CASE
+                WHEN
+                    PD.PO_LINE_TP_CD IN (#poLineTpItt#, #poLineTpExp#)
+                THEN
+                    POA.COA_BR_CD
+                END                                     MDSE_COA_BR_CD
+        ,   CASE
+                WHEN
+                    PD.PO_LINE_TP_CD IN (#poLineTpItt#, #poLineTpExp#)
+                THEN
+                    POA.COA_CC_CD
+                END                                     MDSE_COA_CC_CD
+        ,   CASE
+                WHEN
+                    PD.PO_LINE_TP_CD IN (#poLineTpItt#, #poLineTpExp#)
+                THEN
+                    POA.COA_ACCT_CD
+                ELSE
+                    CPA.COA_ACCT_CD
+                END                                     MDSE_COA_ACCT_CD
+        ,   CASE
+                WHEN
+                    PD.PO_LINE_TP_CD IN (#poLineTpItt#, #poLineTpExp#)
+                THEN
+                    POA.COA_PROD_CD
+                END                                     MDSE_COA_PROD_CD
+        ,   CASE
+                WHEN
+                    PD.PO_LINE_TP_CD IN (#poLineTpItt#, #poLineTpExp#)
+                THEN
+                    POA.COA_CH_CD
+                END                                     MDSE_COA_CH_CD
+        ,   CASE
+                WHEN
+                    PD.PO_LINE_TP_CD IN (#poLineTpItt#, #poLineTpExp#)
+                THEN
+                    POA.COA_AFFL_CD
+                ELSE
+                    V.COA_AFFL_CD
+                END                                     MDSE_COA_AFFL_CD
+        ,   CASE
+                WHEN
+                    PD.PO_LINE_TP_CD IN (#poLineTpItt#, #poLineTpExp#)
+                THEN
+                    POA.COA_PROJ_CD
+                END                                     MDSE_COA_PROJ_CD
+        ,   CASE
+                WHEN
+                    PD.PO_LINE_TP_CD IN (#poLineTpItt#, #poLineTpExp#)
+                THEN
+                    POA.COA_EXTN_CD
+                END                                     MDSE_COA_EXTN_CD
+        ,   CDAV.CM_COA_CMPY_CD                         VAR_COA_CMPY_CD
+        ,   CDAV.CM_COA_BR_CD                           VAR_COA_BR_CD
+        ,   CDAV.CM_COA_CC_CD                           VAR_COA_CC_CD
+        ,   CDAV.CM_COA_ACCT_CD                         VAR_COA_ACCT_CD
+        ,   CDAV.CM_COA_PROD_CD                         VAR_COA_PROD_CD
+        ,   CDAV.CM_COA_CH_CD                           VAR_COA_CH_CD
+        ,   CDAV.CM_COA_AFFL_CD                         VAR_COA_AFFL_CD
+        ,   CDAV.CM_COA_PROJ_CD                         VAR_COA_PROJ_CD
+        ,   CDAV.CM_COA_EXTN_CD                         VAR_COA_EXTN_CD
+        ,   CAID.PO_ORD_DTL_LINE_NUM                    PO_ORD_DTL_LINE_NUM
+        ,   PD.PO_RCV_QTY                               PO_RCV_QTY
+        ,   PD.PO_LINE_TP_CD                            PO_LINE_TP_CD
+        ,   PD.PO_MATCH_TP_CD                           PO_MATCH_TP_CD
+        ,   NVL(CAID.ENT_DEAL_NET_UNIT_PRC_AMT,0)       ENT_DEAL_NET_UNIT_PRC_AMT
+        ,   NVL(CAID.ENT_PO_DTL_DEAL_NET_AMT,0)         ENT_PO_DTL_DEAL_NET_AMT
+        ,   NVL(CAID.ENT_FUNC_NET_UNIT_PRC_AMT,0)       ENT_FUNC_NET_UNIT_PRC_AMT
+        ,   NVL(CAID.ENT_PO_DTL_FUNC_NET_AMT,0)         ENT_PO_DTL_FUNC_NET_AMT
+        ,   NVL(CAID.EXCH_RATE,0)                       EXCH_RATE
+        ,   NVL(M.INVTY_CTRL_FLG,'Y')                   INVTY_CTRL_FLG
+        ,   V.INV_TOL_RATE                              INV_TOL_RATE
+        ,   CAID.AC_OC_FOB_COST_AMT                     AC_OC_FOB_COST_AMT
+        ,   CIAD.CM_INV_ACCT_DIST_LINE_NUM              CM_INV_ACCT_DIST_LINE_NUM
+        ,   PD.MDSE_DESC_SHORT_TXT                      MDSE_DESC_SHORT_TXT
+        ,   PD.PO_DISP_UOM_CD                           UOM_CD
+        ,   P.DEST_RTL_WH_CD
+        ,   PD.ENT_DEAL_NET_UNIT_PRC_AMT                PD_ENT_DEAL_NET_UNIT_PRC_AMT
+        FROM
+            CM_AP_INV_HDR     CAIH
+        ,   CM_AP_INV_DTL     CAID
+        ,   CM_INV_ACCT_DIST  CIAD
+        ,   (
+                SELECT
+                    CAID.GLBL_CMPY_CD
+                ,   CAID.AP_VND_CD
+                ,   CAID.AP_VND_INV_NUM
+                ,   CAID.AP_VND_INV_SQ_NUM
+                ,   SUM(NVL(CAID.ENT_DEAL_NET_UNIT_PRC_AMT,0) * NVL(CAID.INV_QTY, 0)) AC_INV_VAR_COST_AMT
+                FROM
+                    CM_AP_INV_DTL     CAID
+                WHERE
+                    GLBL_CMPY_CD = #glblCmpyCd#
+                AND EZCANCELFLAG = '0'
+                GROUP BY
+                    CAID.GLBL_CMPY_CD
+                ,   CAID.AP_VND_CD
+                ,   CAID.AP_VND_INV_NUM
+                ,   CAID.AP_VND_INV_SQ_NUM
+            )                 CAID_SUM
+        ,   VND               V
+        ,   CM_DEF_ACCT       CDAV <!-- For Variance -->
+        ,   PO_ACCT           POA
+        ,   PO_DTL            PD
+        ,   MDSE              M
+        ,   PO                P
+        ,   COA_PROJ_ACCT     CPA
+        ,   (
+                SELECT
+                    V.GLBL_CMPY_CD
+                ,   V.INV_VND_CD
+                ,   MAX(PV.PRNT_VND_CD)           PRNT_VND_CD
+                ,   MAX(PV.PRNT_VND_NM)           PRNT_VND_NM
+                ,   MAX(V.VND_PMT_METH_CD)       VND_PMT_METH_CD
+                ,   MAX(V.VND_PMT_TERM_CD)       VND_PMT_TERM_CD
+                ,   MAX(V.VND_PMT_TERM_DESC_TXT) VND_PMT_TERM_DESC_TXT
+                FROM
+                    PRNT_VND PV
+                ,   VND      V 
+                WHERE
+                    PV.GLBL_CMPY_CD   = #glblCmpyCd#
+                AND PV.GLBL_CMPY_CD   = V.GLBL_CMPY_CD
+                AND PV.PRNT_VND_PK    = V.PRNT_VND_PK
+                AND PV.EZCANCELFLAG   = '0'
+                AND V.EZCANCELFLAG    = '0'
+                GROUP BY
+                    V.GLBL_CMPY_CD
+                ,   V.INV_VND_CD
+            )                 PV
+        WHERE
+            CAIH.GLBL_CMPY_CD          = #glblCmpyCd#
+        AND CAIH.GLBL_CMPY_CD          = CAID.GLBL_CMPY_CD
+        AND CAIH.AP_VND_CD             = CAID.AP_VND_CD
+        AND CAIH.AP_VND_INV_NUM        = CAID.AP_VND_INV_NUM
+        AND CAIH.AP_VND_INV_SQ_NUM     = CAID.AP_VND_INV_SQ_NUM
+        AND CAIH.AP_INV_TP_CD          = CAID.AP_INV_TP_CD
+        AND CAID.GLBL_CMPY_CD          = CIAD.GLBL_CMPY_CD
+        AND CAID.AP_VND_CD             = CIAD.AP_VND_CD
+        AND CAID.AP_VND_INV_NUM        = CIAD.AP_VND_INV_NUM
+        AND CAID.AP_VND_INV_SQ_NUM     = CIAD.AP_VND_INV_SQ_NUM
+        AND CAID.AP_VND_INV_LINE_NUM   = CIAD.AP_VND_INV_LINE_NUM
+        AND CIAD.AP_LINE_TP_CD         = #apLineTpCdItem#
+        AND CAIH.GLBL_CMPY_CD          = CAID_SUM.GLBL_CMPY_CD
+        AND CAIH.AP_VND_CD             = CAID_SUM.AP_VND_CD
+        AND CAIH.AP_VND_INV_NUM        = CAID_SUM.AP_VND_INV_NUM
+        AND CAIH.AP_VND_INV_SQ_NUM     = CAID_SUM.AP_VND_INV_SQ_NUM
+        AND CAID.GLBL_CMPY_CD          = CAID_SUM.GLBL_CMPY_CD
+        AND CAID.AP_VND_CD             = CAID_SUM.AP_VND_CD
+        AND CAID.AP_VND_INV_NUM        = CAID_SUM.AP_VND_INV_NUM
+        AND CAID.AP_VND_INV_SQ_NUM     = CAID_SUM.AP_VND_INV_SQ_NUM
+        AND CAIH.EZCANCELFLAG          = '0'
+        AND CAID.EZCANCELFLAG          = '0'
+        AND CIAD.EZCANCELFLAG          = '0'
+        AND CAIH.GLBL_CMPY_CD          = V.GLBL_CMPY_CD(+)
+        AND CAIH.AP_VND_CD             = V.INV_VND_CD(+)
+        AND V.EZCANCELFLAG(+)          = '0'
+        AND CAIH.GLBL_CMPY_CD          = CDAV.GLBL_CMPY_CD(+)
+        AND #cmDefAcctCdVar#           = CDAV.CM_DEF_ACCT_CD(+)
+        AND CDAV.EZCANCELFLAG(+)       = '0'
+        AND CAID.GLBL_CMPY_CD          = POA.GLBL_CMPY_CD(+)
+        AND CAID.PO_NUM                = POA.PO_ORD_NUM(+)
+        AND CAID.PO_ORD_DTL_LINE_NUM   = POA.PO_ORD_DTL_LINE_NUM(+)
+        AND POA.PO_ACCT_TP_CD(+)       = #poAcctTpCd#
+        AND POA.EZCANCELFLAG(+)        = '0'
+        AND CAID.GLBL_CMPY_CD          = PD.GLBL_CMPY_CD(+)
+        AND CAID.PO_NUM                = PD.PO_ORD_NUM(+)
+        AND CAID.PO_ORD_DTL_LINE_NUM   = PD.PO_ORD_DTL_LINE_NUM(+)
+        AND PD.EZCANCELFLAG(+)        = '0'
+        AND CAID.GLBL_CMPY_CD          = M.GLBL_CMPY_CD(+)
+        AND CAID.MDSE_CD               = M.MDSE_CD(+)
+        AND M.EZCANCELFLAG(+)          = '0'
+        AND M.GLBL_CMPY_CD             = CPA.GLBL_CMPY_CD(+)
+        AND M.COA_MDSE_TP_CD           = CPA.COA_PROJ_CD(+)
+        AND CPA.COA_PROJ_ACCT_TP_CD(+) = #coaProjAcctTpAccrual#
+        AND CPA.EZCANCELFLAG(+)        = '0'
+        AND CAIH.AP_VND_CD            = PV.INV_VND_CD(+)
+        AND CAIH.GLBL_CMPY_CD          = P.GLBL_CMPY_CD(+)
+        AND CAIH.PO_NUM                = P.PO_ORD_NUM(+)
+        AND P.EZCANCELFLAG(+)         = '0'
+        <iterate property="apInvCatgCdIsEDI" var="apInvCatgCdIsEDIList[]" open="AND CAIH.AP_INV_CATG_CD IN (" close=")" conjunction=",">
+        #apInvCatgCdIsEDIList[]#
+        </iterate>
+        <iterate property="acctInvStsCdList" var="acctInvStsCdList[]" open="AND CAIH.ACCT_INV_STS_CD IN (" close=")" conjunction=",">
+        #acctInvStsCdList[]#
+        </iterate>
+        AND P.DS_PO_TP_CD             != #dsPoTpCd# 
+        AND P.PO_HDR_STS_CD            = #poHdrStsCdIsOpen#
+        AND (
+                (
+                    PD.PO_LINE_STS_CD = #poLineStsCdIsOpen#
+                    <iterate property="poStsCdIsOpenList" var="poStsCdIsOpenList[]" open="AND PD.PO_STS_CD IN (" close=")" conjunction=",">
+                    #poStsCdIsOpenList[]#
+                    </iterate>
+                )
+                OR
+                (
+                    <iterate property="poLinsStsCdIsOpenForXXList" var="poLinsStsCdIsOpenForXXList[]" open="PD.PO_LINE_STS_CD IN (" close=")" conjunction=",">
+                    #poLinsStsCdIsOpenForXXList[]#
+                    </iterate>
+                )
+            )
+        ORDER BY
+            CAIH.AP_VND_CD
+        ,   CAIH.AP_VND_INV_NUM
+        ,   CAIH.AP_VND_INV_SQ_NUM
+        ,   CAID.AP_VND_INV_LINE_NUM
+        ,   CIAD.CM_INV_ACCT_DIST_LINE_NUM
+    </statement>
+    <!-- end   2018/11/08 QC#28982 ADD -->
+
+    <!-- start 2018/12/20 QC#29679 ADD -->
+    <statement id="getChargeAccountByLOB" parameterClass="Map" resultClass="Map">
+        SELECT
+            WH.COA_BR_CD        AS COA_BR_CD
+           ,LBT.COA_CC_CD       AS COA_CC_CD
+           ,CLB.FRT_COA_PROD_CD AS COA_PROD_CD
+        FROM
+            PO                  PO
+           ,RTL_WH              WH
+           ,DS_COND_CONST       DCC
+           ,LINE_BIZ_TP         LBT
+           ,COA_LINE_BIZ_TP     CLB
+        WHERE 1=1
+        AND PO.GLBL_CMPY_CD              = #glblCmpyCd#
+        AND PO.PO_ORD_NUM                = #poNum#
+        AND PO.EZCANCELFLAG              = '0'
+        AND PO.GLBL_CMPY_CD              = WH.GLBL_CMPY_CD(+)
+        AND PO.DEST_RTL_WH_CD            = WH.RTL_WH_CD(+)
+        AND WH.EZCANCELFLAG(+)           = '0'
+        AND PO.GLBL_CMPY_CD              = DCC.GLBL_CMPY_CD(+)
+        AND PO.PRCH_GRP_CD               = DCC.DS_COND_CONST_CD(+)
+        AND DCC.DS_COND_CONST_GRP_ID(+)  = #dsCondConstGrpId#
+        AND DCC.EZCANCELFLAG(+)          = '0'
+        AND DCC.GLBL_CMPY_CD             = LBT.GLBL_CMPY_CD(+)
+        AND DCC.DS_COND_CONST_VAL_TXT_01 = LBT.LINE_BIZ_TP_CD(+)
+        AND LBT.EZCANCELFLAG(+)          = '0'
+        AND DCC.GLBL_CMPY_CD             = CLB.GLBL_CMPY_CD(+)
+        AND DCC.DS_COND_CONST_VAL_TXT_01 = CLB.COA_LINE_BIZ_TP_NM(+)
+        AND CLB.EZCANCELFLAG(+)          = '0'
+    </statement>
+    <!-- end   2018/12/20 QC#29679 ADD -->
+
+    <!-- start 2019/08/29 QC#52280 ADD -->
+    <statement id="SELECT_POUPDATE_RECORD_FOR_CREDIT_MEMO" parameterClass="Map" resultClass="Map">
+        SELECT
+             PD.PO_ORD_NUM              AS PO_ORD_NUM
+            ,PD.MDSE_CD                 AS MDSE_CD
+            ,NVL(PD.PO_INV_BAL_QTY, 0)  AS PO_INV_BAL_QTY
+            ,PD.PO_ORD_DTL_LINE_NUM     AS PO_ORD_DTL_LINE_NUM
+            ,PD.PO_STS_CD               AS PO_STS_CD
+            ,PD.PO_LINE_STS_CD          AS PO_LINE_STS_CD
+        FROM
+             PO_DTL     PD
+        WHERE
+                PD.GLBL_CMPY_CD         = #glblCmpyCd#
+            AND PD.EZCANCELFLAG         = '0'
+            AND PD.PO_ORD_NUM           = #poOrdNum#
+            AND (
+                    (
+                        PD.PO_LINE_STS_CD = #poLineStsCdIsOpen#
+                        <iterate property="poStsCdIsOpenList" var="poStsCdIsOpenList[]" open="AND PD.PO_STS_CD IN (" close=")" conjunction=",">
+                        #poStsCdIsOpenList[]#
+                        </iterate>
+                    )
+                    OR
+                    (
+                        <iterate property="poLinsStsCdIsOpenForXXList" var="poLinsStsCdIsOpenForXXList[]" open="PD.PO_LINE_STS_CD IN (" close=")" conjunction=",">
+                        #poLinsStsCdIsOpenForXXList[]#
+                        </iterate>
+                    )
+                    OR
+                    (
+                        PD.PO_STS_CD = #poStsCdIsClosed#
+                    )
+                )
+        ORDER BY
+            PD.PO_ORD_NUM
+        ,   PD.MDSE_CD
+        ,   PD.PO_ORD_DTL_LINE_NUM
+    </statement>
+    <!-- end   2019/08/29 QC#52280 ADD -->
+
+    <!-- start 2019/10/24 QC#54275 ADD -->
+    <statement id="getLOBByPO" parameterClass="Map" resultClass="String">
+        SELECT
+            LBT.LINE_BIZ_TP_CD       AS LINE_BIZ_TP_CD
+        FROM
+            PO                  PO
+           ,DS_COND_CONST       DCC
+           ,LINE_BIZ_TP         LBT
+        WHERE 1=1
+        AND PO.GLBL_CMPY_CD              = #glblCmpyCd#
+        AND PO.PO_ORD_NUM                = #poNum#
+        AND PO.EZCANCELFLAG              = '0'
+        AND PO.GLBL_CMPY_CD              = DCC.GLBL_CMPY_CD
+        AND PO.PRCH_GRP_CD               = DCC.DS_COND_CONST_CD
+        AND DCC.DS_COND_CONST_GRP_ID     = #dsCondConstGrpId#
+        AND DCC.EZCANCELFLAG             = '0'
+        AND DCC.GLBL_CMPY_CD             = LBT.GLBL_CMPY_CD
+        AND DCC.DS_COND_CONST_VAL_TXT_01 = LBT.LINE_BIZ_TP_CD
+        AND LBT.EZCANCELFLAG             = '0'
+    </statement>
+
+    <!-- start 2019/11/06 QC#54275-1 MOD -->
+    <!-- start 2019/11/11 QC#54275-1 MOD -->
+    <statement id="getChargeAccountByPO" parameterClass="Map" resultClass="Map">
+    SELECT
+        RCC.RPT_COND_CONST_VAL_TXT_04   AS COA_CC_CD
+       ,X.COA_PROD_CD                   AS COA_PROD_CD
+       ,X.COA_PROJ_CD                   AS COA_PROJ_CD
+    FROM
+        (
+            SELECT
+                COA_PROD_CD
+               ,COA_PROJ_CD
+            FROM
+                (
+                    SELECT
+                            CASE
+                                WHEN
+                                    PD.PO_LINE_TP_CD IN (#poLineTpExp#, #poLineTpExpWR#)
+                                THEN
+                                    DECODE(POA.COA_PROD_CD, #prodCd99#, NULL, #prodCdZZ#, NULL, POA.COA_PROD_CD)
+                                ELSE
+                                    DECODE(M.COA_PROD_CD, #prodCd99#, NULL, #prodCdZZ#, NULL, M.COA_PROD_CD)
+                                END                                     COA_PROD_CD
+                        ,   CASE
+                                WHEN
+                                    PD.PO_LINE_TP_CD IN (#poLineTpExp#, #poLineTpExpWR#)
+                                THEN
+                                    POA.COA_PROJ_CD
+                                ELSE
+                                    M.COA_MDSE_TP_CD
+                                END                                     COA_PROJ_CD
+                    FROM
+                        CM_AP_INV_DTL       CAID
+                    ,   PO_DTL              PD
+                    ,   PO_ACCT             POA
+                    ,   MDSE                M
+                    WHERE 1=1
+                    AND CAID.GLBL_CMPY_CD           = #glblCmpyCd#
+                    AND CAID.AP_VND_CD              = #apVndCd#
+                    AND CAID.AP_VND_INV_NUM         = #apVndInvNum#
+                    AND CAID.AP_VND_INV_SQ_NUM      = #apVndInvSqNum#
+                    AND CAID.PO_NUM                 = #poNum#
+                    AND CAID.EZCANCELFLAG           = '0'
+                    AND CAID.GLBL_CMPY_CD           = PD.GLBL_CMPY_CD
+                    AND CAID.PO_NUM                 = PD.PO_ORD_NUM
+                    AND CAID.PO_ORD_DTL_LINE_NUM    = PD.PO_ORD_DTL_LINE_NUM
+                    AND PD.EZCANCELFLAG             = '0'
+                    AND CAID.GLBL_CMPY_CD           = POA.GLBL_CMPY_CD(+)
+                    AND CAID.PO_NUM                 = POA.PO_ORD_NUM(+)
+                    AND CAID.PO_ORD_DTL_LINE_NUM    = POA.PO_ORD_DTL_LINE_NUM(+)
+                    AND POA.PO_ACCT_TP_CD(+)        = #poAcctTpCd#
+                    AND POA.EZCANCELFLAG(+)         = '0'
+                    AND PD.GLBL_CMPY_CD             = M.GLBL_CMPY_CD
+                    AND PD.MDSE_CD                  = M.MDSE_CD
+                    AND M.EZCANCELFLAG              = '0'
+                    ORDER BY PD.ENT_DEAL_NET_UNIT_PRC_AMT DESC, PD.PO_ORD_DTL_LINE_NUM ASC
+                )
+            WHERE 
+                ROWNUM = 1
+        ) X
+       ,  RPT_COND_CONST RCC
+    WHERE 
+        X.COA_PROD_CD                    = RCC.RPT_COND_CONST_VAL_TXT_01(+)
+    AND RCC.GLBL_CMPY_CD(+)              = #glblCmpyCd#
+    AND RCC.RPT_COND_CONST_GRP_ID(+)     = #rptCondConstGrpId#
+    AND RCC.EZCANCELFLAG(+)              = '0'
+    </statement>
+    <!-- end   2019/11/11 QC#54275-1 MOD -->
+    <!-- end   2019/11/06 QC#54275-1 MOD -->
+    <!-- end   2019/10/24 QC#54275 ADD -->
+    <!-- START 2020/09/29 R.Kurahashi [QC#57795,ADD] -->
+    <statement id="getCoaCombination" parameterClass="Map" resultClass="Map">
+    SELECT
+        NVL(LOC_COA.COA_CMPY_CD, DEF_COA.COA_CMPY_CD) COA_CMPY_CD
+       ,NVL(LOC_COA.COA_BR_CD, DEF_COA.COA_BR_CD)     COA_BR_CD
+       ,NVL(LOC_COA.COA_CC_CD, DEF_COA.COA_CC_CD)     COA_CC_CD
+       ,NVL(LOC_COA.COA_ACCT_CD, DEF_COA.COA_ACCT_CD) COA_ACCT_CD
+       ,NVL(LOC_COA.COA_PROD_CD, DEF_COA.COA_PROD_CD) COA_PROD_CD
+       ,NVL(LOC_COA.COA_CH_CD, DEF_COA.COA_CH_CD)     COA_CH_CD
+       ,NVL(LOC_COA.COA_AFFL_CD, DEF_COA.COA_AFFL_CD) COA_AFFL_CD
+       ,NVL(LOC_COA.COA_PROJ_CD, DEF_COA.COA_PROJ_CD) COA_PROJ_CD
+       ,NVL(LOC_COA.COA_EXTN_CD, DEF_COA.COA_EXTN_CD) COA_EXTN_CD
+    FROM
+        COA_CONST LOC_COA
+       ,COA_CONST DEF_COA
+       ,(SELECT
+             P.DEST_RTL_WH_CD
+            ,P.VND_CD 
+         FROM
+             PO P
+            ,CM_AP_INV_HDR CAIH
+         WHERE
+             P.GLBL_CMPY_CD      = #glblCmpyCd#
+         AND P.GLBL_CMPY_CD      = CAIH.GLBL_CMPY_CD
+         AND P.EZCANCELFLAG      = '0'
+         AND CAIH.EZCANCELFLAG   = '0'
+         AND P.PO_ORD_NUM        = CAIH.PO_NUM
+         AND CAIH.AP_VND_INV_NUM = #apVndInvNum#
+        ) P
+    WHERE
+        1=1
+    <!-- In case of hitting Supplier(Vnd_cd) and Ship_to_cust / WH -->
+    AND LOC_COA.COA_CONST_GRP_ID(+)   = 'ALL_FREIGHT'
+    AND LOC_COA.COA_CONST_RESRC_ID(+) = 'ALL'
+    AND LOC_COA.VND_CD(+)             = P.VND_CD
+    AND LOC_COA.DEST_RTL_WH_CD(+)       = P.DEST_RTL_WH_CD
+    <!-- In case of hitting only Supplier(Vnd_cd) -->
+    AND DEF_COA.COA_CONST_GRP_ID(+)   = 'ALL_FREIGHT'
+    AND DEF_COA.COA_CONST_RESRC_ID(+) = 'ALL'
+    AND DEF_COA.VND_CD(+)             = P.VND_CD
+    AND DEF_COA.DEST_RTL_WH_CD(+)       = '*'
+    <!-- Pick first record if duplicated -->
+    AND ROWNUM = 1
+    </statement>
+    <!-- END 2020/09/29 R.Kurahashi [QC#57795,ADD] -->
+    <!-- START 2023/01/05 S.Nakatani [QC#60248,ADD] -->
+    <statement id="getCoaCombinationHandlingFee" parameterClass="Map" resultClass="Map">
+    SELECT
+        NVL(LOC_COA.COA_CMPY_CD, DEF_COA.COA_CMPY_CD) COA_CMPY_CD
+       ,NVL(LOC_COA.COA_BR_CD, DEF_COA.COA_BR_CD)     COA_BR_CD
+       ,NVL(LOC_COA.COA_CC_CD, DEF_COA.COA_CC_CD)     COA_CC_CD
+       ,NVL(LOC_COA.COA_ACCT_CD, DEF_COA.COA_ACCT_CD) COA_ACCT_CD
+       ,NVL(LOC_COA.COA_PROD_CD, DEF_COA.COA_PROD_CD) COA_PROD_CD
+       ,NVL(LOC_COA.COA_CH_CD, DEF_COA.COA_CH_CD)     COA_CH_CD
+       ,NVL(LOC_COA.COA_AFFL_CD, DEF_COA.COA_AFFL_CD) COA_AFFL_CD
+       ,NVL(LOC_COA.COA_PROJ_CD, DEF_COA.COA_PROJ_CD) COA_PROJ_CD
+       ,NVL(LOC_COA.COA_EXTN_CD, DEF_COA.COA_EXTN_CD) COA_EXTN_CD
+    FROM
+        COA_CONST LOC_COA
+       ,COA_CONST DEF_COA
+       ,(SELECT
+             P.DEST_RTL_WH_CD
+            ,P.VND_CD 
+         FROM
+             PO P
+            ,CM_AP_INV_HDR CAIH
+         WHERE
+             P.GLBL_CMPY_CD      = #glblCmpyCd#
+         AND P.GLBL_CMPY_CD      = CAIH.GLBL_CMPY_CD
+         AND P.EZCANCELFLAG      = '0'
+         AND CAIH.EZCANCELFLAG   = '0'
+         AND P.PO_ORD_NUM        = CAIH.PO_NUM
+         AND CAIH.AP_VND_INV_NUM = #apVndInvNum#
+        ) P
+    WHERE
+        1=1
+    -- In case of hitting Supplier(Vnd_cd) and Ship_to_cust / WH 
+    AND LOC_COA.COA_CONST_GRP_ID(+)   = 'ALL_HANDLING_FEE'
+    AND LOC_COA.COA_CONST_RESRC_ID(+) = 'ALL'
+    AND LOC_COA.VND_CD(+)             = P.VND_CD
+    AND LOC_COA.DEST_RTL_WH_CD(+)     = P.DEST_RTL_WH_CD
+    -- In case of hitting only Supplier(Vnd_cd)
+    AND DEF_COA.COA_CONST_GRP_ID(+)   = 'ALL_HANDLING_FEE'
+    AND DEF_COA.COA_CONST_RESRC_ID(+) = 'ALL'
+    AND DEF_COA.VND_CD(+)             = P.VND_CD
+    AND DEF_COA.DEST_RTL_WH_CD(+)     = '*'
+    -- Pick first record if duplicated
+    AND ROWNUM = 1
+    </statement>
+    <!-- END 2023/01/05 S.Nakatani [QC#60248,ADD] -->
+    <!-- START 2021/06/09 H.Dimay [QC#58883,ADD] -->
+    <statement id="getShipToCustCd" parameterClass="Map" resultClass="String">
+    SELECT
+        VIBW.SHIP_TO_CUST_CD
+    FROM
+        VND_INV_BOL_WRK  VIBW
+    ,   VND_INV_WRK VIW
+    WHERE
+        VIBW.GLBL_CMPY_CD = #glblCmpyCd#
+    AND VIBW.EZCANCELFLAG = '0'
+    AND VIBW.VND_INV_NUM  = #apVndInvNum#
+    AND VIW.VND_CD        = #apVndCd#
+    AND VIW.VND_INV_NUM   = VIBW.VND_INV_NUM
+    AND VIW.GLBL_CMPY_CD  = VIBW.GLBL_CMPY_CD
+    AND VIW.EZCANCELFLAG  = VIBW.EZCANCELFLAG
+    </statement>
+    <!-- END 2021/06/09 H.Dimay [QC#58883,ADD] -->
+</sqlMap>

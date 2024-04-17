@@ -1,0 +1,610 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NSZC010001">
+
+    <statement id="getDsContrDtl" parameterClass="Map" resultClass="Map">
+        SELECT
+              A.MTR_BLLG_NEXT_BLLG_DT
+             ,A.MTR_BLLG_LAST_BLLG_DT
+        FROM
+              DS_CONTR_DTL A
+             ,DS_CONTR_DTL_TP B
+        WHERE
+              A.GLBL_CMPY_CD       = #glblCmpyCd#
+          AND A.SVC_MACH_MSTR_PK   = #machMstrPk#
+          AND A.EZCANCELFLAG       = '0'
+          AND A.DS_CONTR_DTL_STS_CD IN 
+          <iterate property="dsContrDtlStsCd" var="dsContrDtlStsCd[]"  open="(" close=" )" conjunction=",">
+              #dsContrDtlStsCd[]#
+          </iterate>
+          AND A.CONTR_EFF_FROM_DT &lt;= #mtrReadDt#
+          AND A.CONTR_EFF_THRU_DT &gt;= #mtrReadDt#
+          AND A.GLBL_CMPY_CD = B.GLBL_CMPY_CD
+          AND A.EZCANCELFLAG = B.EZCANCELFLAG
+          AND A.DS_CONTR_DTL_TP_CD = B.DS_CONTR_DTL_TP_CD
+          AND B.USG_CHRG_FLG = 'Y'
+    </statement>
+    <!-- MOD-S 10/13/2015 K.Kishimoto -->
+    <statement id="getLastMtrRead" parameterClass="Map" resultClass="Map">
+        SELECT
+            A.MTR_READ_DT 
+            ,NVL(A.READ_MTR_CNT, 0) READ_MTR_CNT
+        FROM 
+            SVC_PHYS_MTR_READ A 
+        WHERE
+                A.GLBL_CMPY_CD          =    #glblCmpyCd#
+            AND A.EZCANCELFLAG          =    '0'
+            AND A.SVC_MACH_MSTR_PK      =    #svcMachMstrPk#
+            AND A.SVC_PHYS_MTR_PK       =    #svcPhysMtrPk#
+            <!-- MOD-S 03/17/2016 M.Gotou -->
+            AND A.VLD_MTR_FLG           =    'Y'
+            AND A.MTR_READ_DT        &lt;= #mtrReadDt#
+            <!-- MOD-S 03/17/2016 M.Gotou -->
+            <!-- ADD-S 09/10/2017 K.Kasai -->
+            <isNotNull property="svcPhysMtrReadPk">
+            AND A.SVC_PHYS_MTR_READ_PK  &lt;&gt; #svcPhysMtrReadPk#
+            </isNotNull>
+<!-- add start 2019/11/22 QC#54799 -->
+            <isNotNull property="dsMtrReadTpGrpCd">
+<!-- add end 2019/11/22 QC#54799 -->
+            <!-- ADD-E 09/10/2017 K.Kasai -->
+<!-- add start 2018/06/04 QC#26052 -->
+            AND (A.DS_MTR_READ_TP_GRP_CD =    #dsMtrReadTpGrpCd#
+<!-- add start 2018/06/29 QC#26795 -->
+            <isNotNull property="addDsMtrReadTpGrpCd">
+             OR  A.DS_MTR_READ_TP_GRP_CD =    #addDsMtrReadTpGrpCd#
+            </isNotNull>
+<!-- add end 2018/06/29 QC#26795 -->
+             OR  A.CNTR_RESET_TP_CD      =    #exchange#)
+<!-- add end 2018/06/04 QC#26052 -->
+<!-- add start 2019/11/22 QC#54799 -->
+            </isNotNull>
+<!-- add end 2019/11/22 QC#54799 -->
+        ORDER BY
+             A.MTR_READ_DT               DESC
+            ,A.SVC_PHYS_MTR_READ_GRP_SQ  DESC
+    </statement>
+    <statement id="checkInvoicedMeter" parameterClass="Map" resultClass="Map">
+        SELECT 
+            A.SVC_PHYS_MTR_READ_PK
+        FROM 
+            SVC_PHYS_MTR_READ A 
+        WHERE
+                A.GLBL_CMPY_CD               = #glblCmpyCd#
+            AND A.EZCANCELFLAG               = '0'
+            AND A.SVC_MACH_MSTR_PK           = #svcMachMstrPk#
+            AND A.SVC_PHYS_MTR_READ_GRP_SQ   = #svcPhysMtrReadGrpSq#
+    </statement>
+    <!-- MOD-E 10/13/2015 K.Kishimoto  -->
+        
+    <statement id="checkMeterExists" parameterClass="Map" resultClass="Map">
+        SELECT
+            SVC_MACH_MSTR_PK
+           ,MDL_MTR_LB_CD
+           ,MTR_CLS_TP_CD
+           ,DS_MDL_MTR_PK
+        FROM
+            SVC_PHYS_MTR
+        WHERE
+            GLBL_CMPY_CD = #glblCmpyCd#
+            AND EZCANCELFLAG = '0'
+            AND SVC_MACH_MSTR_PK = #svcMachMstrPk#
+            AND SVC_PHYS_MTR_PK  = #svcPhysMtrPk#
+    </statement>
+    <statement id="getBackAllocTargetDate" parameterClass="Map" resultClass="String">
+        SELECT
+            A.BLLG_SCHD_THRU_DT
+        FROM 
+            DS_CONTR_BLLG_SCHD A 
+        WHERE
+                A.GLBL_CMPY_CD          =     #glblCmpyCd#
+            AND A.EZCANCELFLAG          =     '0'
+            AND A.DS_CONTR_DTL_PK       =     #dsContrDtlPk#
+            AND A.MTR_ENTRY_CPLT_FLG    =     'N'
+            AND A.USG_CHRG_FLG          =     'Y'
+            AND A.SVC_CR_REBIL_PK       IS NULL
+            AND A.BLLG_SCHD_THRU_DT     &gt;=  #fromDt#
+            AND A.BLLG_SCHD_THRU_DT     &lt;=  #thruDt#
+            <!-- START 2023/02/03 E.Sanchez [QC#61138, ADD] -->
+            AND A.SKIP_RECOV_TP_CD      &lt;&gt; #skipRecovTpCd#
+            <!-- END 2023/02/03 E.Sanchez [QC#61138, ADD] -->
+        GROUP BY
+             A.BLLG_SCHD_THRU_DT
+        ORDER BY
+             A.BLLG_SCHD_THRU_DT
+    </statement>
+    <statement id="getlastBllgMtrGrpSqByBllgMtrPk" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            A.SVC_PHYS_MTR_READ_GRP_SQ
+        FROM 
+             DS_CONTR_BLLG_SCHD A
+            <!-- START 2022/03/24 R.Jabal [QC#59779, ADD]-->
+            ,SVC_PHYS_MTR_READ B
+            <!-- END 2022/03/24 R.Jabal [QC#59779, ADD]-->
+        WHERE
+                A.GLBL_CMPY_CD          =     #glblCmpyCd#
+            AND A.EZCANCELFLAG          =     '0'
+            AND A.DS_CONTR_DTL_PK       =     #dsContrDtlPk#
+            <isNotNull property="dsContrBllgMtrPk">
+            AND A.DS_CONTR_BLLG_MTR_PK  =     #dsContrBllgMtrPk#
+            </isNotNull>
+            AND A.MTR_ENTRY_CPLT_FLG    =     'Y'
+            AND A.USG_CHRG_FLG          =     'Y'
+            AND A.BLLG_SCHD_THRU_DT     &gt;= #fromDt#
+            AND A.BLLG_SCHD_THRU_DT     &lt;= #thruDt#
+            <!-- START 2022/03/24 R.Jabal [QC#59779, ADD]-->
+            AND A.GLBL_CMPY_CD          = B.GLBL_CMPY_CD
+            AND A.SVC_PHYS_MTR_READ_GRP_SQ = B.SVC_PHYS_MTR_READ_GRP_SQ
+            AND B.VLD_MTR_FLG           = #vldMtrFlg#
+            AND B.EZCANCELFLAG          = '0'
+            <!-- END 2022/03/24 R.Jabal [QC#59779, ADD]-->
+        ORDER BY
+             A.BLLG_SCHD_THRU_DT DESC
+    </statement>
+    <statement id="getMtrReadDtBySvcPhysMtrReadGrpSq" parameterClass="Map" resultClass="String">
+        SELECT
+            A.MTR_READ_DT
+        FROM 
+            SVC_PHYS_MTR_READ A 
+        WHERE
+                A.GLBL_CMPY_CD              =     #glblCmpyCd#
+            AND A.EZCANCELFLAG              =     '0'
+            AND A.SVC_PHYS_MTR_READ_GRP_SQ  =     #svcPhysMtrReadGrpSq#
+    </statement>
+    <statement id="getUsageChrgReg" parameterClass="Map" resultClass="Map">
+        SELECT
+             DISTINCT
+             A.DS_CONTR_DTL_PK
+            ,A.PRNT_DS_CONTR_DTL_PK
+            ,A.BLLG_SCHD_FROM_DT
+            ,A.BLLG_SCHD_THRU_DT
+            ,A.NEXT_BLLG_DT
+            ,A.RVS_SCHD_DT
+            ,A.SVC_PHYS_MTR_READ_GRP_SQ
+            ,B.DS_CONTR_SCHD_EST_FLG
+            ,C.SVC_MACH_MSTR_PK
+            ,D.DS_CONTR_CATG_CD
+            ,D.DS_CONTR_NUM
+            ,D.DS_CONTR_PK
+        FROM
+             DS_CONTR_BLLG_SCHD         A
+            ,DS_BLLG_SCHD_TP            B
+            ,DS_CONTR_DTL               C
+            ,DS_CONTR                   D
+        WHERE
+                A.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND A.EZCANCELFLAG          = '0'
+            AND A.BLLBL_FLG             = 'Y'
+            AND A.USG_CHRG_FLG          = 'Y'
+<!-- START 2017/08/24 K.Kitachi [QC#20746, MOD] -->
+<!--        AND A.BLLG_CALC_FLG         = 'N' -->
+            AND A.INV_FLG               = 'N'
+<!-- END 2017/08/24 K.Kitachi [QC#20746, MOD] -->
+            AND A.BLLG_STAGE_FLG        = 'Y'
+            AND A.GLBL_CMPY_CD          = B.GLBL_CMPY_CD
+            AND A.DS_BLLG_SCHD_TP_CD    = B.DS_BLLG_SCHD_TP_CD
+<!-- START 2018/06/26 [QC#26192, Add] -->
+            AND A.DS_CONTR_DTL_PK       = #dsContrDtlPk#
+<!-- END   2018/06/26 [QC#26192, Add] -->
+            AND B.EZCANCELFLAG          = '0'
+            AND A.GLBL_CMPY_CD          = C.GLBL_CMPY_CD
+            AND A.DS_CONTR_DTL_PK       = C.DS_CONTR_DTL_PK
+            AND C.EZCANCELFLAG          = '0'
+            AND C.GLBL_CMPY_CD          = D.GLBL_CMPY_CD
+            AND C.DS_CONTR_PK           = D.DS_CONTR_PK
+            AND D.EZCANCELFLAG          = '0'
+            AND D.DS_CONTR_CATG_CD      = #dsContrCatgCd#
+            AND D.DS_CONTR_NUM          = #dsContrNum#
+            AND A.SVC_CR_REBIL_PK       IS NULL
+        ORDER BY
+             D.DS_CONTR_NUM
+            ,A.DS_CONTR_DTL_PK
+            ,NVL(A.RVS_SCHD_DT, A.NEXT_BLLG_DT) 
+    </statement>
+    <statement id="getUsageChrgFltAgg" parameterClass="Map" resultClass="Map">
+        SELECT
+             A.DS_CONTR_DTL_PK
+            ,A.DS_CONTR_BLLG_SCHD_PK
+            ,MAX(A.BLLG_SCHD_THRU_DT) AS BLLG_SCHD_THRU_DT
+            ,A.NEXT_BLLG_DT
+            ,C.DS_CONTR_PK
+            ,C.DS_CONTR_NUM
+        FROM
+             DS_CONTR_BLLG_SCHD         A
+            ,DS_CONTR_DTL               B
+            ,DS_CONTR                   C
+        WHERE
+                A.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND A.EZCANCELFLAG          = '0'
+            AND A.BLLBL_FLG             = 'Y'
+            AND A.USG_CHRG_FLG          = 'Y'
+<!-- START 2017/08/24 K.Kitachi [QC#20746, MOD] -->
+<!--        AND A.BLLG_CALC_FLG         = 'N' -->
+            AND A.INV_FLG               = 'N'
+<!-- END 2017/08/24 K.Kitachi [QC#20746, MOD] -->
+            AND A.BLLG_STAGE_FLG        = 'Y'
+            AND A.GLBL_CMPY_CD          = B.GLBL_CMPY_CD
+            AND A.DS_CONTR_DTL_PK       = B.DS_CONTR_DTL_PK
+            AND B.DS_CONTR_DTL_TP_CD    = #dsContrDtlTpCd#
+            AND B.EZCANCELFLAG          = '0'
+            AND B.GLBL_CMPY_CD          = C.GLBL_CMPY_CD
+            AND B.DS_CONTR_PK           = C.DS_CONTR_PK
+            AND C.EZCANCELFLAG          = '0'
+            AND C.DS_CONTR_CATG_CD      = #dsContrCatgCd#
+            AND C.DS_CONTR_NUM          = #dsContrNum#
+            AND A.SVC_CR_REBIL_PK       IS NULL
+        GROUP BY
+             C.DS_CONTR_PK
+            ,C.DS_CONTR_NUM
+            ,A.DS_CONTR_BLLG_SCHD_PK
+            ,A.DS_CONTR_DTL_PK
+            ,BLLG_SCHD_THRU_DT 
+            ,A.NEXT_BLLG_DT
+        ORDER BY
+             C.DS_CONTR_PK
+            ,A.DS_CONTR_DTL_PK
+            ,BLLG_SCHD_THRU_DT
+    </statement>
+    <statement id="getNotEntryCntReg" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            COUNT(*)   AS  NOT_ENTRY_CNT
+        FROM (
+            SELECT
+                NVL(A.RVS_SCHD_DT, A.NEXT_BLLG_DT)  AS  NEXT_BLLG_DT
+            FROM
+                DS_CONTR_BLLG_SCHD      A
+            WHERE
+                    A.GLBL_CMPY_CD          = #glblCmpyCd#
+                AND A.EZCANCELFLAG          = '0'
+                AND A.DS_CONTR_DTL_PK       = #dsContrDtlPk#
+                AND A.USG_CHRG_FLG          = 'Y'
+                AND A.MTR_ENTRY_CPLT_FLG    = 'N'
+            ) AA
+        WHERE
+            AA.NEXT_BLLG_DT     = #nextBllgDt#
+    </statement>
+    <statement id="getNotEntryCntFltAgg" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            COUNT(*)   AS  NOT_ENTRY_CNT
+        FROM 
+            DS_CONTR_BLLG_SCHD      A
+        WHERE
+                A.GLBL_CMPY_CD               = #glblCmpyCd#
+            AND A.EZCANCELFLAG               = '0'
+            AND A.DS_CONTR_DTL_PK            IN (
+                SELECT
+                    X.DS_CONTR_DTL_PK
+                FROM
+                    DS_CONTR_DTL                        X
+                WHERE
+                        X.GLBL_CMPY_CD      = A.GLBL_CMPY_CD
+                    AND X.EZCANCELFLAG      = '0'
+                    AND X.DS_CONTR_PK       = #dsContrPk#
+                    AND X.DS_CONTR_DTL_TP_CD NOT IN (#agg#, #fleet#)
+            )
+            AND A.USG_CHRG_FLG               = 'Y'
+            AND A.MTR_ENTRY_CPLT_FLG         = 'N'
+            AND A.NEXT_BLLG_DT               = #nextBllgDt#
+    </statement>
+    <statement id="getContrInfoFromDtl" parameterClass="Map" resultClass="Map">
+        SELECT
+             A.DS_CONTR_NUM
+            ,A.DS_CONTR_PK
+            ,A.DS_CONTR_CATG_CD
+        FROM 
+            DS_CONTR      A
+        WHERE
+                A.GLBL_CMPY_CD               = #glblCmpyCd#
+            AND A.EZCANCELFLAG               = '0'
+            AND EXISTS (
+                SELECT
+                    *
+                FROM
+                    DS_CONTR_DTL    B
+                WHERE
+                        B.GLBL_CMPY_CD               = A.GLBL_CMPY_CD
+                    AND B.EZCANCELFLAG               = '0'
+                    AND B.DS_CONTR_PK                = A.DS_CONTR_PK
+                    AND B.DS_CONTR_DTL_PK            = #dsContrDtlPk#
+            )
+    </statement>
+    <statement id="getTestCopyInInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+             A.DS_TEST_COPY_CLS_CD
+            ,A.READ_MTR_CNT
+        FROM
+             SVC_PHYS_MTR_READ  A
+        WHERE
+                A.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND A.SVC_TASK_NUM          = #svcTaskNum#
+            AND A.SVC_PHYS_MTR_PK       = #svcPhysMtrPk#
+            AND A.MTR_READ_DT           &lt;= #mtrReadDt#
+            AND A.VLD_MTR_FLG           = 'Y'
+            AND A.EZCANCELFLAG          = '0'
+        ORDER BY
+             A.MTR_READ_DT                  DESC
+            ,A.SVC_PHYS_MTR_READ_GRP_SQ     DESC
+    </statement>
+    <statement id="getCurSchdForTestCopy" parameterClass="Map" resultClass="Map">
+        SELECT
+             A.DS_CONTR_BLLG_SCHD_PK
+        FROM
+             DS_CONTR_BLLG_SCHD   A
+            ,CONTR_PHYS_BLLG_MTR_RELN   B
+        WHERE
+                A.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND A.DS_CONTR_DTL_PK       = #dsContrDtlPk#
+            AND A.USG_CHRG_FLG          = 'Y'
+            AND A.MTR_ENTRY_CPLT_FLG    = 'Y'
+            AND A.DS_BLLG_SCHD_STS_CD   = #stsBilled#
+            AND A.BLLG_SCHD_THRU_DT     &gt;= #mtrReadDt#
+            AND A.EZCANCELFLAG          = '0'
+            AND A.GLBL_CMPY_CD          = B.GLBL_CMPY_CD
+            AND A.DS_CONTR_DTL_PK       = B.DS_CONTR_DTL_PK
+            AND B.EZCANCELFLAG          = '0'
+            AND B.SVC_PHYS_MTR_PK       = #svcPhysMtrPk#
+        ORDER BY
+             A.BLLG_SCHD_THRU_DT        ASC
+    </statement>
+    <statement id="getPreSchdForTestCopy" parameterClass="Map" resultClass="Map">
+        SELECT
+             A.DS_CONTR_BLLG_SCHD_PK
+        FROM
+             DS_CONTR_BLLG_SCHD   A
+            ,CONTR_PHYS_BLLG_MTR_RELN   B
+        WHERE
+                A.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND A.DS_CONTR_DTL_PK       = #dsContrDtlPk#
+            AND A.USG_CHRG_FLG          = 'Y'
+            AND A.MTR_ENTRY_CPLT_FLG    = 'Y'
+            AND A.DS_BLLG_SCHD_STS_CD   = #stsBilled#
+            AND A.BLLG_SCHD_THRU_DT     &lt; #curSchdFromDt#
+            AND A.EZCANCELFLAG          = '0'
+            AND A.GLBL_CMPY_CD          = B.GLBL_CMPY_CD
+            AND A.DS_CONTR_DTL_PK       = B.DS_CONTR_DTL_PK
+            AND B.EZCANCELFLAG          = '0'
+            AND B.SVC_PHYS_MTR_PK       = #svcPhysMtrPk#
+        ORDER BY
+             A.BLLG_SCHD_THRU_DT        DESC
+    </statement>
+<!-- START 2017/03/13 K.Kitachi [QC#15163, ADD] -->
+    <statement id="countSvcPhysMtrReadGrpSq" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            COUNT(*)
+        FROM
+            SVC_PHYS_MTR_READ A
+        WHERE
+                A.GLBL_CMPY_CD                = #glblCmpyCd#
+            AND A.SVC_MACH_MSTR_PK            = #svcMachMstrPk#
+            AND A.SVC_PHYS_MTR_READ_GRP_SQ &gt; #svcPhysMtrReadGrpSq#
+            AND A.EZCANCELFLAG                = '0'
+            AND ROWNUM                        = 1
+    </statement>
+<!-- END 2017/03/13 K.Kitachi [QC#15163, ADD] -->
+<!-- START 2017/08/24 K.Kitachi [QC#20746, ADD] -->
+    <statement id="getResetSchdInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+             C.DS_CONTR_CATG_CD
+            ,A.DS_CONTR_BLLG_SCHD_PK
+            ,A.PRNT_DS_CONTR_BLLG_SCHD_PK
+            ,A.BLLG_SCHD_THRU_DT
+        FROM
+             DS_CONTR_BLLG_SCHD A
+            ,DS_CONTR_DTL       B
+            ,DS_CONTR           C
+        WHERE
+                A.GLBL_CMPY_CD         = #glblCmpyCd#
+            AND A.EZCANCELFLAG         = '0'
+            AND A.DS_CONTR_DTL_PK      = #dsContrDtlPk#
+            AND A.DS_CONTR_BLLG_MTR_PK = #dsContrBllgMtrPk#
+            AND A.USG_CHRG_FLG         = 'Y'
+            AND A.MTR_ENTRY_CPLT_FLG   = 'Y'
+            AND A.INV_FLG              = 'N'
+            AND A.SVC_CR_REBIL_PK      IS NULL
+            AND A.GLBL_CMPY_CD         = B.GLBL_CMPY_CD
+            AND A.DS_CONTR_DTL_PK      = B.DS_CONTR_DTL_PK
+            AND B.EZCANCELFLAG         = '0'
+            AND B.GLBL_CMPY_CD         = C.GLBL_CMPY_CD
+            AND B.DS_CONTR_PK          = C.DS_CONTR_PK
+            AND C.EZCANCELFLAG         = '0'
+        UNION ALL
+        SELECT
+             C.DS_CONTR_CATG_CD
+            ,A.DS_CONTR_BLLG_SCHD_PK
+            ,A.PRNT_DS_CONTR_BLLG_SCHD_PK
+            ,A.BLLG_SCHD_THRU_DT
+        FROM
+             DS_CONTR_BLLG_SCHD A
+            ,DS_CONTR_DTL       B
+            ,DS_CONTR           C
+        WHERE
+                A.GLBL_CMPY_CD         = #glblCmpyCd#
+            AND A.EZCANCELFLAG         = '0'
+            AND A.DS_CONTR_DTL_PK      = #dsContrDtlPk#
+            AND A.DS_CONTR_BLLG_MTR_PK = #dsContrBllgMtrPk#
+            AND A.USG_CHRG_FLG         = 'Y'
+            AND A.MTR_ENTRY_CPLT_FLG   = 'N'
+            AND A.BLLG_CALC_FLG        = 'Y'
+            AND A.SVC_CR_REBIL_PK      IS NULL
+            AND A.GLBL_CMPY_CD         = B.GLBL_CMPY_CD
+            AND A.DS_CONTR_DTL_PK      = B.DS_CONTR_DTL_PK
+            AND B.EZCANCELFLAG         = '0'
+            AND B.GLBL_CMPY_CD         = C.GLBL_CMPY_CD
+            AND B.DS_CONTR_PK          = C.DS_CONTR_PK
+            AND C.EZCANCELFLAG         = '0'
+        ORDER BY
+            BLLG_SCHD_THRU_DT          DESC
+    </statement>
+<!-- END 2017/08/24 K.Kitachi [QC#20746, ADD] -->
+<!-- START 2018/05/08 K.Kojima [QC#24817,ADD] -->
+    <statement id="getMtrFmlaInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+             MF.MTR_LB_CD
+            ,MF.MTR_FMLA_TP_CD_01
+            ,MF.FMLA_MTR_LB_CD_01
+            ,MF.MTR_FMLA_TP_CD_02
+            ,MF.FMLA_MTR_LB_CD_02
+            ,MF.MTR_FMLA_TP_CD_03
+            ,MF.FMLA_MTR_LB_CD_03
+            ,MF.MTR_FMLA_TP_CD_04
+            ,MF.FMLA_MTR_LB_CD_04
+            ,MF.MTR_FMLA_TP_CD_05
+            ,MF.FMLA_MTR_LB_CD_05
+            ,MF.MTR_FMLA_TP_CD_06
+            ,MF.FMLA_MTR_LB_CD_06
+            ,MF.MTR_FMLA_TP_CD_07
+            ,MF.FMLA_MTR_LB_CD_07
+            ,MF.MTR_FMLA_TP_CD_08
+            ,MF.FMLA_MTR_LB_CD_08
+            ,MF.MTR_FMLA_TP_CD_09
+            ,MF.FMLA_MTR_LB_CD_09
+            ,MF.MTR_FMLA_TP_CD_10
+            ,MF.FMLA_MTR_LB_CD_10
+            ,SPM.DS_MDL_MTR_PK
+            ,SPM.SVC_PHYS_MTR_PK
+        FROM
+             MTR_FMLA   MF
+            ,SVC_PHYS_MTR SPM
+        WHERE
+                MF.GLBL_CMPY_CD      = #glblCmpyCd#
+            AND MF.EZCANCELFLAG      = '0'
+            AND MF.GLBL_CMPY_CD      = SPM.GLBL_CMPY_CD
+            AND MF.MTR_GRP_PK        = SPM.MTR_GRP_PK
+            AND MF.MTR_LB_CD         = SPM.MDL_MTR_LB_CD
+            AND SPM.SVC_MACH_MSTR_PK = #svcMachMstrPk#
+            AND SPM.EZCANCELFLAG     = '0'
+    </statement>
+    <statement id="getBeforeMtrCnt" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            READ_MTR_CNT
+        FROM
+            (
+                SELECT
+                    SPMR.READ_MTR_CNT
+                FROM
+                    SVC_PHYS_MTR_READ SPMR
+                WHERE
+                        SPMR.GLBL_CMPY_CD        = #glblCmpyCd#
+                    AND SPMR.SVC_PHYS_MTR_PK     = #svcPhysMtrPk#
+                    AND SPMR.MTR_READ_DT     &lt;= #mtrReadDt#
+                    AND SPMR.VLD_MTR_FLG         = 'Y'
+                    AND SPMR.EZCANCELFLAG        = '0'
+                ORDER BY
+                     MTR_READ_DT              DESC
+                    ,SVC_PHYS_MTR_READ_GRP_SQ DESC
+            )
+        WHERE
+            ROWNUM = 1
+    </statement>
+<!-- END 2018/05/08 K.Kojima [QC#24817,ADD] -->
+<!-- START 2018/06/26 [QC#15410,ADD] -->
+    <statement id="getGrpSqByReadDt" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            A.SVC_PHYS_MTR_READ_GRP_SQ
+        FROM
+            SVC_PHYS_MTR_READ       A
+        WHERE
+                A.GLBL_CMPY_CD          = #glblCmpyCd#
+            <!-- START 2018/10/11 [QC#28592,ADD] -->
+            AND A.VLD_MTR_FLG           = 'Y'
+            <!-- START 2018/10/11 [QC#28592,ADD] -->
+            AND A.EZCANCELFLAG          = '0'
+            AND A.SVC_PHYS_MTR_PK       = #svcPhysMtrPk#
+            AND A.MTR_READ_DT           = #mtrReadDt#
+            AND A.DS_MTR_READ_TP_GRP_CD = #dsMtrReadTpGrpCd#
+    </statement>
+<!-- END   2018/06/26 [QC#15410,ADD] -->
+<!-- START 2020/01/24 K.Kitachi [QC#55495, ADD] -->
+    <statement id="countTechMndBllblCntr" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            COUNT(*)
+        FROM
+            SVC_PHYS_MTR SPM
+        WHERE
+                SPM.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND SPM.SVC_PHYS_MTR_PK = #svcPhysMtrPk#
+            AND SPM.EZCANCELFLAG    = '0'
+            AND (
+                <isNotEqual property="dsMtrReadTpGrpCd" compareValue="B">
+                EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        DS_MDL_MTR DMM
+                    WHERE
+                            SPM.GLBL_CMPY_CD      = DMM.GLBL_CMPY_CD
+                        AND SPM.MTR_GRP_PK        = DMM.MTR_GRP_PK
+                        AND SPM.MDL_MTR_LB_CD     = DMM.MDL_MTR_LB_CD
+                        AND DMM.TECH_READ_MND_FLG = 'Y'
+                        AND DMM.EZCANCELFLAG      = '0'
+                    )
+                OR
+                </isNotEqual>
+                EXISTS (
+                    SELECT
+                        1
+                    FROM
+                         CONTR_PHYS_BLLG_MTR_RELN A
+                        ,DS_CONTR_BLLG_MTR        B
+                        ,DS_CONTR_DTL             C
+                        ,DS_CONTR_DTL_STS_V       D
+                    WHERE
+                            SPM.GLBL_CMPY_CD       = A.GLBL_CMPY_CD
+                        AND SPM.SVC_MACH_MSTR_PK   = A.MACH_MSTR_PK
+                        AND SPM.SVC_PHYS_MTR_PK    = A.SVC_PHYS_MTR_PK
+                        AND A.BLLBL_FLG            = 'Y'
+                        AND A.ACTV_FLG             = 'Y'
+                        AND A.EZCANCELFLAG         = '0'
+                        AND A.GLBL_CMPY_CD         = B.GLBL_CMPY_CD
+                        AND A.DS_CONTR_BLLG_MTR_PK = B.DS_CONTR_BLLG_MTR_PK
+                        AND B.EZCANCELFLAG         = '0'
+                        AND B.GLBL_CMPY_CD         = C.GLBL_CMPY_CD
+                        AND B.DS_CONTR_DTL_PK      = C.DS_CONTR_DTL_PK
+                        AND C.CONTR_EFF_FROM_DT    &lt;= #mtrReadDt#
+                        AND NVL(C.CONTR_CLO_DT, C.CONTR_EFF_THRU_DT) &gt;= #mtrReadDt#
+                        AND C.EZCANCELFLAG         = '0' 
+                        AND C.GLBL_CMPY_CD         = D.GLBL_CMPY_CD
+                        AND C.DS_CONTR_DTL_PK      = D.DS_CONTR_DTL_PK
+                        AND D.DS_CONTR_CTRL_STS_CD &lt;&gt; #dsContrCtrlStsCd#
+                        AND D.EZCANCELFLAG         = '0'
+                    )
+                )
+    </statement>
+<!-- END 2020/01/24 K.Kitachi [QC#55495, ADD] -->
+
+    <!-- START 2022/03/24 R.Jabal [QC#59779, ADD]-->
+    <statement id="getPreviousMeterCount" parameterClass="Map" resultClass="BigDecimal">
+        SELECT 
+            READ_MTR_CNT 
+        FROM(
+            SELECT
+                A.READ_MTR_CNT
+            FROM 
+                SVC_PHYS_MTR_READ A
+            WHERE
+                    A.GLBL_CMPY_CD          =     #glblCmpyCd#
+                AND A.EZCANCELFLAG          =     '0'
+                AND A.SVC_MACH_MSTR_PK      =     #svcMachMstrPk#
+                AND A.SVC_PHYS_MTR_PK       =     #svcPhysMtrPk#
+                AND A.MTR_READ_DT           &lt;= #mtrReadDt#
+                AND A.VLD_MTR_FLG           =     #vldMtrFlg#
+                AND A.DS_MTR_READ_TP_GRP_CD =     #dsMtrReadTpGrpCd#
+            ORDER BY
+                 A.MTR_READ_DT DESC
+                ,A.SVC_PHYS_MTR_READ_GRP_SQ  DESC)
+        WHERE ROWNUM                        =     1
+    </statement>
+    <!-- END 2022/03/24 R.Jabal [QC#59779, ADD]-->
+    <!-- START 2022/06/22 E.Sanchez [QC#59804, ADD] -->
+    <statement id="getBllgMtrSchdBySvcPhysMrReadGrpSq" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            A.DS_CONTR_BLLG_SCHD_PK
+        FROM
+            DS_CONTR_BLLG_SCHD A
+        WHERE
+                A.GLBL_CMPY_CD             = #glblCmpyCd#
+            AND A.SVC_PHYS_MTR_READ_GRP_SQ = #svcPhysMtrReadGrpSq#
+            AND A.EZCANCELFLAG             = '0'
+    </statement>
+    <!-- END 2022/06/22 E.Sanchez [QC#59804, ADD] -->
+</sqlMap>

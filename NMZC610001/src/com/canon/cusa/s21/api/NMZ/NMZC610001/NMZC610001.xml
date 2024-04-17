@@ -1,0 +1,1720 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<sqlMap namespace="NMZC610001">
+
+    <typeAlias alias="CustInfoBean"   type="com.canon.cusa.s21.api.NMZ.NMZC610001.CustInfoBean"/>
+
+    <statement id="getLocNumFromShipTo" parameterClass="Map" resultClass="Map">
+        SELECT SHIP.LOC_NUM AS LOC_NUM
+            , SHIP.SELL_TO_CUST_CD AS SELL_TO_CUST_CD 
+        FROM SHIP_TO_CUST SHIP
+        WHERE SHIP.GLBL_CMPY_CD = #glblCmpyCd#
+        AND   SHIP.EZCANCELFLAG = '0'
+        AND   SHIP.RGTN_STS_CD = #rgtnStsCd#
+        AND   SHIP.SHIP_TO_CUST_CD = #shipToCustCd#
+    </statement>
+    
+    <statement id="getLocNumFromBillTo" parameterClass="Map" resultClass="Map">
+        SELECT BILL.LOC_NUM AS LOC_NUM
+             , BILL.SELL_TO_CUST_CD AS SELL_TO_CUST_CD
+        FROM BILL_TO_CUST BILL
+        WHERE BILL.GLBL_CMPY_CD = #glblCmpyCd#
+        AND   BILL.EZCANCELFLAG = '0'
+        AND   BILL.RGTN_STS_CD = #rgtnStsCd#
+        AND   BILL.BILL_TO_CUST_CD = #billToCustCd#
+
+    </statement>
+    <statement id="getCustInfoForTransaction" parameterClass="Map" resultMap="result.getCustInfo">
+        SELECT
+            TRX.DS_ACCT_NUM            AS DS_ACCT_NUM
+            , TRX.LOC_NUM              AS LOC_NUM
+            , TRX.DS_PO_REQ_FLG        AS DS_PO_REQ_FLG
+            <!-- 2022/11/25 QC#60398 Add Start -->
+            , TRX.HARD_COPY_REQ_FLG    AS HARD_COPY_REQ_FLG
+            <!-- 2022/11/25 QC#60398 Add End -->
+            , TRX.DS_BLKT_PO_NUM       AS DS_BLKT_PO_NUM
+            , TRX.DS_PO_EXPR_DT        AS DS_PO_EXPR_DT
+            , TRX.CUST_EFF_LVL_CD      AS CUST_EFF_LVL_CD
+            , TRX.DS_CR_CARD_REQ_FLG   AS DS_CR_CARD_REQ_FLG
+            , TRX.DS_OVNGT_ALLW_FLG    AS DS_OVNGT_ALLW_FLG
+            , TRX.DS_CUST_TRX_RULE_PK  AS DS_CUST_TRX_RULE_PK
+        FROM DS_CUST_TRX_RULE TRX
+        WHERE TRX.GLBL_CMPY_CD = #glblCmpyCd#
+        AND   TRX.EZCANCELFLAG = '0'
+        <isEqual property="searchLvl" compareValue="1">
+              AND   TRX.DS_ACCT_NUM = #acctNum#
+        </isEqual>
+        <isEqual property="searchLvl" compareValue="2">
+              AND   TRX.LOC_NUM = #locNum#
+        </isEqual>
+        AND   TRX.DS_TRX_RULE_TP_CD = #trxRuleTpCd#
+    </statement>
+    <statement id="getRelnCustInfoForTransaction" parameterClass="Map" resultMap="result.getCustInfo">
+        WITH  RELN_WRK(GLBL_CMPY_CD
+              ,DS_ACCT_NUM
+              , RELN_DS_ACCT_NUM
+              , DS_ACCT_RELN_TP_CD
+              , LV) 
+        AS ( 
+            SELECT RELN.GLBL_CMPY_CD        AS GLBL_CMPY_CD
+                 , RELN.DS_ACCT_NUM         AS DS_ACCT_NUM
+                 , RELN.RELN_DS_ACCT_NUM    AS RELN_DS_ACCT_NUM
+                 , RELN.DS_ACCT_RELN_TP_CD  AS DS_ACCT_RELN_TP_CD
+                 , 1        AS LV
+                FROM DS_ACCT_RELN RELN 
+                WHERE RELN.DS_ACCT_NUM = #acctNum#
+                AND RELN.GLBL_CMPY_CD = #glblCmpyCd#
+                AND RELN.EZCANCELFLAG = '0'
+                AND RELN.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCd#
+                AND RELN.RGTN_STS_CD = #rgtnStsCd#
+
+            UNION ALL
+            SELECT RELN.GLBL_CMPY_CD       AS GLBL_CMPY_CD
+                 , RELN.DS_ACCT_NUM        AS DS_ACCT_NUM
+                 , RELN.RELN_DS_ACCT_NUM   AS RELN_DS_ACCT_NUM
+                 , RELN.DS_ACCT_RELN_TP_CD AS DS_ACCT_RELN_TP_CD
+                 , LV + 1        AS LV
+                FROM DS_ACCT_RELN RELN, RELN_WRK
+                WHERE RELN.GLBL_CMPY_CD = #glblCmpyCd#
+                AND RELN.EZCANCELFLAG = '0'
+                AND RELN.RGTN_STS_CD = #rgtnStsCd#
+                AND RELN_WRK.RELN_DS_ACCT_NUM = RELN.DS_ACCT_NUM
+                AND RELN_WRK.DS_ACCT_NUM &lt;&gt; RELN.RELN_DS_ACCT_NUM 
+                AND RELN_WRK.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCd#
+
+            )
+
+            CYCLE DS_ACCT_NUM SET IsLoop TO 'Y' DEFAULT 'N'
+
+    SELECT * 
+    FROM (
+        SELECT 
+             TRX.DS_ACCT_NUM          AS DS_ACCT_NUM
+            , TRX.DS_PO_REQ_FLG        AS DS_PO_REQ_FLG
+            <!-- 2022/11/25 QC#60398 Add Start -->
+            , TRX.HARD_COPY_REQ_FLG    AS HARD_COPY_REQ_FLG
+            <!-- 2022/11/25 QC#60398 Add End -->
+            , TRX.DS_BLKT_PO_NUM       AS DS_BLKT_PO_NUM
+            , TRX.DS_PO_EXPR_DT        AS DS_PO_EXPR_DT
+            , TRX.CUST_EFF_LVL_CD      AS CUST_EFF_LVL_CD
+            , TRX.DS_CR_CARD_REQ_FLG   AS DS_CR_CARD_REQ_FLG
+            , TRX.DS_OVNGT_ALLW_FLG    AS DS_OVNGT_ALLW_FLG
+            , TRX.DS_CUST_TRX_RULE_PK  AS DS_CUST_TRX_RULE_PK
+        FROM RELN_WRK, DS_CUST_TRX_RULE TRX
+        WHERE  ( RELN_WRK.DS_ACCT_NUM = #acctNum# 
+                  OR (RELN_WRK.DS_ACCT_NUM &lt;&gt; #acctNum# AND RELN_WRK.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCd#))
+        AND RELN_WRK.IsLoop = 'N'
+        AND RELN_WRK.GLBL_CMPY_CD = TRX.GLBL_CMPY_CD
+        AND TRX.EZCANCELFLAG = '0'
+        AND RELN_WRK.RELN_DS_ACCT_NUM = TRX.DS_ACCT_NUM
+        AND TRX.DS_TRX_RULE_TP_CD = #trxRuleTpCd#
+        AND TRX.CUST_EFF_LVL_CD = #custEffLvlCd#
+        ORDER BY RELN_WRK.LV
+         )
+    WHERE ROWNUM = 1
+    </statement>
+    <statement id="getCustInfoForInvoice" parameterClass="Map" resultMap="result.getCustInfo">
+        SELECT
+            INV.LOC_NUM                    AS LOC_NUM
+            , INV.DS_ACCT_NUM              AS DS_ACCT_NUM
+            , INV.CUST_BLLG_TP_CD          AS CUST_BLLG_TP_CD
+            , INV.CUST_CONSL_TERM_CD       AS CUST_CONSL_TERM_CD
+            , INV.CUST_BLLG_VCLE_CD        AS CUST_BLLG_VCLE_CD
+            , INV.ITRL_RVW_PSN_CD          AS ITRL_RVW_PSN_CD
+            , INV.CTAC_PSN_PK              AS CTAC_PSN_PK
+            , INV.CUST_EML_MSG_TXT         AS CUST_EML_MSG_TXT
+            , INV.DEF_INV_GRP_CD           AS DEF_INV_GRP_CD
+            , INV.INV_GRP_NUM              AS INV_GRP_NUM
+            , INV.DS_CUST_INV_RULE_PK      AS DS_CUST_INV_RULE_PK
+            <!-- QC#4256
+            <isEqual property="searchLvl" compareValue="1">
+            -->
+            <!-- Del QC#16602
+            , ATB.DS_ACCT_REF_ATTRB_NUM    AS DS_ACCT_REF_ATTRB_NUM
+            , ATB.BLLG_ATTRB_NM            AS BLLG_ATTRB_NM
+            , ATB.BLLG_ATTRB_VAL_TXT       AS BLLG_ATTRB_VAL_TXT
+            , ATB.BLLG_ATTRB_ENBL_FLG      AS BLLG_ATTRB_ENBL_FLG
+            , ATB.BLLG_ATTRB_REQ_FLG       AS BLLG_ATTRB_REQ_FLG
+            , ATB.DS_ACCT_REF_ATTRB_PK     AS DS_ACCT_REF_ATTRB_PK
+            -->
+            <!-- QC#4256
+            </isEqual>
+            -->
+        FROM
+            DS_CUST_INV_RULE INV
+            <!-- QC#4256
+            <isEqual property="searchLvl" compareValue="1">
+            -->
+            <!-- Del QC#16602
+            , DS_ACCT_REF_ATTRB ATB
+            -->
+            <!-- QC#16602 -->
+            <isEqual property="searchLvl" compareValue="2">
+            , BILL_TO_CUST BTC
+            </isEqual>
+            <!-- QC#4256
+            </isEqual>
+            -->
+        WHERE INV.GLBL_CMPY_CD = #glblCmpyCd#
+        AND   INV.EZCANCELFLAG = '0'
+        AND   INV.CUST_INV_SRC_CD = #custInvSrcCd#
+        <isEqual property="searchLvl" compareValue="1">
+        AND   INV.DS_ACCT_NUM = #acctNum#
+        <!-- Del QC#16602
+        AND   INV.GLBL_CMPY_CD = ATB.GLBL_CMPY_CD(+)
+        AND   INV.DS_ACCT_NUM = ATB.DS_ACCT_NUM(+)
+        AND   ATB.EZCANCELFLAG (+) = '0'
+        -->
+        </isEqual>
+        <isEqual property="searchLvl" compareValue="2">
+        AND   INV.LOC_NUM = #locNum#
+        <!-- QC#16602 -->
+        AND   BTC.RGTN_STS_CD     = #rgtnStsCd#
+        AND   INV.LOC_NUM         = BTC.LOC_NUM
+        <!-- Del QC#16602
+        AND   INV.GLBL_CMPY_CD = ATB.GLBL_CMPY_CD(+)
+        AND   INV.LOC_NUM = ATB.LOC_NUM(+)
+        AND   ATB.EZCANCELFLAG (+) = '0'
+        -->
+        </isEqual>
+    </statement>
+    <!-- Add Start 2017/01/06 QC#16602 -->
+    <statement id="getCustInfoForCustRef" parameterClass="Map" resultMap="result.getCustInfo">
+        SELECT
+              ATB.LOC_NUM               AS LOC_NUM
+            , ATB.DS_ACCT_NUM           AS DS_ACCT_NUM
+            , ATB.DS_ACCT_REF_ATTRB_NUM AS DS_ACCT_REF_ATTRB_NUM
+            , ATB.BLLG_ATTRB_NM         AS BLLG_ATTRB_NM
+            , ATB.BLLG_ATTRB_VAL_TXT    AS BLLG_ATTRB_VAL_TXT
+            , ATB.BLLG_ATTRB_ENBL_FLG   AS BLLG_ATTRB_ENBL_FLG
+            , ATB.BLLG_ATTRB_REQ_FLG    AS BLLG_ATTRB_REQ_FLG
+            , ATB.DS_ACCT_REF_ATTRB_PK  AS DS_ACCT_REF_ATTRB_PK
+        FROM
+              DS_ACCT_REF_ATTRB ATB
+            <isEqual property="searchLvl" compareValue="2">
+            , BILL_TO_CUST BTC
+            </isEqual>
+        WHERE 
+            ATB.GLBL_CMPY_CD    = #glblCmpyCd#
+        AND ATB.EZCANCELFLAG    = '0'
+        <isEqual property="searchLvl" compareValue="1">
+        AND ATB.DS_ACCT_NUM     = #acctNum#
+        </isEqual>
+        <isEqual property="searchLvl" compareValue="2">
+        AND ATB.LOC_NUM         = #locNum#
+        AND BTC.RGTN_STS_CD     = #rgtnStsCd#
+        AND ATB.LOC_NUM         = BTC.LOC_NUM
+        </isEqual>
+    </statement>
+    <!-- Add End 2017/01/06 QC#16602 -->
+    <statement id="getRelnCustInfoForInvoice" parameterClass="Map" resultMap="result.getCustInfo">
+    WITH  RELN_WRK(GLBL_CMPY_CD
+              ,DS_ACCT_NUM
+              , RELN_DS_ACCT_NUM
+              , DS_ACCT_RELN_TP_CD
+              , LV) 
+        AS ( 
+            SELECT RELN.GLBL_CMPY_CD        AS GLBL_CMPY_CD
+                 , RELN.DS_ACCT_NUM         AS DS_ACCT_NUM
+                 , RELN.RELN_DS_ACCT_NUM    AS RELN_DS_ACCT_NUM
+                 , RELN.DS_ACCT_RELN_TP_CD  AS DS_ACCT_RELN_TP_CD
+                 , 1        AS LV
+                FROM DS_ACCT_RELN RELN 
+                WHERE RELN.DS_ACCT_NUM = #acctNum#
+                AND RELN.GLBL_CMPY_CD = #glblCmpyCd#
+                AND RELN.EZCANCELFLAG = '0'
+                AND RELN.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCd#
+                AND RELN.RGTN_STS_CD = #rgtnStsCd#
+
+            UNION ALL
+            SELECT RELN.GLBL_CMPY_CD       AS GLBL_CMPY_CD
+                 , RELN.DS_ACCT_NUM        AS DS_ACCT_NUM
+                 , RELN.RELN_DS_ACCT_NUM   AS RELN_DS_ACCT_NUM
+                 , RELN.DS_ACCT_RELN_TP_CD AS DS_ACCT_RELN_TP_CD
+                 , LV + 1        AS LV
+                FROM DS_ACCT_RELN RELN, RELN_WRK
+                WHERE RELN.GLBL_CMPY_CD = #glblCmpyCd#
+                AND RELN.EZCANCELFLAG = '0'
+                AND RELN.RGTN_STS_CD = #rgtnStsCd#
+                AND RELN_WRK.RELN_DS_ACCT_NUM = RELN.DS_ACCT_NUM
+                AND RELN_WRK.DS_ACCT_NUM &lt;&gt; RELN.RELN_DS_ACCT_NUM 
+                AND RELN_WRK.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCd#
+
+            )
+
+            CYCLE DS_ACCT_NUM SET IsLoop TO 'Y' DEFAULT 'N'
+
+    SELECT 
+            INV.LOC_NUM
+            , INV.DS_ACCT_NUM
+            , INV.CUST_BLLG_TP_CD
+            , INV.CUST_CONSL_TERM_CD
+            , INV.CUST_BLLG_VCLE_CD
+            , INV.ITRL_RVW_PSN_CD
+            , INV.CTAC_PSN_PK
+            , INV.CUST_EML_MSG_TXT
+            , INV.DEF_INV_GRP_CD
+            , INV.INV_GRP_NUM
+            , INV.DS_CUST_INV_RULE_PK
+            <!-- Del QC#16602
+            , ATB.DS_ACCT_REF_ATTRB_NUM
+            , ATB.BLLG_ATTRB_NM
+            , ATB.BLLG_ATTRB_VAL_TXT
+            , ATB.BLLG_ATTRB_ENBL_FLG
+            , ATB.BLLG_ATTRB_REQ_FLG
+            , ATB.DS_ACCT_REF_ATTRB_PK
+            -->
+            , RELN_WRK.LV
+    FROM 
+            RELN_WRK
+            , DS_CUST_INV_RULE INV
+            <!-- Del QC#16602
+            , DS_ACCT_REF_ATTRB ATB
+            -->
+            , (SELECT MIN(LV) AS MIN_LV_NUM FROM RELN_WRK) MIN_LV
+    WHERE 
+       <!-- Del QC#16602
+            INV.GLBL_CMPY_CD = ATB.GLBL_CMPY_CD(+)
+       AND  ATB.EZCANCELFLAG (+) = 0
+       AND  INV.DS_ACCT_NUM = ATB.DS_ACCT_NUM(+)
+       -->
+           RELN_WRK.GLBL_CMPY_CD     = INV.GLBL_CMPY_CD
+       AND INV.EZCANCELFLAG          = '0'
+       AND RELN_WRK.RELN_DS_ACCT_NUM = INV.DS_ACCT_NUM
+       AND INV.CUST_INV_SRC_CD       = #custInvSrcCd#
+       AND INV.CUST_EFF_LVL_CD       = #custEffLvlCd#
+
+       AND  ( RELN_WRK.DS_ACCT_NUM   = #acctNum#
+                  OR (RELN_WRK.DS_ACCT_NUM &lt;&gt; #acctNum# AND RELN_WRK.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCd#))
+       AND RELN_WRK.IsLoop           = 'N'
+
+       AND RELN_WRK.LV               = MIN_LV.MIN_LV_NUM
+
+    <!-- Del QC#16602
+    ORDER BY ATB.DS_ACCT_NUM
+           , ATB.DS_ACCT_REF_ATTRB_NUM
+    -->
+    </statement>
+    <!-- Add Start 2017/01/06 QC#16602 -->
+    <statement id="getRelnCustInfoForCustRef" parameterClass="Map" resultMap="result.getCustInfo">
+    WITH  RELN_WRK(GLBL_CMPY_CD
+              ,DS_ACCT_NUM
+              , RELN_DS_ACCT_NUM
+              , DS_ACCT_RELN_TP_CD
+              , LV) 
+        AS ( 
+            SELECT RELN.GLBL_CMPY_CD        AS GLBL_CMPY_CD
+                 , RELN.DS_ACCT_NUM         AS DS_ACCT_NUM
+                 , RELN.RELN_DS_ACCT_NUM    AS RELN_DS_ACCT_NUM
+                 , RELN.DS_ACCT_RELN_TP_CD  AS DS_ACCT_RELN_TP_CD
+                 , 1        AS LV
+                FROM DS_ACCT_RELN RELN 
+                WHERE RELN.DS_ACCT_NUM = #acctNum#
+                AND RELN.GLBL_CMPY_CD = #glblCmpyCd#
+                AND RELN.EZCANCELFLAG = '0'
+                AND RELN.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCd#
+                AND RELN.RGTN_STS_CD = #rgtnStsCd#
+
+            UNION ALL
+            SELECT RELN.GLBL_CMPY_CD       AS GLBL_CMPY_CD
+                 , RELN.DS_ACCT_NUM        AS DS_ACCT_NUM
+                 , RELN.RELN_DS_ACCT_NUM   AS RELN_DS_ACCT_NUM
+                 , RELN.DS_ACCT_RELN_TP_CD AS DS_ACCT_RELN_TP_CD
+                 , LV + 1        AS LV
+                FROM DS_ACCT_RELN RELN, RELN_WRK
+                WHERE RELN.GLBL_CMPY_CD = #glblCmpyCd#
+                AND RELN.EZCANCELFLAG = '0'
+                AND RELN.RGTN_STS_CD = #rgtnStsCd#
+                AND RELN_WRK.RELN_DS_ACCT_NUM = RELN.DS_ACCT_NUM
+                AND RELN_WRK.DS_ACCT_NUM &lt;&gt; RELN.RELN_DS_ACCT_NUM 
+                AND RELN_WRK.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCd#
+
+            )
+
+            CYCLE DS_ACCT_NUM SET IsLoop TO 'Y' DEFAULT 'N'
+
+    SELECT 
+            ATB.LOC_NUM
+            , ATB.DS_ACCT_NUM
+            , ATB.DS_ACCT_REF_ATTRB_NUM
+            , ATB.BLLG_ATTRB_NM
+            , ATB.BLLG_ATTRB_VAL_TXT
+            , ATB.BLLG_ATTRB_ENBL_FLG
+            , ATB.BLLG_ATTRB_REQ_FLG
+            , ATB.DS_ACCT_REF_ATTRB_PK
+            , RELN_WRK.LV
+    FROM RELN_WRK
+            , DS_ACCT_REF_ATTRB ATB
+            , (SELECT MIN(LV) AS MIN_LV_NUM FROM RELN_WRK) MIN_LV
+    WHERE 
+           RELN_WRK.GLBL_CMPY_CD     = ATB.GLBL_CMPY_CD
+       AND ATB.EZCANCELFLAG          = '0'
+       AND RELN_WRK.RELN_DS_ACCT_NUM = ATB.DS_ACCT_NUM
+       AND ATB.CUST_EFF_LVL_CD       = #custEffLvlCd#
+
+       AND ( RELN_WRK.DS_ACCT_NUM    = #acctNum#
+                  OR (RELN_WRK.DS_ACCT_NUM &lt;&gt; #acctNum# AND RELN_WRK.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCd#))
+       AND RELN_WRK.IsLoop           = 'N'
+
+       AND RELN_WRK.LV               = MIN_LV.MIN_LV_NUM
+
+    ORDER BY 
+             ATB.DS_ACCT_NUM
+           , ATB.DS_ACCT_REF_ATTRB_NUM
+    </statement>
+    <!-- Add End 2017/01/06 QC#16602 -->
+    <statement id="getCustInfoForInstruction" parameterClass="Map" resultMap="result.getCustInfo">
+        SELECT
+            SPCL.LOC_NUM                AS LOC_NUM
+            , SPCL.DS_ACCT_NUM          AS DS_ACCT_NUM
+            , SPCL.DS_CUST_MSG_TXT      AS DS_CUST_MSG_TXT
+            , SPCL.DS_PRINT_ON_INV_FLG  AS DS_PRINT_ON_INV_FLG
+            , SPCL.CUST_EFF_LVL_CD      AS SPCL_CUST_EFF_LVL_CD
+            , SPCL.EFF_THRU_DT          AS EFF_THRU_DT
+            , SPCL.DS_CUST_SPCL_MSG_PK  AS DS_CUST_SPCL_MSG_PK
+            , SPCL.DS_BIZ_AREA_CD       AS DS_BIZ_AREA_CD
+            , SPCL.DS_CUST_MSG_TP_CD    AS DS_CUST_MSG_TP_CD
+            , SPCL.LINE_BIZ_TP_CD       AS LINE_BIZ_TP_CD
+
+        FROM DS_CUST_SPCL_MSG SPCL
+        WHERE SPCL.GLBL_CMPY_CD = #glblCmpyCd#
+        AND   SPCL.EZCANCELFLAG = '0'
+        AND   (SPCL.LINE_BIZ_TP_CD = #lineBizTpCd# or SPCL.LINE_BIZ_TP_CD = #lineBizTpCdALL#)
+        AND   SPCL.DS_BIZ_AREA_CD IN
+        <iterate property="dsBizAreaCdList" var="dsBizAreaCd[]" open=" (" close=")" conjunction=",">
+        #dsBizAreaCd[]#
+        </iterate>
+        AND   SPCL.DS_CUST_MSG_TP_CD IN
+        <iterate property="dsCustMsgTpCdList" var="dsCustMsgTpCd[]" open=" (" close=")" conjunction=",">
+        #dsCustMsgTpCd[]#
+        </iterate>
+        AND   SPCL.EFF_FROM_DT &lt;= #slsDt#
+        AND   (SPCL.EFF_THRU_DT &gt;= #slsDt# OR SPCL.EFF_THRU_DT IS NULL)
+       <isEqual property="searchLvl" compareValue="1">
+        AND   SPCL.DS_ACCT_NUM = #acctNum#
+        </isEqual>
+        <isEqual property="searchLvl" compareValue="2">
+        AND   SPCL.LOC_NUM = #locNum#
+        </isEqual>
+        ORDER BY 
+            SPCL.DS_BIZ_AREA_CD
+           ,SPCL.DS_CUST_MSG_TP_CD
+           ,SPCL.DS_CUST_SPCL_MSG_PK
+    </statement>
+    <statement id="getCustInfoForInstructionAll" parameterClass="Map" resultMap="result.getCustInfo">
+        SELECT
+            SPCL.LOC_NUM                AS LOC_NUM
+            , SPCL.DS_ACCT_NUM          AS DS_ACCT_NUM
+            , SPCL.DS_CUST_MSG_TXT      AS DS_CUST_MSG_TXT
+            , SPCL.DS_PRINT_ON_INV_FLG  AS DS_PRINT_ON_INV_FLG
+            , SPCL.CUST_EFF_LVL_CD      AS SPCL_CUST_EFF_LVL_CD
+            , SPCL.EFF_THRU_DT          AS EFF_THRU_DT
+            , SPCL.DS_CUST_SPCL_MSG_PK  AS DS_CUST_SPCL_MSG_PK
+            , SPCL.DS_BIZ_AREA_CD       AS DS_BIZ_AREA_CD
+            , SPCL.DS_CUST_MSG_TP_CD    AS DS_CUST_MSG_TP_CD
+            , SPCL.LINE_BIZ_TP_CD       AS LINE_BIZ_TP_CD
+
+        FROM DS_CUST_SPCL_MSG SPCL
+            , LINE_BIZ_TP TP
+        WHERE SPCL.GLBL_CMPY_CD = #glblCmpyCd#
+        AND   SPCL.EZCANCELFLAG = '0'
+        AND   SPCL.DS_BIZ_AREA_CD IN
+        <iterate property="dsBizAreaCdList" var="dsBizAreaCd[]" open=" (" close=")" conjunction=",">
+        #dsBizAreaCd[]#
+        </iterate>
+        AND   SPCL.DS_CUST_MSG_TP_CD IN
+        <iterate property="dsCustMsgTpCdList" var="dsCustMsgTpCd[]" open=" (" close=")" conjunction=",">
+        #dsCustMsgTpCd[]#
+        </iterate>
+        AND   SPCL.EFF_FROM_DT &lt;= #slsDt#
+        AND   (SPCL.EFF_THRU_DT &gt;= #slsDt# OR SPCL.EFF_THRU_DT IS NULL)
+
+        AND SPCL.GLBL_CMPY_CD = TP.GLBL_CMPY_CD
+        AND SPCL.LINE_BIZ_TP_CD = TP.LINE_BIZ_TP_CD
+        AND TP.EZCANCELFLAG = '0'
+        AND TP.LINE_BIZ_ALL_FLG = 'Y'
+       <isEqual property="searchLvl" compareValue="1">
+        AND   SPCL.DS_ACCT_NUM = #acctNum#
+        </isEqual>
+        <isEqual property="searchLvl" compareValue="2">
+        AND   SPCL.LOC_NUM = #locNum#
+        </isEqual>
+        ORDER BY 
+            SPCL.DS_BIZ_AREA_CD
+           ,SPCL.DS_CUST_MSG_TP_CD
+           ,SPCL.DS_CUST_SPCL_MSG_PK
+    </statement>
+    <statement id="getRelnCustInfoForInstruction" parameterClass="Map" resultMap="result.getCustInfo">
+        WITH  RELN_WRK(GLBL_CMPY_CD
+                      ,DS_ACCT_NUM
+                      , RELN_DS_ACCT_NUM
+                      , DS_ACCT_RELN_TP_CD
+                      , LV) 
+                AS ( 
+                    SELECT RELN.GLBL_CMPY_CD        AS GLBL_CMPY_CD
+                         , RELN.DS_ACCT_NUM         AS DS_ACCT_NUM
+                         , RELN.RELN_DS_ACCT_NUM    AS RELN_DS_ACCT_NUM
+                         , RELN.DS_ACCT_RELN_TP_CD  AS DS_ACCT_RELN_TP_CD
+                         , 1        AS LV
+                        FROM DS_ACCT_RELN RELN 
+                        WHERE RELN.DS_ACCT_NUM = #acctNum#
+                        AND RELN.GLBL_CMPY_CD = #glblCmpyCd#
+                        AND RELN.EZCANCELFLAG = '0'
+                        AND RELN.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCd#
+                        AND RELN.RGTN_STS_CD = #rgtnStsCd#
+        
+                    UNION ALL
+                    SELECT RELN.GLBL_CMPY_CD       AS GLBL_CMPY_CD
+                         , RELN.DS_ACCT_NUM        AS DS_ACCT_NUM
+                         , RELN.RELN_DS_ACCT_NUM   AS RELN_DS_ACCT_NUM
+                         , RELN.DS_ACCT_RELN_TP_CD AS DS_ACCT_RELN_TP_CD
+                         , LV + 1        AS LV
+                        FROM DS_ACCT_RELN RELN, RELN_WRK
+                        WHERE RELN.GLBL_CMPY_CD = #glblCmpyCd#
+                        AND RELN.EZCANCELFLAG = '0'
+                        AND RELN.RGTN_STS_CD = #rgtnStsCd#
+                        AND RELN_WRK.RELN_DS_ACCT_NUM = RELN.DS_ACCT_NUM
+                        AND RELN_WRK.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCd#
+        
+                    )
+        
+                    CYCLE DS_ACCT_NUM SET IsLoop TO 'Y' DEFAULT 'N'
+        
+        SELECT * FROM (
+                        SELECT 
+                            SPCL.LOC_NUM                AS LOC_NUM
+                            , SPCL.DS_ACCT_NUM          AS DS_ACCT_NUM
+                            , SPCL.DS_CUST_MSG_TXT      AS DS_CUST_MSG_TXT
+                            , SPCL.DS_PRINT_ON_INV_FLG  AS DS_PRINT_ON_INV_FLG
+                            , SPCL.CUST_EFF_LVL_CD      AS SPCL_CUST_EFF_LVL_CD
+                            , SPCL.EFF_THRU_DT          AS EFF_THRU_DT
+                            , SPCL.DS_CUST_SPCL_MSG_PK  AS DS_CUST_SPCL_MSG_PK
+                            , DENSE_RANK() OVER (ORDER BY RELN_WRK.LV) AS RANK 
+                            , SPCL.DS_BIZ_AREA_CD       AS DS_BIZ_AREA_CD
+                            , SPCL.DS_CUST_MSG_TP_CD    AS DS_CUST_MSG_TP_CD
+                            , SPCL.LINE_BIZ_TP_CD       AS LINE_BIZ_TP_CD
+        
+        FROM
+            RELN_WRK, DS_CUST_SPCL_MSG SPCL
+        WHERE
+            RELN_WRK.IsLoop = 'N'
+        AND RELN_WRK.GLBL_CMPY_CD = SPCL.GLBL_CMPY_CD
+        AND RELN_WRK.RELN_DS_ACCT_NUM = SPCL.DS_ACCT_NUM
+        AND SPCL.EZCANCELFLAG = '0'
+        AND SPCL.CUST_EFF_LVL_CD = #custEffLvlCd#
+        <!-- QC#10534
+        AND SPCL.LINE_BIZ_TP_CD = #lineBizTpCd#
+         -->
+        AND (SPCL.LINE_BIZ_TP_CD = #lineBizTpCd# OR SPCL.LINE_BIZ_TP_CD = #lineBizTpCdALL#)
+        AND SPCL.DS_BIZ_AREA_CD IN
+        <iterate property="dsBizAreaCdList" var="dsBizAreaCd[]" open=" (" close=")" conjunction=",">
+        #dsBizAreaCd[]#
+        </iterate>
+        AND SPCL.DS_CUST_MSG_TP_CD IN
+        <iterate property="dsCustMsgTpCdList" var="dsCustMsgTpCd[]" open=" (" close=")" conjunction=",">
+        #dsCustMsgTpCd[]#
+        </iterate>
+        AND SPCL.EFF_FROM_DT &lt;= #slsDt#
+        AND (SPCL.EFF_THRU_DT &gt;= #slsDt# OR SPCL.EFF_THRU_DT IS NULL)
+        )
+        WHERE RANK = 1
+        ORDER BY 
+            DS_BIZ_AREA_CD
+           ,DS_CUST_MSG_TP_CD
+           ,DS_CUST_SPCL_MSG_PK
+    </statement>
+    <statement id="getRelnCustInfoForInstructionAll" parameterClass="Map" resultMap="result.getCustInfo">
+        WITH  RELN_WRK(GLBL_CMPY_CD
+                      ,DS_ACCT_NUM
+                      , RELN_DS_ACCT_NUM
+                      , DS_ACCT_RELN_TP_CD
+                      , LV) 
+                AS ( 
+                    SELECT RELN.GLBL_CMPY_CD        AS GLBL_CMPY_CD
+                         , RELN.DS_ACCT_NUM         AS DS_ACCT_NUM
+                         , RELN.RELN_DS_ACCT_NUM    AS RELN_DS_ACCT_NUM
+                         , RELN.DS_ACCT_RELN_TP_CD  AS DS_ACCT_RELN_TP_CD
+                         , 1        AS LV
+                        FROM DS_ACCT_RELN RELN 
+                        WHERE RELN.DS_ACCT_NUM = #acctNum#
+                        AND RELN.GLBL_CMPY_CD = #glblCmpyCd#
+                        AND RELN.EZCANCELFLAG = '0'
+                        AND RELN.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCd#
+                        AND RELN.RGTN_STS_CD = #rgtnStsCd#
+        
+                    UNION ALL
+                    SELECT RELN.GLBL_CMPY_CD       AS GLBL_CMPY_CD
+                         , RELN.DS_ACCT_NUM        AS DS_ACCT_NUM
+                         , RELN.RELN_DS_ACCT_NUM   AS RELN_DS_ACCT_NUM
+                         , RELN.DS_ACCT_RELN_TP_CD AS DS_ACCT_RELN_TP_CD
+                         , LV + 1        AS LV
+                        FROM DS_ACCT_RELN RELN, RELN_WRK
+                        WHERE RELN.GLBL_CMPY_CD = #glblCmpyCd#
+                        AND RELN.EZCANCELFLAG = '0'
+                        AND RELN.RGTN_STS_CD = #rgtnStsCd#
+                        AND RELN_WRK.RELN_DS_ACCT_NUM = RELN.DS_ACCT_NUM
+                        AND RELN_WRK.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCd#
+        
+                    )
+        
+                    CYCLE DS_ACCT_NUM SET IsLoop TO 'Y' DEFAULT 'N'
+        
+        SELECT * FROM (
+                        SELECT 
+                            SPCL.LOC_NUM                AS LOC_NUM
+                            , SPCL.DS_ACCT_NUM          AS DS_ACCT_NUM
+                            , SPCL.DS_CUST_MSG_TXT      AS DS_CUST_MSG_TXT
+                            , SPCL.DS_PRINT_ON_INV_FLG  AS DS_PRINT_ON_INV_FLG
+                            , SPCL.CUST_EFF_LVL_CD      AS SPCL_CUST_EFF_LVL_CD
+                            , SPCL.EFF_THRU_DT          AS EFF_THRU_DT
+                            , SPCL.DS_CUST_SPCL_MSG_PK  AS DS_CUST_SPCL_MSG_PK
+                            , DENSE_RANK() OVER (ORDER BY RELN_WRK.LV) AS RANK 
+                            , SPCL.DS_BIZ_AREA_CD       AS DS_BIZ_AREA_CD
+                            , SPCL.DS_CUST_MSG_TP_CD    AS DS_CUST_MSG_TP_CD
+                            , SPCL.LINE_BIZ_TP_CD       AS LINE_BIZ_TP_CD
+        
+        FROM
+            RELN_WRK
+            , DS_CUST_SPCL_MSG SPCL
+            , LINE_BIZ_TP TP
+        WHERE
+            RELN_WRK.IsLoop = 'N'
+        AND RELN_WRK.GLBL_CMPY_CD = SPCL.GLBL_CMPY_CD
+        AND RELN_WRK.RELN_DS_ACCT_NUM = SPCL.DS_ACCT_NUM
+        AND SPCL.EZCANCELFLAG = '0'
+        AND SPCL.CUST_EFF_LVL_CD = #custEffLvlCd#
+        AND SPCL.LINE_BIZ_TP_CD = #lineBizTpCd#
+        AND SPCL.DS_BIZ_AREA_CD IN
+        <iterate property="dsBizAreaCdList" var="dsBizAreaCd[]" open=" (" close=")" conjunction=",">
+        #dsBizAreaCd[]#
+        </iterate>
+        AND SPCL.DS_CUST_MSG_TP_CD IN
+        <iterate property="dsCustMsgTpCdList" var="dsCustMsgTpCd[]" open=" (" close=")" conjunction=",">
+        #dsCustMsgTpCd[]#
+        </iterate>
+        AND SPCL.EFF_FROM_DT &lt;= #slsDt#
+        AND (SPCL.EFF_THRU_DT &gt;= #slsDt# OR SPCL.EFF_THRU_DT IS NULL)
+        
+        AND SPCL.GLBL_CMPY_CD = TP.GLBL_CMPY_CD
+        AND SPCL.LINE_BIZ_TP_CD = TP.LINE_BIZ_TP_CD
+        AND TP.EZCANCELFLAG = '0'
+        AND TP.LINE_BIZ_ALL_FLG = 'Y'
+        )
+        WHERE RANK = 1
+        ORDER BY 
+            DS_BIZ_AREA_CD
+           ,DS_CUST_MSG_TP_CD
+           ,DS_CUST_SPCL_MSG_PK
+    </statement>
+    <statement id="getCustInfoForBillShip" parameterClass="Map" resultMap="result.getCustInfo">
+        <!-- 2019/08/28 QC#53021 Mod Start -->
+        <!-- 
+        SELECT
+            TRX.DS_ACCT_NUM         AS DS_ACCT_NUM
+            , TRX.DS_DEF_BILL_TO_CD AS BILL_TO_CUST_CD
+            , TRX.DS_DEF_SHIP_TO_CD	AS SHIP_TO_CUST_CD
+        FROM
+            DS_CUST_TRX_RULE TRX
+        WHERE
+            TRX.GLBL_CMPY_CD = #glblCmpyCd#
+        AND TRX.EZCANCELFLAG = '0'
+        AND TRX.DS_ACCT_NUM = #acctNum#
+        AND TRX.DS_TRX_RULE_TP_CD = #trxRuleTpCd#
+        -->
+        SELECT
+            TRX.DS_ACCT_NUM         AS DS_ACCT_NUM
+            , (CASE WHEN DDB.DS_DEF_BILL_TO_CD IS NOT NULL THEN TRX.DS_DEF_BILL_TO_CD 
+               ELSE NULL
+               END) AS BILL_TO_CUST_CD
+            , (CASE WHEN DDS.DS_DEF_SHIP_TO_CD IS NOT NULL THEN TRX.DS_DEF_SHIP_TO_CD 
+               ELSE NULL
+               END) AS SHIP_TO_CUST_CD
+        FROM
+            DS_CUST_TRX_RULE TRX
+          ,(SELECT
+                TRXR.DS_DEF_BILL_TO_CD   AS DS_DEF_BILL_TO_CD
+              , TRXR.DS_CUST_TRX_RULE_PK AS DS_CUST_TRX_RULE_PK
+            FROM
+                DS_CUST_TRX_RULE TRXR
+              , ACCT_LOC         AC
+              , PTY_LOC_WRK      PLW
+              , SELL_TO_CUST     STC
+              , BILL_TO_CUST     BTC
+            WHERE 
+                TRXR.GLBL_CMPY_CD       = #glblCmpyCd#
+            AND TRXR.EZCANCELFLAG       = '0'
+            AND TRXR.DS_ACCT_NUM        = #acctNum#
+            AND TRXR.DS_TRX_RULE_TP_CD  = #trxRuleTpCd#
+            AND TRXR.GLBL_CMPY_CD       = BTC.GLBL_CMPY_CD
+            AND TRXR.DS_DEF_BILL_TO_CD  = BTC.BILL_TO_CUST_CD
+            AND BTC.RGTN_STS_CD         = #rgtnStsCd#
+            AND BTC.EZCANCELFLAG        = '0'
+            AND PLW.GLBL_CMPY_CD        = BTC.GLBL_CMPY_CD
+            AND PLW.PTY_LOC_PK          = BTC.PTY_LOC_PK
+            AND PLW.RGTN_STS_CD         = #rgtnStsCd#
+            AND PLW.EZCANCELFLAG        = '0'
+            AND AC.GLBL_CMPY_CD         = PLW.GLBL_CMPY_CD
+            AND AC.LOC_NUM              = PLW.LOC_NUM
+            AND AC.RGTN_STS_CD          = #rgtnStsCd#
+            AND AC.EZCANCELFLAG         = '0'
+            AND AC.GLBL_CMPY_CD         = STC.GLBL_CMPY_CD
+            AND AC.DS_ACCT_NUM          = STC.SELL_TO_CUST_CD
+            AND STC.RGTN_STS_CD         = #rgtnStsCd#
+            AND STC.EZCANCELFLAG        = '0'
+        ) DDB
+        ,(SELECT
+                TRXR.DS_DEF_SHIP_TO_CD   AS DS_DEF_SHIP_TO_CD
+              , TRXR.DS_CUST_TRX_RULE_PK AS DS_CUST_TRX_RULE_PK
+            FROM
+                DS_CUST_TRX_RULE TRXR
+              , ACCT_LOC         AC
+              , PTY_LOC_WRK      PLW
+              , SELL_TO_CUST     STC
+              , SHIP_TO_CUST     SHTC
+            WHERE 
+                TRXR.GLBL_CMPY_CD       = #glblCmpyCd#
+            AND TRXR.EZCANCELFLAG       = '0'
+            AND TRXR.DS_ACCT_NUM        = #acctNum#
+            AND TRXR.DS_TRX_RULE_TP_CD  = #trxRuleTpCd#
+            AND TRXR.GLBL_CMPY_CD       = SHTC.GLBL_CMPY_CD
+            AND TRXR.DS_DEF_SHIP_TO_CD  = SHTC.SHIP_TO_CUST_CD
+            AND SHTC.RGTN_STS_CD        = #rgtnStsCd#
+            AND SHTC.EZCANCELFLAG       = '0'
+            AND PLW.GLBL_CMPY_CD        = SHTC.GLBL_CMPY_CD
+            AND PLW.PTY_LOC_PK          = SHTC.PTY_LOC_PK
+            AND PLW.RGTN_STS_CD         = #rgtnStsCd#
+            AND PLW.EZCANCELFLAG        = '0'
+            AND AC.GLBL_CMPY_CD         = PLW.GLBL_CMPY_CD
+            AND AC.LOC_NUM              = PLW.LOC_NUM
+            AND AC.RGTN_STS_CD          = #rgtnStsCd#
+            AND AC.EZCANCELFLAG         = '0'
+            AND AC.GLBL_CMPY_CD         = STC.GLBL_CMPY_CD
+            AND AC.DS_ACCT_NUM          = STC.SELL_TO_CUST_CD
+            AND STC.RGTN_STS_CD         = #rgtnStsCd#
+            AND STC.EZCANCELFLAG        = '0'
+        ) DDS
+        WHERE
+                TRX.GLBL_CMPY_CD        = #glblCmpyCd#
+            AND TRX.EZCANCELFLAG        = '0'
+            AND TRX.DS_ACCT_NUM         = #acctNum#
+            AND TRX.DS_TRX_RULE_TP_CD   = #trxRuleTpCd#
+            AND TRX.DS_CUST_TRX_RULE_PK = DDB.DS_CUST_TRX_RULE_PK(+)
+            AND TRX.DS_CUST_TRX_RULE_PK = DDS.DS_CUST_TRX_RULE_PK(+)
+        <!-- 2019/08/28 QC#53021 Mod End -->
+    </statement>
+    <!-- ADD Start QC#8659 -->
+    <statement id="getCustInfoForBillShipFromLoc" parameterClass="Map" resultMap="result.getCustInfo">
+        <!-- 2019/08/28 QC#53021 Mod Start -->
+        <!--
+        SELECT
+            TRX.DS_DEF_BILL_TO_CD AS BILL_TO_CUST_CD
+            , TRX.DS_DEF_SHIP_TO_CD AS SHIP_TO_CUST_CD
+        FROM
+            DS_CUST_TRX_RULE TRX
+        WHERE 
+            TRX.GLBL_CMPY_CD = #glblCmpyCd#
+        AND TRX.EZCANCELFLAG = '0'
+        AND TRX.LOC_NUM = #locNum#
+        AND TRX.DS_TRX_RULE_TP_CD = #trxRuleTpCd#
+        -->
+        SELECT
+              (CASE WHEN DDB.DS_DEF_BILL_TO_CD IS NOT NULL THEN TRX.DS_DEF_BILL_TO_CD 
+               ELSE NULL
+               END) AS BILL_TO_CUST_CD
+            , (CASE WHEN DDS.DS_DEF_SHIP_TO_CD IS NOT NULL THEN TRX.DS_DEF_SHIP_TO_CD 
+               ELSE NULL
+               END) AS SHIP_TO_CUST_CD
+        FROM
+            DS_CUST_TRX_RULE TRX
+          ,(SELECT
+                TRXR.DS_DEF_BILL_TO_CD   AS DS_DEF_BILL_TO_CD
+              , TRXR.DS_CUST_TRX_RULE_PK AS DS_CUST_TRX_RULE_PK
+            FROM
+                DS_CUST_TRX_RULE TRXR
+              , ACCT_LOC         AC
+              , PTY_LOC_WRK      PLW
+              , SELL_TO_CUST     STC
+              , BILL_TO_CUST     BTC
+            WHERE 
+                TRXR.GLBL_CMPY_CD       = #glblCmpyCd#
+            AND TRXR.EZCANCELFLAG       = '0'
+            AND TRXR.LOC_NUM            = #locNum#
+            AND TRXR.DS_TRX_RULE_TP_CD  = #trxRuleTpCd#
+            AND TRXR.GLBL_CMPY_CD       = BTC.GLBL_CMPY_CD
+            AND TRXR.DS_DEF_BILL_TO_CD  = BTC.BILL_TO_CUST_CD
+            AND BTC.RGTN_STS_CD         = #rgtnStsCd#
+            AND BTC.EZCANCELFLAG        = '0'
+            AND PLW.GLBL_CMPY_CD        = BTC.GLBL_CMPY_CD
+            AND PLW.PTY_LOC_PK          = BTC.PTY_LOC_PK
+            AND PLW.RGTN_STS_CD         = #rgtnStsCd#
+            AND PLW.EZCANCELFLAG        = '0'
+            AND AC.GLBL_CMPY_CD         = PLW.GLBL_CMPY_CD
+            AND AC.LOC_NUM              = PLW.LOC_NUM
+            AND AC.RGTN_STS_CD          = #rgtnStsCd#
+            AND AC.EZCANCELFLAG         = '0'
+            AND AC.GLBL_CMPY_CD         = STC.GLBL_CMPY_CD
+            AND AC.DS_ACCT_NUM          = STC.SELL_TO_CUST_CD
+            AND STC.RGTN_STS_CD         = #rgtnStsCd#
+            AND STC.EZCANCELFLAG        = '0'
+        ) DDB
+        ,(SELECT
+                TRXR.DS_DEF_SHIP_TO_CD   AS DS_DEF_SHIP_TO_CD
+              , TRXR.DS_CUST_TRX_RULE_PK AS DS_CUST_TRX_RULE_PK
+            FROM
+                DS_CUST_TRX_RULE TRXR
+              , ACCT_LOC         AC
+              , PTY_LOC_WRK      PLW
+              , SELL_TO_CUST     STC
+              , SHIP_TO_CUST     SHTC
+            WHERE 
+                TRXR.GLBL_CMPY_CD       = #glblCmpyCd#
+            AND TRXR.EZCANCELFLAG       = '0'
+            AND TRXR.LOC_NUM            = #locNum#
+            AND TRXR.DS_TRX_RULE_TP_CD  = #trxRuleTpCd#
+            AND TRXR.GLBL_CMPY_CD       = SHTC.GLBL_CMPY_CD
+            AND TRXR.DS_DEF_SHIP_TO_CD  = SHTC.SHIP_TO_CUST_CD
+            AND SHTC.RGTN_STS_CD        = #rgtnStsCd#
+            AND SHTC.EZCANCELFLAG       = '0'
+            AND PLW.GLBL_CMPY_CD        = SHTC.GLBL_CMPY_CD
+            AND PLW.PTY_LOC_PK          = SHTC.PTY_LOC_PK
+            AND PLW.RGTN_STS_CD         = #rgtnStsCd#
+            AND PLW.EZCANCELFLAG        = '0'
+            AND AC.GLBL_CMPY_CD         = PLW.GLBL_CMPY_CD
+            AND AC.LOC_NUM              = PLW.LOC_NUM
+            AND AC.RGTN_STS_CD          = #rgtnStsCd#
+            AND AC.EZCANCELFLAG         = '0'
+            AND AC.GLBL_CMPY_CD         = STC.GLBL_CMPY_CD
+            AND AC.DS_ACCT_NUM          = STC.SELL_TO_CUST_CD
+            AND STC.RGTN_STS_CD         = #rgtnStsCd#
+            AND STC.EZCANCELFLAG        = '0'
+        ) DDS
+        WHERE
+                TRX.GLBL_CMPY_CD        = #glblCmpyCd#
+            AND TRX.EZCANCELFLAG        = '0'
+            AND TRX.LOC_NUM             = #locNum#
+            AND TRX.DS_TRX_RULE_TP_CD   = #trxRuleTpCd#
+            AND TRX.DS_CUST_TRX_RULE_PK = DDB.DS_CUST_TRX_RULE_PK(+)
+            AND TRX.DS_CUST_TRX_RULE_PK = DDS.DS_CUST_TRX_RULE_PK(+)
+        <!-- 2019/08/28 QC#53021 Mod End -->
+    </statement>
+    <statement id="getBillToFromShipTo" parameterClass="Map" resultMap="String">
+        SELECT 
+            SHIP.RELN_BILL_TO_CUST_CD AS BILL_TO_CUST_CD
+        <!-- 2019/08/28 QC#53021 Mod Start -->
+        <!--
+        FROM SHIP_TO_CUST SHIP
+        WHERE SHIP.GLBL_CMPY_CD = #glblCmpyCd#
+        AND   SHIP.EZCANCELFLAG = '0'
+        AND   SHIP.RGTN_STS_CD = #rgtnStsCd#
+        AND   SHIP.SHIP_TO_CUST_CD = #shipToCustCd#
+        -->
+        FROM
+            SHIP_TO_CUST SHIP
+          , ACCT_LOC     AC
+          , PTY_LOC_WRK  PLW
+          , SELL_TO_CUST STC
+        WHERE 
+            SHIP.GLBL_CMPY_CD       = #glblCmpyCd#
+        AND SHIP.EZCANCELFLAG       = '0'
+        AND SHIP.RGTN_STS_CD        = #rgtnStsCd#
+        AND SHIP.SHIP_TO_CUST_CD    = #shipToCustCd#
+        AND PLW.GLBL_CMPY_CD        = SHIP.GLBL_CMPY_CD
+        AND PLW.PTY_LOC_PK          = SHIP.PTY_LOC_PK
+        AND PLW.RGTN_STS_CD         = #rgtnStsCd#
+        AND PLW.EZCANCELFLAG        = '0'
+        AND AC.GLBL_CMPY_CD         = PLW.GLBL_CMPY_CD
+        AND AC.LOC_NUM              = PLW.LOC_NUM
+        AND AC.RGTN_STS_CD          = #rgtnStsCd#
+        AND AC.EZCANCELFLAG         = '0'
+        AND AC.GLBL_CMPY_CD         = STC.GLBL_CMPY_CD
+        AND AC.DS_ACCT_NUM          = STC.SELL_TO_CUST_CD
+        AND STC.RGTN_STS_CD         = #rgtnStsCd#
+        AND STC.EZCANCELFLAG        = '0'
+        <!-- 2019/08/28 QC#53021 Mod End -->
+    </statement>
+    <!-- ADD End QC#8659 -->
+    <statement id="getCustInfoForPrimBill" parameterClass="Map" resultMap="String">
+        SELECT
+            BILL.BILL_TO_CUST_CD AS BILL_TO_CUST_CD
+        <!-- 2019/08/28 QC#53021 Mod Start -->
+        <!--
+        FROM BILL_TO_CUST BILL
+        WHERE BILL.GLBL_CMPY_CD = #glblCmpyCd#
+        AND   BILL.EZCANCELFLAG = '0'
+        AND   BILL.RGTN_STS_CD = #rgtnStsCd#
+        AND   BILL.SELL_TO_CUST_CD = #acctNum#
+        AND   BILL.PRIM_USG_FLG = 'Y'
+        -->
+        FROM
+            BILL_TO_CUST BILL
+          , ACCT_LOC     AC
+          , PTY_LOC_WRK  PLW
+          , SELL_TO_CUST STC
+        WHERE 
+            BILL.GLBL_CMPY_CD       = #glblCmpyCd#
+        AND BILL.EZCANCELFLAG       = '0'
+        AND BILL.RGTN_STS_CD        = #rgtnStsCd#
+        AND BILL.SELL_TO_CUST_CD    = #acctNum#
+        AND BILL.PRIM_USG_FLG       = 'Y'
+        AND PLW.GLBL_CMPY_CD        = BILL.GLBL_CMPY_CD
+        AND PLW.PTY_LOC_PK          = BILL.PTY_LOC_PK
+        AND PLW.RGTN_STS_CD         = #rgtnStsCd#
+        AND PLW.EZCANCELFLAG        = '0'
+        AND AC.GLBL_CMPY_CD         = PLW.GLBL_CMPY_CD
+        AND AC.LOC_NUM              = PLW.LOC_NUM
+        AND AC.RGTN_STS_CD          = #rgtnStsCd#
+        AND AC.EZCANCELFLAG         = '0'
+        AND AC.GLBL_CMPY_CD         = STC.GLBL_CMPY_CD
+        AND AC.DS_ACCT_NUM          = STC.SELL_TO_CUST_CD
+        AND STC.RGTN_STS_CD         = #rgtnStsCd#
+        AND STC.EZCANCELFLAG        = '0'
+        <!-- 2019/08/28 QC#53021 Mod End -->
+    </statement>
+    <statement id="getCustInfoForPrimShip" parameterClass="Map" resultMap="String">
+        SELECT 
+            SHIP.SHIP_TO_CUST_CD AS SHIP_TO_CUST_CD
+        <!-- 2019/08/28 QC#53021 Mod Start -->
+        <!--
+        FROM SHIP_TO_CUST SHIP
+        WHERE SHIP.GLBL_CMPY_CD = #glblCmpyCd#
+        AND   SHIP.EZCANCELFLAG = '0'
+        AND   SHIP.RGTN_STS_CD = #rgtnStsCd#
+
+        AND   SHIP.SELL_TO_CUST_CD = #acctNum#
+        AND   SHIP.PRIM_USG_FLG = 'Y'
+        -->
+        FROM
+            SHIP_TO_CUST SHIP
+          , ACCT_LOC     AC
+          , PTY_LOC_WRK  PLW
+          , SELL_TO_CUST STC
+        WHERE 
+            SHIP.GLBL_CMPY_CD       = #glblCmpyCd#
+        AND SHIP.EZCANCELFLAG       = '0'
+        AND SHIP.RGTN_STS_CD        = #rgtnStsCd#
+        AND SHIP.SELL_TO_CUST_CD    = #acctNum#
+        AND SHIP.PRIM_USG_FLG       = 'Y'
+        AND PLW.GLBL_CMPY_CD        = SHIP.GLBL_CMPY_CD
+        AND PLW.PTY_LOC_PK          = SHIP.PTY_LOC_PK
+        AND PLW.RGTN_STS_CD         = #rgtnStsCd#
+        AND PLW.EZCANCELFLAG        = '0'
+        AND AC.GLBL_CMPY_CD         = PLW.GLBL_CMPY_CD
+        AND AC.LOC_NUM              = PLW.LOC_NUM
+        AND AC.RGTN_STS_CD          = #rgtnStsCd#
+        AND AC.EZCANCELFLAG         = '0'
+        AND AC.GLBL_CMPY_CD         = STC.GLBL_CMPY_CD
+        AND AC.DS_ACCT_NUM          = STC.SELL_TO_CUST_CD
+        AND STC.RGTN_STS_CD         = #rgtnStsCd#
+        AND STC.EZCANCELFLAG        = '0'
+        <!-- 2019/08/28 QC#53021 Mod End -->
+    </statement>
+    <statement id="getCustInfoForSpecialHandling" parameterClass="Map" resultMap="result.getCustInfo">
+        SELECT
+            HDLG.DS_ACCT_NUM              AS DS_ACCT_NUM
+            , HDLG.DS_SPCL_HDLG_TP_VAL_CD AS DS_SPCL_HDLG_TP_VAL_CD
+            , HDLG.EFF_FROM_DT            AS HDLG_EFF_FROM_DT
+            , HDLG.EFF_THRU_DT            AS HDLG_EFF_THRU_DT
+            , HDLG.CUST_EFF_LVL_CD        AS HDLG_CUST_EFF_LVL_CD
+            , HDLG.DS_CUST_SPCL_HDLG_PK   AS DS_CUST_SPCL_HDLG_PK
+
+        FROM
+            DS_CUST_SPCL_HDLG HDLG
+        WHERE
+            HDLG.GLBL_CMPY_CD = #glblCmpyCd#
+        AND   HDLG.EZCANCELFLAG = '0'
+        AND   HDLG.DS_ACCT_NUM = #acctNum#
+        AND   HDLG.DS_SPCL_HDLG_TP_CD = #dsSpclHdlgTpCd#
+        AND   HDLG.EFF_FROM_DT &lt;= #slsDt#
+        <!-- MOD Start QC#9073 2016/05/27 -->
+        AND   NVL(HDLG.EFF_THRU_DT, #maxDate#) &gt;= #slsDt#
+        <!-- MOD End QC#9073 2016/05/27 -->
+    </statement>
+    <statement id="getRelnCustInfoForSpecialHandling" parameterClass="Map" resultMap="result.getCustInfo">
+        WITH  RELN_WRK(GLBL_CMPY_CD
+              ,DS_ACCT_NUM
+              , RELN_DS_ACCT_NUM
+              , DS_ACCT_RELN_TP_CD
+              , LV) 
+        AS ( 
+            SELECT RELN.GLBL_CMPY_CD        AS GLBL_CMPY_CD
+                 , RELN.DS_ACCT_NUM         AS DS_ACCT_NUM
+                 , RELN.RELN_DS_ACCT_NUM    AS RELN_DS_ACCT_NUM
+                 , RELN.DS_ACCT_RELN_TP_CD  AS DS_ACCT_RELN_TP_CD
+                 , 1        AS LV
+                FROM DS_ACCT_RELN RELN 
+                WHERE RELN.DS_ACCT_NUM = #acctNum#
+                AND RELN.GLBL_CMPY_CD = #glblCmpyCd#
+                AND RELN.EZCANCELFLAG = '0'
+                AND RELN.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCd#
+                AND RELN.RGTN_STS_CD = #rgtnStsCd#
+
+            UNION ALL
+            SELECT RELN.GLBL_CMPY_CD       AS GLBL_CMPY_CD
+                 , RELN.DS_ACCT_NUM        AS DS_ACCT_NUM
+                 , RELN.RELN_DS_ACCT_NUM   AS RELN_DS_ACCT_NUM
+                 , RELN.DS_ACCT_RELN_TP_CD AS DS_ACCT_RELN_TP_CD
+                 , LV + 1        AS LV
+                FROM DS_ACCT_RELN RELN, RELN_WRK
+                WHERE RELN.GLBL_CMPY_CD = #glblCmpyCd#
+                AND RELN.EZCANCELFLAG = '0'
+                AND RELN.RGTN_STS_CD = #rgtnStsCd#
+                AND RELN_WRK.RELN_DS_ACCT_NUM = RELN.DS_ACCT_NUM
+                AND RELN_WRK.DS_ACCT_NUM &lt;&gt; RELN.RELN_DS_ACCT_NUM 
+                AND RELN_WRK.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCd#
+
+            )
+
+            CYCLE DS_ACCT_NUM SET IsLoop TO 'Y' DEFAULT 'N'
+        SELECT * 
+        FROM (
+            SELECT 
+                    HDLG.DS_ACCT_NUM              AS DS_ACCT_NUM
+                    , HDLG.DS_SPCL_HDLG_TP_VAL_CD AS DS_SPCL_HDLG_TP_VAL_CD
+                    , HDLG.EFF_FROM_DT            AS HDLG_EFF_FROM_DT
+                    , HDLG.EFF_THRU_DT            AS HDLG_EFF_THRU_DT
+                    , HDLG.CUST_EFF_LVL_CD        AS HDLG_CUST_EFF_LVL_CD
+                    , HDLG.DS_CUST_SPCL_HDLG_PK   AS DS_CUST_SPCL_HDLG_PK
+            FROM RELN_WRK, DS_CUST_SPCL_HDLG HDLG
+            WHERE  ( RELN_WRK.DS_ACCT_NUM = #acctNum# 
+                  OR (RELN_WRK.DS_ACCT_NUM &lt;&gt; #acctNum# AND RELN_WRK.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCd#))
+               AND RELN_WRK.IsLoop = 'N'
+               AND RELN_WRK.GLBL_CMPY_CD = HDLG.GLBL_CMPY_CD
+               AND HDLG.EZCANCELFLAG = '0'
+               AND RELN_WRK.RELN_DS_ACCT_NUM = HDLG.DS_ACCT_NUM
+               AND HDLG.CUST_EFF_LVL_CD = #custEffLvlCd#
+               AND HDLG.DS_SPCL_HDLG_TP_CD = #dsSpclHdlgTpCd#
+               AND HDLG.EFF_FROM_DT &lt;= #slsDt#
+               <!-- MOD Start QC#9073 2016/05/27 -->
+               AND NVL(HDLG.EFF_THRU_DT, #maxDate#) &gt;= #slsDt#
+               <!-- MOD Start QC#9073 2016/05/27 -->
+
+            ORDER BY RELN_WRK.LV
+             )
+        WHERE ROWNUM = 1
+    </statement>
+    <statement id="getCustInfoForEligShip" parameterClass="Map" resultMap="result.getCustInfo">
+        SELECT SHIP.SELL_TO_CUST_CD AS SHIP_TO_RELN_DS_ACCT_NUM
+        FROM SHIP_TO_CUST SHIP
+        WHERE SHIP.GLBL_CMPY_CD = #glblCmpyCd#
+        AND   SHIP.EZCANCELFLAG = '0'
+        AND   SHIP.RGTN_STS_CD = #rgtnStsCd#
+        AND   SHIP.SHIP_TO_CUST_CD = #shipToCustCd#
+        AND   SHIP.SELL_TO_CUST_CD = #acctNum#
+    </statement>
+    <statement id="getRelnCustInfoForEligShip" parameterClass="Map" resultMap="result.getCustInfo">
+        WITH  RELN_WRK(GLBL_CMPY_CD
+              ,DS_ACCT_NUM
+              , RELN_DS_ACCT_NUM
+              , DS_ACCT_RELN_TP_CD
+              , DS_ACCT_RELN_SHIP_TO_FLG
+              , LV) 
+        AS (
+            SELECT RELN.GLBL_CMPY_CD             AS GLBL_CMPY_CD
+                 , RELN.DS_ACCT_NUM              AS DS_ACCT_NUM
+                 , RELN.RELN_DS_ACCT_NUM         AS RELN_DS_ACCT_NUM
+                 , RELN.DS_ACCT_RELN_TP_CD       AS DS_ACCT_RELN_TP_CD
+                 , RELN.DS_ACCT_RELN_SHIP_TO_FLG AS DS_ACCT_RELN_SHIP_TO_FLG
+                 , 1        AS LV
+                FROM DS_ACCT_RELN RELN 
+                WHERE RELN.DS_ACCT_NUM = #acctNum#
+                AND RELN.GLBL_CMPY_CD = #glblCmpyCd#
+                AND RELN.EZCANCELFLAG = '0'
+                <!-- QC#10230
+                AND RELN.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCd#
+                -->
+                <!-- START 2017/11/16 H.Sugawara [QC#17322(Sol#174),ADD] -->
+                AND RELN.DS_ACCT_RELN_TP_CD != #dsAcctRelnTpCd_Exclusion#
+                <!-- END 2017/11/16 H.Sugawara [QC#17322(Sol#174),ADD] -->
+                AND RELN.RGTN_STS_CD = #rgtnStsCd#
+
+            UNION ALL
+            SELECT RELN.GLBL_CMPY_CD             AS GLBL_CMPY_CD
+                 , RELN.DS_ACCT_NUM              AS DS_ACCT_NUM
+                 , RELN.RELN_DS_ACCT_NUM         AS RELN_DS_ACCT_NUM
+                 , RELN.DS_ACCT_RELN_TP_CD       AS DS_ACCT_RELN_TP_CD
+                 , RELN.DS_ACCT_RELN_SHIP_TO_FLG AS DS_ACCT_RELN_SHIP_TO_FLG
+                 , LV + 1        AS LV
+                FROM DS_ACCT_RELN RELN, RELN_WRK
+                WHERE RELN.GLBL_CMPY_CD = #glblCmpyCd#
+                AND RELN.EZCANCELFLAG = '0'
+                AND RELN.RGTN_STS_CD = #rgtnStsCd#
+                AND RELN_WRK.RELN_DS_ACCT_NUM = RELN.DS_ACCT_NUM
+                AND RELN_WRK.DS_ACCT_NUM &lt;&gt; RELN.RELN_DS_ACCT_NUM 
+                AND RELN_WRK.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCd#
+
+            )
+
+            CYCLE DS_ACCT_NUM SET IsLoop TO 'Y' DEFAULT 'N'
+
+        SELECT
+            RELN_WRK.DS_ACCT_RELN_SHIP_TO_FLG AS DS_ACCT_RELN_SHIP_TO_FLG
+            , RELN_WRK.RELN_DS_ACCT_NUM       AS SHIP_TO_RELN_DS_ACCT_NUM
+
+        FROM SHIP_TO_CUST SHIP, RELN_WRK
+        WHERE  ( RELN_WRK.DS_ACCT_NUM = #acctNum# 
+              OR (RELN_WRK.DS_ACCT_NUM &lt;&gt; #acctNum# AND RELN_WRK.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCd#))
+             AND RELN_WRK.IsLoop = 'N'
+        AND RELN_WRK.GLBL_CMPY_CD = SHIP.GLBL_CMPY_CD
+        AND RELN_WRK.RELN_DS_ACCT_NUM = SHIP.SELL_TO_CUST_CD
+
+        AND SHIP.EZCANCELFLAG = '0'
+        AND SHIP.RGTN_STS_CD = #rgtnStsCd#
+        AND SHIP.SHIP_TO_CUST_CD = #shipToCustCd#
+    </statement>
+    <statement id="getCustInfoForEligBill" parameterClass="Map" resultMap="result.getCustInfo">
+        SELECT
+            BILL.SELL_TO_CUST_CD AS BILL_TO_RELN_DS_ACCT_NUM
+        FROM BILL_TO_CUST BILL
+        WHERE BILL.GLBL_CMPY_CD = #glblCmpyCd#
+        AND   BILL.EZCANCELFLAG = '0'
+        AND   BILL.RGTN_STS_CD = #rgtnStsCd#
+        AND   BILL.BILL_TO_CUST_CD = #billToCustCd#
+
+        AND   BILL.SELL_TO_CUST_CD = #acctNum#
+    </statement>
+    <statement id="getRelnCustInfoForEligBill" parameterClass="Map" resultMap="result.getCustInfo">
+        WITH  RELN_WRK(GLBL_CMPY_CD
+              ,DS_ACCT_NUM
+              , RELN_DS_ACCT_NUM
+              , DS_ACCT_RELN_TP_CD
+              , DS_ACCT_RELN_BILL_TO_FLG
+              , LV) 
+        AS (
+            SELECT RELN.GLBL_CMPY_CD             AS GLBL_CMPY_CD
+                 , RELN.DS_ACCT_NUM              AS DS_ACCT_NUM
+                 , RELN.RELN_DS_ACCT_NUM         AS RELN_DS_ACCT_NUM
+                 , RELN.DS_ACCT_RELN_TP_CD       AS DS_ACCT_RELN_TP_CD
+                 , RELN.DS_ACCT_RELN_BILL_TO_FLG AS DS_ACCT_RELN_BILL_TO_FLG
+                 , 1        AS LV
+                FROM DS_ACCT_RELN RELN 
+                WHERE RELN.DS_ACCT_NUM = #acctNum#
+                AND RELN.GLBL_CMPY_CD = #glblCmpyCd#
+                AND RELN.EZCANCELFLAG = '0'
+                <!-- START 2017/11/16 H.Sugawara [QC#17322(Sol#174),ADD] -->
+                AND RELN.DS_ACCT_RELN_TP_CD != #dsAcctRelnTpCd_Exclusion#
+                <!-- END 2017/11/16 H.Sugawara [QC#17322(Sol#174),ADD] -->
+                AND RELN.RGTN_STS_CD = #rgtnStsCd#
+
+            UNION ALL
+            SELECT RELN.GLBL_CMPY_CD             AS GLBL_CMPY_CD
+                 , RELN.DS_ACCT_NUM              AS DS_ACCT_NUM
+                 , RELN.RELN_DS_ACCT_NUM         AS RELN_DS_ACCT_NUM
+                 , RELN.DS_ACCT_RELN_TP_CD       AS DS_ACCT_RELN_TP_CD
+                 , RELN.DS_ACCT_RELN_BILL_TO_FLG AS DS_ACCT_RELN_BILL_TO_FLG
+                 , LV + 1        AS LV
+                FROM DS_ACCT_RELN RELN, RELN_WRK
+                WHERE RELN.GLBL_CMPY_CD = #glblCmpyCd#
+                AND RELN.EZCANCELFLAG = '0'
+                AND RELN.RGTN_STS_CD = #rgtnStsCd#
+                AND RELN_WRK.RELN_DS_ACCT_NUM = RELN.DS_ACCT_NUM
+                AND RELN_WRK.DS_ACCT_NUM &lt;&gt; RELN.RELN_DS_ACCT_NUM
+                AND RELN_WRK.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCd#
+
+            )
+
+            CYCLE DS_ACCT_NUM SET IsLoop TO 'Y' DEFAULT 'N'
+
+        SELECT
+            RELN_WRK.DS_ACCT_RELN_BILL_TO_FLG AS DS_ACCT_RELN_BILL_TO_FLG
+            , RELN_WRK.RELN_DS_ACCT_NUM       AS BILL_TO_RELN_DS_ACCT_NUM
+
+        FROM RELN_WRK
+            , BILL_TO_CUST BILL
+        WHERE  ( RELN_WRK.DS_ACCT_NUM = #acctNum#
+              OR (RELN_WRK.DS_ACCT_NUM &lt;&gt; #acctNum# AND RELN_WRK.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCd#))
+             AND RELN_WRK.IsLoop = 'N'
+        AND RELN_WRK.GLBL_CMPY_CD = BILL.GLBL_CMPY_CD
+        AND BILL.EZCANCELFLAG = '0'
+        AND BILL.RGTN_STS_CD = #rgtnStsCd#
+
+        AND RELN_WRK.RELN_DS_ACCT_NUM = BILL.SELL_TO_CUST_CD
+        AND BILL.BILL_TO_CUST_CD = #billToCustCd#
+    </statement>
+    <statement id="getRelnCustInfoForEligAcct" parameterClass="Map" resultMap="result.getCustInfo">
+        WITH  RELN_WRK(GLBL_CMPY_CD
+              ,DS_ACCT_NUM
+              , RELN_DS_ACCT_NUM
+              , DS_ACCT_RELN_TP_CD
+              , DS_ACCT_RELN_RECIP_FLG
+              , LV) 
+        AS (
+            SELECT RELN.GLBL_CMPY_CD             AS GLBL_CMPY_CD
+                 , RELN.DS_ACCT_NUM              AS DS_ACCT_NUM
+                 , RELN.RELN_DS_ACCT_NUM         AS RELN_DS_ACCT_NUM
+                 , RELN.DS_ACCT_RELN_TP_CD       AS DS_ACCT_RELN_TP_CD
+                 , RELN.DS_ACCT_RELN_RECIP_FLG AS DS_ACCT_RELN_RECIP_FLG
+                 , 1        AS LV
+                FROM DS_ACCT_RELN RELN 
+                WHERE RELN.DS_ACCT_NUM = #acctNum#
+                AND RELN.GLBL_CMPY_CD = #glblCmpyCd#
+                AND RELN.EZCANCELFLAG = '0'
+                <!-- START 2017/11/16 H.Sugawara [QC#17322(Sol#174),ADD] -->
+                AND RELN.DS_ACCT_RELN_TP_CD != #dsAcctRelnTpCd_Exclusion#
+                <!-- END 2017/11/16 H.Sugawara [QC#17322(Sol#174),ADD] -->
+                AND RELN.RGTN_STS_CD = #rgtnStsCd#
+
+            UNION ALL
+            SELECT RELN.GLBL_CMPY_CD             AS GLBL_CMPY_CD
+                 , RELN.DS_ACCT_NUM              AS DS_ACCT_NUM
+                 , RELN.RELN_DS_ACCT_NUM         AS RELN_DS_ACCT_NUM
+                 , RELN.DS_ACCT_RELN_TP_CD       AS DS_ACCT_RELN_TP_CD
+                 , RELN.DS_ACCT_RELN_RECIP_FLG AS DS_ACCT_RELN_RECIP_FLG
+                 , LV + 1        AS LV
+                FROM DS_ACCT_RELN RELN, RELN_WRK
+                WHERE RELN.GLBL_CMPY_CD = #glblCmpyCd#
+                AND RELN.EZCANCELFLAG = '0'
+                AND RELN.RGTN_STS_CD = #rgtnStsCd#
+                AND RELN_WRK.RELN_DS_ACCT_NUM = RELN.DS_ACCT_NUM
+                AND RELN_WRK.DS_ACCT_NUM &lt;&gt; RELN.RELN_DS_ACCT_NUM 
+                AND RELN_WRK.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCd#
+
+            )
+
+            CYCLE DS_ACCT_NUM SET IsLoop TO 'Y' DEFAULT 'N'
+
+        SELECT 
+            RELN_WRK.RELN_DS_ACCT_NUM       AS RELN_DS_ACCT_NUM
+         FROM RELN_WRK
+         WHERE  ( RELN_WRK.DS_ACCT_NUM = #acctNum#
+              OR (RELN_WRK.DS_ACCT_NUM &lt;&gt; #acctNum# AND RELN_WRK.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCd#))
+         AND RELN_WRK.IsLoop = 'N'
+         AND RELN_WRK.RELN_DS_ACCT_NUM = #relnAcctNum#
+    </statement>
+    <statement id="getCustInfoForRelatedChildReln" parameterClass="Map" resultMap="result.getCustInfo">
+        WITH  RELN_WRK(GLBL_CMPY_CD
+              ,DS_ACCT_NUM
+              , RELN_DS_ACCT_NUM
+              , DS_ACCT_RELN_TP_CD
+              , DS_ACCT_RELN_BILL_TO_FLG
+              , DS_ACCT_RELN_SHIP_TO_FLG
+              , LV) 
+        AS (
+            SELECT RELN.GLBL_CMPY_CD             AS GLBL_CMPY_CD
+                 , RELN.DS_ACCT_NUM              AS DS_ACCT_NUM
+                 , RELN.RELN_DS_ACCT_NUM         AS RELN_DS_ACCT_NUM
+                 , RELN.DS_ACCT_RELN_TP_CD       AS DS_ACCT_RELN_TP_CD
+                 , RELN.DS_ACCT_RELN_BILL_TO_FLG AS DS_ACCT_RELN_BILL_TO_FLG
+                 , RELN.DS_ACCT_RELN_SHIP_TO_FLG AS DS_ACCT_RELN_SHIP_TO_FLG
+                 , 1        AS LV
+                FROM DS_ACCT_RELN RELN 
+                WHERE RELN.RELN_DS_ACCT_NUM = #acctNum#
+                AND RELN.GLBL_CMPY_CD = #glblCmpyCd#
+                AND RELN.EZCANCELFLAG = '0'
+                <!-- START 2018/03/20 Hd.Sugawara [QC#25000,ADD] -->
+                <isNull property="subModeCd">
+                <!-- END 2018/03/20 Hd.Sugawara [QC#25000,ADD] -->
+                AND RELN.RGTN_STS_CD = #rgtnStsCd#
+                <!-- START 2018/03/20 Hd.Sugawara [QC#25000,ADD] -->
+                </isNull>
+                <!-- END 2018/03/20 Hd.Sugawara [QC#25000,ADD] -->
+                AND RELN.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCd#
+
+            UNION ALL
+            SELECT RELN.GLBL_CMPY_CD             AS GLBL_CMPY_CD
+                 , RELN.DS_ACCT_NUM              AS DS_ACCT_NUM
+                 , RELN.RELN_DS_ACCT_NUM         AS RELN_DS_ACCT_NUM
+                 , RELN.DS_ACCT_RELN_TP_CD       AS DS_ACCT_RELN_TP_CD
+                 , RELN.DS_ACCT_RELN_BILL_TO_FLG AS DS_ACCT_RELN_BILL_TO_FLG
+                 , RELN.DS_ACCT_RELN_SHIP_TO_FLG AS DS_ACCT_RELN_SHIP_TO_FLG
+                 , LV + 1        AS LV
+                FROM DS_ACCT_RELN RELN, RELN_WRK
+                WHERE RELN.GLBL_CMPY_CD = #glblCmpyCd#
+                AND RELN.EZCANCELFLAG = '0'
+                <!-- START 2018/03/20 Hd.Sugawara [QC#25000,ADD] -->
+                <isNull property="subModeCd">
+                <!-- END 2018/03/20 Hd.Sugawara [QC#25000,ADD] -->
+                AND RELN.RGTN_STS_CD = #rgtnStsCd#
+                <!-- START 2018/03/20 Hd.Sugawara [QC#25000,ADD] -->
+                </isNull>
+                <!-- END 2018/03/20 Hd.Sugawara [QC#25000,ADD] -->
+                AND RELN_WRK.DS_ACCT_NUM = RELN.RELN_DS_ACCT_NUM
+                AND RELN_WRK.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCd#
+
+            )
+
+            CYCLE DS_ACCT_NUM SET IsLoop TO 'Y' DEFAULT 'N'
+
+        SELECT * FROM (
+        SELECT
+            RELN_WRK.DS_ACCT_RELN_TP_CD AS R_DS_ACCT_RELN_TP_CD
+            , RELN_WRK.RELN_DS_ACCT_NUM AS R_DS_ACCT_NUM
+            , RELN_WRK.DS_ACCT_NUM AS R_RELN_DS_ACCT_NUM
+            , BILL.BILL_TO_CUST_CD AS R_BILL_TO_CUST_CD
+            , SHIP.SHIP_TO_CUST_CD AS R_SHIP_TO_CUST_CD
+            , '' AS R_DS_ACCT_RELN_BILL_TO_FLG
+            , '' AS R_DS_ACCT_RELN_SHIP_TO_FLG
+        FROM
+            RELN_WRK
+            , SHIP_TO_CUST SHIP
+            , BILL_TO_CUST BILL
+            , ACCT_LOC AL
+        WHERE  ( RELN_WRK.DS_ACCT_NUM = #acctNum#
+              OR (RELN_WRK.DS_ACCT_NUM &lt;&gt; #acctNum# AND RELN_WRK.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCd#))
+        AND RELN_WRK.IsLoop = 'N'
+
+        AND AL.DS_ACCT_NUM = RELN_WRK.DS_ACCT_NUM
+        AND AL.LOC_NUM = SHIP.LOC_NUM (+)
+        AND AL.LOC_NUM = BILL.LOC_NUM(+)
+        AND AL.EZCANCELFLAG(+) = '0'
+        AND AL.GLBL_CMPY_CD(+) = #glblCmpyCd#
+
+        AND  RELN_WRK.GLBL_CMPY_CD = SHIP.GLBL_CMPY_CD(+)
+        AND  RELN_WRK.DS_ACCT_NUM = SHIP.SELL_TO_CUST_CD(+)
+        AND  SHIP.EZCANCELFLAG(+) = '0'
+        AND  SHIP.RGTN_STS_CD(+) = #rgtnStsCd#
+
+        AND  RELN_WRK.GLBL_CMPY_CD = BILL.GLBL_CMPY_CD(+)
+        AND  RELN_WRK.DS_ACCT_NUM = BILL.SELL_TO_CUST_CD(+)
+        AND  BILL.EZCANCELFLAG(+) = '0'
+        AND  BILL.RGTN_STS_CD(+) = #rgtnStsCd#
+
+       ORDER BY RELN_WRK.DS_ACCT_NUM
+                , RELN_WRK.RELN_DS_ACCT_NUM
+       )
+       WHERE ROWNUM &lt; #rownum#
+    </statement>
+    <statement id="getCustInfoForRelatedCurrent" parameterClass="Map" resultMap="result.getCustInfo">
+        SELECT
+            '' AS R_DS_ACCT_RELN_TP_CD
+            , SELL.SELL_TO_CUST_CD AS R_DS_ACCT_NUM
+            , '' AS R_RELN_DS_ACCT_NUM
+            , BILL.BILL_TO_CUST_CD AS R_BILL_TO_CUST_CD
+            , SHIP.SHIP_TO_CUST_CD AS R_SHIP_TO_CUST_CD
+            , '' AS R_DS_ACCT_RELN_BILL_TO_FLG
+            , '' AS R_DS_ACCT_RELN_SHIP_TO_FLG
+        FROM
+            SELL_TO_CUST SELL
+            , SHIP_TO_CUST SHIP
+            , BILL_TO_CUST BILL
+            , ACCT_LOC AL
+        WHERE
+             SELL.GLBL_CMPY_CD = #glblCmpyCd#
+        AND  SELL.EZCANCELFLAG = '0'
+        AND  SELL.SELL_TO_CUST_CD = #acctNum#
+
+        AND  AL.DS_ACCT_NUM = SELL.SELL_TO_CUST_CD
+        AND  AL.LOC_NUM = SHIP.LOC_NUM (+)
+        AND  AL.LOC_NUM = BILL.LOC_NUM (+)
+        AND  AL.EZCANCELFLAG (+)= '0'
+        AND  AL.GLBL_CMPY_CD (+)= #glblCmpyCd#
+
+        AND  SELL.GLBL_CMPY_CD = SHIP.GLBL_CMPY_CD(+)
+        AND  SELL.SELL_TO_CUST_CD = SHIP.SELL_TO_CUST_CD(+)
+        AND  SHIP.EZCANCELFLAG(+) = '0'
+        AND  SHIP.RGTN_STS_CD (+)= #rgtnStsCd#
+
+        AND  SELL.GLBL_CMPY_CD = BILL.GLBL_CMPY_CD(+)
+        AND  SELL.SELL_TO_CUST_CD = BILL.SELL_TO_CUST_CD(+)
+
+        AND  BILL.EZCANCELFLAG (+)= '0'
+        AND  BILL.RGTN_STS_CD (+)= #rgtnStsCd#
+
+        AND  ROWNUM &lt; #rownum#
+    </statement>
+    <statement id="getCustInfoForRelatedParentReln" parameterClass="Map" resultMap="result.getCustInfo">
+        WITH  RELN_WRK(GLBL_CMPY_CD
+              ,DS_ACCT_NUM
+              , RELN_DS_ACCT_NUM
+              , DS_ACCT_RELN_TP_CD
+              , DS_ACCT_RELN_BILL_TO_FLG
+              , DS_ACCT_RELN_SHIP_TO_FLG
+              , LV) 
+        AS (
+            SELECT RELN.GLBL_CMPY_CD             AS GLBL_CMPY_CD
+                 , RELN.DS_ACCT_NUM              AS DS_ACCT_NUM
+                 , RELN.RELN_DS_ACCT_NUM         AS RELN_DS_ACCT_NUM
+                 , RELN.DS_ACCT_RELN_TP_CD       AS DS_ACCT_RELN_TP_CD
+                 , RELN.DS_ACCT_RELN_BILL_TO_FLG AS DS_ACCT_RELN_BILL_TO_FLG
+                 , RELN.DS_ACCT_RELN_SHIP_TO_FLG AS DS_ACCT_RELN_SHIP_TO_FLG
+                 , 1        AS LV
+                FROM DS_ACCT_RELN RELN 
+                WHERE RELN.DS_ACCT_NUM = #acctNum#
+                AND RELN.GLBL_CMPY_CD = #glblCmpyCd#
+                AND RELN.EZCANCELFLAG = '0'
+                <!-- START 2017/11/16 H.Sugawara [QC#17322(Sol#174),ADD] -->
+                AND RELN.DS_ACCT_RELN_TP_CD != #dsAcctRelnTpCd_Exclusion#
+                <!-- END 2017/11/16 H.Sugawara [QC#17322(Sol#174),ADD] -->
+                <!-- START 2018/03/20 Hd.Sugawara [QC#25000,ADD] -->
+                <isNull property="subModeCd">
+                <!-- END 2018/03/20 Hd.Sugawara [QC#25000,ADD] -->
+                AND RELN.RGTN_STS_CD = #rgtnStsCd#
+                <!-- START 2018/03/20 Hd.Sugawara [QC#25000,ADD] -->
+                </isNull>
+                <!-- END 2018/03/20 Hd.Sugawara [QC#25000,ADD] -->
+
+            UNION ALL
+            SELECT RELN.GLBL_CMPY_CD             AS GLBL_CMPY_CD
+                 , RELN.DS_ACCT_NUM              AS DS_ACCT_NUM
+                 , RELN.RELN_DS_ACCT_NUM         AS RELN_DS_ACCT_NUM
+                 , RELN.DS_ACCT_RELN_TP_CD       AS DS_ACCT_RELN_TP_CD
+                 , RELN.DS_ACCT_RELN_BILL_TO_FLG AS DS_ACCT_RELN_BILL_TO_FLG
+                 , RELN.DS_ACCT_RELN_SHIP_TO_FLG AS DS_ACCT_RELN_SHIP_TO_FLG
+                 , LV + 1        AS LV
+                FROM DS_ACCT_RELN RELN, RELN_WRK
+                WHERE RELN.GLBL_CMPY_CD = #glblCmpyCd#
+                AND RELN.EZCANCELFLAG = '0'
+                <!-- START 2018/03/20 Hd.Sugawara [QC#25000,ADD] -->
+                <isNull property="subModeCd">
+                <!-- END 2018/03/20 Hd.Sugawara [QC#25000,ADD] -->
+                AND RELN.RGTN_STS_CD = #rgtnStsCd#
+                <!-- START 2018/03/20 Hd.Sugawara [QC#25000,ADD] -->
+                </isNull>
+                <!-- END 2018/03/20 Hd.Sugawara [QC#25000,ADD] -->
+                AND RELN_WRK.RELN_DS_ACCT_NUM = RELN.DS_ACCT_NUM
+                AND RELN_WRK.DS_ACCT_NUM &lt;&gt; RELN.RELN_DS_ACCT_NUM 
+                AND RELN_WRK.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCd#
+
+            )
+
+            CYCLE DS_ACCT_NUM SET IsLoop TO 'Y' DEFAULT 'N'
+        <!-- MOD START 2018/09/11 QC#27941  -->
+        <!-- SELECT
+            RELN_WRK.DS_ACCT_RELN_TP_CD AS R_DS_ACCT_RELN_TP_CD
+            , RELN_WRK.DS_ACCT_NUM AS R_DS_ACCT_NUM
+            , RELN_WRK.RELN_DS_ACCT_NUM AS R_RELN_DS_ACCT_NUM
+            , BILL.BILL_TO_CUST_CD AS R_BILL_TO_CUST_CD
+            , SHIP.SHIP_TO_CUST_CD AS R_SHIP_TO_CUST_CD
+            , RELN_WRK.DS_ACCT_RELN_BILL_TO_FLG AS R_DS_ACCT_RELN_BILL_TO_FLG
+            , RELN_WRK.DS_ACCT_RELN_SHIP_TO_FLG AS R_DS_ACCT_RELN_SHIP_TO_FLG
+        FROM
+            RELN_WRK
+            , SHIP_TO_CUST SHIP
+            , BILL_TO_CUST BILL
+            , ACCT_LOC AL
+        WHERE  ( RELN_WRK.DS_ACCT_NUM = #acctNum#
+              OR (RELN_WRK.DS_ACCT_NUM &lt;&gt; #acctNum# AND RELN_WRK.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCd#))
+        AND RELN_WRK.IsLoop = 'N'
+
+        AND AL.DS_ACCT_NUM = RELN_WRK.RELN_DS_ACCT_NUM
+        AND AL.LOC_NUM = SHIP.LOC_NUM(+)
+        AND AL.LOC_NUM = BILL.LOC_NUM(+)
+        AND AL.EZCANCELFLAG(+) = '0'
+        AND AL.GLBL_CMPY_CD(+) = #glblCmpyCd#
+
+        AND  RELN_WRK.GLBL_CMPY_CD = SHIP.GLBL_CMPY_CD(+)
+        AND  RELN_WRK.RELN_DS_ACCT_NUM = SHIP.SELL_TO_CUST_CD(+)
+        AND  SHIP.EZCANCELFLAG(+) = '0'
+        AND  SHIP.RGTN_STS_CD(+) = #rgtnStsCd#
+
+        AND  RELN_WRK.GLBL_CMPY_CD = BILL.GLBL_CMPY_CD(+)
+        AND  RELN_WRK.RELN_DS_ACCT_NUM = BILL.SELL_TO_CUST_CD(+)
+
+        AND  BILL.EZCANCELFLAG(+) = '0'
+        AND  BILL.RGTN_STS_CD(+) = #rgtnStsCd#
+
+        AND  ROWNUM &lt; #rownum#
+    <isNotEqual property="relnTrgtFlg" compareValue="Y">
+        AND  ( RELN_WRK.DS_ACCT_RELN_BILL_TO_FLG = 'Y' OR  RELN_WRK.DS_ACCT_RELN_SHIP_TO_FLG = 'Y' )
+    </isNotEqual>
+       ORDER BY RELN_WRK.DS_ACCT_NUM
+                , RELN_WRK.RELN_DS_ACCT_NUM -->
+        SELECT /*+ LEADING(AL2 BILL SHIP)
+                   USE_NL_WITH_INDEX(BILL BILL_TO_CUST_I4)
+                   USE_NL_WITH_INDEX(SHIP SHIP_TO_CUST_I6) */
+              AL2.DS_ACCT_RELN_TP_CD AS R_DS_ACCT_RELN_TP_CD
+            , AL2.DS_ACCT_NUM AS R_DS_ACCT_NUM
+            , AL2.RELN_DS_ACCT_NUM AS R_RELN_DS_ACCT_NUM
+            , BILL.BILL_TO_CUST_CD AS R_BILL_TO_CUST_CD
+            , SHIP.SHIP_TO_CUST_CD AS R_SHIP_TO_CUST_CD
+            , AL2.DS_ACCT_RELN_BILL_TO_FLG AS R_DS_ACCT_RELN_BILL_TO_FLG
+            , AL2.DS_ACCT_RELN_SHIP_TO_FLG AS R_DS_ACCT_RELN_SHIP_TO_FLG
+        FROM (SELECT /*+ LEADING(RELN_WRK2 AL)
+                         USE_NL_WITH_INDEX(AL ACCT_LOC_I2) */
+                      RELN_WRK2.DS_ACCT_RELN_TP_CD
+                    , RELN_WRK2.DS_ACCT_NUM
+                    , RELN_WRK2.RELN_DS_ACCT_NUM
+                    , RELN_WRK2.DS_ACCT_RELN_BILL_TO_FLG
+                    , RELN_WRK2.DS_ACCT_RELN_SHIP_TO_FLG
+                    , RELN_WRK2.GLBL_CMPY_CD
+                    , AL.LOC_NUM
+              FROM   (SELECT  RELN_WRK.DS_ACCT_RELN_TP_CD
+                            , RELN_WRK.DS_ACCT_NUM
+                            , RELN_WRK.RELN_DS_ACCT_NUM
+                            , RELN_WRK.DS_ACCT_RELN_BILL_TO_FLG
+                            , RELN_WRK.DS_ACCT_RELN_SHIP_TO_FLG
+                            , RELN_WRK.GLBL_CMPY_CD
+                        FROM  RELN_WRK
+                       WHERE (RELN_WRK.DS_ACCT_NUM = #acctNum#
+                          OR (RELN_WRK.DS_ACCT_NUM &lt;&gt; #acctNum# AND RELN_WRK.DS_ACCT_RELN_TP_CD = #dsAcctRelnTpCd#))
+                         AND  RELN_WRK.IsLoop = 'N'
+                          <isNotEqual property="relnTrgtFlg" compareValue="Y">
+                         AND (RELN_WRK.DS_ACCT_RELN_BILL_TO_FLG = 'Y' OR  RELN_WRK.DS_ACCT_RELN_SHIP_TO_FLG = 'Y')
+                         </isNotEqual>
+                         <!-- 2018/10/23 S21_NA#28721 Add Start -->
+                         <isEqual property="resFltr" compareValue="Y">
+                         AND RELN_WRK.DS_ACCT_RELN_SHIP_TO_FLG = 'Y'
+                         </isEqual>
+                         <!-- 2018/10/23 S21_NA#28721 Add End -->
+                      ORDER BY RELN_WRK.DS_ACCT_NUM
+                              ,RELN_WRK.RELN_DS_ACCT_NUM) RELN_WRK2
+                    , ACCT_LOC AL
+              WHERE AL.DS_ACCT_NUM = RELN_WRK2.RELN_DS_ACCT_NUM
+                AND AL.EZCANCELFLAG(+) = '0'
+                AND AL.GLBL_CMPY_CD(+) = #glblCmpyCd#
+                AND ROWNUM &lt; #rownum#) AL2
+            , SHIP_TO_CUST SHIP
+            , BILL_TO_CUST BILL
+        WHERE AL2.LOC_NUM = SHIP.LOC_NUM(+)
+          AND AL2.LOC_NUM = BILL.LOC_NUM(+)
+          AND AL2.GLBL_CMPY_CD = SHIP.GLBL_CMPY_CD(+)
+          AND AL2.RELN_DS_ACCT_NUM = SHIP.SELL_TO_CUST_CD(+)
+          AND SHIP.RGTN_STS_CD(+) = #rgtnStsCd#
+          AND SHIP.EZCANCELFLAG(+) = '0'
+          AND AL2.GLBL_CMPY_CD = BILL.GLBL_CMPY_CD(+)
+          AND AL2.RELN_DS_ACCT_NUM = BILL.SELL_TO_CUST_CD(+)
+          AND BILL.RGTN_STS_CD(+) = #rgtnStsCd#
+          AND BILL.EZCANCELFLAG(+) = '0'
+          AND ROWNUM &lt; #rownum#
+        ORDER BY AL2.DS_ACCT_NUM
+                ,AL2.RELN_DS_ACCT_NUM
+        <!-- MOD END 2018/09/11 QC#27941  -->
+    </statement>
+    <resultMap id="result.getCustInfo"    class="CustInfoBean">
+        <result property="dsPoReqFlg"              column="DS_PO_REQ_FLG"          javaType="String"/>
+        <!-- 2022/11/25 QC#60398 Add Start -->
+        <result property="hardCopyReqFlg"          column="HARD_COPY_REQ_FLG"      javaType="String"/>
+        <!-- 2022/11/25 QC#60398 Add End -->
+        <result property="dsBlktPoNum"             column="DS_BLKT_PO_NUM"         javaType="String"/>
+        <result property="dsPoExprDt"              column="DS_PO_EXPR_DT"          javaType="String"/>
+        <result property="custEffLvlCd"            column="CUST_EFF_LVL_CD"        javaType="String"/>
+        <result property="dsCrCardReqFlg"          column="DS_CR_CARD_REQ_FLG"     javaType="String"/>
+        <result property="dsOvngtAllwFlg"          column="DS_OVNGT_ALLW_FLG"      javaType="String"/>
+        <result property="dsCustTrxRulePk"         column="DS_CUST_TRX_RULE_PK"    javaType="BigDecimal"/>
+        <result property="dsAcctNum"               column="DS_ACCT_NUM"            javaType="String"/>
+        <result property="locNum"                  column="LOC_NUM"                javaType="String"/>
+
+        <result property="custBllgTpCd"            column="CUST_BLLG_TP_CD"        javaType="String"/>
+        <result property="custConslTermCd"         column="CUST_CONSL_TERM_CD"     javaType="String"/>
+        <result property="custBllgVcleCd"          column="CUST_BLLG_VCLE_CD"      javaType="String"/>
+        <result property="itrlRvwPsnCd"            column="ITRL_RVW_PSN_CD"        javaType="String"/>
+        <result property="ctacPsnPk"               column="CTAC_PSN_PK"            javaType="BigDecimal"/>
+        <result property="custEmlMsgTxt"           column="CUST_EML_MSG_TXT"       javaType="String"/>
+        <result property="defInvGrpCd"             column="DEF_INV_GRP_CD"         javaType="String"/>
+        <result property="invGrpNum"               column="INV_GRP_NUM"            javaType="String"/>
+        <result property="dsCustInvRulePk"         column="DS_CUST_INV_RULE_PK"    javaType="BigDecimal"/>
+        <result property="dsAcctRefAttrbNum"       column="DS_ACCT_REF_ATTRB_NUM"  javaType="String"/>
+        <result property="bllgAttrbNm"             column="BLLG_ATTRB_NM"          javaType="String"/>
+        <result property="bllgAttrbValTxt"         column="BLLG_ATTRB_VAL_TXT"     javaType="String"/>
+        <result property="bllgAttrbEnblFlg"        column="BLLG_ATTRB_ENBL_FLG"    javaType="String"/>
+        <result property="bllgAttrbReqFlg"         column="BLLG_ATTRB_REQ_FLG"     javaType="String"/>
+        <result property="dsAcctRefAttrbPk"        column="DS_ACCT_REF_ATTRB_PK"   javaType="BigDecimal"/>
+
+        <result property="dsCustMsgTxt"            column="DS_CUST_MSG_TXT"        javaType="String"/>
+        <result property="dsPrintOnInvFlg"         column="DS_PRINT_ON_INV_FLG"    javaType="String"/>
+        <result property="spclCustEffLvlCd"        column="SPCL_CUST_EFF_LVL_CD"   javaType="String"/>
+        <result property="effThruDt"               column="EFF_THRU_DT"            javaType="String"/>
+        <result property="dsCustSpclMsgPk"         column="DS_CUST_SPCL_MSG_PK"    javaType="BigDecimal"/>
+        <result property="lineBizTpCd"             column="LINE_BIZ_TP_CD"         javaType="String"/>
+        <result property="dsBizAreaCd"             column="DS_BIZ_AREA_CD"         javaType="String"/>
+        <result property="dsCustMsgTpCd"           column="DS_CUST_MSG_TP_CD"      javaType="String"/>
+        
+
+        <result property="billToCustCd"            column="BILL_TO_CUST_CD"        javaType="String"/>
+        <result property="shipToCustCd"            column="SHIP_TO_CUST_CD"        javaType="String"/>
+        <!-- MOD Start QC#9073 2016/05/27 -->
+        <result property="dsSpclHdlgTpValCd"       column="DS_SPCL_HDLG_TP_VAL_CD" javaType="String"/>
+        <!-- MOD Start QC#9073 2016/05/27 -->
+        <result property="hdlgEffFromDt"           column="HDLG_EFF_FROM_DT"       javaType="String"/>
+        <result property="hdlgEffThruDt"           column="HDLG_EFF_THRU_DT"       javaType="String"/>
+        <result property="hdlgCustEffLvlCd"        column="HDLG_CUST_EFF_LVL_CD"   javaType="String"/>
+        <result property="dsCustSpclHdlgPk"        column="DS_CUST_SPCL_HDLG_PK"   javaType="BigDecimal"/>
+
+        <result property="dsAcctRelnShipToFlg"     column="DS_ACCT_RELN_SHIP_TO_FLG"    javaType="String"/>
+        <result property="shipToRelnDsAcctNum"     column="SHIP_TO_RELN_DS_ACCT_NUM"    javaType="String"/>
+        <result property="dsAcctRelnBillToFlg"     column="DS_ACCT_RELN_BILL_TO_FLG"    javaType="String"/>
+        <result property="billToRelnDsAcctNum"     column="BILL_TO_RELN_DS_ACCT_NUM"    javaType="String"/>
+        <result property="relnDsAcctNum"           column="RELN_DS_ACCT_NUM"            javaType="String"/>
+
+        <result property="relatedDsAcctRelnTpCd"       column="R_DS_ACCT_RELN_TP_CD"         javaType="String"/>
+        <result property="relatedDsAcctNum"            column="R_DS_ACCT_NUM"                javaType="String"/>
+        <result property="relatedRelnDsAcctNum"        column="R_RELN_DS_ACCT_NUM"           javaType="String"/>
+        <result property="relatedBillToCustCd"         column="R_BILL_TO_CUST_CD"            javaType="String"/>
+        <result property="relatedShipToCustCd"         column="R_SHIP_TO_CUST_CD"            javaType="String"/>
+        <result property="relatedDsAcctRelnBillToFlg"  column="R_DS_ACCT_RELN_BILL_TO_FLG"   javaType="String"/>
+        <result property="relatedDsAcctRelnShipToFlg"  column="R_DS_ACCT_RELN_SHIP_TO_FLG"   javaType="String"/>
+    </resultMap>
+
+    <!-- QC#7781 -->
+    <statement id="getInvoiceSourceListInternalReview" parameterClass="Map" resultClass="Map">
+        SELECT 
+            R.PSN_CD
+           ,R.DS_CUST_INV_RULE_RCPNT_PK
+        FROM
+            DS_CUST_INV_RULE_RCPNT R
+        WHERE
+            R.GLBL_CMPY_CD = #glblCmpyCd#
+        AND R.EZCANCELFLAG = '0'
+        AND R.DS_CUST_INV_RULE_PK = #dsCustInvRulePk#
+        AND R.INV_RULE_RCPNT_TP_CD = #invRuleRcpntTp_Internal#
+        ORDER BY
+            R.PSN_CD
+    </statement>
+  
+      <statement id="getInvoiceSourceListExternalContact" parameterClass="Map" resultClass="Map">
+        SELECT 
+            R.CTAC_PSN_PK
+           ,R.DS_CUST_INV_RULE_RCPNT_PK
+        FROM
+            DS_CUST_INV_RULE_RCPNT R
+        WHERE
+            R.GLBL_CMPY_CD = #glblCmpyCd#
+        AND R.EZCANCELFLAG = '0'
+        AND R.DS_CUST_INV_RULE_PK = #dsCustInvRulePk#
+        AND R.INV_RULE_RCPNT_TP_CD = #invRuleRcpntTp_External#
+        ORDER BY
+            R.CTAC_PSN_PK
+    </statement>
+
+    <!-- 2018/08/24 S21_NA#27245 Mod Start -->
+    <!-- 2017/08/22 S21_NA#20183 Add Start -->
+    <statement id = "getBillToShipToFromPrimLoc" parameterClass="Map" resultClass="Map">
+        SELECT
+            WRK.BILL_TO_CUST_CD         BILL_TO_CUST_CD
+            , WRK.SHIP_TO_CUST_CD      SHIP_TO_CUST_CD
+            , WRK.PRIN_CUST_PK           PRIN_CUST_PK
+        FROM
+            (
+            SELECT
+                BTC.BILL_TO_CUST_CD         BILL_TO_CUST_CD
+                , SHTC.SHIP_TO_CUST_CD      SHIP_TO_CUST_CD
+                , PC.PRIN_CUST_PK           PRIN_CUST_PK
+            FROM
+                SELL_TO_CUST STC
+                , ACCT_LOC AC
+                , PTY_LOC_WRK PLW
+                , PRIN_CUST PC
+                , BILL_TO_CUST BTC
+                , SHIP_TO_CUST SHTC
+            WHERE
+                STC.GLBL_CMPY_CD            = #glblCmpyCd#
+                AND STC.SELL_TO_CUST_CD     = #acctNum#
+                AND STC.EZCANCELFLAG        = '0'
+
+                AND STC.GLBL_CMPY_CD        = AC.GLBL_CMPY_CD
+                AND STC.SELL_TO_CUST_CD     = AC.DS_ACCT_NUM
+                AND AC.RGTN_STS_CD          = #rgtnStsCd#
+                AND AC.EZCANCELFLAG         = '0'
+
+                AND AC.GLBL_CMPY_CD         = PLW.GLBL_CMPY_CD
+                AND AC.LOC_NUM              = PLW.LOC_NUM
+                AND PLW.RGTN_STS_CD         = #rgtnStsCd#
+                AND PLW.EZCANCELFLAG        = '0'
+
+                AND PLW.GLBL_CMPY_CD        = PC.GLBL_CMPY_CD(+)
+                AND PLW.LOC_NUM             = PC.LOC_NUM(+)
+                AND PC.EZCANCELFLAG(+)      = '0'
+
+                AND PLW.GLBL_CMPY_CD        = BTC.GLBL_CMPY_CD(+)
+                AND PLW.PTY_LOC_PK          = BTC.PTY_LOC_PK(+)
+                AND BTC.RGTN_STS_CD(+)      = #rgtnStsCd#
+                AND BTC.EZCANCELFLAG(+)     = '0'
+
+                AND PLW.GLBL_CMPY_CD        = SHTC.GLBL_CMPY_CD(+)
+                AND PLW.PTY_LOC_PK          = SHTC.PTY_LOC_PK(+)
+                AND SHTC.RGTN_STS_CD(+)     = #rgtnStsCd#
+                AND SHTC.EZCANCELFLAG(+)    = '0'
+            ORDER BY
+                PC.PRIN_CUST_PK NULLS LAST) WRK
+        WHERE
+             ROWNUM &lt;= #rownum#
+    </statement>
+    <!-- 2017/08/22 S21_NA#20183 Add End -->
+    <!-- 2018/08/24 S21_NA#27245 Mod End -->
+
+    <!-- START 2018/02/07 Hd.Sugawara [QC#20297(Sol#379),ADD] -->
+    <statement id="getLineOfBusinessTypeCode" parameterClass="Map" resultMap="String">
+        SELECT 
+            DOTPD.LINE_BIZ_TP_CD AS LINE_BIZ_TP_CD
+        FROM
+            DS_ORD_TP_PROC_DFN DOTPD
+        WHERE
+                DOTPD.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND DOTPD.DS_ORD_TP_CD    = #dsOrdTpCd#
+            AND DOTPD.ACTV_FLG        = #actvFlg#
+
+            AND DOTPD.EFF_FROM_DT &lt;= #slsDt#
+            AND (
+                DOTPD.EFF_THRU_DT &gt;= #slsDt#
+                OR
+                DOTPD.EFF_THRU_DT IS NULL
+                )
+
+            AND DOTPD.EZCANCELFLAG    = '0'
+    </statement>
+
+    <statement id="getBusinessAreaCode" parameterClass="Map" resultMap="String">
+        SELECT 
+            OCBC.SCD_BIZ_CTX_ATTRB_TXT AS SCD_BIZ_CTX_ATTRB_TXT
+        FROM
+            ORD_CATG_BIZ_CTX OCBC
+            <!-- START 2019/03/27 Hd.Sugawara [QC#30955,DEL] -->
+            <!-- , DS_ORD_CATG DOC -->
+            <!-- END 2019/03/27 Hd.Sugawara [QC#30955,DEL] -->
+        WHERE
+                OCBC.GLBL_CMPY_CD       = #glblCmpyCd#
+            AND (
+                OCBC.ORD_CATG_CTX_TP_CD = #ordCatgCtxTpCdEquipment#
+                OR
+                OCBC.ORD_CATG_CTX_TP_CD = #ordCatgCtxTpCdSupplies#
+                )
+            AND OCBC.EZCANCELFLAG       = '0'
+
+            <!-- START 2019/03/27 Hd.Sugawara [QC#30955,ADD] -->
+            AND (
+                (
+                        OCBC.DS_ORD_CATG_CD = #dsOrdCatgCd#
+                    AND OCBC.DS_ORD_TP_CD   IS NULL
+                    AND OCBC.DS_ORD_RSN_CD  IS NULL
+                )
+                <isNotNull property="dsOrdTpCd">
+                 OR (
+                        OCBC.DS_ORD_CATG_CD = #dsOrdCatgCd#
+                    AND OCBC.DS_ORD_TP_CD   = #dsOrdTpCd#
+                    AND OCBC.DS_ORD_RSN_CD  IS NULL
+                )
+                </isNotNull>
+            )
+            <!-- END 2019/03/27 Hd.Sugawara [QC#30955,ADD] -->
+
+            <!-- START 2019/03/27 Hd.Sugawara [QC#30955,DEL] -->
+            <!-- AND OCBC.GLBL_CMPY_CD       = DOC.GLBL_CMPY_CD -->
+            <!-- AND OCBC.DS_ORD_CATG_CD     = DOC.DS_ORD_CATG_CD -->
+
+            <!-- AND DOC.DS_ORD_CATG_CD      = #dsOrdCatgCd# -->
+            <!-- AND DOC.EZCANCELFLAG        = '0' -->
+            <!-- END 2019/03/27 Hd.Sugawara [QC#30955,DEL] -->
+    </statement>
+
+    <statement id="getShippingDefaultInfo" parameterClass="Map" resultClass="Map">
+        SELECT 
+            DCSD.FRT_COND_CD       AS FRT_COND_CD
+            , DCSD.SHPG_SVC_LVL_CD AS SHPG_SVC_LVL_CD
+        FROM
+            DS_CUST_SHPG_DEF DCSD
+        WHERE
+                DCSD.GLBL_CMPY_CD    = #glblCmpyCd#
+
+            <isNotNull property="locNum">
+            AND DCSD.LOC_NUM         = #locNum#
+            </isNotNull>
+            <isNotNull property="dsAcctNum">
+            AND DCSD.DS_ACCT_NUM     = #dsAcctNum#
+            </isNotNull>
+
+            AND DCSD.LINE_BIZ_TP_CD  = #lineBizTpCd#
+            AND DCSD.DS_BIZ_AREA_CD  = #dsBizAreaCd#
+
+            AND DCSD.EFF_FROM_DT &lt;= #slsDt#
+            AND (
+                DCSD.EFF_THRU_DT &gt;= #slsDt#
+                OR
+                DCSD.EFF_THRU_DT IS NULL
+                )
+
+            AND DCSD.EZCANCELFLAG    = '0'
+            <!-- 2018/12/10 QC#9315 H.Kumagai Mod Start -->
+            AND DCSD.DEF_FLG         = #defFlg#
+            <!-- 2018/12/10 QC#9315 H.Kumagai Mod End -->
+    </statement>
+    <!-- END 2018/02/07 Hd.Sugawara [QC#20297(Sol#379),ADD] -->
+
+</sqlMap>

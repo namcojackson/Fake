@@ -1,0 +1,2867 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NLZC205001">
+
+    <!-- ==== Type Aliases ==== -->
+    <typeAlias alias="MSG_TXT_DTLTMsg"          type="business.db.MSG_TXT_DTLTMsg"/>
+    <typeAlias alias="SHPG_PLNTMsg"             type="business.db.SHPG_PLNTMsg"/>
+    <typeAlias alias="INVTY_ORDTMsg"            type="business.db.INVTY_ORDTMsg"/>
+    <typeAlias alias="VND_RTRN_CMNTTMsg"        type="business.db.VND_RTRN_CMNTTMsg"/>
+    <typeAlias alias="DS_CPO_DELY_INFOTMsg"     type="business.db.DS_CPO_DELY_INFOTMsg"/>
+    <typeAlias alias="SHIP_TO_CUSTTMsg"         type="business.db.SHIP_TO_CUSTTMsg"/>
+    <typeAlias alias="SoSerialInfo"             type="com.canon.cusa.s21.api.NLZ.NLZC205001.SoSerialInfo"/>
+    <typeAlias alias="DeliveryDateCalcInfo"     type="com.canon.cusa.s21.api.NLZ.NLZC205001.DeliveryDateCalcInfo"/>
+    <typeAlias alias="ShippingOrderInfo"        type="com.canon.cusa.s21.api.NLZ.NLZC205001.ShippingOrderInfo"/>
+    <typeAlias alias="ShippingBackOrderInfo"    type="com.canon.cusa.s21.api.NLZ.NLZC205001.ShippingBackOrderInfo"/>
+    <typeAlias alias="TRNSP_LTTMsg"             type="business.db.TRNSP_LTTMsg"/>
+    <typeAlias alias="AREA_LEAD_TMTMsg"         type="business.db.AREA_LEAD_TMTMsg"/>
+
+    <!-- ==== Result Mapping ==== -->
+
+    <statement id="getMinShipPrtyRs" parameterClass="Map">
+        SELECT
+              MIN(B.SHIP_PRTY) AS SHIP_PRTY
+        FROM  SHPG_PLN A
+            , SHPG_SVC B
+        WHERE A.GLBL_CMPY_CD         = B.GLBL_CMPY_CD
+        AND   A.ORIG_SHPG_SVC_LVL_CD = B.SHPG_SVC_LVL_CD
+        AND   A.REQ_FRT_CHRG_TO_CD   = B.FRT_CHRG_TO_CD
+        AND   A.REQ_FRT_CHRG_METH_CD = B.FRT_CHRG_METH_CD
+        AND   A.GLBL_CMPY_CD         = #glblCmpyCd#
+        AND   A.SHPG_PLN_NUM         = #shpgPlnNum#
+        AND   A.TRX_SRC_TP_CD        = #trxSrcTpCd#
+        AND   A.EZCANCELFLAG         = '0'
+        AND   B.EZCANCELFLAG         = '0'
+    </statement>
+
+    <statement id="getBaseSoHdrCpoRs" parameterClass="Map">
+        SELECT
+              A.TRX_SRC_TP_CD
+            , A.TRX_HDR_NUM
+            , A.BILL_TO_CUST_CD
+            , A.SELL_TO_CUST_CD
+            , A.SHIP_TO_CUST_CD
+            , A.DROP_SHIP_FLG
+            , A.ORIG_SHPG_SVC_LVL_CD
+            , A.REQ_FRT_CHRG_TO_CD
+            , A.REQ_FRT_CHRG_METH_CD
+            , A.CARR_CD
+            , A.RDD_DT
+            , A.RSD_DT
+            , A.SHIP_TO_LOC_NM
+            , A.SHIP_TO_ADDL_LOC_NM
+            <!-- START 2019/07/16 R.Kurahashi [QC#51926,MOD] -->
+            <!-- , A.SHIP_TO_FIRST_LINE_ADDR -->
+            <!-- , A.SHIP_TO_SCD_LINE_ADDR -->
+            <!-- , A.SHIP_TO_THIRD_LINE_ADDR -->
+            <!-- , A.SHIP_TO_FRTH_LINE_ADDR -->
+            , REPLACE(A.SHIP_TO_FIRST_LINE_ADDR, CHR(13)||CHR(10), ' ') AS SHIP_TO_FIRST_LINE_ADDR
+            , REPLACE(A.SHIP_TO_SCD_LINE_ADDR, CHR(13)||CHR(10), ' ')   AS SHIP_TO_SCD_LINE_ADDR
+            , REPLACE(A.SHIP_TO_THIRD_LINE_ADDR, CHR(13)||CHR(10), ' ') AS SHIP_TO_THIRD_LINE_ADDR
+            , REPLACE(A.SHIP_TO_FRTH_LINE_ADDR, CHR(13)||CHR(10), ' ')  AS SHIP_TO_FRTH_LINE_ADDR
+            <!-- END 2019/07/16 R.Kurahashi [QC#51926,MOD] -->
+            , A.SHIP_TO_FIRST_REF_CMNT_TXT
+            , A.SHIP_TO_SCD_REF_CMNT_TXT
+            , A.SHIP_TO_CTY_ADDR
+            , A.SHIP_TO_ST_CD
+            , A.SHIP_TO_POST_CD
+            , A.SHIP_TO_CTRY_CD
+            , A.RQST_CARR_CD
+            , A.CARR_ACCT_NUM
+            , A.INVTY_LOC_CD
+            , B.CUST_ISS_PO_NUM
+            , ( SELECT    SUBSTR (EDI_PO_NOTE_TXT, 4, 5)
+                FROM      EDI_PO_NOTE
+                WHERE     EDI_PO_NOTE_PK = (
+                                            SELECT MAX(EDI_PO_NOTE_PK) 
+                                            FROM   EDI_PO_NOTE
+                                            WHERE  EDI_PO_NOTE_TXT LIKE 'DP%'
+                                            AND    ANSI_SEG_CD     = 'REF'
+                                            AND    NOTE_LVL_CD     = 'H'
+                                            AND    CUST_EDI_PO_NUM = B.CUST_ISS_PO_NUM
+                                            AND    GLBL_CMPY_CD    = B.GLBL_CMPY_CD
+                                            AND    EZCANCELFLAG    = '0'
+                                            GROUP BY CUST_EDI_PO_NUM
+                                           )
+               ) AS SO_DEPT_NUM
+            , B.CPO_SRC_TP_CD
+            <isEqual property="shpgFrceFlg" compareValue="N">
+            , D.RTE_GRP_NUM
+            , D.FRT_CHRG_TO_CD
+            , D.FRT_CHRG_METH_CD
+            , D.SHPG_SVC_LVL_CD
+            , D.SHPG_MODE_CD
+            , D.PSD_DT
+            , D.PDD_DT
+            </isEqual>
+            , E.SHIP_TO_CUST_CD            AS ASN_SHIP_TO_CUST_CD
+            , F.SHIP_TO_CUST_CD            AS SHIP_SHIP_TO_CUST_CD
+            , F.LOC_NM                     AS SHIP_LOC_NM
+            , F.ADDL_LOC_NM                AS SHIP_ADDL_LOC_NM
+            , F.FIRST_LINE_ADDR            AS SHIP_FIRST_LINE_ADDR
+            , F.SCD_LINE_ADDR              AS SHIP_SCD_LINE_ADDR
+            , F.THIRD_LINE_ADDR            AS SHIP_THIRD_LINE_ADDR
+            , F.FRTH_LINE_ADDR             AS SHIP_FRTH_LINE_ADDR
+            , F.FIRST_REF_CMNT_TXT         AS SHIP_FIRST_REF_CMNT_TXT
+            , F.SCD_REF_CMNT_TXT           AS SHIP_SCD_REF_CMNT_TXT
+            , F.CTRY_CD                    AS SHIP_CTRY_CD
+            , F.ST_CD                      AS SHIP_ST_CD
+            , F.CTY_ADDR                   AS SHIP_CTY_ADDR
+            , F.TEL_NUM                    AS SHIP_TEL_NUM
+            , F.POST_CD                    AS SHIP_POST_CD
+            , G.SELL_TO_CUST_CD            AS SELL_SELL_TO_CUST_CD
+            , G.LOC_NM                     AS SELL_LOC_NM
+            , G.ADDL_LOC_NM                AS SELL_ADDL_LOC_NM
+            , G.FIRST_LINE_ADDR            AS SELL_FIRST_LINE_ADDR
+            , G.SCD_LINE_ADDR              AS SELL_SCD_LINE_ADDR
+            , G.THIRD_LINE_ADDR            AS SELL_THIRD_LINE_ADDR
+            , G.FRTH_LINE_ADDR             AS SELL_FRTH_LINE_ADDR
+            , G.FIRST_REF_CMNT_TXT         AS SELL_FIRST_REF_CMNT_TXT
+            , G.SCD_REF_CMNT_TXT           AS SELL_SCD_REF_CMNT_TXT
+            , G.CTRY_CD                    AS SELL_CTRY_CD
+            , G.ST_CD                      AS SELL_ST_CD
+            , G.CTY_ADDR                   AS SELL_CTY_ADDR
+            , G.TEL_NUM                    AS SELL_TEL_NUM
+            , G.POST_CD                    AS SELL_POST_CD
+            , H.BILL_TO_CUST_CD            AS BILL_BILL_TO_CUST_CD
+            , H.ASN_REQ_FLG
+            , H.PRINT_SCC_LB_FLG
+            , H.PRINT_UCC_LB_FLG
+            , H.MIX_PLT_ALLW_FLG
+            , H.NON_ASN_UCC_LB_FLG
+            , H.LOC_NM                     AS BILL_LOC_NM
+            , H.ADDL_LOC_NM                AS BILL_ADDL_LOC_NM
+            , H.FIRST_LINE_ADDR            AS BILL_FIRST_LINE_ADDR
+            , H.SCD_LINE_ADDR              AS BILL_SCD_LINE_ADDR
+            , H.THIRD_LINE_ADDR            AS BILL_THIRD_LINE_ADDR
+            , H.FRTH_LINE_ADDR             AS BILL_FRTH_LINE_ADDR
+            , H.FIRST_REF_CMNT_TXT         AS BILL_FIRST_REF_CMNT_TXT
+            , H.SCD_REF_CMNT_TXT           AS BILL_SCD_REF_CMNT_TXT
+            , H.CTRY_CD                    AS BILL_CTRY_CD
+            , H.ST_CD                      AS BILL_ST_CD
+            , H.CTY_ADDR                   AS BILL_CTY_ADDR
+            , H.TEL_NUM                    AS BILL_TEL_NUM
+            , H.POST_CD                    AS BILL_POST_CD
+            , NULL                         AS RTRN_LB_CD
+            , NULL                         AS RTRN_SELL_TO_CUST_CD
+            , NULL                         AS RTRN_LOC_NM
+            , NULL                         AS RTRN_ADDL_LOC_NM
+            , NULL                         AS RTRN_FIRST_LINE_ADDR
+            , NULL                         AS RTRN_SCD_LINE_ADDR
+            , NULL                         AS RTRN_THIRD_LINE_ADDR
+            , NULL                         AS RTRN_FRTH_LINE_ADDR
+            , NULL                         AS RTRN_FIRST_REF_CMNT_TXT
+            , NULL                         AS RTRN_SCD_REF_CMNT_TXT
+            , NULL                         AS RTRN_CTRY_CD
+            , NULL                         AS RTRN_ST_CD
+            , NULL                         AS RTRN_CTY_ADDR
+            , NULL                         AS RTRN_TEL_NUM
+            , NULL                         AS RTRN_POST_CD
+            , B.SELL_TO_FIRST_REF_CMNT_TXT AS SELL_TO_FIRST_REF_CMNT_TXT
+            , B.SELL_TO_SCD_REF_CMNT_TXT   AS SELL_TO_SCD_REF_CMNT_TXT
+            , RS.RTL_WH_CD                 AS RTL_WH_CD
+            , NVL(BPV.CTAC_PTNR_PSN_NM, BCPV.CTAC_PTNR_PSN_NM) AS BILL_TO_CTAC_PTNR_PSN_NM
+            , NVL(BPV.CTAC_PSN_TEL_NUM, BCPV.CTAC_PSN_TEL_NUM) AS BILL_TO_CTAC_PSN_TEL_NUM
+            , NVL(SPV.CTAC_PTNR_PSN_NM, SCPV.CTAC_PTNR_PSN_NM) AS SELL_TO_CTAC_PTNR_PSN_NM
+            , NVL(SPV.CTAC_PSN_TEL_NUM, SCPV.CTAC_PSN_TEL_NUM) AS SELL_TO_CTAC_PSN_TEL_NUM
+            ,CASE WHEN EXISTS(
+                 SELECT
+                     1
+                 FROM
+                     ORD_CATG_BIZ_CTX OCB
+                 WHERE
+                     OCB.GLBL_CMPY_CD       = B.GLBL_CMPY_CD
+                 AND OCB.ORD_CATG_CTX_TP_CD IN(#ordCatgCtxTp#)
+                 AND OCB.DS_ORD_CATG_CD     = B.DS_ORD_CATG_CD
+                 AND (OCB.DS_ORD_TP_CD IS NULL OR OCB.DS_ORD_TP_CD = B.DS_ORD_TP_CD)
+                 AND (OCB.DS_ORD_RSN_CD IS NULL OR OCB.DS_ORD_RSN_CD = B.DS_ORD_RSN_CD)
+                 AND OCB.EZCANCELFLAG = '0'
+               ) THEN B.SELL_TO_FIRST_REF_CMNT_TXT
+               ELSE NVL(CPV.CTAC_PTNR_PSN_NM, CCPV.CTAC_PTNR_PSN_NM)
+            END AS SHIP_TO_CTAC_PTNR_PSN_NM
+            , NVL(CPV.CTAC_PSN_TEL_NUM, CCPV.CTAC_PSN_TEL_NUM) AS SHIP_TO_CTAC_PSN_TEL_NUM
+        FROM
+              SHPG_PLN         A
+            , CPO              B
+            <isEqual property="shpgFrceFlg" compareValue="N">
+            , RTE_GRP_DTL      C
+            , RTE_GRP          D
+            </isEqual>
+            , ASN_SHIP_TO_CUST E
+            , SHIP_TO_CUST     F
+            , SELL_TO_CUST     G
+            , BILL_TO_CUST     H
+            , RTL_SWH          RS
+            <!-- START 2018/03/29 QC#23559 -->
+            , (SELECT
+                   SP.GLBL_CMPY_CD
+                 , SP.SHPG_PLN_NUM
+                 , CASE WHEN DCP.CTAC_PSN_FIRST_NM IS NOT NULL AND DCP.CTAC_PSN_LAST_NM IS NOT NULL THEN DCP.CTAC_PSN_FIRST_NM || ' ' || DCP.CTAC_PSN_LAST_NM
+                        WHEN DCP.CTAC_PSN_FIRST_NM IS NOT NULL AND DCP.CTAC_PSN_LAST_NM IS NULL     THEN DCP.CTAC_PSN_FIRST_NM
+                        WHEN DCP.CTAC_PSN_FIRST_NM IS NULL     AND DCP.CTAC_PSN_LAST_NM IS NOT NULL THEN DCP.CTAC_PSN_LAST_NM
+                   END  AS CTAC_PTNR_PSN_NM
+                 , DCP.CTAC_PSN_TEL_NUM
+                 , ROW_NUMBER() OVER(PARTITION BY SP.SHPG_PLN_NUM ORDER BY CTAC.PRIORITY_NUM, DCP.CTAC_PSN_SORT_NUM) AS ROW_NUM
+               FROM
+                   SHPG_PLN        SP
+                 , CPO_DTL         DCD
+                 , DS_CPO_CTAC_PSN DCP
+                 ,(
+                     SELECT
+                          CT.CTAC_TP_CD
+                         ,1 AS PRIORITY_NUM
+                     FROM CTAC_TP CT 
+                     WHERE
+                         CT.GLBL_CMPY_CD = #glblCmpyCd#
+                     AND CT.CTAC_TP_CD   = #ctacPsnTpBillToEquipment#
+                     AND CT.EZCANCELFLAG = '0'
+                     UNION ALL
+                     SELECT
+                          CT.CTAC_TP_CD
+                         ,2 AS PRIORITY_NUM
+                     FROM CTAC_TP CT 
+                     WHERE
+                         CT.GLBL_CMPY_CD = #glblCmpyCd#
+                     AND CT.CTAC_TP_CD   = #ctacPsnTpBillToSply#
+                     AND CT.EZCANCELFLAG = '0'
+                     UNION ALL
+                     SELECT
+                          CT.CTAC_TP_CD
+                         ,3 AS PRIORITY_NUM
+                     FROM CTAC_TP CT 
+                     WHERE
+                         CT.GLBL_CMPY_CD = #glblCmpyCd#
+                     <!-- 2018/11/14 QC#27954 Mod Start -->
+                     <!-- AND CT.CTAC_TP_CD   = #ctacPsnTpBillToContract# -->
+                     AND CT.CTAC_TP_CD   = #ctacPsnTpBillToParts#
+                     <!-- 2018/11/14 QC#27954 Mod End -->
+                     AND CT.EZCANCELFLAG = '0'
+                     <!-- 2018/11/14 QC#27954 Add Start -->
+                     UNION ALL
+                     SELECT
+                          CT.CTAC_TP_CD
+                         ,4 AS PRIORITY_NUM
+                     FROM CTAC_TP CT 
+                     WHERE
+                         CT.GLBL_CMPY_CD = #glblCmpyCd#
+                     AND CT.CTAC_TP_CD   = #ctacPsnTpBillToContract#
+                     AND CT.EZCANCELFLAG = '0'
+                     <!-- 2018/11/14 QC#27954 Add End -->
+                 ) CTAC
+               WHERE
+                   SP.GLBL_CMPY_CD      = #glblCmpyCd#
+               AND SP.SHPG_PLN_NUM      = #shpgPlnNum#
+               AND SP.EZCANCELFLAG      = '0'
+               AND SP.GLBL_CMPY_CD      = DCD.GLBL_CMPY_CD
+               AND SP.TRX_HDR_NUM       = DCD.CPO_ORD_NUM
+               AND SP.TRX_LINE_NUM      = DCD.CPO_DTL_LINE_NUM
+               AND SP.TRX_LINE_SUB_NUM  = DCD.CPO_DTL_LINE_SUB_NUM
+               AND DCD.EZCANCELFLAG     = '0'
+               AND DCD.GLBL_CMPY_CD     = DCP.GLBL_CMPY_CD
+               AND DCD.CPO_ORD_NUM      = DCP.CPO_ORD_NUM
+               AND DCD.DS_CPO_CONFIG_PK = DCP.DS_CPO_CONFIG_PK
+               AND DCP.CTAC_PSN_TP_CD   = CTAC.CTAC_TP_CD
+               AND DCP.EZCANCELFLAG     = '0'
+              ) BPV
+            , (SELECT
+                   SP.GLBL_CMPY_CD
+                 , SP.SHPG_PLN_NUM
+                 , CASE WHEN DCP.CTAC_PSN_FIRST_NM IS NOT NULL AND DCP.CTAC_PSN_LAST_NM IS NOT NULL THEN DCP.CTAC_PSN_FIRST_NM || ' ' || DCP.CTAC_PSN_LAST_NM
+                        WHEN DCP.CTAC_PSN_FIRST_NM IS NOT NULL AND DCP.CTAC_PSN_LAST_NM IS NULL     THEN DCP.CTAC_PSN_FIRST_NM
+                        WHEN DCP.CTAC_PSN_FIRST_NM IS NULL     AND DCP.CTAC_PSN_LAST_NM IS NOT NULL THEN DCP.CTAC_PSN_LAST_NM
+                   END  AS CTAC_PTNR_PSN_NM
+                 , DCP.CTAC_PSN_TEL_NUM
+                 , ROW_NUMBER() OVER(PARTITION BY SP.SHPG_PLN_NUM ORDER BY CTAC.PRIORITY_NUM, DCP.CTAC_PSN_SORT_NUM) AS ROW_NUM
+               FROM
+                   SHPG_PLN        SP
+                 , CPO_DTL         DCD
+                 , DS_CPO_CTAC_PSN DCP
+                 ,(
+                     SELECT
+                          CT.CTAC_TP_CD
+                         ,1 AS PRIORITY_NUM
+                     FROM CTAC_TP CT 
+                     WHERE
+                         CT.GLBL_CMPY_CD = #glblCmpyCd#
+                     AND CT.CTAC_TP_CD   = #ctacPsnTpBillToEquipment#
+                     AND CT.EZCANCELFLAG = '0'
+                     UNION ALL
+                     SELECT
+                          CT.CTAC_TP_CD
+                         ,2 AS PRIORITY_NUM
+                     FROM CTAC_TP CT 
+                     WHERE
+                         CT.GLBL_CMPY_CD = #glblCmpyCd#
+                     AND CT.CTAC_TP_CD   = #ctacPsnTpBillToSply#
+                     AND CT.EZCANCELFLAG = '0'
+                     UNION ALL
+                     SELECT
+                          CT.CTAC_TP_CD
+                         ,3 AS PRIORITY_NUM
+                     FROM CTAC_TP CT 
+                     WHERE
+                         CT.GLBL_CMPY_CD = #glblCmpyCd#
+                     <!-- 2018/11/14 QC#27954 Mod Start -->
+                     <!-- AND CT.CTAC_TP_CD   = #ctacPsnTpBillToContract# -->
+                     AND CT.CTAC_TP_CD   = #ctacPsnTpBillToParts#
+                     <!-- 2018/11/14 QC#27954 Mod End -->
+                     AND CT.EZCANCELFLAG = '0'
+                     <!-- 2018/11/14 QC#27954 Add Start -->
+                     UNION ALL
+                     SELECT
+                          CT.CTAC_TP_CD
+                         ,4 AS PRIORITY_NUM
+                     FROM CTAC_TP CT 
+                     WHERE
+                         CT.GLBL_CMPY_CD = #glblCmpyCd#
+                     AND CT.CTAC_TP_CD   = #ctacPsnTpBillToContract#
+                     AND CT.EZCANCELFLAG = '0'
+                     <!-- 2018/11/14 QC#27954 Add End -->
+                 ) CTAC
+               WHERE
+                   SP.GLBL_CMPY_CD      = #glblCmpyCd#
+               AND SP.SHPG_PLN_NUM      = #shpgPlnNum#
+               AND SP.EZCANCELFLAG      = '0'
+               AND SP.GLBL_CMPY_CD      = DCD.GLBL_CMPY_CD
+               AND SP.TRX_HDR_NUM       = DCD.CPO_ORD_NUM
+               AND SP.TRX_LINE_NUM      = DCD.CPO_DTL_LINE_NUM
+               AND SP.TRX_LINE_SUB_NUM  = DCD.CPO_DTL_LINE_SUB_NUM
+               AND DCD.EZCANCELFLAG     = '0'
+               AND DCD.GLBL_CMPY_CD     = DCP.GLBL_CMPY_CD
+               AND DCD.CPO_ORD_NUM      = DCP.CPO_ORD_NUM
+               AND DCP.DS_CPO_CONFIG_PK IS NULL
+               AND DCP.CTAC_PSN_TP_CD   = CTAC.CTAC_TP_CD
+               AND DCP.EZCANCELFLAG     = '0'
+              ) BCPV
+              <!-- END 2018/03/29 QC#23559 -->
+            , (SELECT
+                   SP.GLBL_CMPY_CD
+                 , SP.SHPG_PLN_NUM
+                 , CASE WHEN DCP.CTAC_PSN_FIRST_NM IS NOT NULL AND DCP.CTAC_PSN_LAST_NM IS NOT NULL THEN DCP.CTAC_PSN_FIRST_NM || ' ' || DCP.CTAC_PSN_LAST_NM
+                        WHEN DCP.CTAC_PSN_FIRST_NM IS NOT NULL AND DCP.CTAC_PSN_LAST_NM IS NULL     THEN DCP.CTAC_PSN_FIRST_NM
+                        WHEN DCP.CTAC_PSN_FIRST_NM IS NULL     AND DCP.CTAC_PSN_LAST_NM IS NOT NULL THEN DCP.CTAC_PSN_LAST_NM
+                   END  AS CTAC_PTNR_PSN_NM
+                 , DCP.CTAC_PSN_TEL_NUM
+                 , ROW_NUMBER() OVER(PARTITION BY SP.SHPG_PLN_NUM ORDER BY DCP.CTAC_PSN_SORT_NUM) AS ROW_NUM
+               FROM
+                   SHPG_PLN        SP
+                 , CPO_DTL         DCD
+                 , DS_CPO_CTAC_PSN DCP
+               WHERE
+                   SP.GLBL_CMPY_CD      = #glblCmpyCd#
+               AND SP.SHPG_PLN_NUM      = #shpgPlnNum#
+               AND SP.EZCANCELFLAG      = '0'
+               AND SP.GLBL_CMPY_CD      = DCD.GLBL_CMPY_CD
+               AND SP.TRX_HDR_NUM       = DCD.CPO_ORD_NUM
+               AND SP.TRX_LINE_NUM      = DCD.CPO_DTL_LINE_NUM
+               AND SP.TRX_LINE_SUB_NUM  = DCD.CPO_DTL_LINE_SUB_NUM
+               AND DCD.EZCANCELFLAG     = '0'
+               AND DCD.GLBL_CMPY_CD     = DCP.GLBL_CMPY_CD
+               AND DCD.CPO_ORD_NUM      = DCP.CPO_ORD_NUM
+               AND DCD.DS_CPO_CONFIG_PK = DCP.DS_CPO_CONFIG_PK
+               AND DCP.CTAC_PSN_TP_CD   = #ctacPsnTpSellTo#
+               AND DCP.EZCANCELFLAG     = '0'
+              ) SPV
+            , (SELECT
+                   SP.GLBL_CMPY_CD
+                 , SP.SHPG_PLN_NUM
+                 , CASE WHEN DCP.CTAC_PSN_FIRST_NM IS NOT NULL AND DCP.CTAC_PSN_LAST_NM IS NOT NULL THEN DCP.CTAC_PSN_FIRST_NM || ' ' || DCP.CTAC_PSN_LAST_NM
+                        WHEN DCP.CTAC_PSN_FIRST_NM IS NOT NULL AND DCP.CTAC_PSN_LAST_NM IS NULL     THEN DCP.CTAC_PSN_FIRST_NM
+                        WHEN DCP.CTAC_PSN_FIRST_NM IS NULL     AND DCP.CTAC_PSN_LAST_NM IS NOT NULL THEN DCP.CTAC_PSN_LAST_NM
+                   END  AS CTAC_PTNR_PSN_NM
+                 , DCP.CTAC_PSN_TEL_NUM
+                 , ROW_NUMBER() OVER(PARTITION BY SP.SHPG_PLN_NUM ORDER BY DCP.CTAC_PSN_SORT_NUM) AS ROW_NUM
+               FROM
+                   SHPG_PLN        SP
+                 , CPO_DTL         DCD
+                 , DS_CPO_CTAC_PSN DCP
+               WHERE
+                   SP.GLBL_CMPY_CD      = #glblCmpyCd#
+               AND SP.SHPG_PLN_NUM      = #shpgPlnNum#
+               AND SP.EZCANCELFLAG      = '0'
+               AND SP.GLBL_CMPY_CD      = DCD.GLBL_CMPY_CD
+               AND SP.TRX_HDR_NUM       = DCD.CPO_ORD_NUM
+               AND SP.TRX_LINE_NUM      = DCD.CPO_DTL_LINE_NUM
+               AND SP.TRX_LINE_SUB_NUM  = DCD.CPO_DTL_LINE_SUB_NUM
+               AND DCD.EZCANCELFLAG     = '0'
+               AND DCD.GLBL_CMPY_CD     = DCP.GLBL_CMPY_CD
+               AND DCD.CPO_ORD_NUM      = DCP.CPO_ORD_NUM
+               AND DCP.DS_CPO_CONFIG_PK IS NULL
+               AND DCP.CTAC_PSN_TP_CD   = #ctacPsnTpSellTo#
+               AND DCP.EZCANCELFLAG     = '0'
+              ) SCPV
+            , (SELECT
+                   SP.GLBL_CMPY_CD
+                 , SP.SHPG_PLN_NUM
+                 , CASE WHEN DCP.CTAC_PSN_FIRST_NM IS NOT NULL AND DCP.CTAC_PSN_LAST_NM IS NOT NULL THEN DCP.CTAC_PSN_FIRST_NM || ' ' || DCP.CTAC_PSN_LAST_NM
+                        WHEN DCP.CTAC_PSN_FIRST_NM IS NOT NULL AND DCP.CTAC_PSN_LAST_NM IS NULL     THEN DCP.CTAC_PSN_FIRST_NM
+                        WHEN DCP.CTAC_PSN_FIRST_NM IS NULL     AND DCP.CTAC_PSN_LAST_NM IS NOT NULL THEN DCP.CTAC_PSN_LAST_NM
+                   END  AS CTAC_PTNR_PSN_NM
+                 , DCP.CTAC_PSN_TEL_NUM
+                 , ROW_NUMBER() OVER(PARTITION BY SP.SHPG_PLN_NUM ORDER BY DCP.CTAC_PSN_SORT_NUM) AS ROW_NUM
+               FROM
+                   SHPG_PLN        SP
+                 , CPO_DTL         DCD
+                 , DS_CPO_CTAC_PSN DCP
+               WHERE
+                   SP.GLBL_CMPY_CD      = #glblCmpyCd#
+               AND SP.SHPG_PLN_NUM      = #shpgPlnNum#
+               AND SP.EZCANCELFLAG      = '0'
+               AND SP.GLBL_CMPY_CD      = DCD.GLBL_CMPY_CD
+               AND SP.TRX_HDR_NUM       = DCD.CPO_ORD_NUM
+               AND SP.TRX_LINE_NUM      = DCD.CPO_DTL_LINE_NUM
+               AND SP.TRX_LINE_SUB_NUM  = DCD.CPO_DTL_LINE_SUB_NUM
+               AND DCD.EZCANCELFLAG     = '0'
+               AND DCD.GLBL_CMPY_CD     = DCP.GLBL_CMPY_CD
+               AND DCD.CPO_ORD_NUM      = DCP.CPO_ORD_NUM
+               AND DCD.DS_CPO_CONFIG_PK = DCP.DS_CPO_CONFIG_PK
+               <!-- START 2017/10/16 S.Katsuma [Sol#454,ADD] -->
+               <!--AND DCP.CTAC_PSN_TP_CD  = #ctacPsnTpShipTo# -->
+               AND DCP.CTAC_PSN_TP_CD  IN (#ctacPsnTpDelivIns#, #ctacPsnTpOrdCtac#)
+               <!-- END 2017/10/16 S.Katsuma [Sol#454,ADD] -->
+               AND DCP.EZCANCELFLAG     = '0'
+              ) CPV
+            , (SELECT
+                   SP.GLBL_CMPY_CD
+                 , SP.SHPG_PLN_NUM
+                 , CASE WHEN DCP.CTAC_PSN_FIRST_NM IS NOT NULL AND DCP.CTAC_PSN_LAST_NM IS NOT NULL THEN DCP.CTAC_PSN_FIRST_NM || ' ' || DCP.CTAC_PSN_LAST_NM
+                        WHEN DCP.CTAC_PSN_FIRST_NM IS NOT NULL AND DCP.CTAC_PSN_LAST_NM IS NULL     THEN DCP.CTAC_PSN_FIRST_NM
+                        WHEN DCP.CTAC_PSN_FIRST_NM IS NULL     AND DCP.CTAC_PSN_LAST_NM IS NOT NULL THEN DCP.CTAC_PSN_LAST_NM
+                   END  AS CTAC_PTNR_PSN_NM
+                 , DCP.CTAC_PSN_TEL_NUM
+                 , ROW_NUMBER() OVER(PARTITION BY SP.SHPG_PLN_NUM ORDER BY DCP.CTAC_PSN_SORT_NUM) AS ROW_NUM
+               FROM
+                   SHPG_PLN        SP
+                 , CPO_DTL         DCD
+                 , DS_CPO_CTAC_PSN DCP
+               WHERE
+                   SP.GLBL_CMPY_CD      = #glblCmpyCd#
+               AND SP.SHPG_PLN_NUM      = #shpgPlnNum#
+               AND SP.EZCANCELFLAG      = '0'
+               AND SP.GLBL_CMPY_CD      = DCD.GLBL_CMPY_CD
+               AND SP.TRX_HDR_NUM       = DCD.CPO_ORD_NUM
+               AND SP.TRX_LINE_NUM      = DCD.CPO_DTL_LINE_NUM
+               AND SP.TRX_LINE_SUB_NUM  = DCD.CPO_DTL_LINE_SUB_NUM
+               AND DCD.EZCANCELFLAG     = '0'
+               AND DCD.GLBL_CMPY_CD     = DCP.GLBL_CMPY_CD
+               AND DCD.CPO_ORD_NUM      = DCP.CPO_ORD_NUM
+               AND DCP.DS_CPO_CONFIG_PK IS NULL
+               <!-- START 2017/10/16 S.Katsuma [Sol#454,ADD] -->
+               <!--AND DCP.CTAC_PSN_TP_CD  = #ctacPsnTpShipTo# -->
+               AND DCP.CTAC_PSN_TP_CD  IN (#ctacPsnTpDelivIns#, #ctacPsnTpOrdCtac#)
+               <!-- END 2017/10/16 S.Katsuma [Sol#454,ADD] -->
+               AND DCP.EZCANCELFLAG     = '0'
+              ) CCPV
+        WHERE
+              A.GLBL_CMPY_CD             = #glblCmpyCd#
+        AND   A.SHPG_PLN_NUM             = #shpgPlnNum#
+        AND   A.TRX_SRC_TP_CD            = #trxSrcTpCd#
+        AND   A.EZCANCELFLAG             = '0'
+        AND   A.GLBL_CMPY_CD             = B.GLBL_CMPY_CD
+        AND   A.TRX_HDR_NUM              = B.CPO_ORD_NUM
+        AND   B.EZCANCELFLAG             = '0'
+        AND   A.GLBL_CMPY_CD             = RS.GLBL_CMPY_CD
+        AND   A.INVTY_LOC_CD             = RS.INVTY_LOC_CD
+        AND   RS.EZCANCELFLAG            = '0'
+        AND   A.GLBL_CMPY_CD             = E.GLBL_CMPY_CD    (+)
+        AND   A.SHIP_TO_CUST_CD          = E.SHIP_TO_CUST_CD (+)
+        AND   E.EZCANCELFLAG(+)          = '0'
+        AND   A.GLBL_CMPY_CD             = F.GLBL_CMPY_CD    (+)
+        AND   A.SHIP_TO_CUST_CD          = F.SHIP_TO_CUST_CD (+)
+        AND   F.EZCANCELFLAG(+)          = '0'
+        AND   A.GLBL_CMPY_CD             = G.GLBL_CMPY_CD    (+)
+        AND   A.SELL_TO_CUST_CD          = G.SELL_TO_CUST_CD (+)
+        AND   G.EZCANCELFLAG(+)          = '0'
+        AND   A.GLBL_CMPY_CD             = H.GLBL_CMPY_CD    (+)
+        AND   A.BILL_TO_CUST_CD          = H.BILL_TO_CUST_CD (+)
+        AND   H.EZCANCELFLAG(+)          = '0'
+        AND   A.GLBL_CMPY_CD             = BPV.GLBL_CMPY_CD(+)
+        AND   A.SHPG_PLN_NUM             = BPV.SHPG_PLN_NUM(+)
+        AND   BPV.ROW_NUM(+)             = 1
+        AND   A.GLBL_CMPY_CD             = BCPV.GLBL_CMPY_CD(+)
+        AND   A.SHPG_PLN_NUM             = BCPV.SHPG_PLN_NUM(+)
+        AND   BCPV.ROW_NUM(+)            = 1
+        AND   A.GLBL_CMPY_CD             = SPV.GLBL_CMPY_CD(+)
+        AND   A.SHPG_PLN_NUM             = SPV.SHPG_PLN_NUM(+)
+        AND   SPV.ROW_NUM(+)             = 1
+        AND   A.GLBL_CMPY_CD             = SCPV.GLBL_CMPY_CD(+)
+        AND   A.SHPG_PLN_NUM             = SCPV.SHPG_PLN_NUM(+)
+        AND   SCPV.ROW_NUM(+)            = 1
+        AND   A.GLBL_CMPY_CD             = CPV.GLBL_CMPY_CD(+)
+        AND   A.SHPG_PLN_NUM             = CPV.SHPG_PLN_NUM(+)
+        AND   CPV.ROW_NUM(+)             = 1
+        AND   A.GLBL_CMPY_CD             = CCPV.GLBL_CMPY_CD(+)
+        AND   A.SHPG_PLN_NUM             = CCPV.SHPG_PLN_NUM(+)
+        AND   CCPV.ROW_NUM(+)            = 1
+        <isEqual property="shpgFrceFlg" compareValue="N">
+        AND   A.GLBL_CMPY_CD             = C.GLBL_CMPY_CD
+        AND   A.SHPG_PLN_NUM             = C.SHPG_PLN_NUM
+        AND   C.EZCANCELFLAG             = '0'
+        AND   C.GLBL_CMPY_CD             = D.GLBL_CMPY_CD
+        AND   C.RTE_GRP_NUM              = D.RTE_GRP_NUM
+        AND   D.EZCANCELFLAG             = '0'
+        </isEqual>
+    </statement>
+
+    <statement id="getBaseSoHdrDcTransfRs" parameterClass="Map">
+        SELECT
+              A.TRX_SRC_TP_CD
+            , A.TRX_HDR_NUM
+            , NVL(NVL(STC.SELL_TO_CUST_CD, F.SELL_TO_CUST_CD), A.SELL_TO_CUST_CD) AS SELL_TO_CUST_CD
+            , A.SHIP_TO_CUST_CD
+            , A.ORIG_SHPG_SVC_LVL_CD
+            , A.RDD_DT
+            , A.RSD_DT
+            , A.INVTY_LOC_CD
+            , NVL(A.RQST_CARR_CD, A.CARR_CD) AS CARR_CD
+            <isEqual property="shpgFrceFlg" compareValue="N">
+            , C.RTE_GRP_NUM
+            , C.SHPG_SVC_LVL_CD
+            , C.SHPG_MODE_CD
+            , C.PSD_DT
+            , C.PDD_DT
+            </isEqual>
+            , CASE WHEN A.DROP_SHIP_FLG = 'Y' THEN A.SHIP_TO_CUST_CD            ELSE F.SHIP_TO_CUST_CD        END    AS WH_WH_CD
+            , CASE WHEN A.DROP_SHIP_FLG = 'Y' THEN A.SHIP_TO_LOC_NM             ELSE F.LOC_NM                 END    AS WH_LOC_NM
+            , CASE WHEN A.DROP_SHIP_FLG = 'Y' THEN A.SHIP_TO_ADDL_LOC_NM        ELSE F.ADDL_LOC_NM            END    AS WH_ADDL_LOC_NM
+            , CASE WHEN A.DROP_SHIP_FLG = 'Y' THEN A.SHIP_TO_FIRST_LINE_ADDR    ELSE F.FIRST_LINE_ADDR        END    AS WH_FIRST_LINE_ADDR
+            , CASE WHEN A.DROP_SHIP_FLG = 'Y' THEN A.SHIP_TO_SCD_LINE_ADDR      ELSE F.SCD_LINE_ADDR          END    AS WH_SCD_LINE_ADDR
+            , CASE WHEN A.DROP_SHIP_FLG = 'Y' THEN A.SHIP_TO_THIRD_LINE_ADDR    ELSE F.THIRD_LINE_ADDR        END    AS WH_THIRD_LINE_ADDR
+            , CASE WHEN A.DROP_SHIP_FLG = 'Y' THEN A.SHIP_TO_FRTH_LINE_ADDR     ELSE F.FRTH_LINE_ADDR         END    AS WH_FRTH_LINE_ADDR
+            , CASE WHEN A.DROP_SHIP_FLG = 'Y' THEN A.SHIP_TO_FIRST_REF_CMNT_TXT ELSE F.FIRST_REF_CMNT_TXT     END    AS WH_FIRST_REF_CMNT_TXT
+            , CASE WHEN A.DROP_SHIP_FLG = 'Y' THEN A.SHIP_TO_SCD_REF_CMNT_TXT   ELSE F.SCD_REF_CMNT_TXT       END    AS WH_SCD_REF_CMNT_TXT
+            , CASE WHEN A.DROP_SHIP_FLG = 'Y' THEN A.SHIP_TO_CTRY_CD            ELSE F.CTRY_CD                END    AS WH_CTRY_CD
+            , CASE WHEN A.DROP_SHIP_FLG = 'Y' THEN A.SHIP_TO_ST_CD              ELSE F.ST_CD                  END    AS WH_ST_CD
+            , CASE WHEN A.DROP_SHIP_FLG = 'Y' THEN A.SHIP_TO_CTY_ADDR           ELSE F.CTY_ADDR               END    AS WH_CTY_ADDR
+            , CASE WHEN A.DROP_SHIP_FLG = 'Y' THEN NULL                         ELSE F.TEL_NUM                END    AS WH_TEL_NUM
+            , CASE WHEN A.DROP_SHIP_FLG = 'Y' THEN A.SHIP_TO_POST_CD            ELSE F.POST_CD                END    AS WH_POST_CD
+            , RS1.RTL_WH_CD
+            , RS2.RTL_WH_CD                  AS RS2_RTL_WH_CD
+            , STC.SELL_TO_CUST_CD            AS SHIP_TO_SELL_TO_CUST_CD
+            , PR.CTAC_PSN_NM                 AS SHIP_TO_CTAC_PTNR_PSN_NM
+            , V.VND_CD                       AS VND_VND_CD
+            , PVV.PRNT_VND_NM                AS VND_LOC_NM
+            , V.ADDL_LOC_NM                  AS VND_ADDL_LOC_NM
+            , V.FIRST_LINE_ADDR              AS VND_FIRST_LINE_ADDR
+            , V.SCD_LINE_ADDR                AS VND_SCD_LINE_ADDR
+            , V.THIRD_LINE_ADDR              AS VND_THIRD_LINE_ADDR
+            , V.FRTH_LINE_ADDR               AS VND_FRTH_LINE_ADDR
+            , V.FIRST_REF_CMNT_TXT           AS VND_FIRST_REF_CMNT_TXT
+            , V.SCD_REF_CMNT_TXT             AS VND_SCD_REF_CMNT_TXT
+            , V.CTRY_CD                      AS VND_CTRY_CD
+            , V.ST_CD                        AS VND_ST_CD
+            , V.CTY_ADDR                     AS VND_CTY_ADDR
+            , V.TEL_NUM                      AS VND_TEL_NUM
+            , V.POST_CD                      AS VND_POST_CD
+            <!-- START 2018/04/02 S.Katsuma [QC#25143,ADD] -->
+            , A.DROP_SHIP_FLG
+            <!-- END 2018/04/02 S.Katsuma [QC#25143,ADD] -->
+            <!-- START 2018/04/02 T.Wada [QC#54989,ADD] -->
+            , BTC.BILL_TO_CUST_CD            AS BILL_BILL_TO_CUST_CD
+            , BTC.ASN_REQ_FLG
+            , BTC.PRINT_SCC_LB_FLG
+            , BTC.PRINT_UCC_LB_FLG
+            , BTC.MIX_PLT_ALLW_FLG
+            , BTC.NON_ASN_UCC_LB_FLG
+            , BTC.LOC_NM                     AS BILL_LOC_NM
+            , BTC.ADDL_LOC_NM                AS BILL_ADDL_LOC_NM
+            , BTC.FIRST_LINE_ADDR            AS BILL_FIRST_LINE_ADDR
+            , BTC.SCD_LINE_ADDR              AS BILL_SCD_LINE_ADDR
+            , BTC.THIRD_LINE_ADDR            AS BILL_THIRD_LINE_ADDR
+            , BTC.FRTH_LINE_ADDR             AS BILL_FRTH_LINE_ADDR
+            , BTC.FIRST_REF_CMNT_TXT         AS BILL_FIRST_REF_CMNT_TXT
+            , BTC.SCD_REF_CMNT_TXT           AS BILL_SCD_REF_CMNT_TXT
+            , BTC.CTRY_CD                    AS BILL_CTRY_CD
+            , BTC.ST_CD                      AS BILL_ST_CD
+            , BTC.CTY_ADDR                   AS BILL_CTY_ADDR
+            , BTC.TEL_NUM                    AS BILL_TEL_NUM
+            , BTC.POST_CD                    AS BILL_POST_CD
+            <!-- END 2018/04/02 T.Wada [QC#54989,ADD] -->
+        FROM
+              SHPG_PLN         A
+            <isEqual property="shpgFrceFlg" compareValue="N">
+            , RTE_GRP_DTL      B
+            , RTE_GRP          C
+            </isEqual>
+            , SHIP_TO_CUST     F
+            , RTL_SWH          RS1
+            , RTL_SWH          RS2
+            , SHIP_TO_CUST     STC
+            , INVTY_ORD_DTL    IOD
+            , PRCH_REQ         PR
+            , VND              V
+            , PO_VND_V         PVV
+            <!-- START 2018/04/02 T.Wada [QC#54989,ADD] -->
+            , BILL_TO_CUST BTC
+            <!-- END 2018/04/02 T.Wada [QC#54989,ADD] -->
+        WHERE
+              A.GLBL_CMPY_CD             = #glblCmpyCd#
+        AND   A.SHPG_PLN_NUM             = #shpgPlnNum#
+        AND   A.TRX_SRC_TP_CD            = #trxSrcTpCd#
+        AND   A.EZCANCELFLAG             = '0'
+        AND   A.GLBL_CMPY_CD             = F.GLBL_CMPY_CD(+)
+        AND   A.SHIP_TO_CUST_CD          = F.SHIP_TO_CUST_CD(+)
+        AND   F.EZCANCELFLAG(+)          = '0'
+        AND   A.GLBL_CMPY_CD             = RS2.GLBL_CMPY_CD(+)
+        AND   A.SHIP_TO_CUST_CD          = RS2.INVTY_LOC_CD(+)
+        AND   RS2.EZCANCELFLAG(+)        = '0'
+        AND   RS2.GLBL_CMPY_CD           = STC.GLBL_CMPY_CD(+)
+        AND   RS2.RTL_WH_CD              = STC.SHIP_TO_CUST_CD(+)
+        AND   STC.EZCANCELFLAG(+)        = '0'
+        AND   A.GLBL_CMPY_CD             = RS1.GLBL_CMPY_CD
+        AND   A.INVTY_LOC_CD             = RS1.INVTY_LOC_CD
+        AND   RS1.EZCANCELFLAG           = '0'
+        <isEqual property="shpgFrceFlg" compareValue="N">
+        AND   A.GLBL_CMPY_CD             = B.GLBL_CMPY_CD
+        AND   A.SHPG_PLN_NUM             = B.SHPG_PLN_NUM
+        AND   B.EZCANCELFLAG             = '0'
+        AND   B.GLBL_CMPY_CD             = C.GLBL_CMPY_CD
+        AND   B.RTE_GRP_NUM              = C.RTE_GRP_NUM
+        AND   C.EZCANCELFLAG             = '0'
+        </isEqual>
+        AND   A.GLBL_CMPY_CD             = IOD.GLBL_CMPY_CD(+)
+        AND   A.TRX_HDR_NUM              = IOD.INVTY_ORD_NUM(+)
+        AND   A.TRX_LINE_NUM             = IOD.INVTY_ORD_LINE_NUM(+)
+        AND   IOD.EZCANCELFLAG(+)        = '0'
+        AND   IOD.GLBL_CMPY_CD           = PR.GLBL_CMPY_CD(+)
+        AND   IOD.PRCH_REQ_NUM           = PR.PRCH_REQ_NUM(+)
+        AND   PR.EZCANCELFLAG(+)         = '0'
+        AND   A.GLBL_CMPY_CD             = V.GLBL_CMPY_CD(+)
+        AND   A.SHIP_TO_CUST_CD          = V.VND_CD(+)
+        AND   V.EZCANCELFLAG(+)          = '0'
+        AND   V.GLBL_CMPY_CD             = PVV.GLBL_CMPY_CD(+)
+        AND   V.VND_CD                   = PVV.VND_CD(+)
+        AND   PVV.EZCANCELFLAG(+)        = '0'
+        <!-- START 2018/04/02 T.Wada [QC#54989,ADD] -->
+        AND A.GLBL_CMPY_CD               = BTC.GLBL_CMPY_CD(+)
+        AND A.BILL_TO_CUST_CD            = BTC.BILL_TO_CUST_CD(+)
+        AND BTC.EZCANCELFLAG(+)          = '0'
+        <!-- END 2018/04/02 T.Wada [QC#54989,ADD] -->
+    </statement>
+
+    <statement id="getBaseSoHdrInvtyRs" parameterClass="Map">
+        SELECT
+              A.TRX_SRC_TP_CD
+            , A.TRX_HDR_NUM
+            , A.ORIG_SHPG_SVC_LVL_CD
+            , A.INVTY_LOC_CD
+            , A.SHIP_TO_CUST_CD
+            , NVL(A.RQST_CARR_CD, A.CARR_CD) AS CARR_CD
+            , NVL(STC1.SELL_TO_CUST_CD, A.SELL_TO_CUST_CD)       AS SELL_TO_CUST_CD
+            <!-- START 2018/05/07 S.Katsuma [QC#25389,MOD] -->
+            , CASE WHEN A.DROP_SHIP_FLG = 'Y'
+              THEN
+                  A.SHIP_TO_CUST_CD
+              ELSE
+                  NVL(B.WH_CD, B2.RTL_WH_CD)
+              END AS WH_WH_CD
+            , CASE WHEN A.DROP_SHIP_FLG = 'Y'
+              THEN
+                  A.SHIP_TO_LOC_NM
+              ELSE
+                  CASE WHEN B.WH_CD IS NOT NULL THEN B.LOC_NM             ELSE B2.SHIP_TO_LOC_NM     END 
+              END AS WH_LOC_NM
+            , CASE WHEN A.DROP_SHIP_FLG = 'Y'
+              THEN
+                  A.SHIP_TO_ADDL_LOC_NM
+              ELSE
+                  CASE WHEN B.WH_CD IS NOT NULL THEN B.ADDL_LOC_NM        ELSE B2.ADDL_LOC_NM        END
+              END AS WH_ADDL_LOC_NM
+            , CASE WHEN A.DROP_SHIP_FLG = 'Y'
+              THEN
+                  A.SHIP_TO_FIRST_LINE_ADDR
+              ELSE
+                  CASE WHEN B.WH_CD IS NOT NULL THEN B.FIRST_LINE_ADDR    ELSE B2.FIRST_LINE_ADDR    END
+              END AS WH_FIRST_LINE_ADDR
+            , CASE WHEN A.DROP_SHIP_FLG = 'Y'
+              THEN
+                  A.SHIP_TO_SCD_LINE_ADDR
+              ELSE
+                  CASE WHEN B.WH_CD IS NOT NULL THEN B.SCD_LINE_ADDR      ELSE B2.SCD_LINE_ADDR      END
+              END AS WH_SCD_LINE_ADDR
+            , CASE WHEN A.DROP_SHIP_FLG = 'Y'
+              THEN
+                  A.SHIP_TO_THIRD_LINE_ADDR
+              ELSE
+                  CASE WHEN B.WH_CD IS NOT NULL THEN B.THIRD_LINE_ADDR    ELSE B2.THIRD_LINE_ADDR    END
+              END AS WH_THIRD_LINE_ADDR
+            , CASE WHEN A.DROP_SHIP_FLG = 'Y'
+              THEN
+                  A.SHIP_TO_FRTH_LINE_ADDR
+              ELSE
+                  CASE WHEN B.WH_CD IS NOT NULL THEN B.FRTH_LINE_ADDR     ELSE B2.FRTH_LINE_ADDR     END
+              END AS WH_FRTH_LINE_ADDR
+            , CASE WHEN A.DROP_SHIP_FLG = 'Y'
+              THEN
+                  A.SHIP_TO_FIRST_REF_CMNT_TXT
+              ELSE
+                  CASE WHEN B.WH_CD IS NOT NULL THEN B.FIRST_REF_CMNT_TXT ELSE B2.FIRST_REF_CMNT_TXT END
+              END AS WH_FIRST_REF_CMNT_TXT
+            , CASE WHEN A.DROP_SHIP_FLG = 'Y'
+              THEN
+                  A.SHIP_TO_SCD_REF_CMNT_TXT
+              ELSE
+                  CASE WHEN B.WH_CD IS NOT NULL THEN B.SCD_REF_CMNT_TXT   ELSE B2.SCD_REF_CMNT_TXT   END
+              END AS WH_SCD_REF_CMNT_TXT
+            , CASE WHEN A.DROP_SHIP_FLG = 'Y'
+              THEN
+                  A.SHIP_TO_CTRY_CD
+              ELSE
+                  CASE WHEN B.WH_CD IS NOT NULL THEN B.CTRY_CD            ELSE B2.CTRY_CD            END
+              END AS WH_CTRY_CD
+            , CASE WHEN A.DROP_SHIP_FLG = 'Y'
+              THEN
+                  A.SHIP_TO_ST_CD
+              ELSE
+                  CASE WHEN B.WH_CD IS NOT NULL THEN B.ST_CD              ELSE B2.ST_CD              END
+              END AS WH_ST_CD
+            , CASE WHEN A.DROP_SHIP_FLG = 'Y'
+              THEN
+                  A.SHIP_TO_CTY_ADDR
+              ELSE
+                  CASE WHEN B.WH_CD IS NOT NULL THEN B.CTY_ADDR           ELSE B2.CTY_ADDR           END
+              END AS WH_CTY_ADDR
+            , CASE WHEN A.DROP_SHIP_FLG = 'Y'
+              THEN
+                  NULL
+              ELSE
+                  CASE WHEN B.WH_CD IS NOT NULL THEN B.TEL_NUM            ELSE B2.TEL_NUM            END
+              END AS WH_TEL_NUM
+            , CASE WHEN A.DROP_SHIP_FLG = 'Y'
+              THEN
+                  A.SHIP_TO_POST_CD
+              ELSE
+                  CASE WHEN B.WH_CD IS NOT NULL THEN B.POST_CD            ELSE B2.POST_CD            END
+              END AS WH_POST_CD
+            , RS1.RTL_WH_CD
+            , STC1.SELL_TO_CUST_CD       AS INVTY_TO_SELL_TO_CUST_CD
+            , RS2.RTL_WH_CD              AS RS2_RTL_WH_CD
+            , STC2.SELL_TO_CUST_CD       AS SHIP_TO_SELL_TO_CUST_CD
+            , A.DROP_SHIP_FLG
+            <!-- END 2018/05/07 S.Katsuma [QC#25389,MOD] -->
+        FROM
+              SHPG_PLN        A
+            , WH              B
+            , RTL_WH          B2
+            , RTL_SWH         RS1
+            , RTL_SWH         RS2
+            , SHIP_TO_CUST    STC1
+            , SHIP_TO_CUST    STC2
+        WHERE
+              A.GLBL_CMPY_CD       = #glblCmpyCd#
+        AND   A.SHPG_PLN_NUM       = #shpgPlnNum#
+        AND   A.TRX_SRC_TP_CD      = #trxSrcTpCd#
+        AND   A.EZCANCELFLAG       = '0'
+        AND   A.GLBL_CMPY_CD       = B.GLBL_CMPY_CD(+)
+        AND   A.INVTY_LOC_CD       = B.WH_CD(+)
+        AND   B.EZCANCELFLAG(+)    = '0'
+        AND   A.GLBL_CMPY_CD       = RS1.GLBL_CMPY_CD
+        AND   A.INVTY_LOC_CD       = RS1.INVTY_LOC_CD
+        AND   RS1.EZCANCELFLAG     = '0'
+        AND   RS1.GLBL_CMPY_CD     = STC1.GLBL_CMPY_CD
+        AND   RS1.RTL_WH_CD        = STC1.SHIP_TO_CUST_CD
+        AND   STC1.EZCANCELFLAG    = '0'
+        AND   A.GLBL_CMPY_CD       = RS2.GLBL_CMPY_CD(+)
+        AND   A.INVTY_LOC_CD       = RS2.INVTY_LOC_CD(+)
+        AND   RS2.EZCANCELFLAG(+)  = '0'
+        AND   RS2.GLBL_CMPY_CD     = B2.GLBL_CMPY_CD(+)
+        AND   RS2.RTL_WH_CD        = B2.RTL_WH_CD(+)
+        AND   B2.EZCANCELFLAG(+)   = '0'
+        AND   RS2.GLBL_CMPY_CD     = STC2.GLBL_CMPY_CD(+)
+        AND   RS2.RTL_WH_CD        = STC2.SHIP_TO_CUST_CD(+)
+        AND   STC2.EZCANCELFLAG(+) = '0'
+    </statement>
+
+    <statement id="getBaseSoHdrWrkRs" parameterClass="Map">
+        SELECT
+              A.TRX_SRC_TP_CD
+            , A.TRX_HDR_NUM
+            , A.SHIP_TO_CUST_CD
+            , NVL(A.RQST_CARR_CD, A.CARR_CD) AS CARR_CD
+            , NVL(STC.SELL_TO_CUST_CD , A.SELL_TO_CUST_CD) AS SELL_TO_CUST_CD
+            , A.ORIG_SHPG_SVC_LVL_CD
+            , A.INVTY_LOC_CD
+            , B.VND_CD                   AS VND_VND_CD
+            , PVV.PRNT_VND_NM            AS VND_LOC_NM
+            , B.ADDL_LOC_NM              AS VND_ADDL_LOC_NM
+            , B.FIRST_LINE_ADDR          AS VND_FIRST_LINE_ADDR
+            , B.SCD_LINE_ADDR            AS VND_SCD_LINE_ADDR
+            , B.THIRD_LINE_ADDR          AS VND_THIRD_LINE_ADDR
+            , B.FRTH_LINE_ADDR           AS VND_FRTH_LINE_ADDR
+            , B.FIRST_REF_CMNT_TXT       AS VND_FIRST_REF_CMNT_TXT
+            , B.SCD_REF_CMNT_TXT         AS VND_SCD_REF_CMNT_TXT
+            , B.CTRY_CD                  AS VND_CTRY_CD
+            , B.ST_CD                    AS VND_ST_CD
+            , B.CTY_ADDR                 AS VND_CTY_ADDR
+            , B.TEL_NUM                  AS VND_TEL_NUM
+            , B.POST_CD                  AS VND_POST_CD
+            , STC.SELL_TO_CUST_CD        AS SHIP_TO_SELL_TO_CUST_CD
+            , RS2.RTL_WH_CD              AS RS2_RTL_WH_CD
+            , RS1.RTL_WH_CD
+        FROM  SHPG_PLN A
+            , VND      B
+            , RTL_SWH  RS1
+            , RTL_SWH  RS2
+            , SHIP_TO_CUST  STC
+            , PO_VND_V      PVV
+        WHERE A.GLBL_CMPY_CD        = B.GLBL_CMPY_CD (+)
+        AND   A.SHIP_TO_CUST_CD     = B.VND_CD       (+)
+        AND   B.GLBL_CMPY_CD        = PVV.GLBL_CMPY_CD(+)
+        AND   B.VND_CD              = PVV.VND_CD(+)
+        AND   A.GLBL_CMPY_CD        = RS1.GLBL_CMPY_CD
+        AND   A.INVTY_LOC_CD        = RS1.INVTY_LOC_CD
+        AND   A.GLBL_CMPY_CD        = RS2.GLBL_CMPY_CD (+)
+        AND   A.SHIP_TO_CUST_CD     = RS2.INVTY_LOC_CD (+)
+        AND   RS2.GLBL_CMPY_CD      = STC.GLBL_CMPY_CD (+)
+        AND   RS2.RTL_WH_CD         = STC.SHIP_TO_CUST_CD (+)
+        AND   A.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND   A.SHPG_PLN_NUM        = #shpgPlnNum#
+        AND   A.TRX_SRC_TP_CD       = #trxSrcTpCd#
+        AND   A.EZCANCELFLAG        = '0'
+        AND   B.EZCANCELFLAG    (+) = '0'
+        AND   RS1.EZCANCELFLAG      = '0'
+        AND   RS2.EZCANCELFLAG  (+) = '0'
+        AND   STC.EZCANCELFLAG  (+) = '0'
+        AND   PVV.EZCANCELFLAG  (+) = '0'
+    </statement>
+
+    <statement id="getBaseSoHdrExptRs" parameterClass="Map">
+        SELECT
+              SP.SELL_TO_CUST_CD
+            , SP.BILL_TO_CUST_CD
+            , NVL(SP.RQST_CARR_CD, SP.CARR_CD) AS CARR_CD
+            , SP.SHIP_TO_CUST_CD
+            , SP.INVTY_LOC_CD
+            , SP.TRX_HDR_NUM
+            , C.CUST_ISS_PO_NUM
+            , SP.REQ_FRT_CHRG_TO_CD
+            , SP.REQ_FRT_CHRG_METH_CD
+            , SP.ORIG_SHPG_SVC_LVL_CD
+            , SP.RSD_DT
+            , SP.DROP_SHIP_FLG
+            , SP.SHIP_TO_LOC_NM
+            , SP.SHIP_TO_ADDL_LOC_NM
+            , SP.SHIP_TO_FIRST_LINE_ADDR
+            , SP.SHIP_TO_SCD_LINE_ADDR
+            , SP.SHIP_TO_THIRD_LINE_ADDR
+            , SP.SHIP_TO_FRTH_LINE_ADDR
+            , SP.SHIP_TO_FIRST_REF_CMNT_TXT
+            , SP.SHIP_TO_SCD_REF_CMNT_TXT
+            , SP.SHIP_TO_CTY_ADDR
+            , SP.SHIP_TO_ST_CD
+            , SP.SHIP_TO_POST_CD
+            , SP.SHIP_TO_CTRY_CD
+            , SP.RQST_CARR_CD
+            , SP.CARR_ACCT_NUM
+            , ( SELECT    SUBSTR (EPN.EDI_PO_NOTE_TXT, 4, 5)
+                FROM      EDI_PO_NOTE EPN
+                WHERE     EPN.EDI_PO_NOTE_PK = (
+                                            SELECT MAX(EPN.EDI_PO_NOTE_PK) 
+                                            FROM   EDI_PO_NOTE EPN
+                                            WHERE  EPN.EDI_PO_NOTE_TXT LIKE 'DP%'
+                                            AND    EPN.ANSI_SEG_CD     = 'REF'
+                                            AND    EPN.NOTE_LVL_CD     = 'H'
+                                            AND    EPN.CUST_EDI_PO_NUM = C.CUST_ISS_PO_NUM
+                                            AND    EPN.GLBL_CMPY_CD    = C.GLBL_CMPY_CD
+                                            AND    EPN.EZCANCELFLAG    = '0'
+                                            GROUP BY EPN.CUST_EDI_PO_NUM
+                                            )
+               ) AS SO_DEPT_NUM
+            , SP.TRX_SRC_TP_CD
+            , SH.SHIP_TO_CUST_CD            AS SHIP_SHIP_TO_CUST_CD
+            , SH.LOC_NM                     AS SHIP_LOC_NM
+            , SH.ADDL_LOC_NM                AS SHIP_ADDL_LOC_NM
+            , SH.FIRST_LINE_ADDR            AS SHIP_FIRST_LINE_ADDR
+            , SH.SCD_LINE_ADDR              AS SHIP_SCD_LINE_ADDR
+            , SH.THIRD_LINE_ADDR            AS SHIP_THIRD_LINE_ADDR
+            , SH.FRTH_LINE_ADDR             AS SHIP_FRTH_LINE_ADDR
+            , SH.FIRST_REF_CMNT_TXT         AS SHIP_FIRST_REF_CMNT_TXT
+            , SH.SCD_REF_CMNT_TXT           AS SHIP_SCD_REF_CMNT_TXT
+            , SH.CTRY_CD                    AS SHIP_CTRY_CD
+            , SH.ST_CD                      AS SHIP_ST_CD
+            , SH.CTY_ADDR                   AS SHIP_CTY_ADDR
+            , SH.TEL_NUM                    AS SHIP_TEL_NUM
+            , SH.POST_CD                    AS SHIP_POST_CD
+            , SE.SELL_TO_CUST_CD            AS SELL_SELL_TO_CUST_CD
+            , SE.LOC_NM                     AS SELL_LOC_NM
+            , SE.ADDL_LOC_NM                AS SELL_ADDL_LOC_NM
+            , SE.FIRST_LINE_ADDR            AS SELL_FIRST_LINE_ADDR
+            , SE.SCD_LINE_ADDR              AS SELL_SCD_LINE_ADDR
+            , SE.THIRD_LINE_ADDR            AS SELL_THIRD_LINE_ADDR
+            , SE.FRTH_LINE_ADDR             AS SELL_FRTH_LINE_ADDR
+            , SE.FIRST_REF_CMNT_TXT         AS SELL_FIRST_REF_CMNT_TXT
+            , SE.SCD_REF_CMNT_TXT           AS SELL_SCD_REF_CMNT_TXT
+            , SE.CTRY_CD                    AS SELL_CTRY_CD
+            , SE.ST_CD                      AS SELL_ST_CD
+            , SE.CTY_ADDR                   AS SELL_CTY_ADDR
+            , SE.TEL_NUM                    AS SELL_TEL_NUM
+            , SE.POST_CD                    AS SELL_POST_CD
+            , BT.BILL_TO_CUST_CD            AS BILL_BILL_TO_CUST_CD
+            , BT.ASN_REQ_FLG
+            , BT.PRINT_SCC_LB_FLG
+            , BT.PRINT_UCC_LB_FLG
+            , BT.MIX_PLT_ALLW_FLG
+            , BT.NON_ASN_UCC_LB_FLG
+            , BT.LOC_NM                     AS BILL_LOC_NM
+            , BT.ADDL_LOC_NM                AS BILL_ADDL_LOC_NM
+            , BT.FIRST_LINE_ADDR            AS BILL_FIRST_LINE_ADDR
+            , BT.SCD_LINE_ADDR              AS BILL_SCD_LINE_ADDR
+            , BT.THIRD_LINE_ADDR            AS BILL_THIRD_LINE_ADDR
+            , BT.FRTH_LINE_ADDR             AS BILL_FRTH_LINE_ADDR
+            , BT.FIRST_REF_CMNT_TXT         AS BILL_FIRST_REF_CMNT_TXT
+            , BT.SCD_REF_CMNT_TXT           AS BILL_SCD_REF_CMNT_TXT
+            , BT.CTRY_CD                    AS BILL_CTRY_CD
+            , BT.ST_CD                      AS BILL_ST_CD
+            , BT.CTY_ADDR                   AS BILL_CTY_ADDR
+            , BT.TEL_NUM                    AS BILL_TEL_NUM
+            , BT.POST_CD                    AS BILL_POST_CD
+            , NULL                          AS RTRN_LB_CD
+            , NULL                          AS RTRN_SELL_TO_CUST_CD
+            , NULL                          AS RTRN_LOC_NM
+            , NULL                          AS RTRN_ADDL_LOC_NM
+            , NULL                          AS RTRN_FIRST_LINE_ADDR
+            , NULL                          AS RTRN_SCD_LINE_ADDR
+            , NULL                          AS RTRN_THIRD_LINE_ADDR
+            , NULL                          AS RTRN_FRTH_LINE_ADDR
+            , NULL                          AS RTRN_FIRST_REF_CMNT_TXT
+            , NULL                          AS RTRN_SCD_REF_CMNT_TXT
+            , NULL                          AS RTRN_CTRY_CD
+            , NULL                          AS RTRN_ST_CD
+            , NULL                          AS RTRN_CTY_ADDR
+            , NULL                          AS RTRN_TEL_NUM
+            , NULL                          AS RTRN_POST_CD
+            , ASH.SHIP_TO_CUST_CD           AS ASN_SHIP_TO_CUST_CD
+            , C.SELL_TO_FIRST_REF_CMNT_TXT  AS SELL_TO_FIRST_REF_CMNT_TXT
+            , C.SELL_TO_SCD_REF_CMNT_TXT    AS SELL_TO_SCD_REF_CMNT_TXT
+            , C.CPO_SRC_TP_CD
+            <isEqual property="shpgFrceFlg" compareValue="N">
+                , RGR.RTE_GRP_NUM
+                , RGR.PSD_DT
+            </isEqual>
+            , RS.RTL_WH_CD
+        FROM  SHPG_PLN          SP
+            , CPO               C
+            , SHIP_TO_CUST      SH
+            , SELL_TO_CUST      SE
+            , BILL_TO_CUST      BT
+            , ASN_SHIP_TO_CUST  ASH
+            , RTL_SWH           RS
+            <isEqual property="shpgFrceFlg" compareValue="N">
+                , RTE_GRP_DTL      RGRD
+                , RTE_GRP          RGR
+            </isEqual>
+        WHERE SP.GLBL_CMPY_CD            = C.GLBL_CMPY_CD
+        AND   SP.TRX_HDR_NUM             = C.CPO_ORD_NUM
+        AND   SP.GLBL_CMPY_CD            = RS.GLBL_CMPY_CD
+        AND   SP.INVTY_LOC_CD            = RS.INVTY_LOC_CD
+        <isEqual property="shpgFrceFlg" compareValue="N">
+            AND   SP.GLBL_CMPY_CD            = RGRD.GLBL_CMPY_CD
+            AND   SP.SHPG_PLN_NUM            = RGRD.SHPG_PLN_NUM
+            AND   RGRD.GLBL_CMPY_CD          = RGR.GLBL_CMPY_CD
+            AND   RGRD.RTE_GRP_NUM           = RGR.RTE_GRP_NUM
+        </isEqual>
+        AND   SP.GLBL_CMPY_CD            = SH.GLBL_CMPY_CD    (+)
+        AND   SP.SHIP_TO_CUST_CD         = SH.SHIP_TO_CUST_CD (+)
+        AND   SP.GLBL_CMPY_CD            = SE.GLBL_CMPY_CD    (+)
+        AND   SP.SELL_TO_CUST_CD         = SE.SELL_TO_CUST_CD (+)
+        AND   SP.GLBL_CMPY_CD            = BT.GLBL_CMPY_CD    (+)
+        AND   SP.BILL_TO_CUST_CD         = BT.BILL_TO_CUST_CD (+)
+        AND   SP.GLBL_CMPY_CD            = ASH.GLBL_CMPY_CD    (+)
+        AND   SP.SHIP_TO_CUST_CD         = ASH.SHIP_TO_CUST_CD (+)
+        AND   SP.GLBL_CMPY_CD            = #glblCmpyCd#
+        AND   SP.SHPG_PLN_NUM            = #shpgPlnNum#
+        AND   SP.TRX_SRC_TP_CD           = #trxSrcTpCd#
+        AND   SP.EZCANCELFLAG            = '0'
+        AND   C.EZCANCELFLAG             = '0'
+        AND   RS.EZCANCELFLAG            = '0'
+        <isEqual property="shpgFrceFlg" compareValue="N">
+            AND   RGRD.EZCANCELFLAG          = '0'
+            AND   RGR.EZCANCELFLAG           = '0'
+        </isEqual>
+        AND   SH.EZCANCELFLAG        (+) = '0'
+        AND   SE.EZCANCELFLAG        (+) = '0'
+        AND   BT.EZCANCELFLAG        (+) = '0'
+        AND   ASH.EZCANCELFLAG       (+) = '0'
+    </statement>
+
+    <statement id="getBaseSoHdrVndRtrnRs" parameterClass="Map">
+        SELECT
+              SP.SELL_TO_CUST_CD
+            , SP.BILL_TO_CUST_CD
+            , NVL(SP.RQST_CARR_CD, SP.CARR_CD) AS CARR_CD
+            , SP.SHIP_TO_CUST_CD
+            , SP.INVTY_LOC_CD
+            , SP.TRX_HDR_NUM
+            , SP.REQ_FRT_CHRG_TO_CD
+            , SP.REQ_FRT_CHRG_METH_CD
+            , SP.ORIG_SHPG_SVC_LVL_CD
+            , SP.RSD_DT
+            , SP.DROP_SHIP_FLG
+            , SP.SHIP_TO_LOC_NM
+            , SP.SHIP_TO_ADDL_LOC_NM
+            , SP.SHIP_TO_FIRST_LINE_ADDR
+            , SP.SHIP_TO_SCD_LINE_ADDR
+            , SP.SHIP_TO_THIRD_LINE_ADDR
+            , SP.SHIP_TO_FRTH_LINE_ADDR
+            , SP.SHIP_TO_FIRST_REF_CMNT_TXT
+            , SP.SHIP_TO_SCD_REF_CMNT_TXT
+            , SP.SHIP_TO_CTY_ADDR
+            , SP.SHIP_TO_ST_CD
+            , SP.SHIP_TO_POST_CD
+            , SP.SHIP_TO_CTRY_CD
+            , SP.RQST_CARR_CD
+            , SP.CARR_ACCT_NUM
+            , SP.TRX_SRC_TP_CD
+            , VR.VND_RTRN_NUM
+            , V.VND_CD                      AS VND_VND_CD
+            , PVV.PRNT_VND_NM               AS VND_LOC_NM
+            , V.ADDL_LOC_NM                 AS VND_ADDL_LOC_NM
+            , V.FIRST_LINE_ADDR             AS VND_FIRST_LINE_ADDR
+            , V.SCD_LINE_ADDR               AS VND_SCD_LINE_ADDR
+            , V.THIRD_LINE_ADDR             AS VND_THIRD_LINE_ADDR
+            , V.FRTH_LINE_ADDR              AS VND_FRTH_LINE_ADDR
+            , V.FIRST_REF_CMNT_TXT          AS VND_FIRST_REF_CMNT_TXT
+            , V.SCD_REF_CMNT_TXT            AS VND_SCD_REF_CMNT_TXT
+            , V.CTRY_CD                     AS VND_CTRY_CD
+            , V.ST_CD                       AS VND_ST_CD
+            , V.CTY_ADDR                    AS VND_CTY_ADDR
+            , V.TEL_NUM                     AS VND_TEL_NUM
+            , V.POST_CD                     AS VND_POST_CD
+            , BT.BILL_TO_CUST_CD            AS BILL_BILL_TO_CUST_CD
+            , BT.ASN_REQ_FLG
+            , BT.PRINT_SCC_LB_FLG
+            , BT.PRINT_UCC_LB_FLG
+            , BT.MIX_PLT_ALLW_FLG
+            , BT.NON_ASN_UCC_LB_FLG
+            , BT.LOC_NM                     AS BILL_LOC_NM
+            , BT.ADDL_LOC_NM                AS BILL_ADDL_LOC_NM
+            , BT.FIRST_LINE_ADDR            AS BILL_FIRST_LINE_ADDR
+            , BT.SCD_LINE_ADDR              AS BILL_SCD_LINE_ADDR
+            , BT.THIRD_LINE_ADDR            AS BILL_THIRD_LINE_ADDR
+            , BT.FRTH_LINE_ADDR             AS BILL_FRTH_LINE_ADDR
+            , BT.FIRST_REF_CMNT_TXT         AS BILL_FIRST_REF_CMNT_TXT
+            , BT.SCD_REF_CMNT_TXT           AS BILL_SCD_REF_CMNT_TXT
+            , BT.CTRY_CD                    AS BILL_CTRY_CD
+            , BT.ST_CD                      AS BILL_ST_CD
+            , BT.CTY_ADDR                   AS BILL_CTY_ADDR
+            , BT.TEL_NUM                    AS BILL_TEL_NUM
+            , BT.POST_CD                    AS BILL_POST_CD
+            , RS.RTL_WH_CD
+        FROM  SHPG_PLN SP
+            , VND_RTRN VR
+            , VND V
+            , BILL_TO_CUST BT
+            , RTL_SWH      RS
+            , PO_VND_V     PVV
+        WHERE SP.GLBL_CMPY_CD            = VR.GLBL_CMPY_CD    (+)
+        AND   SP.TRX_HDR_NUM             = VR.VND_RTRN_NUM    (+)
+        AND   SP.GLBL_CMPY_CD            = RS.GLBL_CMPY_CD
+        AND   SP.INVTY_LOC_CD            = RS.INVTY_LOC_CD
+        AND   SP.GLBL_CMPY_CD            = V.GLBL_CMPY_CD     (+)
+        AND   SP.SHIP_TO_CUST_CD         = V.VND_CD           (+)
+        AND   V.GLBL_CMPY_CD             = PVV.GLBL_CMPY_CD(+)
+        AND   V.VND_CD                   = PVV.VND_CD(+)
+        AND   PVV.EZCANCELFLAG(+)        = '0'
+        AND   SP.GLBL_CMPY_CD            = BT.GLBL_CMPY_CD    (+)
+        AND   SP.BILL_TO_CUST_CD         = BT.BILL_TO_CUST_CD (+)
+        AND   SP.GLBL_CMPY_CD            = #glblCmpyCd#
+        AND   SP.SHPG_PLN_NUM            = #shpgPlnNum#
+        AND   SP.TRX_SRC_TP_CD           = #trxSrcTpCd#
+        AND   SP.EZCANCELFLAG            = '0'
+        AND   VR.EZCANCELFLAG           (+) = '0'
+        AND   RS.EZCANCELFLAG            = '0'
+        AND   V.EZCANCELFLAG            (+) = '0'
+        AND   BT.EZCANCELFLAG           (+) = '0'
+    </statement>
+
+    <statement id="getOrigShpgSvcLvlCdRs" parameterClass="Map">
+        SELECT
+              A.ORIG_SHPG_SVC_LVL_CD
+        FROM  SHPG_PLN A
+        WHERE A.GLBL_CMPY_CD  = #glblCmpyCd#
+        AND   A.SHPG_PLN_NUM  = #shpgPlnNum#
+        AND   A.TRX_SRC_TP_CD = #trxSrcTpCd#
+        AND   A.EZCANCELFLAG  = '0'
+    </statement>
+
+    <statement id="getBaseSoDtlCpoRs" parameterClass="Map">
+        SELECT
+              A.SHPG_PLN_NUM
+            , A.TRX_HDR_NUM
+            , A.TRX_LINE_NUM
+            , A.TRX_LINE_SUB_NUM
+            , A.SP_FUNC_NET_UNIT_PRC_AMT
+            , A.AVAL_SO_QTY
+            , A.MDSE_CD
+            , A.STK_STS_CD
+            , A.SET_MDSE_CD
+            , A.SYS_SRC_CD
+            , B.IN_POUND_WT
+            , B.IN_INCH_VOL
+            , C.IN_EACH_QTY
+            , D.SHPG_SER_TAKE_FLG
+            , E.MDSE_NM                  AS SET_MDSE_NM
+            , F.CPO_SRC_TP_CD
+            , G.ORD_QTY
+            , G.CUST_MDSE_CD
+            , G.CPO_ORD_TP_CD
+        FROM  SHPG_PLN       A
+            , MDSE_STORE_PKG B
+            , MDSE_STORE_PKG C
+            , MDSE           D
+            , MDSE           E
+            , CPO            F
+            , CPO_DTL        G
+        WHERE A.GLBL_CMPY_CD            = B.GLBL_CMPY_CD         (+)
+        AND   A.MDSE_CD                 = B.MDSE_CD              (+)
+        AND   A.GLBL_CMPY_CD            = C.GLBL_CMPY_CD         (+)
+        AND   A.MDSE_CD                 = C.MDSE_CD              (+)
+        AND   A.GLBL_CMPY_CD            = D.GLBL_CMPY_CD
+        AND   A.MDSE_CD                 = D.MDSE_CD
+        AND   A.GLBL_CMPY_CD            = E.GLBL_CMPY_CD         (+)
+        AND   A.SET_MDSE_CD             = E.MDSE_CD              (+)
+        AND   A.GLBL_CMPY_CD            = F.GLBL_CMPY_CD
+        AND   A.TRX_HDR_NUM             = F.CPO_ORD_NUM
+        AND   A.GLBL_CMPY_CD            = G.GLBL_CMPY_CD
+        AND   A.TRX_HDR_NUM             = G.CPO_ORD_NUM
+        AND   A.TRX_LINE_NUM            = G.CPO_DTL_LINE_NUM
+        AND   A.TRX_LINE_SUB_NUM        = G.CPO_DTL_LINE_SUB_NUM
+        AND   A.GLBL_CMPY_CD            = #glblCmpyCd#
+        AND   A.SHPG_PLN_NUM            = #shpgPlnNum#
+        AND   A.TRX_SRC_TP_CD           = #trxSrcTpCd#
+        AND   A.EZCANCELFLAG            = '0'
+        AND   B.PKG_UOM_CD          (+) = #pkgUomCdEa#
+        AND   B.DMN_PKG_APVL_STS_CD (+) = #dmnPkgApvlStsCd#
+        AND   B.EZCANCELFLAG        (+) = '0'
+        AND   C.PKG_UOM_CD          (+) = #pkgUomCdCa#
+        AND   C.DMN_PKG_APVL_STS_CD (+) = #dmnPkgApvlStsCd#
+        AND   C.EZCANCELFLAG        (+) = '0'
+        AND   D.EZCANCELFLAG            = '0'
+        AND   E.EZCANCELFLAG        (+) = '0'
+        AND   F.EZCANCELFLAG            = '0'
+        AND   G.EZCANCELFLAG            = '0'
+    </statement>
+
+    <statement id="getBaseSoDtlStkStsChngRs" parameterClass="Map">
+        SELECT
+              A.SHPG_PLN_NUM
+            , A.TRX_HDR_NUM
+            , A.TRX_LINE_NUM
+            , A.TRX_LINE_SUB_NUM
+            , A.SP_FUNC_NET_UNIT_PRC_AMT
+            , A.AVAL_SO_QTY
+            , A.MDSE_CD
+            , A.SYS_SRC_CD
+            , B.IN_POUND_WT
+            , B.IN_INCH_VOL
+            , C.IN_EACH_QTY
+            , D.SHPG_SER_TAKE_FLG
+            , E.STK_STS_CD               AS FROM_STK_STS_CD
+            , E.TO_STK_STS_CD
+        FROM  SHPG_PLN       A
+            , MDSE_STORE_PKG B
+            , MDSE_STORE_PKG C
+            , MDSE           D
+            , INVTY_ORD_DTL  E
+        WHERE A.GLBL_CMPY_CD            = B.GLBL_CMPY_CD       (+)
+        AND   A.MDSE_CD                 = B.MDSE_CD            (+)
+        AND   A.GLBL_CMPY_CD            = C.GLBL_CMPY_CD       (+)
+        AND   A.MDSE_CD                 = C.MDSE_CD            (+)
+        AND   A.GLBL_CMPY_CD            = D.GLBL_CMPY_CD
+        AND   A.MDSE_CD                 = D.MDSE_CD
+        AND   A.GLBL_CMPY_CD            = E.GLBL_CMPY_CD
+        AND   A.TRX_HDR_NUM             = E.INVTY_ORD_NUM
+        AND   A.TRX_LINE_NUM            = E.INVTY_ORD_LINE_NUM
+        AND   A.GLBL_CMPY_CD            = #glblCmpyCd#
+        AND   A.SHPG_PLN_NUM            = #shpgPlnNum#
+        AND   A.TRX_SRC_TP_CD           = #trxSrcTpCd#
+        AND   A.EZCANCELFLAG            = '0'
+        AND   B.PKG_UOM_CD          (+) = #pkgUomCdEa#
+        AND   B.DMN_PKG_APVL_STS_CD (+) = #dmnPkgApvlStsCd#
+        AND   B.EZCANCELFLAG        (+) = '0'
+        AND   C.PKG_UOM_CD          (+) = #pkgUomCdCa#
+        AND   C.DMN_PKG_APVL_STS_CD (+) = #dmnPkgApvlStsCd#
+        AND   C.EZCANCELFLAG        (+) = '0'
+        AND   D.EZCANCELFLAG            = '0'
+        AND   E.EZCANCELFLAG            = '0'
+    </statement>
+
+    <statement id="getBaseSoDtlInvtyWrkRs" parameterClass="Map">
+        SELECT
+              A.SHPG_PLN_NUM
+            , A.TRX_HDR_NUM
+            , A.TRX_LINE_NUM
+            , A.TRX_LINE_SUB_NUM
+            , A.SP_FUNC_NET_UNIT_PRC_AMT
+            , A.AVAL_SO_QTY
+            , A.MDSE_CD
+            , A.STK_STS_CD
+            , A.SYS_SRC_CD
+            , B.IN_POUND_WT
+            , B.IN_INCH_VOL
+            , C.IN_EACH_QTY
+            , D.SHPG_SER_TAKE_FLG
+        FROM  SHPG_PLN       A
+            , MDSE_STORE_PKG B
+            , MDSE_STORE_PKG C
+            , MDSE           D
+        WHERE A.GLBL_CMPY_CD            = B.GLBL_CMPY_CD (+)
+        AND   A.MDSE_CD                 = B.MDSE_CD      (+)
+        AND   A.GLBL_CMPY_CD            = C.GLBL_CMPY_CD (+)
+        AND   A.MDSE_CD                 = C.MDSE_CD      (+)
+        AND   A.GLBL_CMPY_CD            = D.GLBL_CMPY_CD
+        AND   A.MDSE_CD                 = D.MDSE_CD
+        AND   A.GLBL_CMPY_CD            = #glblCmpyCd#
+        AND   A.SHPG_PLN_NUM            = #shpgPlnNum#
+        AND   A.TRX_SRC_TP_CD           = #trxSrcTpCd#
+        AND   A.EZCANCELFLAG            = '0'
+        AND   B.PKG_UOM_CD          (+) = #pkgUomCdEa#
+        AND   B.DMN_PKG_APVL_STS_CD (+) = #dmnPkgApvlStsCd#
+        AND   B.EZCANCELFLAG        (+) = '0'
+        AND   C.PKG_UOM_CD          (+) = #pkgUomCdCa#
+        AND   C.DMN_PKG_APVL_STS_CD (+) = #dmnPkgApvlStsCd#
+        AND   C.EZCANCELFLAG        (+) = '0'
+        AND   D.EZCANCELFLAG            = '0'
+    </statement>
+
+    <statement id="getBaseSoDtlExptRs" parameterClass="Map">
+        SELECT
+              A.SHPG_PLN_NUM
+            , A.TRX_HDR_NUM
+            , A.TRX_LINE_NUM
+            , A.TRX_LINE_SUB_NUM
+            , A.SP_FUNC_NET_UNIT_PRC_AMT
+            , A.AVAL_SO_QTY
+            , A.MDSE_CD
+            , A.STK_STS_CD
+            , A.SET_MDSE_CD
+            , A.SYS_SRC_CD
+            , B.IN_POUND_WT
+            , B.IN_INCH_VOL
+            , C.IN_EACH_QTY
+            , D.SHPG_SER_TAKE_FLG
+            , E.MDSE_NM                  AS SET_MDSE_NM
+            , A.AVAL_SO_QTY
+            , F.ORD_QTY
+            , F.CUST_MDSE_CD
+            , F.CPO_ORD_TP_CD
+        FROM  SHPG_PLN       A
+            , MDSE_STORE_PKG B
+            , MDSE_STORE_PKG C
+            , MDSE           D
+            , MDSE           E
+            , CPO_DTL        F
+        WHERE A.GLBL_CMPY_CD            = B.GLBL_CMPY_CD         (+)
+        AND   A.MDSE_CD                 = B.MDSE_CD              (+)
+        AND   A.GLBL_CMPY_CD            = C.GLBL_CMPY_CD         (+)
+        AND   A.MDSE_CD                 = C.MDSE_CD              (+)
+        AND   A.GLBL_CMPY_CD            = D.GLBL_CMPY_CD
+        AND   A.MDSE_CD                 = D.MDSE_CD
+        AND   A.GLBL_CMPY_CD            = E.GLBL_CMPY_CD         (+)
+        AND   A.SET_MDSE_CD             = E.MDSE_CD              (+)
+        AND   A.GLBL_CMPY_CD            = F.GLBL_CMPY_CD
+        AND   A.TRX_HDR_NUM             = F.CPO_ORD_NUM
+        AND   A.TRX_LINE_NUM            = F.CPO_DTL_LINE_NUM
+        AND   A.TRX_LINE_SUB_NUM        = F.CPO_DTL_LINE_SUB_NUM
+        AND   A.GLBL_CMPY_CD            = #glblCmpyCd#
+        AND   A.SHPG_PLN_NUM            = #shpgPlnNum#
+        AND   A.TRX_SRC_TP_CD           = #trxSrcTpCd#
+        AND   A.EZCANCELFLAG            = '0'
+        AND   B.PKG_UOM_CD          (+) = #pkgUomCdEa#
+        AND   B.DMN_PKG_APVL_STS_CD (+) = #dmnPkgApvlStsCd#
+        AND   B.EZCANCELFLAG        (+) = '0'
+        AND   C.PKG_UOM_CD          (+) = #pkgUomCdCa#
+        AND   C.DMN_PKG_APVL_STS_CD (+) = #dmnPkgApvlStsCd#
+        AND   C.EZCANCELFLAG        (+) = '0'
+        AND   D.EZCANCELFLAG            = '0'
+        AND   E.EZCANCELFLAG        (+) = '0'
+        AND   F.EZCANCELFLAG            = '0'
+    </statement>
+
+    <statement id="getBaseSoDtlVndRtrnRs" parameterClass="Map">
+        SELECT
+            A.SHPG_PLN_NUM
+            , A.TRX_HDR_NUM
+            , A.TRX_LINE_NUM
+            , A.TRX_LINE_SUB_NUM
+            , A.SP_FUNC_NET_UNIT_PRC_AMT
+            , A.AVAL_SO_QTY
+            , A.MDSE_CD
+            , A.STK_STS_CD
+            , A.SET_MDSE_CD
+            , A.SYS_SRC_CD
+            , B.IN_POUND_WT
+            , B.IN_INCH_VOL
+            , C.IN_EACH_QTY
+            , D.SHPG_SER_TAKE_FLG
+            , E.MDSE_NM                  AS SET_MDSE_NM
+            , A.AVAL_SO_QTY
+            , F.VND_RTRN_NUM
+        FROM  SHPG_PLN       A
+            , MDSE_STORE_PKG B
+            , MDSE_STORE_PKG C
+            , MDSE           D
+            , MDSE           E
+            , VND_RTRN_DTL   F
+        WHERE A.GLBL_CMPY_CD            = B.GLBL_CMPY_CD         (+)
+        AND   A.MDSE_CD                 = B.MDSE_CD              (+)
+        AND   A.GLBL_CMPY_CD            = C.GLBL_CMPY_CD         (+)
+        AND   A.MDSE_CD                 = C.MDSE_CD              (+)
+        AND   A.GLBL_CMPY_CD            = D.GLBL_CMPY_CD
+        AND   A.MDSE_CD                 = D.MDSE_CD
+        AND   A.GLBL_CMPY_CD            = E.GLBL_CMPY_CD         (+)
+        AND   A.SET_MDSE_CD             = E.MDSE_CD              (+)
+        AND   A.GLBL_CMPY_CD            = F.GLBL_CMPY_CD         (+)
+        AND   A.TRX_HDR_NUM             = F.VND_RTRN_NUM         (+)
+        AND   A.TRX_LINE_NUM            = F.TRX_LINE_NUM         (+)
+        AND   A.GLBL_CMPY_CD            = #glblCmpyCd#
+        AND   A.SHPG_PLN_NUM            = #shpgPlnNum#
+        AND   A.TRX_SRC_TP_CD           = #trxSrcTpCd#
+        AND   A.EZCANCELFLAG            = '0'
+        AND   B.PKG_UOM_CD          (+) = #pkgUomCdEa#
+        AND   B.DMN_PKG_APVL_STS_CD (+) = #dmnPkgApvlStsCd#
+        AND   B.EZCANCELFLAG        (+) = '0'
+        AND   C.PKG_UOM_CD          (+) = #pkgUomCdCa#
+        AND   C.DMN_PKG_APVL_STS_CD (+) = #dmnPkgApvlStsCd#
+        AND   C.EZCANCELFLAG        (+) = '0'
+        AND   D.EZCANCELFLAG            = '0'
+        AND   E.EZCANCELFLAG        (+) = '0'
+        AND   F.EZCANCELFLAG        (+) = '0'
+    </statement>
+
+    <statement id="getBaseSoDtlItemChngAfterRs" parameterClass="Map">
+        SELECT
+              A.INVTY_ORD_NUM
+            , A.INVTY_ORD_LINE_NUM
+            , A.STK_STS_CD
+            , A.ORD_QTY
+            , A.MDSE_CD
+            , B.IN_POUND_WT
+            , B.IN_INCH_VOL
+            , C.IN_EACH_QTY
+            , D.MDSE_CD            AS MDSE_MDSE_CD
+            , D.SHPG_SER_TAKE_FLG
+        FROM  INVTY_ORD_DTL  A
+            , MDSE_STORE_PKG B
+            , MDSE_STORE_PKG C
+            , MDSE           D
+        WHERE A.GLBL_CMPY_CD            =    B.GLBL_CMPY_CD (+)
+        AND   A.MDSE_CD                 =    B.MDSE_CD      (+)
+        AND   A.GLBL_CMPY_CD            =    C.GLBL_CMPY_CD (+)
+        AND   A.MDSE_CD                 =    C.MDSE_CD      (+)
+        AND   A.GLBL_CMPY_CD            =    D.GLBL_CMPY_CD (+)
+        AND   A.MDSE_CD                 =    D.MDSE_CD      (+)
+        AND   A.GLBL_CMPY_CD            =    #glblCmpyCd#
+        AND   A.INVTY_ORD_NUM           =    #invtyOrdNum#
+        AND   A.ORD_QTY                 &lt; 0
+        AND   A.EZCANCELFLAG            =    '0'
+        AND   B.PKG_UOM_CD          (+) =    #pkgUomCdEa#
+        AND   B.DMN_PKG_APVL_STS_CD (+) =    #dmnPkgApvlStsCd#
+        AND   B.EZCANCELFLAG        (+) =    '0'
+        AND   C.PKG_UOM_CD          (+) =    #pkgUomCdCa#
+        AND   C.DMN_PKG_APVL_STS_CD (+) =    #dmnPkgApvlStsCd#
+        AND   C.EZCANCELFLAG        (+) =    '0'
+        AND   D.EZCANCELFLAG        (+) =    '0'
+    </statement>
+
+    <statement id="getBaseSoDtlSetMdseRs" parameterClass="Map">
+        SELECT
+              A.PRNT_MDSE_CD
+            , A.CHILD_MDSE_QTY
+        FROM  CMPSN A
+        WHERE A.GLBL_CMPY_CD           = #glblCmpyCd#
+        AND   A.PRNT_MDSE_CD           = #prntMdseCd#
+        AND   A.MDSE_CMPSN_TP_CD       = #mdseCmpsnTpCd#
+            <isNotNull property="childMdseCd">
+                AND   A.CHILD_MDSE_CD          = #childMdseCd#
+            </isNotNull>
+            <isNotNull property="childOrdTakeMdseCd">
+                AND   A.CHILD_ORD_TAKE_MDSE_CD = #childOrdTakeMdseCd#
+            </isNotNull>
+        AND   A.EZCANCELFLAG           = '0'
+    </statement>
+
+    <statement id="getBaseSoMsgRteRs" parameterClass="Map">
+        SELECT
+              A.CUST_CD                   AS RTE_GUIDE_CUST_CD
+            , A.RTE_GUIDE_SECT_FIRST_FLG
+            , A.RTE_GUIDE_SECT_SCD_FLG
+            , A.RTE_GUIDE_SECT_THIRD_FLG
+            , A.RTE_GUIDE_SECT_FRTH_FLG
+            , A.RTE_GUIDE_SECT_FIFTH_FLG
+            , A.RTE_GUIDE_SECT_SIXTH_FLG
+            , A.RTE_GUIDE_SECT_SVNTH_FLG
+            , A.RTE_GUIDE_SECT_EIGHTH_FLG
+        FROM  RTE_GUIDE A
+        WHERE A.GLBL_CMPY_CD           =     #glblCmpyCd#
+        AND   A.ASG_LOC_ROLE_LAYER_NUM =     #asgLocRoleLayerNum#
+        AND   A.CUST_CD                =     #custCd#
+        AND NVL(A.EFF_FROM_DT, '00000000')    &lt;= #slsDt#
+        AND NVL(A.EFF_THRU_DT, '99991231')    &gt;= #slsDt#
+        AND   A.EZCANCELFLAG           =     '0'
+    </statement>
+
+    <!-- 06/17/2010 D.Fukaya append start -->
+    <statement id="getMsgForCpoDtl" parameterClass="Map" resultMap="result.MSG_TXT_DTLTMsg">
+        SELECT
+              MTD.MSG_TXT_INFO_TXT        AS MSG_TXT_INFO_TXT
+        FROM
+              SHPG_PLN         SP
+              ,MSG_TXT_DTL     MTD
+        WHERE
+              SP.GLBL_CMPY_CD             = MTD.GLBL_CMPY_CD
+          AND SP.TRX_HDR_NUM              = MTD.CPO_ORD_NUM
+          AND SP.TRX_LINE_NUM             = MTD.CPO_DTL_LINE_NUM
+          AND SP.TRX_LINE_SUB_NUM         = MTD.CPO_DTL_LINE_SUB_NUM
+          AND SP.GLBL_CMPY_CD             = #glblCmpyCd#
+          AND SP.SHPG_PLN_NUM             = #shpgPlnNum#
+          AND MTD.TXT_TP_CD               = #txtTpCd#
+          AND SP.EZCANCELFLAG             = '0'
+          AND MTD.EZCANCELFLAG            = '0'
+        ORDER BY
+              MTD.TXT_SQ_NUM
+    </statement>
+
+    <statement id="getMsgForCpoHdr" parameterClass="Map" resultMap="result.MSG_TXT_DTLTMsg">
+        SELECT
+              MTD.MSG_TXT_INFO_TXT        AS MSG_TXT_INFO_TXT
+        FROM
+              SHPG_PLN         SP
+            , MSG_TXT_DTL     MTD
+        WHERE
+              SP.GLBL_CMPY_CD             = MTD.GLBL_CMPY_CD
+          AND SP.TRX_HDR_NUM              = MTD.CPO_ORD_NUM
+          AND SP.GLBL_CMPY_CD             = #glblCmpyCd#
+          AND SP.SHPG_PLN_NUM             = #shpgPlnNum#
+          AND SP.TRX_SRC_TP_CD            = #trxSrcTpCd#
+          AND NVL(MTD.CPO_DTL_LINE_NUM, '000')      = '000'
+          AND NVL(MTD.CPO_DTL_LINE_SUB_NUM, '000')  = '000'
+          AND MTD.TXT_TP_CD               = #txtTpCd#
+          AND SP.EZCANCELFLAG             = '0'
+          AND MTD.EZCANCELFLAG            = '0'
+        ORDER BY
+              MTD.TXT_SQ_NUM
+    </statement>
+
+    <resultMap id="result.DS_CPO_DELY_INFOTMsg" class="DS_CPO_DELY_INFOTMsg">
+         <result property="delyAddlCmntTxt" column="DELY_ADDL_CMNT_TXT" javaType="EZDTStringItem"/>
+    </resultMap>
+    <!-- 08/08/2017 CITS S.Endo Mod Sol#035(QC#18108) START-->
+    <statement id="getMsgForDsCpoDelyInfoHdr" parameterClass="Map" resultClass="Map">
+        SELECT
+            TRIM(SHT.SPCL_HDLG_TP_DESC_TXT || ' ' || DCDI.DELY_ADDL_CMNT_TXT) DELY_ADDL_CMNT_TXT
+        FROM
+            SHPG_PLN          SP
+           ,CPO_DTL           DCD
+           ,DS_CPO_DELY_INFO  DCDI
+           ,CPO               CPO
+           ,SPCL_HDLG_TP      SHT
+        WHERE
+            SP.GLBL_CMPY_CD      = #glblCmpyCd#
+        AND SP.SHPG_PLN_NUM      = #shpgPlnNum#
+        AND SP.TRX_SRC_TP_CD     = #trxSrcTpCd#
+        AND SP.EZCANCELFLAG      = '0'
+        AND SP.GLBL_CMPY_CD      = DCD.GLBL_CMPY_CD
+        AND SP.TRX_HDR_NUM       = DCD.CPO_ORD_NUM
+        AND SP.TRX_LINE_NUM      = DCD.CPO_DTL_LINE_NUM
+        AND SP.TRX_LINE_SUB_NUM  = DCD.CPO_DTL_LINE_SUB_NUM
+        AND DCD.EZCANCELFLAG     = '0'
+        AND DCD.GLBL_CMPY_CD     = DCDI.GLBL_CMPY_CD(+)
+        AND DCD.CPO_ORD_NUM      = DCDI.CPO_ORD_NUM(+)
+        AND DCD.DS_CPO_CONFIG_PK = DCDI.DS_CPO_CONFIG_PK(+)
+        AND DCDI.EZCANCELFLAG(+) = '0'
+        AND DCD.CPO_ORD_NUM      = CPO.CPO_ORD_NUM
+        AND DCD.GLBL_CMPY_CD     = CPO.GLBL_CMPY_CD
+        AND CPO.EZCANCELFLAG     = '0'
+        AND CPO.SPCL_HDLG_TP_CD  = SHT.SPCL_HDLG_TP_CD(+)
+        AND CPO.GLBL_CMPY_CD     = SHT.GLBL_CMPY_CD(+)
+        AND SHT.EZCANCELFLAG(+)  = '0'
+    </statement>
+    <!-- 08/08/2017 CITS S.Endo Mod Sol#035(QC#18108) END-->
+    <resultMap id="result.MSG_TXT_DTLTMsg" class="MSG_TXT_DTLTMsg">
+         <result property="msgTxtInfoTxt" column="MSG_TXT_INFO_TXT" javaType="EZDTStringItem"/>
+    </resultMap>
+
+    <statement id="getMsgForShpgPln" parameterClass="Map" resultMap="result.SHPG_PLNTMsg">
+        SELECT
+              SP.SHIP_CMNT_FIRST_LINE_TXT
+            , SP.SHIP_CMNT_SCD_LINE_TXT
+            , SP.SHIP_CMNT_THIRD_LINE_TXT
+            , SP.SHIP_CMNT_FRTH_LINE_TXT
+        FROM
+              SHPG_PLN SP
+        WHERE
+              SP.GLBL_CMPY_CD               = #glblCmpyCd#
+          AND SP.SHPG_PLN_NUM               = #shpgPlnNum#
+          AND SP.TRX_SRC_TP_CD              = #trxSrcTpCd#
+          AND SP.EZCANCELFLAG               = '0'
+    </statement>
+
+    <resultMap id="result.SHPG_PLNTMsg" class="SHPG_PLNTMsg">
+        <result property="shipCmntFirstLineTxt" column="SHIP_CMNT_FIRST_LINE_TXT" javaType="EZDTStringItem"/>
+        <result property="shipCmntScdLineTxt"   column="SHIP_CMNT_SCD_LINE_TXT"   javaType="EZDTStringItem"/>
+        <result property="shipCmntThirdLineTxt" column="SHIP_CMNT_THIRD_LINE_TXT" javaType="EZDTStringItem"/>
+        <result property="shipCmntFrthLineTxt"  column="SHIP_CMNT_FRTH_LINE_TXT"  javaType="EZDTStringItem"/>
+    </resultMap>
+
+    <statement id="getMsgForInvtyOrd" parameterClass="Map" resultMap="result.INVTY_ORDTMsg">
+        SELECT
+              IO.FIRST_INVTY_ORD_CMNT_TXT AS FIRST_INVTY_ORD_CMNT_TXT
+            , IO.SCD_INVTY_ORD_CMNT_TXT   AS SCD_INVTY_ORD_CMNT_TXT
+            , IO.THIRD_INVTY_ORD_CMNT_TXT AS THIRD_INVTY_ORD_CMNT_TXT
+            , IO.FRTH_INVTY_ORD_CMNT_TXT  AS FRTH_INVTY_ORD_CMNT_TXT
+        FROM
+              SHPG_PLN  SP
+            , INVTY_ORD IO
+        WHERE
+              SP.GLBL_CMPY_CD     = IO.GLBL_CMPY_CD
+          AND SP.TRX_HDR_NUM      = IO.INVTY_ORD_NUM
+          AND SP.GLBL_CMPY_CD     = #glblCmpyCd#
+          AND SP.SHPG_PLN_NUM     = #shpgPlnNum#
+          AND SP.TRX_SRC_TP_CD    = #trxSrcTpCd#
+          AND SP.EZCANCELFLAG     = '0'
+          AND IO.EZCANCELFLAG     = '0'
+    </statement>
+
+    <resultMap id="result.INVTY_ORDTMsg" class="INVTY_ORDTMsg">
+        <result property="firstInvtyOrdCmntTxt" column="FIRST_INVTY_ORD_CMNT_TXT" javaType="EZDTStringItem"/>
+        <result property="scdInvtyOrdCmntTxt"   column="SCD_INVTY_ORD_CMNT_TXT"   javaType="EZDTStringItem"/>
+        <result property="thirdInvtyOrdCmntTxt" column="THIRD_INVTY_ORD_CMNT_TXT" javaType="EZDTStringItem"/>
+        <result property="frthInvtyOrdCmntTxt"  column="FRTH_INVTY_ORD_CMNT_TXT"  javaType="EZDTStringItem"/>
+    </resultMap>
+
+    <statement id="getMsgForVndRtrn" parameterClass="Map" resultMap="result.VND_RTRN_CMNTTMsg">
+        SELECT
+              VRC.VND_RTRN_CMNT_TXT AS VND_RTRN_CMNT_TXT
+        FROM
+              SHPG_PLN         SP
+            , VND_RTRN_CMNT    VRC
+        WHERE
+              SP.GLBL_CMPY_CD            = VRC.GLBL_CMPY_CD
+          AND SP.TRX_HDR_NUM             = VRC.TRX_HDR_NUM
+          AND SP.GLBL_CMPY_CD            = #glblCmpyCd#
+          AND SP.SHPG_PLN_NUM            = #shpgPlnNum#
+          AND SP.TRX_SRC_TP_CD           = #trxSrcTpCd#
+          AND SP.EZCANCELFLAG            = '0'
+          AND VRC.VND_RTRN_CMNT_TP_CD    = #txtTpCd#
+          AND VRC.EZCANCELFLAG           = '0'
+        ORDER BY
+              VRC.VND_RTRN_CMNT_SQ_NUM
+    </statement>
+
+    <resultMap id="result.VND_RTRN_CMNTTMsg" class="VND_RTRN_CMNTTMsg">
+        <result property="vndRtrnCmntTxt" column="VND_RTRN_CMNT_TXT" javaType="EZDTStringItem"/>
+    </resultMap>
+    <!-- 06/17/2010 D.Fukaya append end -->
+
+    <!-- 11/02/2012 Oce WDS SOL#94 START -->
+    <statement id="getHazMatFlgCount" parameterClass="Map" resultClass="Integer">
+        SELECT
+           COUNT(MSI.HAZ_MAT_FLG)
+        FROM
+            MDSE_SFTY_INFO MSI
+        WHERE
+            MSI.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND MSI.MDSE_CD             = #mdseCd#
+        AND MSI.HAZ_MAT_FLG         = 'Y'
+        AND MSI.EZCANCELFLAG        = '0'
+    </statement>
+    <!-- 11/02/2012 Oce WDS SOL#94 END -->
+
+    <!-- 02/06/2013 OCE WDS Defects#121 ADD START -->
+    <statement id="getWhOrTecCountDcTran" parameterClass="Map" resultClass="Integer">
+        SELECT
+           COUNT(V.INVTY_LOC_CD)
+        FROM
+            INVTY_LOC_V V
+        WHERE
+            V.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND V.INVTY_LOC_CD        = #invtyLocCd#
+        AND (  V.INVTY_LOC_TP_CD     = #locTpCdWh#
+            OR V.INVTY_LOC_TP_CD     = #locTpCdTec#
+            )
+        AND V.EZCANCELFLAG        = '0'
+    </statement>
+    <!-- 02/06/2013 OCE WDS Defects#121 ADD E N D -->
+
+    <statement id="getConfigItemCnt" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            COUNT(*)
+        FROM
+            SHPG_ORD_DTL SOD
+        WHERE
+            SOD.GLBL_CMPY_CD    = #glblCmpyCd#
+        AND SOD.SO_NUM          = #soNum#
+        AND SOD.CONFIG_ITEM_FLG = #configItemFlg#
+        AND SOD.EZCANCELFLAG    = '0'
+    </statement>
+
+    <statement id="getVnd" parameterClass="Map" resultClass="String">
+        SELECT
+            V.VND_CD
+        FROM
+            VND V
+        WHERE
+            V.GLBL_CMPY_CD  = #glblCmpyCd#
+        AND V.VND_CD        = #vndCd#
+        AND V.EZCANCELFLAG  = '0'
+    </statement>
+
+    <statement id="getDplyVndNm" parameterClass="Map" resultClass="String">
+        SELECT
+            PV.PRNT_VND_NM || ' - ' || V.LOC_NM DPLY_VND_NM
+        FROM
+            VND V
+           ,PRNT_VND PV
+        WHERE
+            V.GLBL_CMPY_CD  = #glblCmpyCd#
+        AND V.VND_CD        = #vndCd#
+        AND V.EZCANCELFLAG  = '0'
+        AND V.GLBL_CMPY_CD  = PV.GLBL_CMPY_CD
+        AND V.PRNT_VND_PK   = PV.PRNT_VND_PK
+        AND PV.EZCANCELFLAG = '0'
+    </statement>
+
+    <!-- #################### Statement #################### -->
+    <statement id="getShippingOrderInfo" parameterClass="Map" resultMap="result.ShippingOrderInfo">
+        SELECT
+               SO.SHPG_SVC_LVL_CD
+             , SO.SCE_ORD_TP_CD
+             , RW.AUTO_SO_DROP_FLG
+             , RW.SO_PRIN_REQ_FLG
+             , NVL(SOT.SVC_MACH_PROC_STS_CD, #outOfScp#)   AS SVC_MACH_PROC_STS_CD
+             , SOT.SCHD_REQ_FLG
+             , SOD.SO_SLP_NUM
+             , DMI.RTRN_REQ_PRT_FLG
+             , DMI.BACK_ORD_IMPCT_TP_CD
+             <isEqual property="dropShipModeFlg" compareValue="Y">
+             , DCD.RTL_WH_CD                               AS INVTY_LOC_CD
+             </isEqual>
+             <isNotEqual property="dropShipModeFlg" compareValue="Y">
+             , SP.INVTY_LOC_CD
+             </isNotEqual>
+             , SP.SHIP_TO_CUST_CD
+             , SP.TRX_HDR_NUM
+             , SP.TRX_LINE_NUM
+             , SP.TRX_LINE_SUB_NUM
+             <isEqual property="dropShipModeFlg" compareValue="Y">
+             , DCD.RTL_WH_CD                               AS RTL_WH_CD_OF_INVTY_LOC
+             , DCD.RTL_SWH_CD                              AS RTL_SWH_CD_OF_INVTY_LOC
+             </isEqual>
+             <isNotEqual property="dropShipModeFlg" compareValue="Y">
+             , RS1.RTL_WH_CD                               AS RTL_WH_CD_OF_INVTY_LOC
+             , RS1.RTL_SWH_CD                              AS RTL_SWH_CD_OF_INVTY_LOC
+             </isNotEqual>
+             , RS2.RTL_WH_CD                               AS RTL_WH_CD_OF_SHIP_TO_CUST
+             , RS2.RTL_SWH_CD                              AS RTL_SWH_CD_OF_SHIP_TO_CUST
+             , CASE SO.SCE_ORD_TP_CD
+                 WHEN #sceOrdTpCC# THEN IOD.RMV_CONFIG_FLG
+                 WHEN #sceOrdTpRM# THEN ROD.RMV_CONFIG_FLG
+                 ELSE  #flgOff#
+               END RMV_CONFIG_FLG
+             , IOD.PRCH_REQ_NUM
+             , IOD.PRCH_REQ_LINE_NUM
+             , IOD.PRCH_REQ_LINE_SUB_NUM
+             , IO.SVC_CONFIG_MSTR_PK                       AS SVC_CONFIG_MSTR_PK_OF_IO
+             , IOD.SVC_CONFIG_MSTR_PK                      AS SVC_CONFIG_MSTR_PK_OF_IOD
+             , PRD.SVC_CONFIG_MSTR_PK                      AS SVC_CONFIG_MSTR_PK_OF_PR
+             , RO.SVC_CONFIG_MSTR_PK                       AS SVC_CONFIG_MSTR_PK_OF_RM
+             , NVL(SIR1.SVC_PRE_ISTL_SHOP_FLG, #flgOff#) AS SHOP_ITEM_FLG
+             , DCD.PICK_SVC_CONFIG_MSTR_PK
+             , DCD.ORD_SRC_REF_LINE_NUM
+             , DCD.ORD_SRC_REF_LINE_SUB_NUM
+             , DCC.SVC_CONFIG_MSTR_PK                      AS SVC_CONFIG_MSTR_PK_OF_DCC
+             , DCC.DS_CPO_CONFIG_PK
+             , DCC.BILL_TO_CUST_ACCT_CD
+             , DCC.SHIP_TO_CUST_ACCT_CD
+             , DC.ORD_SRC_REF_NUM
+             , NVL(DMI.INSTL_BASE_CTRL_FLG, #flgOff#)      AS INSTL_BASE_CTRL_FLG
+             , NVL(DOT.OUT_OF_WH_NODE_USG_FLG, #flgOff#)   AS OUT_OF_WH_NODE_USG_FLG
+             , NVL(OPT.OUT_OF_WH_INVTY_PROC_FLG, #flgOff#) AS OUT_OF_WH_INVTY_PROC_FLG
+             , SO.PDD_DT
+             , SO.PSD_DT
+             , DC.DS_ORD_CATG_CD
+             , DC.DS_ORD_TP_CD
+             , SO.VND_CD
+             , ROD.ADD_CONFIG_FLG
+             , SMM.SVC_CONFIG_MSTR_PK                      AS SVC_CONFIG_MSTR_PK_OF_SMM
+             , SIR1.WMS_RTE_PATH_CD
+             , PD.SVC_CONFIG_MSTR_PK                           AS SVC_CONFIG_MSTR_PK_OF_PD
+             , DCC.MDL_ID
+        FROM
+               SHPG_ORD             SO
+             , RTL_WH               RW
+             , SCE_ORD_TP           SOT
+             , SHPG_ORD_DTL         SOD
+             , MDSE                 DMI
+             , SHPG_PLN             SP
+             , RTL_SWH              RS1
+             , RTL_SWH              RS2
+             , INVTY_ORD            IO
+             , INVTY_ORD_DTL        IOD
+             , PRCH_REQ_DTL         PRD
+             , CPO_DTL              DCD
+             , DS_CPO_CONFIG        DCC
+             , CPO                  DC
+             , DS_ORD_TP_PROC_DFN   DOT
+             , DS_ORD_LINE_PROC_DFN DOLT
+             , ORD_PROC_TP          OPT
+             , DS_CPO_ISTL_INFO     DCII
+             , SVC_ISTL_RULE        SIR1
+             , RMNF_ORD             RO
+             , RMNF_ORD_DTL         ROD
+             , SVC_MACH_MSTR        SMM
+             , PO_DTL               PD
+        WHERE
+               SO.GLBL_CMPY_CD          = #glblCmpyCd#
+        AND    SO.SO_NUM                = #soNum#
+        AND    SO.EZCANCELFLAG          = '0'
+        AND    SO.GLBL_CMPY_CD          = RW.GLBL_CMPY_CD
+        AND    SO.WH_CD                 = RW.RTL_WH_CD
+        AND    RW.EZCANCELFLAG          = '0'
+        AND    SO.GLBL_CMPY_CD          = SOT.GLBL_CMPY_CD(+)
+        AND    SO.SCE_ORD_TP_CD         = SOT.SCE_ORD_TP_CD(+)
+        AND    SOT.INBD_OTBD_CD(+)      = #inbdOtbdCd#
+        AND    SOT.EZCANCELFLAG(+)      = '0'
+        AND    SO.GLBL_CMPY_CD          = SOD.GLBL_CMPY_CD
+        AND    SO.SO_NUM                = SOD.SO_NUM
+        AND    SOD.EZCANCELFLAG         = '0'
+        AND    SOD.GLBL_CMPY_CD         = DMI.GLBL_CMPY_CD
+        AND    SOD.MDSE_CD              = DMI.MDSE_CD
+        AND    DMI.EZCANCELFLAG         = '0'
+        AND    SOD.GLBL_CMPY_CD         = SP.GLBL_CMPY_CD
+        AND    SOD.SHPG_PLN_NUM         = SP.SHPG_PLN_NUM
+        AND    SP.EZCANCELFLAG          = '0'
+        AND    SP.GLBL_CMPY_CD          = RS1.GLBL_CMPY_CD(+)
+        AND    SP.INVTY_LOC_CD          = RS1.INVTY_LOC_CD(+)
+        AND    RS1.EZCANCELFLAG(+)      = '0'
+        AND    SP.GLBL_CMPY_CD          = RS2.GLBL_CMPY_CD(+)
+        AND    SP.SHIP_TO_CUST_CD       = RS2.INVTY_LOC_CD(+)
+        AND    RS2.EZCANCELFLAG(+)      = '0'
+        AND    SP.GLBL_CMPY_CD          = IO.GLBL_CMPY_CD(+)
+        AND    SP.TRX_HDR_NUM           = IO.INVTY_ORD_NUM(+)
+        AND    IO.EZCANCELFLAG(+)       = '0'
+        AND    SP.GLBL_CMPY_CD          = IOD.GLBL_CMPY_CD(+)
+        AND    SP.TRX_HDR_NUM           = IOD.INVTY_ORD_NUM(+)
+        AND    SP.TRX_LINE_NUM          = IOD.INVTY_ORD_LINE_NUM(+)
+        AND    IOD.EZCANCELFLAG(+)      = '0'
+        AND    SP.GLBL_CMPY_CD          = PRD.GLBL_CMPY_CD(+)
+        AND    SP.TRX_HDR_NUM           = PRD.PRCH_REQ_NUM(+)
+        AND    SP.TRX_LINE_NUM          = PRD.PRCH_REQ_LINE_NUM(+)
+        AND    SP.TRX_LINE_SUB_NUM      = PRD.PRCH_REQ_LINE_SUB_NUM(+)
+        AND    PRD.EZCANCELFLAG(+)      = '0'
+        AND    SP.GLBL_CMPY_CD          = DCD.GLBL_CMPY_CD(+)
+        AND    SP.TRX_HDR_NUM           = DCD.CPO_ORD_NUM(+)
+        AND    SP.TRX_LINE_NUM          = DCD.CPO_DTL_LINE_NUM(+)
+        AND    SP.TRX_LINE_SUB_NUM      = DCD.CPO_DTL_LINE_SUB_NUM(+)
+        AND    DCD.EZCANCELFLAG(+)      = '0'
+        AND    DCD.GLBL_CMPY_CD         = DCC.GLBL_CMPY_CD(+)
+        AND    DCD.CPO_ORD_NUM          = DCC.CPO_ORD_NUM(+)
+        AND    DCD.DS_CPO_CONFIG_PK     = DCC.DS_CPO_CONFIG_PK(+)
+        AND    DCC.EZCANCELFLAG(+)      = '0'
+        AND    DCD.GLBL_CMPY_CD         = DC.GLBL_CMPY_CD(+)
+        AND    DCD.CPO_ORD_NUM          = DC.CPO_ORD_NUM(+)
+        AND    DC.EZCANCELFLAG(+)       = '0'
+        AND    DC.GLBL_CMPY_CD          = DOT.GLBL_CMPY_CD(+)
+        AND    DC.DS_ORD_TP_CD          = DOT.DS_ORD_TP_CD(+)
+        AND    DOT.EZCANCELFLAG(+)      = '0'
+        AND    DCD.GLBL_CMPY_CD         = DOLT.GLBL_CMPY_CD(+)
+        AND    DC.DS_ORD_TP_CD          = DOLT.DS_ORD_TP_CD(+)
+        AND    DCD.DS_ORD_LINE_CATG_CD  = DOLT.DS_ORD_LINE_CATG_CD(+)
+        AND    DOLT.EZCANCELFLAG(+)     = '0'
+        AND    DOLT.GLBL_CMPY_CD        = OPT.GLBL_CMPY_CD(+)
+        AND    DOLT.ORD_PROC_TP_CD      = OPT.ORD_PROC_TP_CD(+)
+        AND    OPT.EZCANCELFLAG(+)      = '0'
+        AND    DCC.GLBL_CMPY_CD         = DCII.GLBL_CMPY_CD(+)
+        AND    DCC.DS_CPO_CONFIG_PK     = DCII.DS_CPO_CONFIG_PK(+)
+        AND    DCII.EZCANCELFLAG(+)     = '0'
+        AND    DCII.GLBL_CMPY_CD        = SIR1.GLBL_CMPY_CD(+)
+        AND    DCII.SVC_ISTL_RULE_NUM   = SIR1.SVC_ISTL_RULE_NUM(+)
+        AND    SIR1.EZCANCELFLAG(+)     = '0'
+        AND    SP.GLBL_CMPY_CD          = RO.GLBL_CMPY_CD(+)
+        AND    SP.TRX_HDR_NUM           = RO.RMNF_ORD_NUM(+)
+        AND    RO.EZCANCELFLAG(+)       = '0'
+        AND    SP.GLBL_CMPY_CD          = ROD.GLBL_CMPY_CD(+)
+        AND    SP.TRX_HDR_NUM           = ROD.RMNF_ORD_NUM(+)
+        AND    SP.TRX_LINE_NUM          = ROD.RMNF_ORD_DTL_LINE_NUM(+)
+        AND    ROD.EZCANCELFLAG(+)      = '0'
+        AND    ROD.GLBL_CMPY_CD         = SMM.GLBL_CMPY_CD(+)
+        AND    ROD.SVC_MACH_MSTR_PK     = SMM.SVC_MACH_MSTR_PK(+)
+        AND    SMM.EZCANCELFLAG(+)      = '0'
+        AND    SP.GLBL_CMPY_CD          = PD.GLBL_CMPY_CD(+)
+        AND    SP.TRX_HDR_NUM           = PD.PO_ORD_NUM(+)
+        AND    SP.TRX_LINE_NUM          = PD.PO_ORD_DTL_LINE_NUM(+)
+        AND    PD.EZCANCELFLAG(+)       = '0'
+        UNION
+        SELECT
+               SO.SHPG_SVC_LVL_CD
+             , SO.SCE_ORD_TP_CD
+             , RW.AUTO_SO_DROP_FLG
+             , RW.SO_PRIN_REQ_FLG
+             , NVL(SOT.SVC_MACH_PROC_STS_CD, #outOfScp#)  AS SVC_MACH_PROC_STS_CD
+             , SOT.SCHD_REQ_FLG
+             , SOD.SO_SLP_NUM
+             , DMI.RTRN_REQ_PRT_FLG
+             , DMI.BACK_ORD_IMPCT_TP_CD
+             , IOD.INVTY_LOC_CD
+             , IOD.TO_INVTY_LOC_CD                        AS SHIP_TO_CUST_CD
+             , SOD.TRX_HDR_NUM
+             , SOD.TRX_LINE_NUM
+             , SOD.TRX_LINE_SUB_NUM
+             , RS1.RTL_WH_CD                              AS RTL_WH_CD_OF_INVTY_LOC
+             , RS1.RTL_SWH_CD                             AS RTL_SWH_CD_OF_INVTY_LOC
+             , RS2.RTL_WH_CD                              AS RTL_WH_CD_OF_SHIP_TO_CUST
+             , RS2.RTL_SWH_CD                             AS RTL_SWH_CD_OF_SHIP_TO_CUST
+             , NVL(IOD.RMV_CONFIG_FLG, #flgOff#)          AS RMV_CONFIG_FLG
+             , IOD.PRCH_REQ_NUM
+             , IOD.PRCH_REQ_LINE_NUM
+             , IOD.PRCH_REQ_LINE_SUB_NUM
+             , IO.SVC_CONFIG_MSTR_PK                      AS SVC_CONFIG_MSTR_PK_OF_IO
+             , IOD.SVC_CONFIG_MSTR_PK                     AS SVC_CONFIG_MSTR_PK_OF_IOD
+             , NULL                                       AS SVC_CONFIG_MSTR_PK_OF_PR
+             , NULL                                       AS SVC_CONFIG_MSTR_PK_OF_RM
+             , #flgOff#                                   AS SHOP_ITEM_FLG
+             , NULL                                       AS PICK_SVC_CONFIG_MSTR_PK
+             , NULL                                       AS ORD_SRC_REF_LINE_NUM
+             , NULL                                       AS ORD_SRC_REF_LINE_SUB_NUM
+             , NULL                                       AS SVC_CONFIG_MSTR_PK_OF_DCC
+             , NULL                                       AS DS_CPO_CONFIG_PK
+             , NULL                                       AS BILL_TO_CUST_ACCT_CD
+             , NULL                                       AS SHIP_TO_CUST_ACCT_CD
+             , NULL                                       AS ORD_SRC_REF_NUM
+             , NVL(DMI.INSTL_BASE_CTRL_FLG, #flgOff#)     AS INSTL_BASE_CTRL_FLG
+             , #flgOff#                                   AS OUT_OF_WH_NODE_USG_FLG
+             , #flgOff#                                   AS OUT_OF_WH_INVTY_PROC_FLG
+             , SO.PDD_DT
+             , SO.PSD_DT
+             , NULL                                       AS DS_ORD_CATG_CD
+             , NULL                                       AS DS_ORD_TP_CD
+             , SO.VND_CD
+             , #flgOff#                                   AS ADD_CONFIG_FLG
+             , NULL                                       AS SVC_CONFIG_MSTR_PK_OF_SMM
+             , NULL                                       AS WMS_RTE_PATH_CD
+             , NULL                                       AS SVC_CONFIG_MSTR_PK_OF_PD
+             , NULL                                       AS MDL_ID
+        FROM
+               SHPG_ORD             SO
+             , RTL_WH               RW
+             , SCE_ORD_TP           SOT
+             , SHPG_ORD_DTL         SOD
+             , MDSE                 DMI
+             , INVTY_ORD            IO
+             , INVTY_ORD_DTL        IOD
+             , RTL_SWH              RS1
+             , RTL_SWH              RS2
+        WHERE
+               SO.GLBL_CMPY_CD          = #glblCmpyCd#
+        AND    SO.SO_NUM                = #soNum#
+        AND    SO.EZCANCELFLAG          = '0'
+        AND    SO.GLBL_CMPY_CD          = RW.GLBL_CMPY_CD
+        AND    SO.WH_CD                 = RW.RTL_WH_CD
+        AND    RW.EZCANCELFLAG          = '0'
+        AND    SO.GLBL_CMPY_CD          = SOT.GLBL_CMPY_CD(+)
+        AND    SO.SCE_ORD_TP_CD         = SOT.SCE_ORD_TP_CD(+)
+        AND    SOT.INBD_OTBD_CD(+)      = '2'
+        AND    SOT.EZCANCELFLAG(+)      = '0'
+        AND    SO.GLBL_CMPY_CD          = SOD.GLBL_CMPY_CD
+        AND    SO.SO_NUM                = SOD.SO_NUM
+        AND    SOD.SHPG_PLN_NUM IS NULL
+        AND    SOD.EZCANCELFLAG         = '0'
+        AND    SOD.GLBL_CMPY_CD         = DMI.GLBL_CMPY_CD
+        AND    SOD.MDSE_CD              = DMI.MDSE_CD
+        AND    DMI.EZCANCELFLAG         = '0'
+        AND    SOD.GLBL_CMPY_CD         = IO.GLBL_CMPY_CD
+        AND    SOD.TRX_HDR_NUM          = IO.INVTY_ORD_NUM
+        AND    IO.EZCANCELFLAG          = '0'
+        AND    SOD.GLBL_CMPY_CD         = IOD.GLBL_CMPY_CD
+        AND    SOD.TRX_HDR_NUM          = IOD.INVTY_ORD_NUM
+        AND    SOD.TRX_LINE_NUM         = IOD.INVTY_ORD_LINE_NUM
+        AND    IOD.EZCANCELFLAG         = '0'
+        AND    IOD.GLBL_CMPY_CD         = RS1.GLBL_CMPY_CD(+)
+        AND    IOD.INVTY_LOC_CD         = RS1.INVTY_LOC_CD(+)
+        AND    RS1.EZCANCELFLAG(+)      = '0'
+        AND    IOD.GLBL_CMPY_CD         = RS2.GLBL_CMPY_CD(+)
+        AND    IOD.TO_INVTY_LOC_CD      = RS2.INVTY_LOC_CD(+)
+        AND    RS2.EZCANCELFLAG(+)      = '0'
+        ORDER BY
+               SO_SLP_NUM
+    </statement>
+
+    <!-- #################### Result Mapping #################### -->
+    <resultMap id="result.ShippingOrderInfo" class="ShippingOrderInfo">
+        <result property="shpgSvcLvlCd"                   column="SHPG_SVC_LVL_CD"                       javaType="String"/>
+        <result property="sceOrdTpCd"                     column="SCE_ORD_TP_CD"                         javaType="String"/>
+        <result property="autoSoDropFlg"                  column="AUTO_SO_DROP_FLG"                      javaType="String"/>
+        <result property="soPrinReqFlg"                   column="SO_PRIN_REQ_FLG"                       javaType="String"/>
+        <result property="svcMachProcStsCd"               column="SVC_MACH_PROC_STS_CD"                  javaType="String"/>
+        <result property="schdReqFlg"                     column="SCHD_REQ_FLG"                          javaType="String"/>
+        <result property="soSlpNum"                       column="SO_SLP_NUM"                            javaType="String"/>
+        <result property="rtrnReqPrtFlg"                  column="RTRN_REQ_PRT_FLG"                      javaType="String"/>
+        <result property="backOrdImpctTpCd"               column="BACK_ORD_IMPCT_TP_CD"                  javaType="String"/>
+        <result property="invtyLocCd"                     column="INVTY_LOC_CD"                          javaType="String"/>
+        <result property="shipToCustCd"                   column="SHIP_TO_CUST_CD"                       javaType="String"/>
+        <result property="trxHdrNum"                      column="TRX_HDR_NUM"                           javaType="String"/>
+        <result property="trxLineNum"                     column="TRX_LINE_NUM"                          javaType="String"/>
+        <result property="trxLineSubNum"                  column="TRX_LINE_SUB_NUM"                      javaType="String"/>
+        <result property="rtlWhCdOfInvtyLoc"              column="RTL_WH_CD_OF_INVTY_LOC"                javaType="String"/>
+        <result property="rtlSwhCdOfInvtyLoc"             column="RTL_SWH_CD_OF_INVTY_LOC"               javaType="String"/>
+        <result property="rtlWhCdOfShipToCust"            column="RTL_WH_CD_OF_SHIP_TO_CUST"             javaType="String"/>
+        <result property="rtlSwhCdOfShipToCust"           column="RTL_SWH_CD_OF_SHIP_TO_CUST"            javaType="String"/>
+        <result property="rmvConfigFlg"                   column="RMV_CONFIG_FLG"                        javaType="String"/>
+        <result property="prchReqNum"                     column="PRCH_REQ_NUM"                          javaType="String"/>
+        <result property="prchReqLineNum"                 column="PRCH_REQ_LINE_NUM"                     javaType="String"/>
+        <result property="prchReqLineSubNum"              column="PRCH_REQ_LINE_SUB_NUM"                 javaType="String"/>
+        <result property="svcConfigMstrPkOfInvtyOrd"      column="SVC_CONFIG_MSTR_PK_OF_IO"              javaType="BigDecimal"/>
+        <result property="svcConfigMstrPkOfInvtyOrdDtl"   column="SVC_CONFIG_MSTR_PK_OF_IOD"             javaType="BigDecimal"/>
+        <result property="svcConfigMstrPkOfPrchReq"       column="SVC_CONFIG_MSTR_PK_OF_PR"              javaType="BigDecimal"/>
+        <result property="svcConfigMstrPkOfRmnfOrd"       column="SVC_CONFIG_MSTR_PK_OF_RM"              javaType="BigDecimal"/>
+        <result property="svcConfigMstrPkOfSvcMachMstr"   column="SVC_CONFIG_MSTR_PK_OF_SMM"             javaType="BigDecimal"/>
+        <result property="shopItemFlg"                    column="SHOP_ITEM_FLG"                         javaType="String"/>
+        <result property="pickSvcConfigMstrPk"            column="PICK_SVC_CONFIG_MSTR_PK"               javaType="BigDecimal"/>
+        <result property="ordSrcRefLineNum"               column="ORD_SRC_REF_LINE_NUM"                  javaType="String"/>
+        <result property="ordSrcRefLineSubNum"            column="ORD_SRC_REF_LINE_SUB_NUM"              javaType="String"/>
+        <result property="svcConfigMstrPkOfDsCpoConfig"   column="SVC_CONFIG_MSTR_PK_OF_DCC"             javaType="BigDecimal"/>
+        <result property="dsCpoConfigPk"                  column="DS_CPO_CONFIG_PK"                      javaType="BigDecimal"/>
+        <result property="billToCustAcctCd"               column="BILL_TO_CUST_ACCT_CD"                  javaType="String"/>
+        <result property="shipToCustAcctCd"               column="SHIP_TO_CUST_ACCT_CD"                  javaType="String"/>
+        <result property="ordSrcRefNum"                   column="ORD_SRC_REF_NUM"                       javaType="String"/>
+        <result property="instlbaseCtrlFlg"               column="INSTL_BASE_CTRL_FLG"                   javaType="String"/>
+        <result property="outOfWhNodeUsgFlg"              column="OUT_OF_WH_NODE_USG_FLG"                javaType="String"/>
+        <result property="outOfWhInvtyProcFlg"            column="OUT_OF_WH_INVTY_PROC_FLG"              javaType="String"/>
+        <result property="pddDt"                          column="PDD_DT"                                javaType="String"/>
+        <result property="psdDt"                          column="PSD_DT"                                javaType="String"/>
+        <result property="dsOrdCatgCd"                    column="DS_ORD_CATG_CD"                        javaType="String"/>
+        <result property="dsOrdTpCd"                      column="DS_ORD_TP_CD"                          javaType="String"/>
+        <result property="vndCd"                          column="VND_CD"                                javaType="String"/>
+        <result property="addConfigFlg"                   column="ADD_CONFIG_FLG"                        javaType="String"/>
+        <result property="wmsRtePathCd"                   column="WMS_RTE_PATH_CD"                       javaType="String"/>
+        <result property="svcConfigMstrPkOfPd"            column="SVC_CONFIG_MSTR_PK_OF_PD"              javaType="BigDecimal"/>
+        <result property="mdlId"                          column="MDL_ID"                                javaType="BigDecimal"/>
+    </resultMap>
+
+    <!-- #################### Statement #################### -->
+    <statement id="getShippingBackOrderInfo" parameterClass="Map" resultMap="result.ShippingBackOrderInfo">
+        SELECT
+               SO.SCE_ORD_TP_CD
+             <isEqual property="dropShipModeFlg" compareValue="Y">
+             , DCD.RTL_WH_CD                    AS INVTY_LOC_CD
+             </isEqual>
+             <isNotEqual property="dropShipModeFlg" compareValue="Y">
+             , SP.INVTY_LOC_CD
+             </isNotEqual>
+             , SP.SHIP_TO_CUST_CD
+             , SP.SET_MDSE_CD
+             , SP.SHPG_PLN_NUM
+             , SP.MDSE_CD
+             , SP.TRX_HDR_NUM
+             , SP.TRX_LINE_NUM
+             , SP.TRX_LINE_SUB_NUM
+             , SP.STK_STS_CD
+             , SP.ORD_QTY                       AS ORD_QTY_OF_SHPG_PLN
+             , SP.SP_FUNC_NET_UNIT_PRC_AMT
+             , SP.AVAL_SO_QTY
+             <isEqual property="dropShipModeFlg" compareValue="Y">
+             , DCD.RTL_WH_CD                    AS RTL_WH_CD_OF_INVTY_LOC
+             , DCD.RTL_SWH_CD                   AS RTL_SWH_CD_OF_INVTY_LOC
+             </isEqual>
+             <isNotEqual property="dropShipModeFlg" compareValue="Y">
+             , RS1.RTL_WH_CD                    AS RTL_WH_CD_OF_INVTY_LOC
+             , RS1.RTL_SWH_CD                   AS RTL_SWH_CD_OF_INVTY_LOC
+             </isNotEqual>
+             , RS2.RTL_WH_CD                    AS RTL_WH_CD_OF_SHIP_TO_CUST
+             , RS2.RTL_SWH_CD                   AS RTL_SWH_CD_OF_SHIP_TO_CUST
+             , M.MDSE_NM
+             , MD.BACK_ORD_IMPCT_TP_CD
+             , MSP.IN_INCH_VOL
+             , MSP.IN_POUND_WT
+             , MSP.IN_EACH_QTY
+             , DCD.ORD_QTY                       AS ORD_QTY_OF_CPO_DTL
+             , DCD.CUST_MDSE_CD
+             , NVL(SIR1.SVC_PRE_ISTL_SHOP_FLG, #flgOff#) AS SHOP_ITEM_FLG
+             , DCD.ORD_SRC_REF_LINE_NUM
+             , DCD.ORD_SRC_REF_LINE_SUB_NUM
+             , DCD.CONFIG_ITEM_FLG
+             , DC.ORD_SRC_REF_NUM
+             , IOD.TO_STK_STS_CD
+             , IOD.PRCH_REQ_NUM
+             , IOD.PRCH_REQ_LINE_NUM
+             , IOD.PRCH_REQ_LINE_SUB_NUM
+             , (SELECT MAX(SOD.SO_SLP_NUM)
+                FROM SHPG_ORD_DTL SOD
+                WHERE SO.GLBL_CMPY_CD = SOD.GLBL_CMPY_CD
+                AND   SO.SO_NUM       = SOD.SO_NUM
+                AND   SOD.EZCANCELFLAG    = '0'
+                ) MAX_SO_SLP_NUM
+        FROM
+               SHPG_ORD          SO
+             , SHPG_PLN          SP
+             , RTL_SWH           RS1
+             , RTL_SWH           RS2
+             , MDSE              M
+             , MDSE              MD
+             , MDSE_STORE_PKG    MSP
+             , CPO_DTL           DCD
+             , CPO               DC
+             , INVTY_ORD_DTL     IOD
+             , DS_CPO_CONFIG     DCC
+             , DS_CPO_ISTL_INFO  DCII
+             , SVC_ISTL_RULE     SIR1
+        WHERE
+               SO.GLBL_CMPY_CD          = #glblCmpyCd#
+        AND    SO.SO_NUM                = #soNum#
+        AND    SO.GLBL_CMPY_CD          = SP.GLBL_CMPY_CD
+        AND    SO.TRX_HDR_NUM           = SP.TRX_HDR_NUM
+        AND    SP.EZCANCELFLAG(+)       = '0'
+        AND    SP.SHPG_STS_CD           = #shpStsCd#
+        AND    SP.GLBL_CMPY_CD          = RS1.GLBL_CMPY_CD
+        AND    SP.INVTY_LOC_CD          = RS1.INVTY_LOC_CD
+        AND    SO.WH_CD                 = RS1.RTL_WH_CD
+        AND    RS1.EZCANCELFLAG         = '0'
+        AND    SP.GLBL_CMPY_CD          = RS2.GLBL_CMPY_CD(+)
+        AND    SP.SHIP_TO_CUST_CD       = RS2.INVTY_LOC_CD(+)
+        AND    RS2.EZCANCELFLAG(+)      = '0'
+        AND    SP.GLBL_CMPY_CD          = M.GLBL_CMPY_CD(+)
+        AND    SP.SET_MDSE_CD           = M.MDSE_CD(+)
+        AND    M.EZCANCELFLAG(+)        = '0'
+        AND    SP.GLBL_CMPY_CD          = MD.GLBL_CMPY_CD
+        AND    SP.MDSE_CD               = MD.MDSE_CD
+        AND    MD.INVTY_CTRL_FLG        = #flgOn#
+        AND    MD.EZCANCELFLAG          = '0'
+        AND    MD.GLBL_CMPY_CD          = MSP.GLBL_CMPY_CD(+)
+        AND    MD.MDSE_CD               = MSP.MDSE_CD(+)
+        AND    MSP.PKG_UOM_CD(+)        = #pkgUomCd#
+        AND    MSP.EZCANCELFLAG(+)      = '0'
+        AND    SP.GLBL_CMPY_CD          = DCD.GLBL_CMPY_CD
+        AND    SP.TRX_HDR_NUM           = DCD.CPO_ORD_NUM
+        AND    SP.TRX_LINE_NUM          = DCD.CPO_DTL_LINE_NUM
+        AND    SP.TRX_LINE_SUB_NUM      = DCD.CPO_DTL_LINE_SUB_NUM
+        AND    DCD.EZCANCELFLAG         = '0'
+        <isNotNull property="dsCpoConfigPk">
+        AND    DCD.DS_CPO_CONFIG_PK     = #dsCpoConfigPk#
+        </isNotNull>
+        AND    DCD.GLBL_CMPY_CD         = DC.GLBL_CMPY_CD(+)
+        AND    DCD.CPO_ORD_NUM          = DC.CPO_ORD_NUM(+)
+        AND    DC.EZCANCELFLAG(+)       = '0'
+        AND    SP.GLBL_CMPY_CD          = IOD.GLBL_CMPY_CD(+)
+        AND    SP.TRX_HDR_NUM           = IOD.INVTY_ORD_NUM(+)
+        AND    SP.TRX_LINE_NUM          = IOD.INVTY_ORD_LINE_NUM(+)
+        AND    IOD.EZCANCELFLAG(+)      = '0'
+        AND    DCD.GLBL_CMPY_CD         = DCC.GLBL_CMPY_CD(+)
+        AND    DCD.CPO_ORD_NUM          = DCC.CPO_ORD_NUM(+)
+        AND    DCD.DS_CPO_CONFIG_PK     = DCC.DS_CPO_CONFIG_PK(+)
+        AND    DCC.EZCANCELFLAG(+)      = '0'
+        AND    DCC.GLBL_CMPY_CD         = DCII.GLBL_CMPY_CD(+)
+        AND    DCC.DS_CPO_CONFIG_PK     = DCII.DS_CPO_CONFIG_PK(+)
+        AND    DCII.EZCANCELFLAG(+)     = '0'
+        AND    DCII.GLBL_CMPY_CD        = SIR1.GLBL_CMPY_CD(+)
+        AND    DCII.SVC_ISTL_RULE_NUM   = SIR1.SVC_ISTL_RULE_NUM(+)
+        AND    SIR1.EZCANCELFLAG(+)     = '0'
+        UNION
+        SELECT 
+               SO.SCE_ORD_TP_CD
+             <isEqual property="dropShipModeFlg" compareValue="Y">
+             , DCD.RTL_WH_CD                    AS INVTY_LOC_CD
+             </isEqual>
+             <isNotEqual property="dropShipModeFlg" compareValue="Y">
+             , SP.INVTY_LOC_CD
+             </isNotEqual>
+             , SP.SHIP_TO_CUST_CD
+             , SP.SET_MDSE_CD
+             , SP.SHPG_PLN_NUM
+             , SP.MDSE_CD
+             , SP.TRX_HDR_NUM
+             , SP.TRX_LINE_NUM
+             , SP.TRX_LINE_SUB_NUM
+             , SP.STK_STS_CD
+             , SP.ORD_QTY                       AS ORD_QTY_OF_SHPG_PLN
+             , SP.SP_FUNC_NET_UNIT_PRC_AMT
+             , SP.AVAL_SO_QTY
+             <isEqual property="dropShipModeFlg" compareValue="Y">
+             , DCD.RTL_WH_CD                    AS RTL_WH_CD_OF_INVTY_LOC
+             , DCD.RTL_SWH_CD                   AS RTL_SWH_CD_OF_INVTY_LOC
+             </isEqual>
+             <isNotEqual property="dropShipModeFlg" compareValue="Y">
+             , RS1.RTL_WH_CD                    AS RTL_WH_CD_OF_INVTY_LOC
+             , RS1.RTL_SWH_CD                   AS RTL_SWH_CD_OF_INVTY_LOC
+             </isNotEqual>
+             , RS2.RTL_WH_CD                    AS RTL_WH_CD_OF_SHIP_TO_CUST
+             , RS2.RTL_SWH_CD                   AS RTL_SWH_CD_OF_SHIP_TO_CUST
+             , M.MDSE_NM
+             , DMI.BACK_ORD_IMPCT_TP_CD
+             , MSP.IN_INCH_VOL
+             , MSP.IN_POUND_WT
+             , MSP.IN_EACH_QTY
+             , DCD.ORD_QTY                       AS ORD_QTY_OF_CPO_DTL
+             , DCD.CUST_MDSE_CD
+             , NVL(SIR1.SVC_PRE_ISTL_SHOP_FLG, #flgOff#) AS SHOP_ITEM_FLG
+             , DCD.ORD_SRC_REF_LINE_NUM
+             , DCD.ORD_SRC_REF_LINE_SUB_NUM
+             , DCD.CONFIG_ITEM_FLG
+             , DC.ORD_SRC_REF_NUM
+             , IOD.TO_STK_STS_CD
+             , IOD.PRCH_REQ_NUM
+             , IOD.PRCH_REQ_LINE_NUM
+             , IOD.PRCH_REQ_LINE_SUB_NUM
+             , (SELECT MAX(SOD.SO_SLP_NUM)
+                FROM SHPG_ORD_DTL SOD
+                WHERE SO.GLBL_CMPY_CD = SOD.GLBL_CMPY_CD
+                AND   SO.SO_NUM       = SOD.SO_NUM
+                AND   SOD.EZCANCELFLAG    = '0'
+                ) MAX_SO_SLP_NUM
+        FROM
+               SHPG_ORD          SO
+             , SHPG_PLN          SP
+             , RTL_SWH           RS1
+             , RTL_SWH           RS2
+             , MDSE              M
+             , MDSE              MD
+             , ORD_TAKE_MDSE     OTM
+             , MDSE              DMI
+             , MDSE_STORE_PKG    MSP
+             , CPO_DTL           DCD
+             , CPO               DC
+             , INVTY_ORD_DTL     IOD
+             , DS_CPO_CONFIG     DCC
+             , DS_CPO_ISTL_INFO  DCII
+             , SVC_ISTL_RULE     SIR1
+        WHERE
+               SO.GLBL_CMPY_CD          = #glblCmpyCd#
+        AND    SO.SO_NUM                = #soNum#
+        AND    SO.GLBL_CMPY_CD          = SP.GLBL_CMPY_CD
+        AND    SO.TRX_HDR_NUM           = SP.TRX_HDR_NUM
+        AND    SP.EZCANCELFLAG(+)       = '0'
+        AND    SP.SHPG_STS_CD           = #shpStsCd#
+        AND    SP.GLBL_CMPY_CD          = RS1.GLBL_CMPY_CD
+        AND    SP.INVTY_LOC_CD          = RS1.INVTY_LOC_CD
+        AND    SO.WH_CD                 = RS1.RTL_WH_CD
+        AND    RS1.EZCANCELFLAG         = '0'
+        AND    SP.GLBL_CMPY_CD          = RS2.GLBL_CMPY_CD(+)
+        AND    SP.SHIP_TO_CUST_CD       = RS2.INVTY_LOC_CD(+)
+        AND    RS2.EZCANCELFLAG(+)      = '0'
+        AND    SP.GLBL_CMPY_CD          = M.GLBL_CMPY_CD(+)
+        AND    SP.SET_MDSE_CD           = M.MDSE_CD(+)
+        AND    M.EZCANCELFLAG(+)        = '0'
+        AND    SP.GLBL_CMPY_CD          = OTM.GLBL_CMPY_CD
+        AND    SP.MDSE_CD               = OTM.ORD_TAKE_MDSE_CD
+        AND    OTM.EZCANCELFLAG         = '0'
+        AND    OTM.GLBL_CMPY_CD         = DMI.GLBL_CMPY_CD
+        AND    OTM.MDSE_CD              = DMI.MDSE_CD
+        AND    DMI.EZCANCELFLAG         = '0'
+        AND    DMI.GLBL_CMPY_CD         = MD.GLBL_CMPY_CD
+        AND    DMI.MDSE_CD              = MD.MDSE_CD
+        AND    MD.INVTY_CTRL_FLG        = #flgOn#
+        AND    MD.EZCANCELFLAG          = '0'
+        AND    MD.GLBL_CMPY_CD          = MSP.GLBL_CMPY_CD(+)
+        AND    MD.MDSE_CD               = MSP.MDSE_CD(+)
+        AND    MSP.PKG_UOM_CD(+)        = #pkgUomCd#
+        AND    MSP.EZCANCELFLAG(+)      = '0'
+        AND    SP.GLBL_CMPY_CD          = DCD.GLBL_CMPY_CD
+        AND    SP.TRX_HDR_NUM           = DCD.CPO_ORD_NUM
+        AND    SP.TRX_LINE_NUM          = DCD.CPO_DTL_LINE_NUM
+        AND    SP.TRX_LINE_SUB_NUM      = DCD.CPO_DTL_LINE_SUB_NUM
+        AND    DCD.EZCANCELFLAG         = '0'
+        <isNotNull property="dsCpoConfigPk">
+        AND    DCD.DS_CPO_CONFIG_PK     = #dsCpoConfigPk#
+        </isNotNull>
+        AND    DCD.GLBL_CMPY_CD         = DC.GLBL_CMPY_CD(+)
+        AND    DCD.CPO_ORD_NUM          = DC.CPO_ORD_NUM(+)
+        AND    DC.EZCANCELFLAG(+)       = '0'
+        AND    SP.GLBL_CMPY_CD          = IOD.GLBL_CMPY_CD(+)
+        AND    SP.TRX_HDR_NUM           = IOD.INVTY_ORD_NUM(+)
+        AND    SP.TRX_LINE_NUM          = IOD.INVTY_ORD_LINE_NUM(+)
+        AND    IOD.EZCANCELFLAG(+)      = '0'
+        AND    DCD.GLBL_CMPY_CD         = DCC.GLBL_CMPY_CD(+)
+        AND    DCD.CPO_ORD_NUM          = DCC.CPO_ORD_NUM(+)
+        AND    DCD.DS_CPO_CONFIG_PK     = DCC.DS_CPO_CONFIG_PK(+)
+        AND    DCC.EZCANCELFLAG(+)      = '0'
+        AND    DCC.GLBL_CMPY_CD         = DCII.GLBL_CMPY_CD(+)
+        AND    DCC.DS_CPO_CONFIG_PK     = DCII.DS_CPO_CONFIG_PK(+)
+        AND    DCII.EZCANCELFLAG(+)     = '0'
+        AND    DCII.GLBL_CMPY_CD        = SIR1.GLBL_CMPY_CD(+)
+        AND    DCII.SVC_ISTL_RULE_NUM   = SIR1.SVC_ISTL_RULE_NUM(+)
+        AND    SIR1.EZCANCELFLAG(+)     = '0'
+    ORDER BY
+               TRX_HDR_NUM
+             , TRX_LINE_NUM
+             , TRX_LINE_SUB_NUM
+             , SHPG_PLN_NUM
+    </statement>
+
+    <!-- #################### Result Mapping #################### -->
+    <resultMap id="result.ShippingBackOrderInfo" class="ShippingBackOrderInfo">
+        <result property="sceOrdTpCd"                     column="SCE_ORD_TP_CD"                         javaType="String"/>
+        <result property="invtyLocCd"                     column="INVTY_LOC_CD"                          javaType="String"/>
+        <result property="shipToCustCd"                   column="SHIP_TO_CUST_CD"                       javaType="String"/>
+        <result property="setMdseCd"                      column="SET_MDSE_CD"                           javaType="String"/>
+        <result property="shpgPlnNum"                     column="SHPG_PLN_NUM"                          javaType="String"/>
+        <result property="mdseCd"                         column="MDSE_CD"                               javaType="String"/>
+        <result property="trxHdrNum"                      column="TRX_HDR_NUM"                           javaType="String"/>
+        <result property="trxLineNum"                     column="TRX_LINE_NUM"                          javaType="String"/>
+        <result property="trxLineSubNum"                  column="TRX_LINE_SUB_NUM"                      javaType="String"/>
+        <result property="stkStsCd"                       column="STK_STS_CD"                            javaType="String"/>
+        <result property="ordQtyOfShpgPln"                column="ORD_QTY_OF_SHPG_PLN"                   javaType="BigDecimal"/>
+        <result property="spFuncNetUnitPrcAmt"            column="SP_FUNC_NET_UNIT_PRC_AMT"              javaType="BigDecimal"/>
+        <result property="avalSoQty"                      column="AVAL_SO_QTY"                           javaType="BigDecimal"/>
+        <result property="rtlWhCdOfInvtyLoc"              column="RTL_WH_CD_OF_INVTY_LOC"                javaType="String"/>
+        <result property="rtlSwhCdOfInvtyLoc"             column="RTL_SWH_CD_OF_INVTY_LOC"               javaType="String"/>
+        <result property="rtlWhCdOfShipToCust"            column="RTL_WH_CD_OF_SHIP_TO_CUST"             javaType="String"/>
+        <result property="rtlSwhCdOfShipToCust"           column="RTL_SWH_CD_OF_SHIP_TO_CUST"            javaType="String"/>
+        <result property="mdseNm"                         column="MDSE_NM"                               javaType="String"/>
+        <result property="backOrdImpctTpCd"               column="BACK_ORD_IMPCT_TP_CD"                  javaType="String"/>
+        <result property="inInchVol"                      column="IN_INCH_VOL"                           javaType="BigDecimal"/>
+        <result property="inPoundWt"                      column="IN_POUND_WT"                           javaType="BigDecimal"/>
+        <result property="inEachQty"                      column="IN_EACH_QTY"                           javaType="BigDecimal"/>
+        <result property="ordQtyOfCpoDtl"                 column="ORD_QTY_OF_CPO_DTL"                    javaType="BigDecimal"/>
+        <result property="custMdseCd"                     column="CUST_MDSE_CD"                          javaType="String"/>
+        <result property="shopItemFlg"                    column="SHOP_ITEM_FLG"                         javaType="String"/>
+        <result property="ordSrcRefLineNum"               column="ORD_SRC_REF_LINE_NUM"                  javaType="String"/>
+        <result property="ordSrcRefLineSubNum"            column="ORD_SRC_REF_LINE_SUB_NUM"              javaType="String"/>
+        <result property="configItemFlg"                  column="CONFIG_ITEM_FLG"                       javaType="String"/>
+        <result property="ordSrcRefNum"                   column="ORD_SRC_REF_NUM"                       javaType="String"/>
+        <result property="toStkStsCd"                     column="TO_STK_STS_CD"                         javaType="String"/>
+        <result property="prchReqNum"                     column="PRCH_REQ_NUM"                          javaType="String"/>
+        <result property="prchReqLineNum"                 column="PRCH_REQ_LINE_NUM"                     javaType="String"/>
+        <result property="prchReqLineSubNum"              column="PRCH_REQ_LINE_SUB_NUM"                 javaType="String"/>
+        <result property="maxSoSlpNum"                    column="MAX_SO_SLP_NUM"                        javaType="String"/>
+    </resultMap>
+
+    <!-- #################### Statement #################### -->
+    <statement id="getSoSerialInfo" parameterClass="Map" resultMap="result.SoSerialInfo">
+        SELECT 
+               SO.TRX_SRC_TP_CD
+             , SOD.MDSE_CD
+             , SOD.SO_SLP_NUM
+             , SOD.TRX_HDR_NUM
+             , SOD.TRX_LINE_NUM
+             , SOD.TRX_LINE_SUB_NUM
+             , DCD.SER_NUM
+        FROM   
+               SHPG_ORD     SO
+             , SHPG_ORD_DTL SOD
+             , CPO_DTL      DCD
+        WHERE  
+               SO.GLBL_CMPY_CD      = #glblCmpyCd#
+        AND    SO.SO_NUM            = #soNum#
+        AND    SO.EZCANCELFLAG      = '0'
+        AND    SO.GLBL_CMPY_CD      = SOD.GLBL_CMPY_CD
+        AND    SO.SO_NUM            = SOD.SO_NUM
+        AND    SOD.EZCANCELFLAG     = '0'
+        AND    SOD.GLBL_CMPY_CD     = DCD.GLBL_CMPY_CD
+        AND    SOD.TRX_HDR_NUM      = DCD.CPO_ORD_NUM
+        AND    SOD.TRX_LINE_NUM     = DCD.CPO_DTL_LINE_NUM
+        AND    SOD.TRX_LINE_SUB_NUM = DCD.CPO_DTL_LINE_SUB_NUM
+        AND    DCD.SER_NUM          IS NOT NULL
+        AND    DCD.EZCANCELFLAG     = '0'
+    -- Inventory Order (IT, TR, RP, RE, RM, IC, DI, SC, SW, CC)
+    UNION ALL
+        SELECT 
+               SO.TRX_SRC_TP_CD
+             , SOD.MDSE_CD
+             , SOD.SO_SLP_NUM
+             , SOD.TRX_HDR_NUM
+             , SOD.TRX_LINE_NUM
+             , SOD.TRX_LINE_SUB_NUM
+             , IOS.SER_NUM
+        FROM   
+               SHPG_ORD      SO
+             , SHPG_ORD_DTL  SOD
+             , INVTY_ORD_SER IOS
+        WHERE  
+               SO.GLBL_CMPY_CD      = #glblCmpyCd#
+        AND    SO.SO_NUM            = #soNum#
+        AND    SO.EZCANCELFLAG      = '0'
+        AND    SO.GLBL_CMPY_CD      = SOD.GLBL_CMPY_CD
+        AND    SO.SO_NUM            = SOD.SO_NUM
+        AND    SOD.EZCANCELFLAG     = '0'
+        AND    SOD.GLBL_CMPY_CD     = IOS.GLBL_CMPY_CD
+        AND    SOD.TRX_HDR_NUM      = IOS.INVTY_ORD_NUM
+        AND    SOD.TRX_LINE_NUM     = IOS.INVTY_ORD_LINE_NUM
+        AND    IOS.SER_NUM          IS NOT NULL
+        AND    IOS.EZCANCELFLAG     = '0'
+    -- Work Order (KT, KU)
+    UNION ALL
+        SELECT 
+               SO.TRX_SRC_TP_CD
+             , SOD.MDSE_CD
+             , SOD.SO_SLP_NUM
+             , SOD.TRX_HDR_NUM
+             , SOD.TRX_LINE_NUM
+             , SOD.TRX_LINE_SUB_NUM
+             , WOS.SER_NUM
+        FROM   
+               SHPG_ORD       SO
+             , SHPG_ORD_DTL   SOD
+             , WRK_ORD_SER    WOS
+        WHERE  
+               SO.GLBL_CMPY_CD          = #glblCmpyCd#
+        AND    SO.SO_NUM                = #soNum#
+        AND    SO.EZCANCELFLAG          = '0'
+        AND    SO.GLBL_CMPY_CD          = SOD.GLBL_CMPY_CD
+        AND    SO.SO_NUM                = SOD.SO_NUM
+        AND    SOD.EZCANCELFLAG         = '0'
+        AND    SOD.GLBL_CMPY_CD         = WOS.GLBL_CMPY_CD
+        AND    SOD.TRX_HDR_NUM          = WOS.WRK_ORD_NUM
+        AND    SOD.TRX_LINE_NUM         = WOS.WRK_ORD_DTL_LINE_NUM
+        AND    WOS.SER_NUM              IS NOT NULL
+        AND    WOS.EZCANCELFLAG         = '0'
+   -- Vendor Return (RD)
+    UNION ALL
+        SELECT 
+               SO.TRX_SRC_TP_CD
+             , SOD.MDSE_CD
+             , SOD.SO_SLP_NUM
+             , SOD.TRX_HDR_NUM
+             , SOD.TRX_LINE_NUM
+             , SOD.TRX_LINE_SUB_NUM
+             , PRS.SER_NUM
+        FROM   
+               SHPG_ORD     SO
+             , SHPG_ORD_DTL SOD
+             , PRCH_REQ_SER PRS
+        WHERE  
+               SO.GLBL_CMPY_CD      = #glblCmpyCd#
+        AND    SO.SO_NUM            = #soNum#
+        AND    SO.EZCANCELFLAG      = '0'
+        AND    SO.GLBL_CMPY_CD      = SOD.GLBL_CMPY_CD
+        AND    SO.SO_NUM            = SOD.SO_NUM
+        AND    SOD.EZCANCELFLAG     = '0'
+        AND    SOD.GLBL_CMPY_CD     = PRS.GLBL_CMPY_CD
+        AND    SOD.TRX_HDR_NUM      = PRS.PRCH_REQ_NUM
+        AND    SOD.TRX_LINE_NUM     = PRS.PRCH_REQ_LINE_NUM
+        AND    SOD.TRX_LINE_SUB_NUM = PRS.PRCH_REQ_LINE_SUB_NUM
+        AND    PRS.SER_NUM          IS NOT NULL
+        AND    PRS.EZCANCELFLAG     = '0'
+    -- Remanufacturing (RM)
+    UNION ALL
+        SELECT 
+               SO.TRX_SRC_TP_CD
+             , SOD.MDSE_CD
+             , SOD.SO_SLP_NUM
+             , SOD.TRX_HDR_NUM
+             , SOD.TRX_LINE_NUM
+             , SOD.TRX_LINE_SUB_NUM
+             , ROD.CMPT_SER_NUM AS SER_NUM
+        FROM   
+               SHPG_ORD     SO
+             , SHPG_ORD_DTL SOD
+             , RMNF_ORD_DTL ROD
+        WHERE  
+               SO.GLBL_CMPY_CD      = #glblCmpyCd#
+        AND    SO.SO_NUM            = #soNum#
+        AND    SO.EZCANCELFLAG      = '0'
+        AND    SO.GLBL_CMPY_CD      = SOD.GLBL_CMPY_CD
+        AND    SO.SO_NUM            = SOD.SO_NUM
+        AND    SOD.EZCANCELFLAG     = '0'
+        AND    SOD.GLBL_CMPY_CD     = ROD.GLBL_CMPY_CD
+        AND    SOD.TRX_HDR_NUM      = ROD.RMNF_ORD_NUM
+        AND    SOD.TRX_LINE_NUM     = ROD.RMNF_ORD_DTL_LINE_NUM
+        AND    ROD.CMPT_SER_NUM     IS NOT NULL
+        AND    ROD.EZCANCELFLAG     = '0'
+    -- BuyBack (BB)
+    UNION ALL
+        SELECT 
+               SO.TRX_SRC_TP_CD
+             , SOD.MDSE_CD
+             , SOD.SO_SLP_NUM
+             , SOD.TRX_HDR_NUM
+             , SOD.TRX_LINE_NUM
+             , SOD.TRX_LINE_SUB_NUM
+             , PSN.SER_NUM AS SER_NUM
+        FROM   
+               SHPG_ORD     SO
+             , SHPG_ORD_DTL SOD
+             , PO_SER_NUM   PSN
+        WHERE  
+               SO.GLBL_CMPY_CD      = #glblCmpyCd#
+        AND    SO.SO_NUM            = #soNum#
+        AND    SO.EZCANCELFLAG      = '0'
+        AND    SO.GLBL_CMPY_CD      = SOD.GLBL_CMPY_CD
+        AND    SO.SO_NUM            = SOD.SO_NUM
+        AND    SOD.EZCANCELFLAG     = '0'
+        AND    SOD.GLBL_CMPY_CD     = PSN.GLBL_CMPY_CD
+        AND    SOD.TRX_HDR_NUM      = PSN.KEY_INFO_CD_04
+        AND    SOD.TRX_LINE_NUM     = PSN.KEY_INFO_CD_05
+        AND    PSN.SER_NUM     IS NOT NULL
+        AND    PSN.EZCANCELFLAG     = '0'
+    </statement>
+
+    <!-- #################### Result Mapping #################### -->
+    <resultMap id="result.SoSerialInfo" class="SoSerialInfo">
+        <result property="trxSrcTpCd"                     column="TRX_SRC_TP_CD"                         javaType="String"/>
+        <result property="mdseCd"                         column="MDSE_CD"                               javaType="String"/>
+        <result property="soSlpNum"                       column="SO_SLP_NUM"                            javaType="String"/>
+        <result property="trxHdrNum"                      column="TRX_HDR_NUM"                           javaType="String"/>
+        <result property="trxLineNum"                     column="TRX_LINE_NUM"                          javaType="String"/>
+        <result property="trxLineSubNum"                  column="TRX_LINE_SUB_NUM"                      javaType="String"/>
+        <result property="serNum"                         column="SER_NUM"                               javaType="String"/>
+    </resultMap>
+
+    <!-- #################### Statement #################### -->
+    <statement id="getDeliveryDateCalcInfo" parameterClass="Map" resultMap="result.DeliveryDateCalcInfo">
+        SELECT
+            SO.WH_CD
+           ,SO.SHPG_MODE_CD
+           ,SO.FRT_CHRG_TO_CD
+           ,SO.FRT_CHRG_METH_CD
+           ,SO.SHIP_TO_CUST_CD
+           ,SO.SELL_TO_CUST_CD
+           ,SLT.DELY_LEAD_AOT
+           ,SSL.SHPG_SVC_TP_CD
+           ,SSL.SHPG_SVC_LVL_CD
+           ,STC.ST_CD
+           ,STC.POST_CD
+        FROM
+            SHPG_ORD         SO
+           ,SHPG_SVC_LVL     SSL
+           ,SHPG_SVC_LEAD_TM SLT
+           ,SHIP_TO_CUST     STC
+        WHERE
+            SO.GLBL_CMPY_CD     = #glblCmpyCd#
+        AND SO.SO_NUM           = #soNum#
+        AND SO.EZCANCELFLAG     = '0'
+        AND SO.GLBL_CMPY_CD     = SSL.GLBL_CMPY_CD(+)
+        AND SO.SHPG_SVC_LVL_CD  = SSL.SHPG_SVC_LVL_CD(+)
+        AND SSL.EZCANCELFLAG(+) = '0'
+        AND SSL.GLBL_CMPY_CD    = SLT.GLBL_CMPY_CD(+)
+        AND SSL.SHPG_SVC_LVL_CD = SLT.SHPG_SVC_LVL_CD(+)
+        AND SLT.EZCANCELFLAG(+) = '0'
+        AND SO.GLBL_CMPY_CD     = STC.GLBL_CMPY_CD(+)
+        AND SO.SHIP_TO_CUST_CD  = STC.SHIP_TO_CUST_CD(+)
+        AND STC.EZCANCELFLAG(+) = '0'
+    </statement>
+
+    <!-- #################### Result Mapping #################### -->
+    <resultMap id="result.DeliveryDateCalcInfo" class="DeliveryDateCalcInfo">
+        <result property="whCd"            column="WH_CD"             javaType="String"/>
+        <result property="shpgModeCd"      column="SHPG_MODE_CD"      javaType="String"/>
+        <result property="frtChrgToCd"     column="FRT_CHRG_TO_CD"    javaType="String"/>
+        <result property="frtChrgMethCd"   column="FRT_CHRG_METH_CD"  javaType="String"/>
+        <result property="shipToCustCd"    column="SHIP_TO_CUST_CD"   javaType="String"/>
+        <result property="sellToCustCd"    column="SELL_TO_CUST_CD"   javaType="String"/>
+        <result property="delyLeadAot"     column="DELY_LEAD_AOT"     javaType="BigDecimal"/>
+        <result property="shpgSvcTpCd"     column="SHPG_SVC_TP_CD"    javaType="String"/>
+        <result property="shpgSvcLvlCd"    column="SHPG_SVC_LVL_CD"   javaType="String"/>
+        <result property="shipToStCd"      column="ST_CD"             javaType="String"/>
+        <result property="shipToPostCd"    column="POST_CD"           javaType="String"/>
+    </resultMap>
+
+    <!-- #################### Statement #################### -->
+    <statement id="getTrnspLt" parameterClass="Map" resultMap="result.TRNSP_LTTMsg">
+        SELECT
+            TL.TRNSP_LT_AOT
+        FROM
+            TRNSP_LT TL
+        WHERE
+            TL.GLBL_CMPY_CD = #glblCmpyCd#
+        AND TL.WH_CD        = #whCd#
+        AND TL.ST_CD        = #shipToStCd#
+        AND TL.SHPG_MODE_CD = #shpgModeCd#
+        AND #shipToPostCd# BETWEEN TL.FROM_ZIP_CD AND TL.TO_ZIP_CD
+        AND NVL(TL.EFF_FROM_DT, '00000000')    &lt;= #effDt#
+        AND NVL(TL.EFF_THRU_DT, '99991231')    &gt;= #effDt#
+        AND TL.EZCANCELFLAG = '0'
+    </statement>
+
+    <!-- #################### Result Mapping #################### -->
+    <resultMap id="result.TRNSP_LTTMsg" class="TRNSP_LTTMsg">
+        <result property="trnspLtAot"    column="TRNSP_LT_AOT"    javaType="EZDTBigDecimalItem"/>
+    </resultMap>
+
+    <!-- #################### Statement #################### -->
+    <statement id="getAreaLeadTm" parameterClass="Map" resultMap="result.AREA_LEAD_TMTMsg">
+        SELECT
+            ALT.DELY_LEAD_AOT
+        FROM
+            AREA_LEAD_TM ALT
+        WHERE
+            ALT.GLBL_CMPY_CD = #glblCmpyCd#
+        AND ALT.WH_CD        = #whCd#
+        AND ALT.ST_CD        = #shipToStCd#
+        AND ALT.SHPG_MODE_CD = #shpgModeCd#
+        AND NVL(ALT.EFF_FROM_DT, '00000000')    &lt;= #effDt#
+        AND NVL(ALT.EFF_THRU_DT, '99991231')    &gt;= #effDt#
+        AND ALT.EZCANCELFLAG = '0'
+    </statement>
+
+    <!-- #################### Result Mapping #################### -->
+    <resultMap id="result.AREA_LEAD_TMTMsg" class="AREA_LEAD_TMTMsg">
+        <result property="delyLeadAot"    column="DELY_LEAD_AOT"    javaType="EZDTBigDecimalItem"/>
+    </resultMap>
+
+    <statement id="getMinShpgModeCd" parameterClass="Map" resultClass="String">
+        SELECT
+            SHS.SHPG_MODE_CD
+        FROM
+            SHPG_SVC SHS
+        WHERE
+            SHS.GLBL_CMPY_CD     = #glblCmpyCd#
+        AND SHS.SHPG_SVC_LVL_CD  = #shpgSvcLvlCd#
+        AND SHS.FRT_CHRG_TO_CD   = #frtChrgToCd#
+        AND SHS.FRT_CHRG_METH_CD = #frtChrgMethCd#
+        AND SHS.EZCANCELFLAG     = '0'
+        ORDER BY
+            SHS.SHIP_PRTY
+    </statement>
+
+    <statement id="getShpgModeCdListFromShpgWt" parameterClass="Map" resultClass="String">
+        SELECT
+            SW.SHPG_MODE_CD
+        FROM
+            SHPG_WT SW
+        WHERE
+            SW.GLBL_CMPY_CD     = #glblCmpyCd#
+        AND SW.FRT_CHRG_METH_CD = #frtChrgMethCd#
+        AND SW.FRT_CHRG_TO_CD   = #frtChrgToCd#
+        AND SW.SHIP_TO_CUST_CD  = #shipToCustCd#
+        AND SW.SELL_TO_CUST_CD  = #sellToCustCd#
+        AND #transMinWt# BETWEEN SW.TRANS_MIN_WT AND SW.TRANS_MAX_WT
+        AND NVL(SW.EFF_FROM_DT, '00000000')    &lt;= #effDt#
+        AND NVL(SW.EFF_THRU_DT, '99991231')    &gt;= #effDt#
+        AND SW.EZCANCELFLAG     = '0'
+        ORDER BY
+            TRANS_MAX_WT DESC
+    </statement>
+
+    <statement id="getExclSchdCoordCnt" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+                COUNT(1)
+        FROM
+                EXCL_SCHD_COORD ESC
+        WHERE
+                ESC.GLBL_CMPY_CD   = #glblCmpyCd#
+        AND     ESC.DS_ORD_CATG_CD = #dsOrdCatgCd#
+        AND  (
+                ESC.DS_ORD_TP_CD IS NULL
+        <isNotNull property="dsOrdTpCd">
+             OR ESC.DS_ORD_TP_CD   = #dsOrdTpCd#
+        </isNotNull>
+             )
+        AND     ESC.EZCANCELFLAG   = '0'
+    </statement>
+
+    <statement id="getShpgSvcLvlInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+            SSL.SHPG_SVC_LVL_CD
+           ,SSL.SHPG_SVC_TP_CD
+           ,SLT.DELY_LEAD_AOT
+        FROM
+            SHPG_SVC_LVL     SSL
+           ,SHPG_SVC_LEAD_TM SLT
+        WHERE
+            SSL.GLBL_CMPY_CD    = #glblCmpyCd#
+        AND SSL.SHPG_SVC_LVL_CD = #shpgSvcLvlCd#
+        AND SSL.EZCANCELFLAG    = '0'
+        AND SSL.GLBL_CMPY_CD    = SLT.GLBL_CMPY_CD(+)
+        AND SSL.SHPG_SVC_LVL_CD = SLT.SHPG_SVC_LVL_CD(+)
+        AND SLT.EZCANCELFLAG(+) = '0'
+    </statement>
+
+    <statement id="getTotShpgWt" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            SUM(NVL(SOD.TOT_SHPG_WT, 0)) AS TOT_SHPG_WT
+        FROM
+            SHPG_ORD_DTL SOD
+           ,SHPG_STS     SS
+        WHERE
+            SOD.GLBL_CMPY_CD = #glblCmpyCd#
+        AND SOD.SO_NUM       = #soNum#
+        AND SOD.EZCANCELFLAG = '0'
+        AND SOD.GLBL_CMPY_CD = SS.GLBL_CMPY_CD
+        AND SOD.SHPG_STS_CD  = SS.SHPG_STS_CD
+        AND SS.SO_PRINT_FLG  = #flgY#
+        AND SS.EZCANCELFLAG  = '0'
+    </statement>
+
+    <resultMap id="result.SHIP_TO_CUSTTMsg" class="SHIP_TO_CUSTTMsg">
+         <result property="locNm" column="LOC_NM" javaType="EZDTStringItem"/>
+         <result property="addlLocNm" column="ADDL_LOC_NM" javaType="EZDTStringItem"/>
+         <result property="firstLineAddr" column="FIRST_LINE_ADDR" javaType="EZDTStringItem"/>
+         <result property="scdLineAddr" column="SCD_LINE_ADDR" javaType="EZDTStringItem"/>
+         <result property="thirdLineAddr" column="THIRD_LINE_ADDR" javaType="EZDTStringItem"/>
+         <result property="frthLineAddr" column="FRTH_LINE_ADDR" javaType="EZDTStringItem"/>
+         <result property="ctyAddr" column="CTY_ADDR" javaType="EZDTStringItem"/>
+         <result property="stCd" column="ST_CD" javaType="EZDTStringItem"/>
+         <result property="postCd" column="POST_CD" javaType="EZDTStringItem"/>
+         <result property="ctryCd" column="CTRY_CD" javaType="EZDTStringItem"/>
+         <result property="telNum" column="TEL_NUM" javaType="EZDTStringItem"/>
+    </resultMap>
+
+    <statement id="getShipToCust" parameterClass="Map" resultMap="result.SHIP_TO_CUSTTMsg">
+        SELECT
+             STC.LOC_NM
+            ,STC.ADDL_LOC_NM
+            ,STC.FIRST_LINE_ADDR
+            ,STC.SCD_LINE_ADDR
+            ,STC.THIRD_LINE_ADDR
+            ,STC.FRTH_LINE_ADDR
+            ,STC.CTY_ADDR
+            ,STC.ST_CD
+            ,STC.POST_CD
+            ,STC.CTRY_CD
+            ,STC.TEL_NUM
+        FROM
+           SHIP_TO_CUST STC
+        WHERE
+            STC.GLBL_CMPY_CD      = #glblCmpyCd#
+        AND STC.SHIP_TO_CUST_CD   = #shipToCustCd#
+        AND STC.EZCANCELFLAG      = '0'
+    </statement>
+    <!-- 08/03/2017 CITS S.Endo Add Sol#072(QC#18386) START -->
+    <statement id="getModelCriticality" parameterClass="Map" resultClass="Map">
+        SELECT
+            MBO.BO_IMPCT_TP_CD BACK_ORD_IMPCT_TP_CD
+        FROM
+            MDL_BO_IMPCT MBO
+        WHERE
+            MBO.MDSE_CD = #mdseCd#
+        AND MBO.MDL_ID = (
+                SELECT
+                    DCP.MDL_ID
+                FROM
+                    SHPG_ORD_DTL SD
+                   ,CPO_DTL CD
+                   ,DS_CPO_CONFIG DCP
+                WHERE
+                    SD.SO_NUM           = #soNum#
+                AND SD.SO_SLP_NUM       = #soSlpNum#
+                AND SD.GLBL_CMPY_CD     = #glblCmpyCd#
+                AND SD.TRX_HDR_NUM      = CD.CPO_ORD_NUM
+                AND SD.TRX_LINE_NUM     = CD.CPO_DTL_LINE_NUM
+                AND SD.TRX_LINE_SUB_NUM = CD.CPO_DTL_LINE_SUB_NUM
+                AND SD.GLBL_CMPY_CD     = CD.GLBL_CMPY_CD
+                AND CD.CPO_ORD_NUM      = DCP.CPO_ORD_NUM
+                AND CD.DS_ORD_POSN_NUM  = DCP.DS_ORD_POSN_NUM
+                AND DCP.CONFIG_CATG_CD  = #configCatgCd#
+                AND CD.GLBL_CMPY_CD     = DCP.GLBL_CMPY_CD
+                AND SD.EZCANCELFLAG     = '0'
+                AND CD.EZCANCELFLAG     = '0'
+                AND DCP.EZCANCELFLAG    = '0'
+            )
+        AND MBO.GLBL_CMPY_CD=#glblCmpyCd#
+        AND MBO.EZCANCELFLAG ='0'
+    </statement>
+    <statement id="getModelCriticalityForBO" parameterClass="Map" resultClass="Map">
+        SELECT
+            MBO.BO_IMPCT_TP_CD BACK_ORD_IMPCT_TP_CD
+        FROM
+            MDL_BO_IMPCT MBO
+        WHERE
+            MBO.MDSE_CD = #mdseCd#
+        AND MBO.MDL_ID = (
+                SELECT
+                    DCP.MDL_ID
+                FROM
+                    CPO_DTL CD
+                   ,DS_CPO_CONFIG DCP
+                WHERE
+                    CD.CPO_ORD_NUM          = #cpoOrdNum#
+                AND CD.CPO_DTL_LINE_NUM     = #cpoDtlLineNum#
+                AND CD.CPO_DTL_LINE_SUB_NUM = #cpoDtlLineSubNum#
+                AND CD.CPO_ORD_NUM          = DCP.CPO_ORD_NUM
+                AND CD.DS_ORD_POSN_NUM      = DCP.DS_ORD_POSN_NUM
+                AND DCP.CONFIG_CATG_CD      = #configCatgCd#
+                AND CD.GLBL_CMPY_CD         = DCP.GLBL_CMPY_CD
+                AND CD.EZCANCELFLAG         = '0'
+                AND DCP.EZCANCELFLAG        = '0'
+            )
+        AND MBO.GLBL_CMPY_CD=#glblCmpyCd#
+        AND MBO.EZCANCELFLAG ='0'
+    </statement>
+    <!-- 08/03/2017 CITS S.Endo Add Sol#072(QC#18386) END -->
+
+    <!-- 201/12/28 QC#18460(SOL#087) T,Hakodate ADD START -->
+     <statement id="getRequestInstallTime" parameterClass="Map" resultClass="String">
+     SELECT
+         RQST_ISTL_TM
+     FROM
+         DS_CPO_ISTL_INFO DCII
+     WHERE 1=1 
+     AND DCII.CPO_ORD_NUM     = #trxHdrNum#
+     AND DCII.GLBL_CMPY_CD    = #glblCmpyCd#
+     AND DCII.EZCANCELFLAG    = '0'
+     AND ROWNUM = 1
+     </statement>
+    <!-- 201/12/28 QC#18460(SOL#087) T,Hakodate ADD END   -->
+
+    <!-- 2018/01/10 QC#18460(SOL#087) T,Hakodate ADD START -->
+     <statement id="getTechMeetTruckFlg" parameterClass="Map" resultClass="String">
+        SELECT
+            1
+        FROM
+             ( SELECT
+                   MAX(DS_CPO_ISTL_INFO_PK) CUR_DS_CPO_ISTL_INFO_PK
+                   ,GLBL_CMPY_CD
+                   ,CPO_ORD_NUM
+               FROM
+                   DS_CPO_ISTL_INFO D
+               WHERE
+                   EZCANCELFLAG = '0'
+               GROUP BY
+                    GLBL_CMPY_CD
+                   ,CPO_ORD_NUM
+             ) CUR_REC
+            ,DS_CPO_ISTL_INFO DCII
+            ,SVC_ISTL_RULE    SIR
+        WHERE
+            DCII.GLBL_CMPY_CD           = #glblCmpyCd#
+        AND DCII.CPO_ORD_NUM            = #trxHdrNum#
+        AND DCII.EZCANCELFLAG           = '0'
+        AND DCII.GLBL_CMPY_CD           = CUR_REC.GLBL_CMPY_CD
+        AND DCII.CPO_ORD_NUM            = CUR_REC.CPO_ORD_NUM
+        AND DCII.DS_CPO_ISTL_INFO_PK    = CUR_REC.CUR_DS_CPO_ISTL_INFO_PK
+        AND DCII.GLBL_CMPY_CD           = SIR.GLBL_CMPY_CD
+        AND DCII.SVC_ISTL_RULE_NUM      = SIR.SVC_ISTL_RULE_NUM
+        AND SIR.TECH_MEET_TRUCK_DEF_FLG = #flgOnY#
+        AND SIR.EZCANCELFLAG            = '0'
+     </statement>
+    <!-- 2018/01/10 QC#18460(SOL#087) T,Hakodate ADD END   -->
+
+    <!-- 2018/06/26 QC#20154 Add SQL. T.Tokutomi  -->
+     <statement id="cntShipped" parameterClass="Map" resultClass="Integer">
+       SELECT
+            COUNT(*) CNT
+        FROM
+            SHPG_ORD SO
+        WHERE
+            SO.GLBL_CMPY_CD = #glblCmpyCd#
+        AND SO.SO_NUM       = #soNum#
+        AND SO.SHPG_STS_CD  = #shipped#
+        AND SO.EZCANCELFLAG = '0'
+     </statement>
+
+     <!-- 2018/06/19 QC#20154 Add SQL. T.Tokutomi  -->
+     <statement id="getWmsWhCdForTecsys" parameterClass="Map" resultClass="String">
+        SELECT
+            RW.WMS_WH_CD
+        FROM
+            RTL_WH RW
+            ,WMS_WH W2
+        WHERE
+            RW.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND RW.RTL_WH_CD           = #rtlWhCd#
+        AND RW.AUTO_SO_DROP_FLG    = #flgOnY#
+        AND RW.EZCANCELFLAG        = '0'
+        AND W2.GLBL_CMPY_CD        = RW.GLBL_CMPY_CD
+        AND W2.WH_CD               = RW.WMS_WH_CD
+        AND W2.MW_REPL_TRGT_GRP_CD = #tecsys#
+        AND W2.EZCANCELFLAG        = '0'
+     </statement>
+
+     <!-- 2018/06/26 QC#20154 Add SQL. T.Tokutomi  -->
+     <statement id="cntShpgPlnFromCPO" parameterClass="Map" resultClass="Map">
+       SELECT
+            CD.CPO_ORD_NUM
+            ,CD.DS_ORD_POSN_NUM
+        FROM
+             SHPG_PLN SP
+            ,CPO_DTL CD
+        WHERE
+            SP.GLBL_CMPY_CD         = #glblCmpyCd#
+        AND SP.SHPG_PLN_NUM         = #shpgPlnNum#
+        AND SP.EZCANCELFLAG         = '0'
+        AND CD.GLBL_CMPY_CD         = SP.GLBL_CMPY_CD
+        AND CD.CPO_ORD_NUM          = SP.TRX_HDR_NUM
+        AND CD.CPO_DTL_LINE_NUM     = SP.TRX_LINE_NUM
+        AND CD.CPO_DTL_LINE_SUB_NUM = SP.TRX_LINE_SUB_NUM
+        AND CD.EZCANCELFLAG         = '0'
+     </statement>
+
+     <!-- 2018/06/26 QC#20154 Add SQL. T.Tokutomi  -->
+     <statement id="getOpenSoForSamePosnCPO" parameterClass="Map" resultClass="String">
+       SELECT
+             SO.SO_NUM
+        FROM
+             CPO_DTL CD
+            ,SHPG_PLN SP
+            ,SHPG_ORD SO
+        WHERE
+            CD.GLBL_CMPY_CD     = #glblCmpyCd#
+        AND CD.CPO_ORD_NUM      = #cpoOrdNum#
+        AND CD.DS_ORD_POSN_NUM  = #dsOrdPosnNum#
+        AND CD.EZCANCELFLAG     = '0'
+        AND SP.GLBL_CMPY_CD     = CD.GLBL_CMPY_CD
+        AND SP.TRX_HDR_NUM      = CD.CPO_ORD_NUM
+        AND SP.TRX_LINE_NUM     = CD.CPO_DTL_LINE_NUM
+        AND SP.TRX_LINE_SUB_NUM = CD.CPO_DTL_LINE_SUB_NUM
+        AND SP.EZCANCELFLAG     = '0'
+        AND SO.GLBL_CMPY_CD     = SP.GLBL_CMPY_CD
+        AND SO.SO_NUM           = SP.SO_NUM
+        AND SO.SHPG_STS_CD      &lt; #shipped#
+        AND SO.EZCANCELFLAG     = '0'
+     </statement>
+
+     <!-- Add Start 2019/12/13 QC#55070 -->
+     <statement id="getShipToCtacPsnNm" parameterClass="Map" resultClass="String">
+        SELECT
+              PR.CTAC_PSN_NM 
+        FROM
+              PRCH_REQ      PR 
+        WHERE
+                PR.GLBL_CMPY_CD = #glblCmpyCd# 
+            AND PR.PRCH_REQ_NUM = #trxHdrNum# 
+            AND PR.EZCANCELFLAG = '0' 
+        UNION 
+        SELECT
+              PR.CTAC_PSN_NM 
+        FROM
+              PRCH_REQ      PR 
+            , PRCH_REQ_DTL  PRD
+            , INVTY_ORD     IO
+        WHERE
+                PR.GLBL_CMPY_CD   = #glblCmpyCd# 
+            AND PR.EZCANCELFLAG   = '0' 
+            AND PR.GLBL_CMPY_CD   = PRD.GLBL_CMPY_CD 
+            AND PR.PRCH_REQ_NUM   = PRD.PRCH_REQ_NUM 
+            AND PRD.EZCANCELFLAG  = '0' 
+            AND PRD.GLBL_CMPY_CD  = IO.GLBL_CMPY_CD 
+            AND PRD.INVTY_ORD_NUM = IO.INVTY_ORD_NUM 
+            AND IO.INVTY_ORD_NUM  = #trxHdrNum# 
+            AND IO.EZCANCELFLAG   = '0' 
+        GROUP BY
+              PR.CTAC_PSN_NM 
+        UNION 
+        SELECT
+              PR.CTAC_PSN_NM 
+        FROM
+              PRCH_REQ PR
+            , CPO      C 
+        WHERE
+                PR.GLBL_CMPY_CD = #glblCmpyCd# 
+            AND PR.EZCANCELFLAG = '0' 
+            AND PR.GLBL_CMPY_CD = C.GLBL_CMPY_CD 
+            AND PR.PRCH_REQ_NUM = C.ORD_SRC_REF_NUM 
+            AND C.CPO_ORD_NUM   = #trxHdrNum# 
+            AND C.CPO_SRC_TP_CD = #invtyReqEntry# 
+            AND C.EZCANCELFLAG  = '0' 
+     </statement>
+     <!-- Add End 2019/12/13 QC#55070 -->
+
+     <!-- Add Start QC#54989 -->
+     <statement id="getOrdInfo" parameterClass="Map" resultClass="Map">
+          SELECT
+               DOTPD.DS_ORD_TP_CD
+             , DOTPD.DEF_PRC_CATG_CD
+             , DOT.DS_ORD_CATG_CD
+          FROM
+               DS_COND_CONST      DCC
+             , DS_ORD_TP_PROC_DFN DOTPD
+             , DS_ORD_TP          DOT
+         WHERE
+               DCC.GLBL_CMPY_CD             = DOTPD.GLBL_CMPY_CD
+           AND DCC.DS_COND_CONST_CD         = DOTPD.DS_ORD_TP_CD
+           AND DOTPD.GLBL_CMPY_CD           = DOT.GLBL_CMPY_CD
+           AND DOTPD.DS_ORD_TP_CD           = DOT.DS_ORD_TP_CD
+           AND DCC.GLBL_CMPY_CD             = #GLBL_CMPY_CD#
+           AND DCC.DS_COND_CONST_GRP_ID     = #DS_COND_CONST_GRP_ID#
+           AND DCC.DS_COND_CONST_VAL_TXT_01 = #DS_COND_CONST_VAL_TXT_01#
+           <isNotNull property="DS_COND_CONST_VAL_TXT_02">
+           AND DCC.DS_COND_CONST_VAL_TXT_02 = #DS_COND_CONST_VAL_TXT_02#
+           </isNotNull>
+           <isNull property="DS_COND_CONST_VAL_TXT_02">
+           AND DCC.DS_COND_CONST_VAL_TXT_02 IS NULL
+           </isNull>
+           AND DCC.EZCANCELFLAG             = '0'
+           AND DOTPD.EZCANCELFLAG           = '0'
+           AND DOT.EZCANCELFLAG             = '0'
+     </statement>
+     <!-- Add End QC#54989 -->
+</sqlMap>

@@ -1,0 +1,628 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NSAL0390Query">
+
+    <statement id="getFstData" parameterClass="Map" resultClass="Map">
+        WITH
+            CR_CARD AS(
+                       SELECT
+                           CC.GLBL_CMPY_CD
+                          ,CC.DS_CONTR_CR_CARD_PO_PK
+                          ,CC.DS_CONTR_PK
+                          ,CC.CR_CARD_CUST_REF_NUM
+                          ,CC.CR_CARD_EXPR_YR_MTH
+                          ,CC.LEASE_CMPY_FLG
+                          ,CC.DS_CONTR_MACH_LVL_NUM
+                          ,CC.EZUPTIMEZONE
+                          ,CC.EZUPTIME
+<!-- START 2016/12/05 [QC#14204, ADD] -->
+                          ,CC.EZINTIME
+                          ,CC.EZINUSERID
+                          ,CC.EZUPUSERID
+                          ,CC.EZTABLEID
+<!-- END 2016/12/05 [QC#14204, ADD] -->
+                       FROM
+                           DS_CONTR_CR_CARD_PO CC
+                       WHERE
+                           CC.GLBL_CMPY_CD             = #glblCmpyCd#
+                           <iterate property="dsContrPkList" var="dsContrPk[]" open="AND CC.DS_CONTR_PK IN (" close=")" conjunction=",">
+                           #dsContrPk[]#
+                           </iterate>
+                           AND CC.DS_CONTR_DTL_PK      IS NULL
+                           AND CC.DS_CONTR_BLLG_MTR_PK IS NULL
+                           AND CC.DS_CONTR_MACH_LVL_NUM = #machLvlNum1#
+                           AND CC.EZCANCELFLAG          = '0'
+<!-- START 2019/01/09 [QC#26928, ADD] -->
+                           AND CC.CR_CARD_FLG           = 'Y'
+<!-- END 2019/01/09 [QC#26928, ADD] -->                       
+                      )
+        SELECT
+            DC.DS_CONTR_PK            AS DS_CONTR_PK
+           ,DC.DS_CONTR_NUM           AS DS_CONTR_NUM
+           ,DC.ALT_PAYER_CUST_CD      AS ALT_PAYER_CUST_CD
+           ,DC.DS_ACCT_NUM            AS DS_ACCT_NUM
+           ,CC.DS_CONTR_CR_CARD_PO_PK AS DS_CONTR_CR_CARD_PO_PK
+           ,CC.CR_CARD_CUST_REF_NUM   AS CR_CARD_CUST_REF_NUM
+           ,CC.CR_CARD_EXPR_YR_MTH    AS CR_CARD_EXPR_YR_MTH
+           ,CASE WHEN CC.LEASE_CMPY_FLG IS NOT NULL THEN CC.LEASE_CMPY_FLG
+                 WHEN DC.LEASE_CMPY_CD IS NOT NULL THEN 'Y'
+                 ELSE 'N'
+            END                       AS LEASE_CMPY_FLG
+           <!-- START 2018/03/16 M.Naito [QC#20496, ADD] -->
+           ,CASE (
+                      SELECT
+                          COUNT(*)
+                      FROM
+                          SVC_MEMO SM
+                      WHERE
+                              SM.GLBL_CMPY_CD      = DC.GLBL_CMPY_CD
+                          AND SM.DS_CONTR_PK       = DC.DS_CONTR_PK
+                          AND (
+                                  SM.SVC_MEMO_TRX_NUM IS NULL
+                                  OR (
+                                          CC.DS_CONTR_CR_CARD_PO_PK IS NOT NULL
+                                      AND SM.SVC_MEMO_TRX_NUM = CC.DS_CONTR_CR_CARD_PO_PK
+                                  )
+                              )
+                          AND SM.SVC_MEMO_CATG_CD  = #contractMemo#
+                          AND SM.SVC_MEMO_TP_CD    = #updateCreditCardInfo#
+                          AND SM.SVC_MEMO_TRX_NM   = #dsContrCrCardPoPk#
+                          AND SM.EZCANCELFLAG      = '0'
+                  )
+            WHEN 0 THEN 'N'
+            ELSE        'Y'
+            END                       AS XX_CNT_DPLY_FLG
+           <!-- END 2018/03/16 M.Naito [QC#20496, ADD] -->
+           ,CC.EZUPTIMEZONE           AS EZUPTIMEZONE
+           ,CC.EZUPTIME               AS EZUPTIME
+           ,SV.DS_CONTR_CTRL_STS_CD   AS DS_CONTR_CTRL_STS_CD
+           ,BC.SELL_TO_CUST_CD        AS SELL_TO_CUST_CD
+<!-- START 2016/12/05 [QC#14204, ADD] -->
+           ,CC.EZINTIME               AS XX_REC_HIST_CRAT_TS
+           ,CC.EZINUSERID             AS XX_REC_HIST_CRAT_BY_NM
+           ,CC.EZUPTIME               AS XX_REC_HIST_UPD_TS
+           ,CC.EZUPUSERID             AS XX_REC_HIST_UPD_BY_NM
+           ,CC.EZTABLEID              AS XX_REC_HIST_TBL_NM
+<!-- END 2016/12/05 [QC#14204, ADD] -->
+        FROM
+            DS_CONTR        DC
+           ,CR_CARD         CC
+           ,DS_CONTR_STS_V  SV
+           ,BILL_TO_CUST    BC
+        WHERE
+            DC.GLBL_CMPY_CD     = #glblCmpyCd#
+            <iterate property="dsContrPkList" var="dsContrPk[]" open="AND DC.DS_CONTR_PK IN (" close=")" conjunction=",">
+            #dsContrPk[]#
+            </iterate>
+            AND DC.EZCANCELFLAG      = '0'
+            AND DC.GLBL_CMPY_CD      = CC.GLBL_CMPY_CD (+)
+            AND DC.DS_CONTR_PK       = CC.DS_CONTR_PK (+)
+            AND DC.GLBL_CMPY_CD      = SV.GLBL_CMPY_CD
+            AND DC.DS_CONTR_PK       = SV.DS_CONTR_PK
+            AND SV.EZCANCELFLAG      = '0'
+            AND DC.GLBL_CMPY_CD      = BC.GLBL_CMPY_CD (+)
+            AND DC.ALT_PAYER_CUST_CD = BC.BILL_TO_CUST_CD (+)
+            AND BC.EZCANCELFLAG (+)  = '0'
+        ORDER BY
+            DC.DS_CONTR_NUM
+    </statement>
+
+    <statement id="getScdData" parameterClass="Map" resultClass="Map">
+        WITH
+            CR_CARD AS(
+                       SELECT
+                           CC.GLBL_CMPY_CD
+                          ,CC.DS_CONTR_CR_CARD_PO_PK
+                          ,CC.DS_CONTR_PK
+                          ,CC.DS_CONTR_DTL_PK
+                          ,CC.CR_CARD_CUST_REF_NUM
+                          ,CC.CR_CARD_EXPR_YR_MTH
+                          ,CC.LEASE_CMPY_FLG
+                          ,CC.EZUPTIMEZONE
+                          ,CC.EZUPTIME
+<!-- START 2016/12/05 [QC#14204, ADD] -->
+                          ,CC.EZINTIME
+                          ,CC.EZINUSERID
+                          ,CC.EZUPUSERID
+                          ,CC.EZTABLEID
+<!-- END 2016/12/05 [QC#14204, ADD] -->
+                       FROM
+                           DS_CONTR_CR_CARD_PO CC
+                       WHERE
+                           CC.GLBL_CMPY_CD             = #glblCmpyCd#
+                           AND CC.DS_CONTR_PK          = #dsContrPk#
+                           AND CC.DS_CONTR_DTL_PK      IS NOT NULL
+                           AND CC.DS_CONTR_BLLG_MTR_PK IS NULL
+                           AND CC.DS_CONTR_MACH_LVL_NUM = #machLvlNum2#
+                           AND CC.EZCANCELFLAG          = '0'
+<!-- START 2019/01/09 [QC#26928, ADD] -->
+                           AND CC.CR_CARD_FLG           = 'Y'
+<!-- END 2019/01/09 [QC#26928, ADD] -->                       
+                      )
+        SELECT
+            DCD.DS_CONTR_DTL_PK       AS DS_CONTR_DTL_PK
+           ,CASE
+                WHEN DCD.DS_CONTR_DTL_TP_CD = #dsContrDtlTpCdFlt# THEN 
+                     TRIM(DC.DS_CONTR_CATG_CD || '-' || DC.DS_CONTR_NUM)
+                WHEN DCD.DS_CONTR_DTL_TP_CD = #dsContrDtlTpCdAgg# THEN 
+                     TRIM(DC.DS_CONTR_CATG_CD || '-' || DC.DS_CONTR_NUM)
+                ELSE
+                    SMM.SER_NUM
+            END                       AS SER_NUM
+           ,CC.DS_CONTR_CR_CARD_PO_PK AS DS_CONTR_CR_CARD_PO_PK
+           ,CC.CR_CARD_CUST_REF_NUM   AS CR_CARD_CUST_REF_NUM
+           ,CC.CR_CARD_EXPR_YR_MTH    AS CR_CARD_EXPR_YR_MTH
+           ,CASE WHEN CC.LEASE_CMPY_FLG IS NOT NULL THEN CC.LEASE_CMPY_FLG
+                 WHEN DC.LEASE_CMPY_CD IS NOT NULL THEN 'Y'
+                 ELSE 'N'
+            END                       AS LEASE_CMPY_FLG
+           <!-- START 2018/03/16 M.Naito [QC#20496, ADD] -->
+           ,CASE (
+                      SELECT
+                          COUNT(*)
+                      FROM
+                          SVC_MEMO SM
+                      WHERE
+                              SM.GLBL_CMPY_CD      = CC.GLBL_CMPY_CD
+                          AND SM.DS_CONTR_PK       = CC.DS_CONTR_PK
+                          AND SM.SVC_MEMO_TRX_NUM  = CC.DS_CONTR_CR_CARD_PO_PK
+                          AND SM.SVC_MEMO_TRX_NUM  IS NOT NULL
+                          AND SM.SVC_MEMO_CATG_CD  = #contractMemo#
+                          AND SM.SVC_MEMO_TP_CD    = #updateCreditCardInfo#
+                          AND SM.SVC_MEMO_TRX_NM   = #dsContrCrCardPoPk#
+                          AND SM.EZCANCELFLAG      = '0'
+                   )
+            WHEN 0 THEN 'N'
+            ELSE        'Y'
+            END                       AS XX_CNT_DPLY_FLG
+           <!-- END 2018/03/16 M.Naito [QC#20496, ADD] -->
+           ,CC.EZUPTIMEZONE           AS EZUPTIMEZONE
+           ,CC.EZUPTIME               AS EZUPTIME
+           ,SV.DS_CONTR_CTRL_STS_CD   AS DS_CONTR_CTRL_STS_CD
+           ,BC.SELL_TO_CUST_CD        AS SELL_TO_CUST_CD
+<!-- START 2016/12/05 [QC#14204, ADD] -->
+           ,CC.EZINTIME               AS XX_REC_HIST_CRAT_TS
+           ,CC.EZINUSERID             AS XX_REC_HIST_CRAT_BY_NM
+           ,CC.EZUPTIME               AS XX_REC_HIST_UPD_TS
+           ,CC.EZUPUSERID             AS XX_REC_HIST_UPD_BY_NM
+           ,CC.EZTABLEID              AS XX_REC_HIST_TBL_NM
+<!-- END 2016/12/05 [QC#14204, ADD] -->
+        FROM
+            DS_CONTR           DC
+           ,DS_CONTR_DTL       DCD
+           ,SVC_MACH_MSTR      SMM
+           ,CR_CARD            CC
+           ,DS_CONTR_DTL_STS_V SV
+           ,BILL_TO_CUST       BC
+        WHERE
+            DC.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND DC.DS_CONTR_PK  = #dsContrPk#
+            AND DC.EZCANCELFLAG = '0'
+
+            AND DC.GLBL_CMPY_CD  = DCD.GLBL_CMPY_CD
+            AND DC.DS_CONTR_PK   = DCD.DS_CONTR_PK
+            AND DCD.EZCANCELFLAG = '0'
+            AND (
+                    (
+                         DC.DS_CONTR_CATG_CD NOT IN (#dsContrCatgFlt#, #dsContrCatgAgg#)
+                         <iterate property="dsContrDtlPkList" var="dsContrDtlPk[]" open="AND DCD.DS_CONTR_DTL_PK IN (" close=")" conjunction=",">
+                             #dsContrDtlPk[]#
+                         </iterate>
+                    ) OR (
+                             DC.DS_CONTR_CATG_CD    = #dsContrCatgFlt#
+                         AND DCD.DS_CONTR_DTL_TP_CD = #dsContrDtlTpCdFlt#
+                    ) OR (
+                             DC.DS_CONTR_CATG_CD    = #dsContrCatgAgg#
+                         AND DCD.DS_CONTR_DTL_TP_CD = #dsContrDtlTpCdAgg#
+                    )
+                )
+
+            AND DCD.GLBL_CMPY_CD     = SMM.GLBL_CMPY_CD (+)
+            AND DCD.SVC_MACH_MSTR_PK = SMM.SVC_MACH_MSTR_PK (+)
+            <isNotNull property="serNumFrom">
+            AND SMM.SER_NUM          &gt;= #serNumFrom#
+            </isNotNull>
+            <isNotNull property="serNumThru">
+            AND SMM.SER_NUM          &lt;= #serNumThru#
+            </isNotNull>
+            <isNotNull property="svcMachMstrPkFrom">
+            AND SMM.SVC_MACH_MSTR_PK &gt;= #svcMachMstrPkFrom#
+            </isNotNull>
+            <isNotNull property="svcMachMstrPkThru">
+            AND SMM.SVC_MACH_MSTR_PK &lt;= #svcMachMstrPkThru#
+            </isNotNull>
+            AND SMM.EZCANCELFLAG (+) = '0'
+
+            AND DCD.GLBL_CMPY_CD             = CC.GLBL_CMPY_CD (+)
+            AND DCD.DS_CONTR_PK              = CC.DS_CONTR_PK (+)
+            AND DCD.DS_CONTR_DTL_PK          = CC.DS_CONTR_DTL_PK (+)
+
+            AND DCD.GLBL_CMPY_CD             = SV.GLBL_CMPY_CD
+            AND DCD.DS_CONTR_PK              = SV.DS_CONTR_PK
+            AND DCD.DS_CONTR_DTL_PK          = SV.DS_CONTR_DTL_PK
+            AND SV.EZCANCELFLAG              = '0'
+
+            AND DCD.GLBL_CMPY_CD             = BC.GLBL_CMPY_CD (+)
+            AND DCD.BASE_BILL_TO_CUST_CD     = BC.BILL_TO_CUST_CD (+)
+            AND BC.EZCANCELFLAG (+)          = '0'
+        ORDER BY
+            DCD.DS_CONTR_DTL_PK
+    </statement>
+
+    <statement id="getTrdData" parameterClass="Map" resultClass="Map">
+        WITH
+            CR_CARD AS(
+                       SELECT
+                           CC.GLBL_CMPY_CD
+                          ,CC.DS_CONTR_CR_CARD_PO_PK
+                          ,CC.DS_CONTR_PK
+                          ,CC.DS_CONTR_DTL_PK
+                          ,CC.CR_CARD_CUST_REF_NUM
+                          ,CC.CR_CARD_EXPR_YR_MTH
+                          ,CC.LEASE_CMPY_FLG
+                          ,CC.EZUPTIMEZONE
+                          ,CC.EZUPTIME
+<!-- START 2016/12/05 [QC#14204, ADD] -->
+                          ,CC.EZINTIME
+                          ,CC.EZINUSERID
+                          ,CC.EZUPUSERID
+                          ,CC.EZTABLEID
+<!-- END 2016/12/05 [QC#14204, ADD] -->
+                       FROM
+                           DS_CONTR_CR_CARD_PO CC
+                       WHERE
+                           CC.GLBL_CMPY_CD             = #glblCmpyCd#
+                           AND CC.DS_CONTR_PK          = #dsContrPk#
+                           AND CC.DS_CONTR_DTL_PK      = #dsContrDtlPk#
+                           AND CC.DS_CONTR_BLLG_MTR_PK IS NULL
+                           AND CC.DS_CONTR_MACH_LVL_NUM = #machLvlNum3#
+                           AND CC.EZCANCELFLAG          = '0'
+<!-- START 2019/01/09 [QC#26928, ADD] -->
+                           AND CC.CR_CARD_FLG           = 'Y'
+<!-- END 2019/01/09 [QC#26928, ADD] -->                       
+                      )
+        SELECT
+            DS_CONTR_BLLG_MTR_PK
+           ,TRD_NM
+           ,DS_CONTR_CR_CARD_PO_PK
+           ,CR_CARD_CUST_REF_NUM
+           ,CR_CARD_EXPR_YR_MTH
+           ,LEASE_CMPY_FLG
+           <!-- START 2018/03/16 M.Naito [QC#20496, ADD] -->
+           ,XX_CNT_DPLY_FLG
+           <!-- END 2018/03/16 M.Naito [QC#20496, ADD] -->
+           ,EZUPTIMEZONE
+           ,EZUPTIME
+           ,TRD_TP
+           ,DS_CONTR_CTRL_STS_CD
+           ,SELL_TO_CUST_CD
+<!-- START 2016/12/05 [QC#14204, ADD] -->
+           ,XX_REC_HIST_CRAT_TS
+           ,XX_REC_HIST_CRAT_BY_NM
+           ,XX_REC_HIST_UPD_TS
+           ,XX_REC_HIST_UPD_BY_NM
+           ,XX_REC_HIST_TBL_NM
+<!-- END 2016/12/05 [QC#14204, ADD] -->
+        FROM
+            (
+             SELECT
+                 NULL                      AS DS_CONTR_BLLG_MTR_PK
+                ,#trdNmBase#               AS TRD_NM
+                ,CC.DS_CONTR_CR_CARD_PO_PK AS DS_CONTR_CR_CARD_PO_PK
+                ,CC.CR_CARD_CUST_REF_NUM   AS CR_CARD_CUST_REF_NUM
+                ,CC.CR_CARD_EXPR_YR_MTH    AS CR_CARD_EXPR_YR_MTH
+                ,CASE WHEN CC.LEASE_CMPY_FLG IS NOT NULL THEN CC.LEASE_CMPY_FLG
+                      WHEN DC.LEASE_CMPY_CD IS NOT NULL THEN 'Y'
+                      ELSE 'N'
+                 END                       AS LEASE_CMPY_FLG
+                <!-- START 2018/03/16 M.Naito [QC#20496, ADD] -->
+                ,CASE (
+                           SELECT
+                              COUNT(*)
+                          FROM
+                              SVC_MEMO SM
+                          WHERE
+                                  SM.GLBL_CMPY_CD      = CC.GLBL_CMPY_CD
+                              AND SM.DS_CONTR_PK       = CC.DS_CONTR_PK
+                              AND SM.SVC_MEMO_TRX_NUM  = CC.DS_CONTR_CR_CARD_PO_PK
+                              AND SM.SVC_MEMO_TRX_NUM  IS NOT NULL
+                              AND SM.SVC_MEMO_CATG_CD  = #contractMemo#
+                              AND SM.SVC_MEMO_TP_CD    = #updateCreditCardInfo#
+                              AND SM.SVC_MEMO_TRX_NM   = #dsContrCrCardPoPk#
+                              AND SM.EZCANCELFLAG      = '0'
+                      )
+                  WHEN 0 THEN 'N'
+                  ELSE        'Y'
+                  END                        AS XX_CNT_DPLY_FLG
+                 <!-- END 2018/03/16 M.Naito [QC#20496, ADD] -->
+                ,CC.EZUPTIMEZONE           AS EZUPTIMEZONE
+                ,CC.EZUPTIME               AS EZUPTIME
+                ,#trdTpCd#                 AS TRD_TP
+                ,SV.DS_CONTR_CTRL_STS_CD   AS DS_CONTR_CTRL_STS_CD
+                ,BC.SELL_TO_CUST_CD        AS SELL_TO_CUST_CD
+<!-- START 2016/12/05 [QC#14204, ADD] -->
+                ,CC.EZINTIME               AS XX_REC_HIST_CRAT_TS
+                ,CC.EZINUSERID             AS XX_REC_HIST_CRAT_BY_NM
+                ,CC.EZUPTIME               AS XX_REC_HIST_UPD_TS
+                ,CC.EZUPUSERID             AS XX_REC_HIST_UPD_BY_NM
+                ,CC.EZTABLEID              AS XX_REC_HIST_TBL_NM
+<!-- END 2016/12/05 [QC#14204, ADD] -->
+             FROM
+                 DS_CONTR           DC
+                ,DS_CONTR_DTL       DCD
+                ,DS_CONTR_DTL_TP    DT
+                ,CR_CARD            CC
+                ,DS_CONTR_DTL_STS_V SV
+                ,BILL_TO_CUST       BC
+             WHERE
+                 DC.GLBL_CMPY_CD     = #glblCmpyCd#
+                 AND DC.DS_CONTR_PK  = #dsContrPk#
+                 AND DC.EZCANCELFLAG = '0'
+
+                 AND DC.GLBL_CMPY_CD     = DCD.GLBL_CMPY_CD
+                 AND DC.DS_CONTR_PK      = DCD.DS_CONTR_PK
+                 AND DCD.DS_CONTR_DTL_PK = #dsContrDtlPk#
+                 AND DCD.EZCANCELFLAG    = '0'
+
+                 AND DCD.GLBL_CMPY_CD       = DT.GLBL_CMPY_CD
+                 AND DCD.DS_CONTR_DTL_TP_CD = DT.DS_CONTR_DTL_TP_CD
+                 AND DT.EZCANCELFLAG        = '0'
+
+                 AND DCD.GLBL_CMPY_CD             = CC.GLBL_CMPY_CD (+)
+                 AND DCD.DS_CONTR_PK              = CC.DS_CONTR_PK (+)
+                 AND DCD.DS_CONTR_DTL_PK          = CC.DS_CONTR_DTL_PK (+)
+
+                 AND DCD.GLBL_CMPY_CD             = SV.GLBL_CMPY_CD
+                 AND DCD.DS_CONTR_PK              = SV.DS_CONTR_PK
+                 AND DCD.DS_CONTR_DTL_PK          = SV.DS_CONTR_DTL_PK
+                 AND SV.EZCANCELFLAG              = '0'
+
+                 AND DCD.GLBL_CMPY_CD             = BC.GLBL_CMPY_CD (+)
+                 AND DCD.BASE_BILL_TO_CUST_CD     = BC.BILL_TO_CUST_CD (+)
+                 AND BC.EZCANCELFLAG (+)          = '0'
+
+             UNION
+
+             SELECT
+                 DM.DS_CONTR_BLLG_MTR_PK    AS DS_CONTR_BLLG_MTR_PK
+                ,ML.MTR_LB_DESC_TXT         AS TRD_NM
+                ,CCP.DS_CONTR_CR_CARD_PO_PK AS DS_CONTR_CR_CARD_PO_PK
+                ,CCP.CR_CARD_CUST_REF_NUM   AS CR_CARD_CUST_REF_NUM
+                ,CCP.CR_CARD_EXPR_YR_MTH    AS CR_CARD_EXPR_YR_MTH
+                ,CASE WHEN CCP.LEASE_CMPY_FLG IS NOT NULL THEN CCP.LEASE_CMPY_FLG
+                      WHEN DC.LEASE_CMPY_CD IS NOT NULL THEN 'Y'
+                      ELSE 'N'
+                 END                        AS LEASE_CMPY_FLG
+                <!-- START 2018/03/16 M.Naito [QC#20496, ADD] -->
+                ,CASE (
+                           SELECT
+                              COUNT(*)
+                          FROM
+                              SVC_MEMO SM
+                          WHERE
+                                  SM.GLBL_CMPY_CD      = CCP.GLBL_CMPY_CD
+                              AND SM.DS_CONTR_PK       = CCP.DS_CONTR_PK
+                              AND SM.SVC_MEMO_TRX_NUM  = CCP.DS_CONTR_CR_CARD_PO_PK
+                              AND SM.SVC_MEMO_TRX_NUM  IS NOT NULL
+                              AND SM.SVC_MEMO_CATG_CD  = #contractMemo#
+                              AND SM.SVC_MEMO_TP_CD    = #updateCreditCardInfo#
+                              AND SM.SVC_MEMO_TRX_NM   = #dsContrCrCardPoPk#
+                              AND SM.EZCANCELFLAG      = '0'
+                      )
+                  WHEN 0 THEN 'N'
+                  ELSE        'Y'
+                  END                        AS XX_CNT_DPLY_FLG
+                 <!-- END 2018/03/16 M.Naito [QC#20496, ADD] -->
+                ,CCP.EZUPTIMEZONE           AS EZUPTIMEZONE
+                ,CCP.EZUPTIME               AS EZUPTIME
+                ,#trdTpBm#                  AS TRD_TP
+                ,SV.DS_CONTR_CTRL_STS_CD    AS DS_CONTR_CTRL_STS_CD
+                ,BC.SELL_TO_CUST_CD         AS SELL_TO_CUST_CD
+<!-- START 2016/12/05 [QC#14204, ADD] -->
+                ,CCP.EZINTIME               AS XX_REC_HIST_CRAT_TS
+                ,CCP.EZINUSERID             AS XX_REC_HIST_CRAT_BY_NM
+                ,CCP.EZUPTIME               AS XX_REC_HIST_UPD_TS
+                ,CCP.EZUPUSERID             AS XX_REC_HIST_UPD_BY_NM
+                ,CCP.EZTABLEID              AS XX_REC_HIST_TBL_NM
+<!-- END 2016/12/05 [QC#14204, ADD] -->
+             FROM
+                 DS_CONTR            DC
+                ,DS_CONTR_DTL        DCD
+                ,DS_CONTR_BLLG_MTR   DM
+                ,MTR_LB              ML
+                ,DS_CONTR_CR_CARD_PO CCP
+                ,DS_CONTR_DTL_STS_V  SV
+                ,BILL_TO_CUST        BC
+             WHERE
+                 DC.GLBL_CMPY_CD     = #glblCmpyCd#
+                 AND DC.DS_CONTR_PK  = #dsContrPk#
+                 AND DC.EZCANCELFLAG = '0'
+
+                 AND DC.GLBL_CMPY_CD     = DCD.GLBL_CMPY_CD
+                 AND DC.DS_CONTR_PK      = DCD.DS_CONTR_PK
+                 AND DCD.DS_CONTR_DTL_PK = #dsContrDtlPk#
+                 AND DCD.EZCANCELFLAG    = '0'
+
+                 AND DCD.GLBL_CMPY_CD    = DM.GLBL_CMPY_CD
+                 AND DCD.DS_CONTR_DTL_PK = DM.DS_CONTR_DTL_PK
+                 AND DM.EZCANCELFLAG     = '0'
+
+                 AND DM.GLBL_CMPY_CD   = ML.GLBL_CMPY_CD
+                 AND DM.BLLG_MTR_LB_CD = ML.MTR_LB_CD
+                 AND ML.EZCANCELFLAG   = '0'
+
+                 AND DM.GLBL_CMPY_CD         = CCP.GLBL_CMPY_CD (+)
+                 AND DM.DS_CONTR_DTL_PK      = CCP.DS_CONTR_DTL_PK (+)
+                 AND DM.DS_CONTR_BLLG_MTR_PK = CCP.DS_CONTR_BLLG_MTR_PK (+)
+                 AND CCP.DS_CONTR_MACH_LVL_NUM (+)
+                                             = #machLvlNum3#
+                 AND CCP.EZCANCELFLAG (+)    = '0'
+<!-- START 2019/01/09 [QC#26928, ADD] -->
+                 AND CCP.CR_CARD_FLG  (+)    = 'Y'
+<!-- END   2019/01/09 [QC#26928, ADD] -->   
+                 AND DCD.GLBL_CMPY_CD             = SV.GLBL_CMPY_CD
+                 AND DCD.DS_CONTR_PK              = SV.DS_CONTR_PK
+                 AND DCD.DS_CONTR_DTL_PK          = SV.DS_CONTR_DTL_PK
+                 AND SV.EZCANCELFLAG              = '0'
+
+                 AND DM.GLBL_CMPY_CD              = BC.GLBL_CMPY_CD (+)
+                 AND DM.BLLG_MTR_BILL_TO_CUST_CD  = BC.BILL_TO_CUST_CD (+)
+                 AND BC.EZCANCELFLAG (+)          = '0'
+            )
+        ORDER BY
+            DS_CONTR_BLLG_MTR_PK NULLS FIRST
+    </statement>
+
+    <statement id="isExistFstData" parameterClass="Map" resultClass="Integer">
+        SELECT
+            COUNT(CC.DS_CONTR_CR_CARD_PO_PK)
+        FROM
+            DS_CONTR_CR_CARD_PO CC
+        WHERE
+            CC.GLBL_CMPY_CD              = #glblCmpyCd#
+            AND CC.DS_CONTR_PK           = #dsContrPk#
+            AND CC.DS_CONTR_DTL_PK       IS NULL
+            AND CC.DS_CONTR_BLLG_MTR_PK  IS NULL
+            AND CC.DS_CONTR_MACH_LVL_NUM = #machLvlNum1#
+            AND CC.EZCANCELFLAG          = '0'
+<!-- START 2019/01/09 [QC#26928, ADD] -->
+            AND CC.CR_CARD_FLG           = 'Y'
+<!-- END 2019/01/09 [QC#26928, ADD] -->                       
+    </statement>
+
+    <statement id="isExistScdData" parameterClass="Map" resultClass="Integer">
+        SELECT
+            COUNT(CC.DS_CONTR_CR_CARD_PO_PK)
+        FROM
+            DS_CONTR_CR_CARD_PO CC
+        WHERE
+            CC.GLBL_CMPY_CD              = #glblCmpyCd#
+            AND CC.DS_CONTR_PK           = #dsContrPk#
+            AND CC.DS_CONTR_DTL_PK       = #dsContrDtlPk#
+            AND CC.DS_CONTR_BLLG_MTR_PK  IS NULL
+            AND CC.DS_CONTR_MACH_LVL_NUM = #machLvlNum2#
+            AND CC.EZCANCELFLAG          = '0'
+<!-- START 2019/01/09 [QC#26928, ADD] -->
+            AND CC.CR_CARD_FLG           = 'Y'
+<!-- END 2019/01/09 [QC#26928, ADD] -->                       
+    </statement>
+
+    <statement id="isExistTrdDataOfContrDtl" parameterClass="Map" resultClass="Integer">
+        SELECT
+            COUNT(CC.DS_CONTR_CR_CARD_PO_PK)
+        FROM
+            DS_CONTR_CR_CARD_PO CC
+        WHERE
+            CC.GLBL_CMPY_CD              = #glblCmpyCd#
+            AND CC.DS_CONTR_PK           = #dsContrPk#
+            AND CC.DS_CONTR_DTL_PK       = #dsContrDtlPk#
+            AND CC.DS_CONTR_BLLG_MTR_PK  IS NULL
+            AND CC.DS_CONTR_MACH_LVL_NUM = #machLvlNum3#
+            AND CC.EZCANCELFLAG          = '0'
+<!-- START 2019/01/09 [QC#26928, ADD] -->
+            AND CC.CR_CARD_FLG           = 'Y'
+<!-- END 2019/01/09 [QC#26928, ADD] -->                       
+    </statement>
+
+    <statement id="isExistTrdDataOfBllgMtr" parameterClass="Map" resultClass="Integer">
+        SELECT
+            COUNT(CC.DS_CONTR_CR_CARD_PO_PK)
+        FROM
+            DS_CONTR_CR_CARD_PO CC
+        WHERE
+            CC.GLBL_CMPY_CD              = #glblCmpyCd#
+            AND CC.DS_CONTR_PK           = #dsContrPk#
+            AND CC.DS_CONTR_DTL_PK       = #dsContrDtlPk#
+            AND CC.DS_CONTR_BLLG_MTR_PK  = #dsContrBllgMtrPk#
+            AND CC.DS_CONTR_MACH_LVL_NUM = #machLvlNum3#
+            AND CC.EZCANCELFLAG          = '0'
+<!-- START 2019/01/09 [QC#26928, ADD] -->
+            AND CC.CR_CARD_FLG           = 'Y'
+<!-- END 2019/01/09 [QC#26928, ADD] -->                       
+    </statement>
+
+    <statement id="getCrCardTrxPk" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            TR.CR_CARD_TRX_PK
+        FROM
+            CR_CARD_TRX TR
+        WHERE
+                TR.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND TR.CR_CARD_TRX_TP_CD     = #crCardTrxTp#
+            AND TR.FIRST_TRX_INFO_NUM    = #firstTrxInfoNum#
+            <isNotNull property="scdTrxInfoNum">
+            AND TR.SCD_TRX_INFO_NUM      = #scdTrxInfoNum#
+            </isNotNull>
+            <isNull property="scdTrxInfoNum">
+            AND TR.SCD_TRX_INFO_NUM      IS NULL
+            </isNull>
+            <isNotNull property="thirdTrxInfoNum">
+            AND TR.THIRD_TRX_INFO_NUM    = #thirdTrxInfoNum#
+            </isNotNull>
+            <isNull property="thirdTrxInfoNum">
+            AND TR.THIRD_TRX_INFO_NUM    IS NULL
+            </isNull>
+            AND TR.CR_CARD_AUTH_STS_CD   = #crCardAuthStsSaved#
+            AND TR.EZCANCELFLAG          = '0'
+    </statement>
+
+    <statement id="getDiffData" parameterClass="Map" resultClass="Map">
+        SELECT
+             TR.CR_CARD_CUST_REF_NUM     AS CR_CARD_CUST_REF_NUM
+            ,CC.CR_CARD_EXPR_YR_MTH      AS CR_CARD_EXPR_YR_MTH
+        FROM
+             CR_CARD_TRX          TR
+            ,DS_CR_CARD           CC
+        WHERE
+                TR.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND TR.CR_CARD_TRX_TP_CD     = #crCardTrxTp#
+            AND TR.FIRST_TRX_INFO_NUM    = #firstTrxInfoNum#
+            <isNotNull property="scdTrxInfoNum">
+            AND TR.SCD_TRX_INFO_NUM      = #scdTrxInfoNum#
+            </isNotNull>
+            <isNull property="scdTrxInfoNum">
+            AND TR.SCD_TRX_INFO_NUM      IS NULL
+            </isNull>
+            <isNotNull property="thirdTrxInfoNum">
+            AND TR.THIRD_TRX_INFO_NUM    = #thirdTrxInfoNum#
+            </isNotNull>
+            <isNull property="thirdTrxInfoNum">
+            AND TR.THIRD_TRX_INFO_NUM    IS NULL
+            </isNull>
+            AND TR.CR_CARD_AUTH_STS_CD   = #crCardAuthStsSaved#
+            AND TR.EZCANCELFLAG          = '0'
+
+            AND TR.GLBL_CMPY_CD          = CC.GLBL_CMPY_CD
+            AND TR.CR_CARD_CUST_REF_NUM  = CC.CR_CARD_CUST_REF_NUM
+            AND CC.EZCANCELFLAG          = '0'
+
+            AND NOT EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        DS_CONTR_CR_CARD_PO  PO
+                    WHERE
+                            PO.GLBL_CMPY_CD          = TR.GLBL_CMPY_CD
+                        AND PO.DS_CONTR_PK           = TR.FIRST_TRX_INFO_NUM
+                        <isNotNull property="scdTrxInfoNum">
+                        AND PO.DS_CONTR_DTL_PK       = TR.SCD_TRX_INFO_NUM
+                        </isNotNull>
+                        <isNull property="scdTrxInfoNum">
+                        AND PO.DS_CONTR_DTL_PK       IS NULL
+                        </isNull>
+                        <isNotNull property="thirdTrxInfoNum">
+                        AND PO.DS_CONTR_BLLG_MTR_PK  = TR.THIRD_TRX_INFO_NUM
+                        </isNotNull>
+                        <isNull property="thirdTrxInfoNum">
+                        AND PO.DS_CONTR_BLLG_MTR_PK  IS NULL
+                        </isNull>
+                        AND PO.CR_CARD_CUST_REF_NUM  = TR.CR_CARD_CUST_REF_NUM
+                        AND PO.DS_CONTR_MACH_LVL_NUM = #dsContrMachLvlNum#
+                        AND PO.EZCANCELFLAG          = '0'
+                        <!-- START 2019/01/09 [QC#26928, ADD] -->
+                        AND PO.CR_CARD_FLG = 'Y'
+                        <!-- END 2019/01/09 [QC#26928, ADD] -->
+                )
+    </statement>
+
+</sqlMap>

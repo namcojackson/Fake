@@ -1,0 +1,219 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NSXC003001CalcCreditAmtForTerminate">
+    <statement id="getBllgSchdInclTrmnDt" parameterClass="Map" resultClass="Map">
+        SELECT
+             A.BLLG_SCHD_FROM_DT
+            ,A.BLLG_SCHD_THRU_DT
+            ,A.INV_FLG
+            ,A.SVC_INV_NUM
+            ,A.BLLG_CYCLE_CD
+            <!-- ADD START 2022/04/26 T.Suzuki QC#59979  -->
+            ,A.SKIP_RECOV_TP_CD
+            <!-- ADD END   2022/04/26 T.Suzuki QC#59979  --> 
+            ,NVL(A.BASE_PRC_DEAL_AMT, 0) AS BASE_PRC_DEAL_AMT
+            ,NVL(A.BASE_ACTL_PRC_DEAL_AMT, 0) AS BASE_ACTL_PRC_DEAL_AMT
+        FROM
+            DS_CONTR_BLLG_SCHD A
+        WHERE
+                A.GLBL_CMPY_CD         = #glblCmpyCd#
+            AND A.DS_CONTR_DTL_PK      = #dsContrDtlPk#
+            AND A.BASE_CHRG_FLG        = 'Y'
+            AND A.BLLG_SCHD_FROM_DT    &lt;= #trmnDt#
+            AND A.BLLG_SCHD_THRU_DT    &gt;= #trmnDt#
+            <!-- START 2018/03/16 K.Kojima [QC#24858,ADD] -->
+            AND A.DS_CONTR_PRC_EFF_PK  IS NOT NULL
+            <!-- END 2018/03/16 K.Kojima [QC#24858,ADD] -->
+            AND A.EZCANCELFLAG         = '0'
+    </statement>
+
+    <statement id="getBilledAmtAfterTrmnDt" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            NVL(SUM(A.BASE_ACTL_PRC_DEAL_AMT), 0)
+        FROM
+            DS_CONTR_BLLG_SCHD A
+        WHERE
+                A.GLBL_CMPY_CD         = #glblCmpyCd#
+            AND A.DS_CONTR_DTL_PK      = #dsContrDtlPk#
+            AND A.BASE_CHRG_FLG        = 'Y'
+            AND A.BLLG_SCHD_FROM_DT    &gt; #bllgSchdThruDt#
+            AND A.INV_FLG              = 'Y'
+            AND A.INV_TP_CD            = #invoice#
+            AND A.DS_CONTR_PRC_EFF_PK  IS NOT NULL
+            AND A.SVC_INV_NUM          IS NOT NULL
+            AND A.EZCANCELFLAG         = '0'
+    </statement>
+ 
+    <statement id="getDigitNum" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            C.AFT_DECL_PNT_DIGIT_NUM
+        FROM
+             DS_CONTR_DTL      A
+            ,DS_CONTR          B
+            ,CCY               C
+        WHERE
+                A.GLBL_CMPY_CD         = #glblCmpyCd#
+            AND A.EZCANCELFLAG         = '0'
+            AND A.GLBL_CMPY_CD         = B.GLBL_CMPY_CD
+            AND A.DS_CONTR_PK          = B.DS_CONTR_PK
+            AND B.EZCANCELFLAG         = '0'
+            AND B.GLBL_CMPY_CD         = C.GLBL_CMPY_CD
+            AND B.CCY_CD               = C.CCY_CD
+            AND C.EZCANCELFLAG         = '0'
+    </statement>
+
+    <!-- START 2018/05/22 K.Kojima [QC#23302,ADD] -->
+    <statement id="getSvcInvLineInclTrmnDt" parameterClass="Map" resultClass="Map">
+    <!-- mod start 2022/07/07 QC#60167 -->
+    <!-- 
+        SELECT
+             SIL.BLLG_PER_FROM_DT
+            ,SIL.BLLG_PER_THRU_DT
+            ,SIL.INV_LINE_DEAL_NET_AMT
+            ,SIL.DS_CONTR_PK
+        FROM
+            SVC_INV_LINE SIL
+        WHERE
+                SIL.GLBL_CMPY_CD              = #glblCmpyCd#
+            AND SIL.DS_CONTR_ADDL_CHRG_PK     = #dsContrAddlChrgPk#
+            AND SIL.BLLG_PER_FROM_DT      &lt;= #trmnDt#
+            AND SIL.BLLG_PER_THRU_DT      &gt;= #trmnDt#
+            AND SIL.EZCANCELFLAG              = '0'
+     -->
+        SELECT
+             B.BLLG_PER_FROM_DT 
+            ,B.BLLG_PER_THRU_DT
+            ,B.INV_LINE_DEAL_NET_AMT
+            ,B.DS_CONTR_PK
+        FROM
+             SVC_INV            A
+            ,SVC_INV_LINE       B
+            ,SVC_INV_LINE       C
+            ,DS_CONTR_BLLG_SCHD D
+        WHERE
+                A.GLBL_CMPY_CD               = #glblCmpyCd#
+            AND A.INV_TP_CD                  = #invTpInvoice#
+            AND A.EZCANCELFLAG               = '0'
+            AND A.GLBL_CMPY_CD               = B.GLBL_CMPY_CD
+            AND A.SVC_INV_NUM                = B.SVC_INV_NUM
+            AND B.DS_CONTR_DTL_PK            = #dsContrDtlPk#
+            AND B.SVC_INV_CHRG_TP_CD         = #svcInvChrgTpAddlChrg#
+            AND B.BLLG_PER_FROM_DT       &lt;= #trmnDt#
+            AND B.BLLG_PER_THRU_DT       &gt;= #trmnDt#
+            AND B.EZCANCELFLAG               = '0'
+            AND B.GLBL_CMPY_CD               = C.GLBL_CMPY_CD
+            AND B.PRNT_SVC_INV_LINE_PK       = C.SVC_INV_LINE_PK
+            AND C.SVC_INV_CHRG_TP_CD         = #svcInvChrgTpBaseChrg#
+            AND C.EZCANCELFLAG               = '0'
+            AND C.GLBL_CMPY_CD               = D.GLBL_CMPY_CD
+            AND C.DS_CONTR_BLLG_SCHD_PK      = D.DS_CONTR_BLLG_SCHD_PK
+            AND D.DS_CONTR_PRC_EFF_PK        IS NOT NULL
+            AND D.BASE_CHRG_FLG              = 'Y'
+            AND D.EZCANCELFLAG               = '0'
+    <!-- mod end 2022/07/07 QC#60167 -->
+    </statement>
+
+    <statement id="getSvcInvLineAfterTrmnDt" parameterClass="Map" resultClass="BigDecimal">
+    <!-- mod start 2022/07/07 QC#60167 -->
+    <!-- 
+        SELECT
+            SUM(NVL(SIL.INV_LINE_DEAL_NET_AMT, 0))
+        FROM
+            SVC_INV_LINE SIL
+        WHERE
+                SIL.GLBL_CMPY_CD             = #glblCmpyCd#
+            AND SIL.DS_CONTR_ADDL_CHRG_PK    = #dsContrAddlChrgPk#
+            AND SIL.BLLG_PER_FROM_DT      &gt; #trmnDt#
+            AND SIL.EZCANCELFLAG             = '0'
+     -->
+        SELECT
+             SUM(NVL(B.INV_LINE_DEAL_NET_AMT, 0))
+        FROM
+             SVC_INV            A
+            ,SVC_INV_LINE       B
+            ,SVC_INV_LINE       C
+            ,DS_CONTR_BLLG_SCHD D
+        WHERE
+                A.GLBL_CMPY_CD               = #glblCmpyCd#
+            AND A.INV_TP_CD                  = #invTpInvoice#
+            AND A.EZCANCELFLAG               = '0'
+            AND A.GLBL_CMPY_CD               = B.GLBL_CMPY_CD
+            AND A.SVC_INV_NUM                = B.SVC_INV_NUM
+            AND B.DS_CONTR_DTL_PK            = #dsContrDtlPk#
+            AND B.SVC_INV_CHRG_TP_CD         = #svcInvChrgTpAddlChrg#
+            AND B.BLLG_PER_FROM_DT        &gt; #trmnDt#
+            AND B.EZCANCELFLAG               = '0'
+            AND B.GLBL_CMPY_CD               = C.GLBL_CMPY_CD
+            AND B.PRNT_SVC_INV_LINE_PK       = C.SVC_INV_LINE_PK
+            AND C.SVC_INV_CHRG_TP_CD         = #svcInvChrgTpBaseChrg#
+            AND C.EZCANCELFLAG               = '0'
+            AND C.GLBL_CMPY_CD               = D.GLBL_CMPY_CD
+            AND C.DS_CONTR_BLLG_SCHD_PK      = D.DS_CONTR_BLLG_SCHD_PK
+            AND D.DS_CONTR_PRC_EFF_PK        IS NOT NULL
+            AND D.BASE_CHRG_FLG              = 'Y'
+            AND D.EZCANCELFLAG               = '0'
+    <!-- mod end 2022/07/07 QC#60167 -->
+    </statement>
+
+    <statement id="getDigitNumForContr" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            C.AFT_DECL_PNT_DIGIT_NUM
+        FROM
+             DS_CONTR          B
+            ,CCY               C
+        WHERE
+                B.GLBL_CMPY_CD         = #glblCmpyCd#
+            AND B.DS_CONTR_PK          = #dsContrPk#
+            AND B.EZCANCELFLAG         = '0'
+            AND B.GLBL_CMPY_CD         = C.GLBL_CMPY_CD
+            AND B.CCY_CD               = C.CCY_CD
+            AND C.EZCANCELFLAG         = '0'
+    </statement>
+    <!-- END 2018/05/22 K.Kojima [QC#23302,ADD] -->
+    
+    <!-- ADD START 2022/04/26 T.Suzuki QC#59979 -->
+    <statement id="getDsContrDtlTpCd" parameterClass="Map" resultClass="Map">
+        SELECT DISTINCT
+             NVL(A.DS_CONTR_DTL_TP_CD, '') AS DS_CONTR_DTL_TP_CD
+            ,A.PRNT_DS_CONTR_DTL_PK
+        FROM
+             DS_CONTR_DTL      A
+        WHERE
+             A.GLBL_CMPY_CD      = #glblCmpyCd#
+         AND A.DS_CONTR_DTL_PK   = #dsContrDtlPk#
+         AND A.EZCANCELFLAG      = '0'
+    </statement>
+    <!-- ADD END   2022/04/26 T.Suzuki QC#59979 -->
+
+    <!-- ADD START 2022/05/16 T.Suzuki QC#60038 -->
+        <statement id="getBillWithEquipFlg" parameterClass="Map" resultClass="String">
+        SELECT DISTINCT
+             A.BILL_WITH_EQUIP_FLG
+        FROM
+             DS_CONTR          A
+            ,DS_CONTR_DTL      B
+        WHERE
+             A.GLBL_CMPY_CD      = #glblCmpyCd#
+         AND A.EZCANCELFLAG      = '0'
+         AND A.GLBL_CMPY_CD      = B.GLBL_CMPY_CD
+         AND A.DS_CONTR_PK       = B.DS_CONTR_PK
+         AND B.DS_CONTR_DTL_PK   = #dsContrDtlPk#
+         AND B.EZCANCELFLAG      = '0'
+    </statement>
+    <!-- ADD END   2022/05/16 T.Suzuki QC#60038 -->
+    
+    <!-- ADD START 2022/04/26 T.Suzuki QC#60038 -->
+    <statement id="getInvedMaxBllgSchdThruDtForBase" parameterClass="Map" resultClass="String">
+        SELECT
+            MAX(A.BLLG_SCHD_THRU_DT) AS BLLG_SCHD_THRU_DT
+        FROM
+            DS_CONTR_BLLG_SCHD  A
+        WHERE
+                A.EZCANCELFLAG         = '0'
+            AND A.GLBL_CMPY_CD         = #glblCmpyCd#
+            AND A.DS_CONTR_DTL_PK      = #dsContrDtlPk#
+            AND A.BASE_CHRG_FLG        = 'Y'
+            AND A.BLLG_SCHD_FROM_DT    &gt;= #bllgSchdThruDt#
+            AND A.INV_FLG              = 'Y'
+    </statement>
+    <!-- ADD END   2022/04/26 T.Suzuki QC#60038 -->
+</sqlMap>

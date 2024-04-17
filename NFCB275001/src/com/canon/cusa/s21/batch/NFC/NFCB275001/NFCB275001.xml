@@ -1,0 +1,234 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<sqlMap namespace="NFCB275001">
+
+<!-- #################### Type Alias #################### -->
+
+<!-- #################### Statement #################### -->
+
+    <statement id="getAjeArReclsIntfcListNotJrnlized" parameterClass="Map" resultClass="Map">
+        SELECT
+              AARI.GLBL_CMPY_CD            AS GLBL_CMPY_CD
+             ,AARI.AJE_AR_RECLS_INTFC_PK   AS AJE_AR_RECLS_INTFC_PK
+          FROM
+               AJE_AR_RECLS_INTFC   AARI
+         WHERE
+               AARI.EZCANCELFLAG    = '0'
+           AND AARI.GLBL_CMPY_CD    = #glblCmpyCd#
+           AND AARI.PROC_DT         = #procDt#
+           AND AARI.AR_TRX_NUM      = '*'
+           AND AARI.TRX_RSN_CD      IN (#trxRsnCdRcls#, #trxRsnCdRvsl#)
+           AND NOT EXISTS (
+                     SELECT
+                            1
+                       FROM
+                            AJE_INTFC_CTRL      AIC
+                      WHERE
+                            AIC.GLBL_CMPY_CD    = #glblCmpyCd#
+                        AND AIC.AJE_INTFC_TP_CD = #ajeIntfcTpCd#
+                        AND AIC.JRNL_CPLT_FLG   = #jrnlCpltFlg#
+                        AND AIC.PROC_DT         = AARI.PROC_DT
+                        AND AIC.GLBL_CMPY_CD    = AARI.GLBL_CMPY_CD
+                        AND AIC.AJE_INTFC_PK    = AARI.AJE_AR_RECLS_INTFC_PK
+                        AND AIC.EZCANCELFLAG    = '0'
+                )
+        UNION
+        SELECT
+              AARI.GLBL_CMPY_CD            AS GLBL_CMPY_CD
+             ,AARI.AJE_AR_RECLS_INTFC_PK   AS AJE_AR_RECLS_INTFC_PK
+          FROM
+               AJE_AR_RECLS_INTFC AARI
+         WHERE
+               AARI.EZCANCELFLAG    = '0'
+           AND AARI.GLBL_CMPY_CD    = #glblCmpyCd#
+           AND AARI.PROC_DT         = #procDt#
+           AND AARI.AR_TRX_NUM      != '*'
+           AND NOT EXISTS (
+                     SELECT
+                            1
+                       FROM
+                             AJE_AR_RECLS_INTFC  AARI2
+                            ,AJE_INTFC_CTRL      AIC
+                      WHERE
+                            AARI2.GLBL_CMPY_CD  = AARI.GLBL_CMPY_CD
+                        AND AARI2.PROC_DT       = AARI.PROC_DT
+                        AND AARI2.AR_TRX_NUM    = '*'
+                        AND AARI2.COA_ACCT_CD   = AARI.COA_ACCT_CD
+                        AND AARI2.COA_AFFL_CD   = AARI.COA_AFFL_CD
+                        AND AARI2.TRX_RSN_CD    IN (#trxRsnCdRcls#, #trxRsnCdRvsl#)
+                        AND AARI2.EZCANCELFLAG  = '0'
+
+                        AND AIC.GLBL_CMPY_CD    = AARI2.GLBL_CMPY_CD
+                        AND AIC.AJE_INTFC_PK    = AARI2.AJE_AR_RECLS_INTFC_PK
+                        AND AIC.AJE_INTFC_TP_CD = #ajeIntfcTpCd#
+                        AND AIC.JRNL_CPLT_FLG   = #jrnlCpltFlg#
+                        AND AIC.EZCANCELFLAG    = '0'
+                )
+    </statement>
+
+    <statement id="getArReclsNotJrnlized" parameterClass="Map" resultClass="Map">
+        WITH
+            RCPT_SRC_COA AS (
+            SELECT
+                 ARS.GLBL_CMPY_CD
+                ,ARS.EZCANCELFLAG
+                ,ARS.AR_RCPT_SRC_CD
+                ,CASE RCC.RPT_COND_CONST_VAL_TXT_01
+                    WHEN #rptCondConstValRsUnid#  THEN ARS.UNID_COA_ACCT_CD
+                    WHEN #rptCondConstValRsUnapl# THEN ARS.UNAPL_COA_ACCT_CD
+                    WHEN #rptCondConstValRsCash#  THEN ARS.CASH_COA_ACCT_CD
+                    WHEN #rptCondConstValRsOacc#  THEN ARS.OACC_COA_ACCT_CD
+                    ELSE #coaAcctCdDef#
+                 END AS COA_ACCT_CD
+                ,CASE RCC.RPT_COND_CONST_VAL_TXT_02
+                    WHEN #rptCondConstValRsUnid#  THEN ARS.UNID_COA_AFFL_CD
+                    WHEN #rptCondConstValRsUnapl# THEN ARS.UNAPL_COA_AFFL_CD
+                    WHEN #rptCondConstValRsCash#  THEN ARS.CASH_COA_AFFL_CD
+                    WHEN #rptCondConstValRsOacc#  THEN ARS.OACC_COA_AFFL_CD
+                    ELSE #coaAfflCdDef#
+                 END AS COA_AFFL_CD
+                ,CASE RCC.RPT_COND_CONST_VAL_TXT_03
+                    WHEN #rptCondConstValRsUnid#  THEN ARS.UNID_COA_CC_CD
+                    WHEN #rptCondConstValRsUnapl# THEN ARS.UNAPL_COA_CC_CD
+                    WHEN #rptCondConstValRsCash#  THEN ARS.CASH_COA_CC_CD
+                    WHEN #rptCondConstValRsOacc#  THEN ARS.OACC_COA_CC_CD
+                    ELSE #coaCcCdDef#
+                 END AS COA_CC_CD
+            FROM
+                 AR_RCPT_SRC      ARS
+                ,RPT_COND_CONST   RCC
+            WHERE
+                    RCC.GLBL_CMPY_CD              =   #glblCmpyCd#
+                AND RCC.RPT_COND_CONST_GRP_ID     =   #rptCondConstGrpId#
+                AND RCC.RPT_COND_CONST_CD         =   #rptCondConstCdRcptIdentified#
+                AND RCC.GLBL_CMPY_CD              =   ARS.GLBL_CMPY_CD
+                AND RCC.EZCANCELFLAG              =   '0'
+                AND ARS.EZCANCELFLAG              =   '0'
+            GROUP BY
+                 RCC.RPT_COND_CONST_VAL_TXT_01
+                ,RCC.RPT_COND_CONST_VAL_TXT_02
+                ,RCC.RPT_COND_CONST_VAL_TXT_03
+                ,ARS.EZCANCELFLAG
+                ,ARS.GLBL_CMPY_CD
+                ,ARS.AR_RCPT_SRC_CD
+                ,ARS.UNID_COA_ACCT_CD
+                ,ARS.UNAPL_COA_ACCT_CD
+                ,ARS.CASH_COA_ACCT_CD
+                ,ARS.OACC_COA_ACCT_CD
+                ,ARS.UNID_COA_AFFL_CD
+                ,ARS.UNAPL_COA_AFFL_CD
+                ,ARS.CASH_COA_AFFL_CD
+                ,ARS.OACC_COA_AFFL_CD
+                ,ARS.UNID_COA_CC_CD
+                ,ARS.UNAPL_COA_CC_CD
+                ,ARS.CASH_COA_CC_CD
+                ,ARS.OACC_COA_CC_CD
+        )
+        SELECT
+             ATB.GLBL_CMPY_CD
+            ,ATB.AR_TRX_BAL_PK
+            ,ATB.AR_TRX_NUM
+            ,ATB.AR_TRX_TP_CD
+            ,ATB.DEAL_RMNG_BAL_GRS_AMT * DECODE(ATB.AR_TRX_TP_CD, 'RCP', -1, 1) AS DEAL_RMNG_BAL_GRS_AMT
+            ,ATB.DEAL_CCY_CD
+            ,ATB.FUNC_RMNG_BAL_GRS_AMT * DECODE(ATB.AR_TRX_TP_CD, 'RCP', -1, 1) AS FUNC_RMNG_BAL_GRS_AMT
+            ,ATB.FUNC_CCY_CD
+            ,ATB.AR_TRX_DT
+            ,#procDt#                   AS PROC_DT
+            ,ATB.SYS_SRC_CD
+            ,ATB.BILL_TO_CUST_ACCT_CD
+            ,STC.COA_AFFL_CD            AS COA_AFFL_CD
+            ,DIT.AR_COA_ACCT_CD         AS AR_COA_ACCT_CD
+            ,RSC.COA_ACCT_CD            AS RSC_COA_ACCT_CD
+            ,CASE
+                WHEN ATB.AR_TRX_TP_CD IN ('INV', 'CRM', 'DEM', 'DED')
+                 THEN   DIT.AR_COA_ACCT_CD
+                ELSE    RSC.COA_ACCT_CD
+             END                        AS COA_ACCT_CD
+        FROM
+             AR_TRX_BAL         ATB
+            ,SELL_TO_CUST       STC
+            ,INV                I
+            ,DS_INV_TP          DIT
+            ,AR_RCPT            AR
+            ,RCPT_SRC_COA       RSC
+            ,AR_ADJ             AA
+            ,AR_TRX_BAL         OATB
+        WHERE
+                ATB.GLBL_CMPY_CD            = #glblCmpyCd#
+            AND ATB.AR_CASH_APPLY_STS_CD    IN ('U', 'P')
+            AND ATB.EZCANCELFLAG            = '0'
+
+            AND ATB.GLBL_CMPY_CD            = STC.GLBL_CMPY_CD
+            AND ATB.BILL_TO_CUST_ACCT_CD    = STC.SELL_TO_CUST_CD
+            AND STC.EZCANCELFLAG            = '0'
+            AND STC.COA_AFFL_CD            != '000'
+
+            AND ATB.GLBL_CMPY_CD            = I.GLBL_CMPY_CD (+)
+            AND ATB.AR_TRX_NUM              = I.INV_NUM (+)
+            AND I.EZCANCELFLAG (+)          = '0'
+
+            AND ATB.GLBL_CMPY_CD            = DIT.GLBL_CMPY_CD (+)
+            AND ATB.DS_INV_TP_CD            = DIT.DS_INV_TP_CD (+)
+            AND DIT.EZCANCELFLAG (+)        = '0'
+
+            AND ATB.GLBL_CMPY_CD            = AA.GLBL_CMPY_CD (+)
+            AND ATB.ATT_ADJ_NUM             = AA.AR_ADJ_NUM (+)
+            AND AA.EZCANCELFLAG (+)         = '0'
+
+            AND AA.GLBL_CMPY_CD             = OATB.GLBL_CMPY_CD (+)
+            AND AA.ORIG_AR_TRX_BAL_PK       = OATB.AR_TRX_BAL_PK (+)
+            AND OATB.EZCANCELFLAG (+)       = '0'
+
+            AND ATB.GLBL_CMPY_CD            = AR.GLBL_CMPY_CD (+)
+            AND NVL(OATB.AR_TRX_NUM, ATB.AR_TRX_NUM)
+                                            = AR.RCPT_NUM (+)
+            AND AR.EZCANCELFLAG (+)         = '0'
+
+            AND AR.GLBL_CMPY_CD             = RSC.GLBL_CMPY_CD (+)
+            AND AR.AR_RCPT_SRC_CD           = RSC.AR_RCPT_SRC_CD (+)
+            AND RSC.EZCANCELFLAG (+)        = '0'
+
+            AND NOT EXISTS (
+                SELECT
+                     1
+                FROM
+                     AJE_AR_RECLS_INTFC     AARI
+                WHERE
+                        ATB.GLBL_CMPY_CD    = AARI.GLBL_CMPY_CD
+                    AND ATB.AR_TRX_NUM      = AARI.AR_TRX_NUM
+                    AND AARI.PROC_DT        = #procDt#
+                    AND AARI.EZCANCELFLAG   = '0'
+            )
+    </statement>
+
+    <statement id="getArReclsIntfc" parameterClass="Map" resultClass="Map">
+        SELECT
+             AARI.COA_ACCT_CD
+            ,AARI.COA_AFFL_CD
+            ,SUM(AARI.DEAL_RMNG_BAL_GRS_AMT)    AS DEAL_RMNG_BAL_GRS_AMT
+            ,SUM(AARI.FUNC_RMNG_BAL_GRS_AMT)    AS FUNC_RMNG_BAL_GRS_AMT
+            ,AARI.DEAL_CCY_CD
+            ,AARI.FUNC_CCY_CD
+        FROM
+            AJE_AR_RECLS_INTFC  AARI
+       WHERE
+             AARI.PROC_DT    = #procDt#
+         AND AARI.AR_TRX_NUM != '*'
+         AND NOT EXISTS (
+                SELECT 1 FROM AJE_AR_RECLS_INTFC  AARI2
+                 WHERE
+                       AARI2.AR_TRX_NUM = '*'
+                   AND AARI.PROC_DT     = AARI2.PROC_DT
+                   AND AARI.COA_ACCT_CD = AARI2.COA_ACCT_CD
+                   AND AARI.COA_AFFL_CD = AARI2.COA_AFFL_CD
+            )
+       GROUP BY
+             AARI.COA_ACCT_CD
+            ,AARI.COA_AFFL_CD
+            ,AARI.DEAL_CCY_CD
+            ,AARI.FUNC_CCY_CD
+    </statement>
+
+
+</sqlMap>

@@ -1,0 +1,210 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NSBB050001">
+    <statement id="getDsAcctNum" parameterClass="Map" resultClass="Map">
+        SELECT
+            D.DS_ACCT_NUM     AS DS_ACCT_NUM
+           ,D.NO_PROC_AOT     AS NO_PROC_AOT
+           ,D.CUT_OFF_AOT     AS CUT_OFF_AOT
+           ,D.START_DT        AS START_DT
+        FROM
+             MDS_ACCT_TNNT D
+        WHERE
+            D.GLBL_CMPY_CD      = #glblCmpyCd#
+        AND D.ACTV_FLG          = 'Y'
+        AND D.EZCANCELFLAG      = '0'
+        AND EXISTS(
+            SELECT
+                1
+            FROM
+             FSR           A
+            WHERE
+            A.GLBL_CMPY_CD      = D.GLBL_CMPY_CD
+        AND A.SELL_TO_CUST_CD   = D.DS_ACCT_NUM
+        AND A.FSR_STS_CD        = #closed#
+        AND A.EZCANCELFLAG      = '0'
+            )
+        ORDER BY
+            D.DS_ACCT_NUM
+    </statement>
+    <statement id="getCloseFsrInfo" parameterClass="Map" resultClass="Map">
+        WITH
+        BR_INFO AS (
+                        SELECT
+                             GLBL_CMPY_CD
+                             ,PSN_CD
+                             ,COA_BR_CD
+                             ,COA_BR_NM
+                             ,COA_BR_DESC_TXT
+                        FROM
+                           (SELECT
+                                 OFA.GLBL_CMPY_CD
+                                 ,OFA.PSN_CD
+                                 ,TOC.COA_BR_CD
+                                 ,CBR.COA_BR_NM
+                                 ,CBR.COA_BR_DESC_TXT
+                                 ,ROW_NUMBER() OVER (PARTITION BY OFA.PSN_CD ORDER BY RTP.MGR_FLG ASC) AS ROW_NUM
+                            FROM
+                                ORG_FUNC_ASG        OFA
+                               , TOC                TOC
+                               , ORG_FUNC_ROLE_TP   RTP
+                               , COA_BR             CBR
+                            WHERE
+                                OFA.GLBL_CMPY_CD            = #glblCmpyCd#
+                                AND OFA.EZCANCELFLAG        = '0'
+                                AND OFA.EFF_FROM_DT     &lt;= #slsDt#
+                                AND NVL(OFA.EFF_THRU_DT,#slsDt#)     &gt;= #slsDt#
+                                AND OFA.GLBL_CMPY_CD        = TOC.GLBL_CMPY_CD
+                                AND OFA.TOC_CD              = TOC.TOC_CD
+                                AND TOC.EZCANCELFLAG        = '0'
+                                AND TOC.GLBL_CMPY_CD        = RTP.GLBL_CMPY_CD
+                                AND TOC.ORG_FUNC_ROLE_TP_CD = RTP.ORG_FUNC_ROLE_TP_CD
+                                AND RTP.TECH_MSTR_REQ_FLG   = 'Y'
+                                AND RTP.ACTV_FLG            = 'Y'
+                                AND RTP.EZCANCELFLAG        = '0'
+                                AND TOC.GLBL_CMPY_CD        = CBR.GLBL_CMPY_CD
+                                AND TOC.COA_BR_CD           = CBR.COA_BR_CD
+                                AND CBR.EZCANCELFLAG        = '0'
+                            )
+                        WHERE
+                            ROW_NUM = 1
+                )
+        SELECT
+            D.MDS_TNNT_ID
+            ,A.FSR_CLO_DT
+            ,A.FSR_NUM
+            ,C.SVC_TASK_NUM
+            ,C.SER_NUM
+            ,SUBSTR(F.SVC_CALL_PRTY_DESC_TXT, 1, 36) AS SVC_CALL_PRTY_DESC_TXT
+            ,G.SVC_TASK_STS_DESC_TXT
+            ,SUBSTR(E.DS_ACCT_NM, 1, 64) AS DS_ACCT_NM
+            ,SUBSTR(H.FIRST_LINE_ADDR
+                || DECODE(H.SCD_LINE_ADDR,    NULL, '', ' ' || H.SCD_LINE_ADDR)
+                || DECODE(H.THIRD_LINE_ADDR,  NULL, '', ' ' || H.THIRD_LINE_ADDR)
+                || DECODE(H.FRTH_LINE_ADDR,   NULL, '', ' ' || H.FRTH_LINE_ADDR), 1, 256) AS FILL_256_TXT_01
+            ,H.CTY_ADDR
+            ,H.ST_CD
+            ,H.POST_CD
+            ,C.SVC_TASK_RCV_DT
+            ,C.SVC_TASK_RCV_TM
+            ,B.TECH_ACPT_DT
+            ,B.TECH_ACPT_TM
+            ,B.FSR_VISIT_ARV_DT
+            ,B.FSR_VISIT_ARV_TM
+            ,B.FSR_VISIT_CPLT_DT
+            ,B.FSR_VISIT_CPLT_TM
+            ,C.SVC_TASK_CLO_DT
+            ,C.SVC_TASK_CLO_TM
+            ,C.SVC_RSP_TM_NUM * 60 AS FILL_20_TXT_06
+            ,C.SVC_RPR_TM_NUM * 60 AS FILL_20_TXT_07
+            ,J.SVC_PBLM_TP_DESC_TXT
+            ,K.SVC_PBLM_CRCT_TP_DESC_TXT
+            ,L.SVC_PBLM_RSN_TP_DESC_TXT
+            ,M.SVC_PBLM_LOC_TP_DESC_TXT
+            ,NVL(J.SVC_PBLM_TP_CD, #svcPsnVisit#) AS FILL_20_TXT_09
+            ,K.SVC_PBLM_CRCT_TP_CD
+            ,CASE N.PSN_TP_CD
+                WHEN #employee# THEN #callCenter#
+                ELSE #onLine#
+             END AS FILL_20_TXT_11
+            ,N.PSN_LAST_NM || ',' || N.PSN_FIRST_NM AS FILL_100_TXT_01
+            ,N.PSN_LAST_NM || ',' || N.PSN_FIRST_NM AS FILL_100_TXT_02
+            ,O.TECH_NM
+            ,P.COA_BR_DESC_TXT
+            ,D.NO_PROC_AOT
+            ,D.CUT_OFF_AOT
+            ,D.START_DT
+            ,D.DS_ACCT_NUM
+            ,B.FSR_VISIT_NUM
+        FROM
+             FSR              A
+            ,FSR_VISIT        B
+            ,SVC_TASK         C
+            ,MDS_ACCT_TNNT    D
+            ,MDS_ACCT         E
+            ,SVC_CALL_PRTY    F
+            ,SVC_TASK_STS     G
+            ,SHIP_TO_CUST     H
+            ,FSR_VISIT_TASK   I
+            ,SVC_PBLM_TP      J
+            ,SVC_PBLM_CRCT_TP K
+            ,SVC_PBLM_RSN_TP  L
+            ,SVC_PBLM_LOC_TP  M
+            ,S21_PSN          N
+            ,TECH_MSTR        O
+            ,BR_INFO          P
+        WHERE
+            A.GLBL_CMPY_CD          = #glblCmpyCd#
+        AND A.FSR_STS_CD            = #closed#
+        AND A.EZCANCELFLAG          = '0'
+        <isEqual property="searchByCondConst" compareValue="Y">
+        AND A.FSR_CLO_DT        &gt;= #fromDt#
+            <isNotNull property="thruDt">
+            AND A.FSR_CLO_DT    &lt;= #thruDt#
+            </isNotNull>
+        </isEqual>
+        AND A.GLBL_CMPY_CD          = B.GLBL_CMPY_CD
+        AND A.FSR_NUM               = B.FSR_NUM
+        AND B.EZCANCELFLAG          = '0'
+        AND B.GLBL_CMPY_CD          = C.GLBL_CMPY_CD
+        AND B.SVC_TASK_NUM          = C.SVC_TASK_NUM
+        AND C.EZCANCELFLAG          = '0'
+        AND A.GLBL_CMPY_CD          = D.GLBL_CMPY_CD
+        AND A.SELL_TO_CUST_CD       = D.DS_ACCT_NUM
+        AND D.ACTV_FLG              = 'Y'
+        AND D.EZCANCELFLAG          = '0'
+        AND A.GLBL_CMPY_CD          = E.GLBL_CMPY_CD
+        AND A.SELL_TO_CUST_CD       = E.DS_ACCT_NUM
+        AND E.ACTV_FLG              = 'Y'
+        AND E.EZCANCELFLAG          = '0'
+        AND C.GLBL_CMPY_CD          = F.GLBL_CMPY_CD(+)
+        AND C.SVC_CALL_PRTY_CD      = F.SVC_CALL_PRTY_CD(+)
+        AND F.EZCANCELFLAG(+)       = '0'
+        AND C.GLBL_CMPY_CD          = G.GLBL_CMPY_CD
+        AND C.SVC_TASK_STS_CD       = G.SVC_TASK_STS_CD
+        AND G.EZCANCELFLAG          = '0'
+        AND C.GLBL_CMPY_CD          = H.GLBL_CMPY_CD(+)
+        AND C.SHIP_TO_CUST_CD       = H.SHIP_TO_CUST_CD(+)
+        AND H.EZCANCELFLAG(+)       = '0'
+        AND B.GLBL_CMPY_CD          = I.GLBL_CMPY_CD
+        AND B.FSR_NUM               = I.FSR_NUM
+        AND B.FSR_VISIT_NUM         = I.FSR_VISIT_NUM
+        AND I.EZCANCELFLAG          = '0'
+        AND I.GLBL_CMPY_CD          = J.GLBL_CMPY_CD(+)
+        AND I.SVC_PBLM_TP_CD        = J.SVC_PBLM_TP_CD(+)
+        AND J.EZCANCELFLAG(+)       = '0'
+        AND I.GLBL_CMPY_CD          = K.GLBL_CMPY_CD(+)
+        AND I.SVC_PBLM_CRCT_TP_CD   = K.SVC_PBLM_CRCT_TP_CD(+)
+        AND K.EZCANCELFLAG(+)       = '0'
+        AND I.GLBL_CMPY_CD          = L.GLBL_CMPY_CD(+)
+        AND I.SVC_PBLM_RSN_TP_CD    = L.SVC_PBLM_RSN_TP_CD(+)
+        AND L.EZCANCELFLAG(+)       = '0'
+        AND I.GLBL_CMPY_CD          = M.GLBL_CMPY_CD(+)
+        AND I.SVC_PBLM_LOC_TP_CD    = M.SVC_PBLM_LOC_TP_CD(+)
+        AND M.EZCANCELFLAG(+)       = '0'
+        AND C.GLBL_CMPY_CD          = N.GLBL_CMPY_CD(+)
+        AND C.EZINUSERID            = N.PSN_CD(+)
+        AND N.EZCANCELFLAG(+)       = '0'
+        AND N.GLBL_CMPY_CD          = O.GLBL_CMPY_CD(+)
+        AND N.PSN_CD                = O.TECH_TOC_CD(+)
+        AND O.EZCANCELFLAG(+)       = '0'
+        AND O.GLBL_CMPY_CD          = P.GLBL_CMPY_CD(+)
+        AND O.TECH_TOC_CD           = P.PSN_CD(+)
+        <isEqual property="noSendFlg" compareValue="Y">
+        AND NOT EXISTS (
+            SELECT
+                1
+            FROM
+                FSR_EVENT Z
+            WHERE
+                Z.GLBL_CMPY_CD          = A.GLBL_CMPY_CD
+            AND Z.FSR_NUM               = A.FSR_NUM
+            AND Z.SVC_DISPT_EVENT_CD    = #sentToMDSCloud#
+            AND Z.EZCANCELFLAG          = '0'
+            )
+        </isEqual>
+        ORDER BY
+            A.SELL_TO_CUST_CD
+            ,A.FSR_NUM
+            ,C.SVC_TASK_NUM
+    </statement>
+</sqlMap>

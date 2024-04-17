@@ -1,0 +1,730 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<sqlMap namespace="NPAL1360Query">
+    <typeAlias alias="NPAL1360CMsg" type="business.blap.NPAL1360.NPAL1360CMsg" />
+    <typeAlias alias="NPAL1360_ACMsg" type="business.blap.NPAL1360.NPAL1360_ACMsg" />
+
+    <statement id="getKitItemName" parameterClass="Map" resultClass="Map">
+        SELECT
+            AM.MDSE_DESC_SHORT_TXT
+           ,AM.MDSE_NM
+           ,AM.FIRST_PROD_CTRL_CD
+           ,AM.RCV_SER_TAKE_FLG
+        FROM
+            ALL_MDSE_V AM
+        WHERE
+            AM.GLBL_CMPY_CD = #cMsg.glblCmpyCd#
+        AND AM.MDSE_CD      = #cMsg.fnshGoodsMdseCd#
+        AND AM.MDSE_TP_CD   = #kitItem#
+        AND AM.EZCANCELFLAG = '0'
+        AND ROWNUM &lt;= #rowNum#
+    </statement>
+
+    <statement id="getWorkOrderSerial" parameterClass="Map" resultClass="Map">
+        SELECT WOS.WRK_ORD_DTL_LINE_NUM
+              ,WOS.SER_NUM
+        FROM WRK_ORD_SER WOS
+        WHERE  1 = 1
+        AND    WOS.GLBL_CMPY_CD = #cMsg.glblCmpyCd#
+        AND    WOS.WRK_ORD_NUM  = #cMsg.wrkOrdNum#
+        <isNotNull property="wrkOrdDtlLineNum">
+        AND    WOS.WRK_ORD_DTL_LINE_NUM = #wrkOrdDtlLineNum#
+        </isNotNull>
+        AND    WOS.EZCANCELFLAG = '0'
+        AND    ROWNUM &lt;= #rowNum#
+    </statement>
+
+    <statement id="getKitItemEffectDate" parameterClass="Map" resultClass="Map">
+        SELECT 
+               CH.EFF_FROM_DT
+              ,CH.EFF_THRU_DT
+        FROM   CMPSN_HIST CH
+        WHERE  1 = 1
+        AND    CH.GLBL_CMPY_CD = #cMsg.glblCmpyCd#
+        AND    CH.CMPSN_H_PK = ( SELECT MAX(CHD.CMPSN_H_PK) 
+                                 FROM   CMPSN DCI
+                                       ,CMPSN_HIST CHD
+                                 WHERE  1 = 1
+                                 AND    DCI.GLBL_CMPY_CD   = #cMsg.glblCmpyCd#
+                                 AND    DCI.PRNT_MDSE_CD   = #cMsg.fnshGoodsMdseCd#
+                                 AND    DCI.CMPSN_REVN_NUM = #cMsg.cmpsnRevnNum#
+                                 AND    DCI.EZCANCELFLAG   = '0'
+                                 AND    DCI.GLBL_CMPY_CD   = CHD.GLBL_CMPY_CD
+                                 AND    DCI.CMPSN_PK       = CHD.CMPSN_PK
+                                 AND    CHD.HIST_ACT_NM   != #histActNm#
+                                 AND    CHD.EZCANCELFLAG = '0' )
+        AND    CH.EZCANCELFLAG = '0'
+    </statement>
+
+    <statement id="checkKitItem" parameterClass="Map" resultClass="Map">
+        SELECT DCM.CMPSN_REVN_NUM
+              ,AM.MDSE_DESC_SHORT_TXT
+              ,AM.MDSE_NM
+              ,AM.FIRST_PROD_CTRL_CD
+              ,AM.RCV_SER_TAKE_FLG
+              ,AM.INVTY_CTRL_FLG
+              ,AM.INSTL_BASE_CTRL_FLG
+              ,UOM.BASE_PKG_UOM_CD
+        FROM   CMPSN CM
+              ,CMPSN DCM
+              ,ALL_MDSE_V AM 
+              ,PKG_UOM_CLS UOM
+        WHERE 1 = 1
+        AND   CM.PRNT_MDSE_CD = #cMsg.fnshGoodsMdseCd#
+        AND   CM.EFF_FROM_DT                       &lt;= #cMsg.slsDt# 
+        AND   NVL(CM.EFF_THRU_DT,#limitEffThruDt#) &gt;= #cMsg.slsDt#  
+        AND   CM.GLBL_CMPY_CD   = #cMsg.glblCmpyCd#
+        AND   CM.EZCANCELFLAG   = '0' 
+        AND   CM.GLBL_CMPY_CD   = DCM.GLBL_CMPY_CD
+        AND   CM.PRNT_MDSE_CD   = DCM.PRNT_MDSE_CD
+        AND   CM.CMPSN_PK       = DCM.CMPSN_PK
+        AND   DCM.EZCANCELFLAG  = '0' 
+        AND   CM.GLBL_CMPY_CD   = AM.GLBL_CMPY_CD
+        AND   CM.PRNT_MDSE_CD   = AM.MDSE_CD
+        AND   AM.MDSE_TP_CD     = #kitItem# 
+        AND   AM.EZCANCELFLAG   = '0'
+        AND   AM.GLBL_CMPY_CD   = UOM.GLBL_CMPY_CD
+        AND   AM.PKG_UOM_CLS_CD = UOM.PKG_UOM_CLS_CD
+        AND   UOM.EZCANCELFLAG  = '0' 
+    </statement>
+
+    <statement id="getComponentItemsInfo" parameterClass="Map" resultClass="Map">
+        SELECT                       
+               CASE WHEN CM.CHILD_MDSE_CD IS NOT NULL THEN CM.CHILD_MDSE_CD
+                   ELSE CM.CHILD_ORD_TAKE_MDSE_CD END AS MDSE_CD
+              ,CASE WHEN MV2.MDSE_NM IS NOT NULL THEN MV2.MDSE_NM 
+                   ELSE MV1.MDSE_NM END AS MDSE_NM
+              ,CASE WHEN MV2.MDSE_DESC_SHORT_TXT IS NOT NULL THEN MV2.MDSE_DESC_SHORT_TXT 
+                   ELSE MV1.MDSE_DESC_SHORT_TXT END AS MDSE_DESC_SHORT_TXT
+              ,CASE WHEN MV2.MDSE_TP_CD IS NOT NULL THEN MV2.MDSE_TP_CD 
+                   ELSE MV1.MDSE_TP_CD END AS MDSE_TP_CD
+              ,CASE WHEN MT2.MDSE_TP_DESC_TXT IS NOT NULL THEN MT2.MDSE_TP_DESC_TXT 
+                   ELSE MT1.MDSE_TP_DESC_TXT END AS MDSE_TP_DESC_TXT
+              ,CASE WHEN MV2.RCV_SER_TAKE_FLG IS NOT NULL THEN MV2.RCV_SER_TAKE_FLG 
+                   ELSE MV1.RCV_SER_TAKE_FLG END AS RCV_SER_TAKE_FLG 
+              ,CASE WHEN UM2.BASE_PKG_UOM_CD IS NOT NULL THEN UM2.BASE_PKG_UOM_CD 
+                   ELSE UM1.BASE_PKG_UOM_CD END AS BASE_PKG_UOM_CD 
+              ,CM.CHILD_MDSE_QTY * #ordQty# ORD_QTY
+              ,CM.CHILD_MDSE_QTY
+              ,CASE WHEN MV2.INVTY_CTRL_FLG IS NOT NULL THEN MV2.INVTY_CTRL_FLG 
+                   ELSE MV1.INVTY_CTRL_FLG END AS INVTY_CTRL_FLG
+              ,CASE WHEN MV2.INSTL_BASE_CTRL_FLG IS NOT NULL THEN MV2.INSTL_BASE_CTRL_FLG 
+                   ELSE MV1.INSTL_BASE_CTRL_FLG END AS INSTL_BASE_CTRL_FLG
+        FROM
+               CMPSN      CM
+              ,ALL_MDSE_V MV1
+              ,MDSE_TP    MT1
+              ,PKG_UOM_CLS UM1 
+              ,ALL_MDSE_V MV2
+              ,MDSE_TP    MT2
+              ,PKG_UOM_CLS UM2
+        WHERE 1 = 1
+        AND   CM.PRNT_MDSE_CD = #mdseCd#
+        AND   CM.GLBL_CMPY_CD = #cMsg.glblCmpyCd#
+        AND   CM.EFF_FROM_DT &lt;= #cMsg.slsDt#
+        AND   NVL(CM.EFF_THRU_DT,'99991231') &gt;= #cMsg.slsDt#
+        AND   CM.EZCANCELFLAG ='0'
+        AND   CM.GLBL_CMPY_CD           = MV1.GLBL_CMPY_CD(+)
+        AND   CM.CHILD_ORD_TAKE_MDSE_CD = MV1.MDSE_CD(+)
+        AND   MV1.EZCANCELFLAG(+)       = '0'
+        AND   MV1.GLBL_CMPY_CD    = MT1.GLBL_CMPY_CD(+)
+        AND   MV1.MDSE_TP_CD      = MT1.MDSE_TP_CD(+)
+        AND   MT1.EZCANCELFLAG(+) = '0'
+        AND   MV1.GLBL_CMPY_CD    = UM1.GLBL_CMPY_CD(+)
+        AND   MV1.PKG_UOM_CLS_CD  = UM1.PKG_UOM_CLS_CD(+)
+        AND   UM1.EZCANCELFLAG(+) = '0'
+        AND   CM.GLBL_CMPY_CD     = MV2.GLBL_CMPY_CD(+)
+        AND   CM.CHILD_MDSE_CD    = MV2.MDSE_CD(+)
+        AND   MV2.EZCANCELFLAG(+) = '0'
+        AND   MV2.GLBL_CMPY_CD    = MT2.GLBL_CMPY_CD(+)
+        AND   MV2.MDSE_TP_CD      = MT2.MDSE_TP_CD(+)
+        AND   MT2.EZCANCELFLAG(+) = '0'
+        AND   MV2.GLBL_CMPY_CD    = UM2.GLBL_CMPY_CD(+)
+        AND   MV2.PKG_UOM_CLS_CD  = UM2.PKG_UOM_CLS_CD(+)
+        AND   UM2.EZCANCELFLAG(+) = '0'
+        ORDER BY CM.CMPSN_PK
+    </statement>
+
+    <statement id="getAvailableInventory" parameterClass="Map" resultClass="Map">
+        SELECT MDSE_CD
+              ,MDSE_NM
+              ,MDSE_DESC_SHORT_TXT
+              ,INVTY_AVAL_QTY
+        FROM ( SELECT I.MDSE_CD
+                     ,M.MDSE_NM
+                     ,M.MDSE_DESC_SHORT_TXT
+                     ,MAX(I.INVTY_AVAL_QTY) INVTY_AVAL_QTY
+                     ,1 SORT_NUM
+               FROM   INVTY I
+                     ,ALL_MDSE_V M
+               WHERE  1 = 1
+               AND    I.MDSE_CD     LIKE #mdseCd# || '%'
+               AND    I.INVTY_LOC_CD = #invtyLocCd#
+               AND    I.LOC_STS_CD   = #locStsCd#
+               AND    I.STK_STS_CD   = #stkStsCd#
+               AND    I.GLBL_CMPY_CD = #cMsg.glblCmpyCd#
+               AND    I.EZCANCELFLAG = '0'
+               AND    I.GLBL_CMPY_CD = M.GLBL_CMPY_CD
+               AND    I.MDSE_CD = M.MDSE_CD
+               AND    M.EZCANCELFLAG = '0'
+               GROUP BY I.MDSE_CD
+                       ,M.MDSE_NM
+                       ,M.MDSE_DESC_SHORT_TXT
+               UNION ALL
+               SELECT M.MDSE_CD
+                     ,M.MDSE_NM
+                     ,M.MDSE_DESC_SHORT_TXT
+                     ,0 INVTY_AVAL_QTY
+                     ,2 SORT_NUM
+               FROM   ORD_TAKE_MDSE O
+                     ,ALL_MDSE_V M
+               WHERE  1 = 1
+               AND    O.ORD_TAKE_MDSE_CD = #mdseCd#
+               AND    O.GLBL_CMPY_CD     = #cMsg.glblCmpyCd#
+               AND    O.EZCANCELFLAG     = '0'
+               AND    O.GLBL_CMPY_CD     = M.GLBL_CMPY_CD
+               AND    O.MDSE_CD          = M.MDSE_CD
+               AND    M.EZCANCELFLAG     = '0'
+               UNION ALL
+               SELECT M.MDSE_CD
+                     ,M.MDSE_NM
+                     ,M.MDSE_DESC_SHORT_TXT
+                     ,0 INVTY_AVAL_QTY
+                     ,3 SORT_NUM
+               FROM   ALL_MDSE_V M
+               WHERE  1 = 1
+               AND    M.MDSE_CD     LIKE #mdseCd# || '%'
+               AND    M.GLBL_CMPY_CD = #cMsg.glblCmpyCd#
+               AND    M.EZCANCELFLAG = '0'
+               AND    NOT EXISTS ( SELECT 'X'
+                                   FROM   ORD_TAKE_MDSE O
+                                   WHERE  1 = 1
+                                   AND    M.GLBL_CMPY_CD = O.GLBL_CMPY_CD
+                                   AND    M.MDSE_CD      = O.ORD_TAKE_MDSE_CD
+                                   AND    O.EZCANCELFLAG = '0' )
+               ORDER BY INVTY_AVAL_QTY DESC
+                       ,SORT_NUM
+                       ,MDSE_CD ) INV
+        WHERE ROWNUM &lt;= #rowNum#
+    </statement>
+    
+    <statement id="unkitComponentItemInfo" parameterClass="Map" resultClass="Map">
+        SELECT DISTINCT MDSE_CD
+              ,MDSE_NM
+              ,MDSE_DESC_SHORT_TXT
+        FROM ( SELECT M.MDSE_CD
+                     ,M.MDSE_NM
+                     ,M.MDSE_DESC_SHORT_TXT
+                     ,1 SORT_NUM
+               FROM   ORD_TAKE_MDSE O
+                     ,ALL_MDSE_V M
+               WHERE  1 = 1
+               AND    O.MDSE_CD     LIKE #mdseCd# || '%'
+               AND    O.GLBL_CMPY_CD = #cMsg.glblCmpyCd#
+               AND    O.EZCANCELFLAG = '0'
+               AND    O.GLBL_CMPY_CD = M.GLBL_CMPY_CD
+               AND    O.MDSE_CD = M.MDSE_CD
+               AND    M.EZCANCELFLAG = '0'
+               GROUP BY M.MDSE_CD
+                       ,M.MDSE_NM
+                       ,M.MDSE_DESC_SHORT_TXT
+               UNION ALL
+               SELECT M.MDSE_CD
+                     ,M.MDSE_NM
+                     ,M.MDSE_DESC_SHORT_TXT
+                     ,2 SORT_NUM
+               FROM   ALL_MDSE_V M
+               WHERE  1 = 1
+               AND    M.MDSE_CD     LIKE #mdseCd# || '%'
+               AND    M.GLBL_CMPY_CD = #cMsg.glblCmpyCd#
+               AND    M.EZCANCELFLAG = '0'
+               AND    NOT EXISTS ( SELECT 'X'
+                                   FROM   ORD_TAKE_MDSE O
+                                   WHERE  1 = 1
+                                   AND    M.GLBL_CMPY_CD = O.GLBL_CMPY_CD
+                                   AND    M.MDSE_CD      = O.ORD_TAKE_MDSE_CD
+                                   AND    O.EZCANCELFLAG = '0' )
+               ORDER BY SORT_NUM
+                       ,MDSE_CD ) INV
+        WHERE ROWNUM &lt;= #rowNum#    
+    </statement>
+
+    <statement id="checkConfiguration" parameterClass="Map" resultClass="Map">
+        SELECT COUNT(SMM1.SVC_CONFIG_MSTR_PK) COUNT
+        FROM   SVC_MACH_MSTR SMM1
+        WHERE  1 = 1
+        AND    SMM1.SVC_CONFIG_MSTR_PK IN ( SELECT SVC_CONFIG_MSTR_PK
+                                            FROM   SVC_MACH_MSTR SMM2
+                                            WHERE  1 = 1
+                                            AND    SMM2.MDSE_CD = #mdseCd#
+                                            AND    SMM2.SER_NUM = #serNum#
+                                            AND    SMM2.GLBL_CMPY_CD = #cMsg.glblCmpyCd#
+                                            AND    SMM2.EZCANCELFLAG = '0' )
+        AND    SMM1.SVC_MACH_MSTR_STS_CD != #svcMachMstrStsCd#
+        AND    SMM1.GLBL_CMPY_CD          = #cMsg.glblCmpyCd#
+        AND    SMM1.EZCANCELFLAG          = '0'
+    </statement>
+
+    <statement id="getShippingPlan" parameterClass="Map" resultClass="Map">
+        SELECT SP.SHPG_PLN_NUM
+        FROM   SHPG_PLN SP
+        WHERE  1 = 1
+        AND    SP.GLBL_CMPY_CD     = #cMsg.glblCmpyCd#
+        AND    SP.TRX_HDR_NUM      = #cMsg.wrkOrdNum#
+        AND    SP.TRX_LINE_NUM     = #wrkOrdDtlLineNum#
+        AND    SP.TRX_LINE_SUB_NUM = #wrkOrdDtlLineSubNum#
+        AND    SP.SHPG_STS_CD      = #shpgStsCd#
+        AND    SP.TRX_SRC_TP_CD    = #cMsg.trxSrcTpCd#
+        AND    SP.EZCANCELFLAG     = '0'
+    </statement>
+
+    <statement id="checkServiceMachineMaster" parameterClass="Map" resultClass="Map">
+        SELECT SMM.SVC_MACH_MSTR_PK
+        FROM   SVC_MACH_MSTR SMM
+        WHERE  1 = 1
+        AND    SMM.GLBL_CMPY_CD = #cMsg.glblCmpyCd#
+        AND    SMM.MDSE_CD      = #mdseCd#
+        AND    SMM.SER_NUM      = #serNum#
+        AND    SMM.EZCANCELFLAG = '0'
+    </statement>
+
+    <statement id="getRws" parameterClass="Map" resultClass="Map">
+        SELECT RH.RWS_NUM
+              ,RH.TRX_ORD_NUM
+              ,RH.RWS_REF_NUM
+              ,RH.WH_CD
+              ,RH.WMS_DROP_STS_CD
+        FROM   RWS_HDR RH
+        WHERE  1 = 1
+        AND    RH.GLBL_CMPY_CD       = #cMsg.glblCmpyCd#
+        AND    RH.PO_RCV_TRX_HDR_NUM = ( SELECT SO.SO_NUM
+                                         FROM   SHPG_ORD SO
+                                         WHERE  1 = 1
+                                         AND    SO.GLBL_CMPY_CD  = #cMsg.glblCmpyCd#
+                                         AND    SO.TRX_HDR_NUM   = #cMsg.wrkOrdNum#
+                                         AND    SO.EZCANCELFLAG  = '0' )
+        AND    RH.EZCANCELFLAG = '0'
+    </statement>
+
+    <statement id="getKitBom" parameterClass="Map" resultClass="Map">
+        SELECT WO.GLBL_CMPY_CD
+              ,WO.WRK_ORD_NUM
+              ,WO.FNSH_GOODS_MDSE_CD
+              ,WO.FNSH_GOODS_ORD_QTY
+              ,WO.RQST_RCV_DT
+              ,WO.KIT_BOM_PRINT_FLG
+              ,WO.WRK_ORD_MSG_TXT
+              ,WO.RTL_WH_CD
+              ,WOD.SO_NUM
+              ,WOD.WRK_ORD_DTL_LINE_NUM
+              ,WOD.ORIG_GOODS_MDSE_CD
+              ,WOD.ORIG_GOODS_ORD_QTY
+              ,WO.FNSH_MDSE_DESC_SHORT_TXT
+              ,WOD.ORIG_MDSE_DESC_SHORT_TXT
+              ,DSWOT.DS_WRK_ORD_TP_DESC_TXT
+              ,WOD.ORIG_GOODS_ORD_QTY / WO.FNSH_GOODS_ORD_QTY AS CHILD_MDSE_QTY
+              ,WOD.SPLY_RTL_SWH_CD
+              ,WH.RTL_WH_NM
+              ,WH.WH_OWNR_CD
+              ,WH.ATTN_NM
+              ,WH.FIRST_LINE_ADDR
+              ,WH.SCD_LINE_ADDR  
+              ,WH.THIRD_LINE_ADDR
+              ,WH.FRTH_LINE_ADDR
+              ,WH.CTY_ADDR || ' ' || WH.ST_CD || ' ' || WH.POST_CD || ' ' || WH.CTRY_CD AS FIFTH_LINE_ADDR
+              ,'TEL : ' || WH.TEL_NUM || 'FAX : ' || WH.FAX_NUM AS SIXTH_LINE_ADDR
+        FROM   WRK_ORD WO
+              ,WRK_ORD_DTL WOD
+              ,DS_WRK_ORD_TP DSWOT
+              ,RTL_WH WH
+        WHERE  1 = 1
+        AND    WO.WRK_ORD_NUM  = #cMsg.wrkOrdNum#
+        AND    WO.GLBL_CMPY_CD = #cMsg.glblCmpyCd#
+        AND    WO.EZCANCELFLAG = '0'
+        AND    WO.GLBL_CMPY_CD = WOD.GLBL_CMPY_CD
+        AND    WO.WRK_ORD_NUM  = WOD.WRK_ORD_NUM
+        AND    WOD.EZCANCELFLAG = '0'
+        AND    WO.GLBL_CMPY_CD     = DSWOT.GLBL_CMPY_CD
+        AND    WO.DS_WRK_ORD_TP_CD = DSWOT.DS_WRK_ORD_TP_CD
+        AND    DSWOT.EZCANCELFLAG     = '0'
+        <isNotNull property="rtlWhCd">
+        AND    WO.GLBL_CMPY_CD = WH.GLBL_CMPY_CD
+        AND    WO.RTL_WH_CD    = WH.RTL_WH_CD
+        AND    WH.EZCANCELFLAG = '0'
+        </isNotNull>
+        <isNotNull property="invtyLocCd">
+        AND    WO.GLBL_CMPY_CD = WH.GLBL_CMPY_CD
+        AND    WO.INVTY_LOC_CD = WH.RTL_WH_CD
+        AND    WH.EZCANCELFLAG = '0'
+        </isNotNull>
+    </statement>
+
+    <statement id="getCmpsnMsg" parameterClass="Map" resultClass="Map">
+        SELECT
+            MSG.PRNT_MDSE_CD
+           ,MAX(CASE MSG.CMPSN_MSG_SEG_ID WHEN  1 THEN MSG.CMPSN_MSG_TXT END) BOM_KIT_CMNT_TXT_01
+           ,MAX(CASE MSG.CMPSN_MSG_SEG_ID WHEN  2 THEN MSG.CMPSN_MSG_TXT END) BOM_KIT_CMNT_TXT_02
+           ,MAX(CASE MSG.CMPSN_MSG_SEG_ID WHEN  3 THEN MSG.CMPSN_MSG_TXT END) BOM_KIT_CMNT_TXT_03
+           ,MAX(CASE MSG.CMPSN_MSG_SEG_ID WHEN  4 THEN MSG.CMPSN_MSG_TXT END) BOM_KIT_CMNT_TXT_04
+           ,MAX(CASE MSG.CMPSN_MSG_SEG_ID WHEN  5 THEN MSG.CMPSN_MSG_TXT END) BOM_KIT_CMNT_TXT_05
+           ,MAX(CASE MSG.CMPSN_MSG_SEG_ID WHEN  6 THEN MSG.CMPSN_MSG_TXT END) BOM_KIT_CMNT_TXT_06
+           ,MAX(CASE MSG.CMPSN_MSG_SEG_ID WHEN  7 THEN MSG.CMPSN_MSG_TXT END) BOM_KIT_CMNT_TXT_07
+           ,MAX(CASE MSG.CMPSN_MSG_SEG_ID WHEN  8 THEN MSG.CMPSN_MSG_TXT END) BOM_KIT_CMNT_TXT_08
+           ,MAX(CASE MSG.CMPSN_MSG_SEG_ID WHEN  9 THEN MSG.CMPSN_MSG_TXT END) BOM_KIT_CMNT_TXT_09
+           ,MAX(CASE MSG.CMPSN_MSG_SEG_ID WHEN 10 THEN MSG.CMPSN_MSG_TXT END) BOM_KIT_CMNT_TXT_10
+           ,MAX(CASE MSG.CMPSN_MSG_SEG_ID WHEN 11 THEN MSG.CMPSN_MSG_TXT END) BOM_KIT_CMNT_TXT_11
+           ,MAX(CASE MSG.CMPSN_MSG_SEG_ID WHEN 12 THEN MSG.CMPSN_MSG_TXT END) BOM_KIT_CMNT_TXT_12
+           ,MAX(CASE MSG.CMPSN_MSG_SEG_ID WHEN 13 THEN MSG.CMPSN_MSG_TXT END) BOM_KIT_CMNT_TXT_13
+           ,MAX(CASE MSG.CMPSN_MSG_SEG_ID WHEN 14 THEN MSG.CMPSN_MSG_TXT END) BOM_KIT_CMNT_TXT_14
+           ,MAX(CASE MSG.CMPSN_MSG_SEG_ID WHEN 15 THEN MSG.CMPSN_MSG_TXT END) BOM_KIT_CMNT_TXT_15
+        FROM
+            WRK_ORD   WOH
+           ,CMPSN_MSG MSG
+        WHERE
+            WOH.GLBL_CMPY_CD       = #cMsg.glblCmpyCd#
+        AND WOH.WRK_ORD_NUM        = #cMsg.wrkOrdNum#
+        AND WOH.EZCANCELFLAG       = '0'
+        AND WOH.GLBL_CMPY_CD       = MSG.GLBL_CMPY_CD
+        AND WOH.FNSH_GOODS_MDSE_CD = MSG.PRNT_MDSE_CD
+        AND MSG.EZCANCELFLAG       = '0'
+        GROUP BY
+            MSG.PRNT_MDSE_CD
+        ORDER BY
+            MSG.PRNT_MDSE_CD
+    </statement>
+
+    <statement id="search" parameterClass="Map" resultMap="result.NPAL1360_ACMsg">
+        SELECT 
+               KIT.WRK_ORD_NUM
+              ,KIT.DS_WRK_ORD_TP_CD
+              ,KIT.WRK_ORD_STS_CD
+              ,KIT.DS_WRK_ORD_STS_NM
+              ,KIT.WRK_ORD_DT
+              ,KIT.PRCH_REQ_NUM
+              ,KIT.RTL_WH_CD
+              ,KIT.RTL_WH_NM
+              ,KIT.CPLT_RTL_SWH_CD
+              ,KIT.RTL_SWH_NM
+              ,KIT.RQST_RCV_DT
+              ,KIT.FNSH_GOODS_MDSE_CD
+              ,KIT.FNSH_MDSE_DESC_SHORT_TXT
+              ,KIT.FNSH_GOODS_MDSE_NM
+              ,KIT.FIRST_PROD_CTRL_CD
+              ,KIT.HDR_BASE_PKG_UOM_CD
+              ,KIT.FNSH_GOODS_ORD_QTY
+              ,KIT.FNSH_GOODS_RCV_QTY
+              ,KIT.FNSH_GOODS_BAL_QTY
+              ,KIT.FNSH_GOODS_CANC_QTY
+              ,KIT.WRK_ORD_MSG_TXT 
+              ,KIT.WRK_ORD_DTL_LINE_NUM
+              ,KIT.ORIG_GOODS_MDSE_CD
+              ,KIT.ORIG_MDSE_DESC_SHORT_TXT
+              ,KIT.ORIG_GOODS_MDSE_NM
+              ,KIT.MDSE_TP_DESC_TXT
+              ,KIT.SPLY_RTL_SWH_CD
+              ,KIT.DTL_BASE_PKG_UOM_CD
+              ,KIT.ORIG_GOODS_ORD_QTY
+              ,KIT.CMPSN_REVN_NUM
+              ,KIT.HDR_RCV_SER_TAKE_FLG
+              ,KIT.DTL_RCV_SER_TAKE_FLG
+              ,KIT.TRX_SRC_TP_CD
+              ,KIT.CHILD_MDSE_QTY
+              ,KIT.INVTY_CTRL_FLG
+              ,KIT.WO_EZUPTIME
+              ,KIT.WO_EZUPTIMEZONE
+              ,KIT.DS_EZUPTIME
+              ,KIT.DS_EZUPTIMEZONE
+        FROM (
+               SELECT 
+                      WO.WRK_ORD_NUM
+                     ,WO.DS_WRK_ORD_TP_CD
+                     ,WOS.DS_WRK_ORD_STS_NM
+                     ,WO.WRK_ORD_STS_CD
+                     ,DWOT.DS_WRK_ORD_TP_DESC_TXT
+                     ,WO.WRK_ORD_DT
+                     ,WO.PRCH_REQ_NUM
+                     ,WO.RTL_WH_CD
+                     ,RW.RTL_WH_NM
+                     ,WO.CPLT_RTL_SWH_CD
+                     ,SW1.RTL_SWH_NM
+                     ,WO.RQST_RCV_DT
+                     ,WO.FNSH_GOODS_MDSE_CD
+                     ,WO.FNSH_MDSE_DESC_SHORT_TXT
+                     ,WO.FNSH_GOODS_MDSE_NM
+                     ,M1.FIRST_PROD_CTRL_CD
+                     ,P1.BASE_PKG_UOM_CD AS HDR_BASE_PKG_UOM_CD
+                     ,WO.FNSH_GOODS_ORD_QTY
+                     ,WO.FNSH_GOODS_RCV_QTY
+                     ,WO.FNSH_GOODS_BAL_QTY
+                     ,WO.FNSH_GOODS_CANC_QTY
+                     ,WO.WRK_ORD_MSG_TXT 
+                     ,WOD.WRK_ORD_DTL_LINE_NUM
+                     ,WOD.ORIG_GOODS_MDSE_CD
+                     ,WOD.ORIG_MDSE_DESC_SHORT_TXT
+                     ,WOD.ORIG_GOODS_MDSE_NM
+                     ,CASE WOD.WRK_ORD_SET_CMPSN_FLG
+                      WHEN 'Y' THEN 'Set Child'
+                      WHEN 'N' THEN MP.MDSE_TP_DESC_TXT
+                      END AS MDSE_TP_DESC_TXT
+                     ,WOD.SPLY_RTL_SWH_CD
+                     ,P2.BASE_PKG_UOM_CD AS DTL_BASE_PKG_UOM_CD
+                     ,WOD.ORIG_GOODS_ORD_QTY
+                     ,WO.CMPSN_REVN_NUM
+                     ,M1.RCV_SER_TAKE_FLG AS HDR_RCV_SER_TAKE_FLG
+                     ,M2.RCV_SER_TAKE_FLG AS DTL_RCV_SER_TAKE_FLG
+                     ,DWOT.TRX_SRC_TP_CD
+                     ,WOD.ORIG_GOODS_ORD_QTY / WO.FNSH_GOODS_ORD_QTY AS CHILD_MDSE_QTY
+                     ,M2.INVTY_CTRL_FLG
+                     ,WO.EZUPTIME       AS WO_EZUPTIME
+                     ,WO.EZUPTIMEZONE   AS WO_EZUPTIMEZONE
+                     ,WO.EZUPTIME      AS DS_EZUPTIME
+                     ,WO.EZUPTIMEZONE  AS DS_EZUPTIMEZONE
+               FROM   WRK_ORD WO
+                     ,WRK_ORD_DTL WOD
+                     ,DS_WRK_ORD_TP DWOT
+                     ,WRK_ORD_STS WOS
+                     ,ALL_MDSE_V M1
+                     ,ALL_MDSE_V M2
+                     ,MDSE_TP MP
+                     ,PKG_UOM_CLS P1
+                     ,PKG_UOM_CLS P2
+                     ,RTL_SWH SW1
+                     ,RTL_WH RW
+                     ,RTL_SWH SW2
+               WHERE 1 =1
+               AND   WO.WRK_ORD_NUM  = #cMsg.wrkOrdNum#
+               AND   WO.GLBL_CMPY_CD = #cMsg.glblCmpyCd#
+               AND   WO.EZCANCELFLAG = '0'
+               AND   WO.GLBL_CMPY_CD  = WOD.GLBL_CMPY_CD
+               AND   WO.WRK_ORD_NUM   = WOD.WRK_ORD_NUM
+               AND   WOD.EZCANCELFLAG = '0'
+               AND   WO.GLBL_CMPY_CD     = DWOT.GLBL_CMPY_CD
+               AND   WO.DS_WRK_ORD_TP_CD = DWOT.DS_WRK_ORD_TP_CD
+               AND   DWOT.EZCANCELFLAG    = '0'
+               AND   WO.GLBL_CMPY_CD   = WOS.GLBL_CMPY_CD
+               AND   WO.WRK_ORD_STS_CD = WOS.WRK_ORD_STS_CD
+               AND   WOS.EZCANCELFLAG  = '0'
+               AND   WO.GLBL_CMPY_CD        = M1.GLBL_CMPY_CD(+)
+               AND   WO.FNSH_GOODS_MDSE_CD  = M1.MDSE_CD(+)
+               AND   M1.EZCANCELFLAG(+)     = '0'
+               AND   WOD.GLBL_CMPY_CD       = M2.GLBL_CMPY_CD(+)
+               AND   WOD.ORIG_GOODS_MDSE_CD = M2.MDSE_CD(+)
+               AND   M2.EZCANCELFLAG(+)     = '0'
+               AND   M2.GLBL_CMPY_CD    = MP.GLBL_CMPY_CD(+)
+               AND   M2.MDSE_TP_CD      = MP.MDSE_TP_CD(+)
+               AND   MP.EZCANCELFLAG(+) = '0'
+               AND   M1.GLBL_CMPY_CD    = P1.GLBL_CMPY_CD(+)
+               AND   M1.PKG_UOM_CLS_CD  = P1.PKG_UOM_CLS_CD(+)
+               AND   P1.EZCANCELFLAG(+) = '0'
+               AND   M2.GLBL_CMPY_CD    = P2.GLBL_CMPY_CD(+)
+               AND   M2.PKG_UOM_CLS_CD  = P2.PKG_UOM_CLS_CD(+)
+               AND   P2.EZCANCELFLAG(+) = '0'
+               AND   WO.GLBL_CMPY_CD     = SW1.GLBL_CMPY_CD(+)
+               AND   WO.RTL_WH_CD        = SW1.RTL_WH_CD(+)
+               AND   WO.CPLT_RTL_SWH_CD  = SW1.RTL_SWH_CD(+)
+               AND   SW1.EZCANCELFLAG(+)  = '0'
+               AND   SW1.GLBL_CMPY_CD     = RW.GLBL_CMPY_CD(+)
+               AND   SW1.RTL_WH_CD        = RW.RTL_WH_CD(+)
+               AND   RW.EZCANCELFLAG(+)   = '0'
+               AND   WO.GLBL_CMPY_CD      = SW2.GLBL_CMPY_CD(+)
+               AND   WO.INVTY_LOC_CD      = SW2.RTL_WH_CD(+)
+               AND   WOD.SPLY_RTL_SWH_CD = SW2.RTL_SWH_CD(+)
+               AND   SW2.EZCANCELFLAG(+)  = '0'
+               ORDER BY WO.WRK_ORD_NUM
+                       ,WOD.WRK_ORD_DTL_LINE_NUM
+               ) KIT
+        WHERE    ROWNUM &lt;= #rowNum#
+    </statement>
+
+    <resultMap id="result.NPAL1360_ACMsg" class="NPAL1360_ACMsg">
+        <result property="wrkOrdNum_A1"             column="WRK_ORD_NUM"              javaType="EZDSStringItem"/>
+        <result property="dsWrkOrdTpCd_A1"          column="DS_WRK_ORD_TP_CD"         javaType="EZDSStringItem"/>
+        <result property="wrkOrdStsCd_A1"           column="WRK_ORD_STS_CD"           javaType="EZDSStringItem"/>
+        <result property="dsWrkOrdStsNm_A1"         column="DS_WRK_ORD_STS_NM"        javaType="EZDSStringItem"/>
+        <result property="wrkOrdDt_A1"              column="WRK_ORD_DT"               javaType="EZDSStringItem"/>
+        <result property="prchReqNum_A1"            column="PRCH_REQ_NUM"             javaType="EZDSStringItem"/>
+        <result property="rtlWhCd_A1"               column="RTL_WH_CD"                javaType="EZDSStringItem"/>
+        <result property="rtlWhNm_A1"               column="RTL_WH_NM"                javaType="EZDSStringItem"/>
+        <result property="cpltRtlSwhCd_A1"          column="CPLT_RTL_SWH_CD"          javaType="EZDSStringItem"/>
+        <result property="rtlSwhNm_A1"              column="RTL_SWH_NM"               javaType="EZDSStringItem"/>
+        <result property="rqstRcvDt_A1"             column="RQST_RCV_DT"              javaType="EZDSStringItem"/>
+        <result property="fnshGoodsMdseCd_A1"       column="FNSH_GOODS_MDSE_CD"       javaType="EZDSStringItem"/>
+        <result property="fnshMdseDescShortTxt_A1"  column="FNSH_MDSE_DESC_SHORT_TXT" javaType="EZDSStringItem"/>
+        <result property="fnshGoodsMdseNm_A1"       column="FNSH_GOODS_MDSE_NM"       javaType="EZDSStringItem"/>
+        <result property="firstProdCtrlCd_A1"       column="FIRST_PROD_CTRL_CD"       javaType="EZDSStringItem"/>
+        <result property="basePkgUomCd_H1"          column="HDR_BASE_PKG_UOM_CD"      javaType="EZDSStringItem"/>
+        <result property="rcvSerTakeFlg_H1"         column="HDR_RCV_SER_TAKE_FLG"     javaType="EZDSStringItem"/>
+        <result property="fnshGoodsOrdQty_A1"       column="FNSH_GOODS_ORD_QTY"       javaType="EZDSBigDecimalItem"/>
+        <result property="fnshGoodsRcvQty_A1"       column="FNSH_GOODS_RCV_QTY"       javaType="EZDSBigDecimalItem"/>
+        <result property="fnshGoodsBalQty_A1"       column="FNSH_GOODS_BAL_QTY"       javaType="EZDSBigDecimalItem"/>
+        <result property="fnshGoodsCancQty_A1"      column="FNSH_GOODS_CANC_QTY"      javaType="EZDSBigDecimalItem"/>
+        <result property="wrkOrdMsgTxt_A1"          column="WRK_ORD_MSG_TXT"          javaType="EZDSStringItem"/>
+        <result property="wrkOrdDtlLineNum_A1"      column="WRK_ORD_DTL_LINE_NUM"     javaType="EZDSStringItem"/>
+        <result property="origGoodsMdseCd_A1"       column="ORIG_GOODS_MDSE_CD"       javaType="EZDSStringItem"/>
+        <result property="origMdseDescShortTxt_A1"  column="ORIG_MDSE_DESC_SHORT_TXT" javaType="EZDSStringItem"/>
+        <result property="origGoodsMdseNm_A1"       column="ORIG_GOODS_MDSE_NM"       javaType="EZDSStringItem"/>
+        <result property="mdseTpDescTxt_A1"         column="MDSE_TP_DESC_TXT"         javaType="EZDSStringItem"/>
+        <result property="splyRtlSwhCd_A1"          column="SPLY_RTL_SWH_CD"          javaType="EZDSStringItem"/>
+        <result property="origGoodsOrdQty_A1"       column="ORIG_GOODS_ORD_QTY"       javaType="EZDSBigDecimalItem"/>
+        <result property="basePkgUomCd_D1"          column="DTL_BASE_PKG_UOM_CD"      javaType="EZDSStringItem"/>
+        <result property="rcvSerTakeFlg_D1"         column="DTL_RCV_SER_TAKE_FLG"     javaType="EZDSStringItem"/>
+        <result property="cmpsnRevnNum_A1"          column="CMPSN_REVN_NUM"           javaType="EZDSBigDecimalItem"/>
+        <result property="trxSrcTpCd_A1"            column="TRX_SRC_TP_CD"            javaType="EZDSStringItem"/>
+        <result property="childMdseQty_A1"          column="CHILD_MDSE_QTY"           javaType="EZDSBigDecimalItem"/>
+        <result property="invtyCtrlFlg_A1"          column="INVTY_CTRL_FLG"           javaType="EZDSStringItem"/>
+        <result property="xxRqstTs_W1"              column="WO_EZUPTIME"              javaType="EZDSStringItem"/>
+        <result property="xxRqstTz_W1"              column="WO_EZUPTIMEZONE"          javaType="EZDSStringItem"/>
+        <result property="xxRqstTs_D1"              column="DS_EZUPTIME"              javaType="EZDSStringItem"/>
+        <result property="xxRqstTz_D1"              column="DS_EZUPTIMEZONE"          javaType="EZDSStringItem"/>
+    </resultMap>
+
+    <statement id="checkPrCloseDetail" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            COUNT(PRD.PRCH_REQ_NUM)
+        FROM
+            PRCH_REQ_DTL PRD
+        WHERE
+            PRD.GLBL_CMPY_CD          = #glblCmpyCd#
+        AND PRD.PRCH_REQ_NUM          = #prchReqNum#
+        AND PRD.PRCH_REQ_LINE_STS_CD  NOT IN (#lineStsClose#, #lineStsCancel#)
+        AND PRD.EZCANCELFLAG          = '0'
+    </statement>
+
+<!--08/30/2017 CITS T.Hakodate Add Sol#069(QC#18270) START -->
+    <statement id="getShippingPlanDetail" parameterClass="Map" resultClass="Map">
+        SELECT
+             SOD.GLBL_CMPY_CD
+            ,SOD.SO_NUM
+            ,SOD.SO_SLP_NUM
+            ,SOD.MDSE_CD
+            ,SOD.FROM_STK_STS_CD
+            ,SOD.SHIP_QTY
+            ,SOD.SYS_SRC_CD
+            ,SOD.PRCH_REQ_NUM
+            ,SOD.PRCH_REQ_LINE_NUM
+            ,SOD.PRCH_REQ_LINE_SUB_NUM
+            ,SOD.TO_INVTY_LOC_CD
+            ,SOD.INVTY_LOC_CD
+        FROM
+            SHPG_ORD_DTL SOD
+        WHERE 1=1
+            AND SOD.GLBL_CMPY_CD  = #glblCmpyCd#
+            AND SOD.SO_NUM        = #soNum#
+            AND SOD.EZCANCELFLAG  = '0'
+    </statement>
+    
+    <statement id="getWrkRwsSerKit" parameterClass="Map" resultClass="Map">
+        SELECT
+             RH.RWS_NUM
+            ,#rwsDtlLineNum#       AS RWS_DTL_LINE_NUM
+            ,WO.FNSH_GOODS_MDSE_CD AS MDSE_CD
+            ,WOS.SER_NUM
+        FROM
+             RWS_HDR     RH
+            ,SHPG_ORD    SO
+            ,WRK_ORD     WO
+            ,WRK_ORD_SER WOS
+        WHERE
+            RH.GLBL_CMPY_CD          = #glblCmpyCd#
+        AND RH.RWS_NUM               = #rwsNum#
+        AND RH.EZCANCELFLAG          = '0'
+        AND RH.GLBL_CMPY_CD          = SO.GLBL_CMPY_CD
+        AND RH.PO_RCV_TRX_HDR_NUM    = SO.SO_NUM
+        AND SO.EZCANCELFLAG          = '0'
+        AND SO.GLBL_CMPY_CD          = WO.GLBL_CMPY_CD
+        AND SO.TRX_HDR_NUM           = WO.WRK_ORD_NUM
+        AND WO.EZCANCELFLAG          = '0'
+        AND WO.GLBL_CMPY_CD          = WOS.GLBL_CMPY_CD
+        AND WO.WRK_ORD_NUM           = WOS.WRK_ORD_NUM
+        AND WOS.WRK_ORD_DTL_LINE_NUM = #wrkOrdDtlLineNum#
+        AND WOS.EZCANCELFLAG         = '0'
+    </statement>
+    
+    <statement id="getWrkRwsSerUnKit" parameterClass="Map" resultClass="Map">
+        SELECT
+             RH.RWS_NUM
+            ,RD.RWS_DTL_LINE_NUM
+            ,RD.MDSE_CD
+            ,WOS.SER_NUM
+        FROM
+             RWS_HDR     RH
+            ,RWS_DTL     RD
+            ,SHPG_ORD    SO
+            ,WRK_ORD_SER WOS
+        WHERE
+            RH.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND RH.RWS_NUM             = #rwsNum#
+        AND RH.EZCANCELFLAG        = '0'
+        AND RH.GLBL_CMPY_CD        = RD.GLBL_CMPY_CD
+        AND RH.RWS_NUM             = RD.RWS_NUM
+        AND RD.EZCANCELFLAG        = '0'
+        AND RH.GLBL_CMPY_CD        = SO.GLBL_CMPY_CD
+        AND RH.PO_RCV_TRX_HDR_NUM  = SO.SO_NUM
+        AND SO.EZCANCELFLAG        = '0'
+        AND SO.GLBL_CMPY_CD        = WOS.GLBL_CMPY_CD
+        AND SO.TRX_HDR_NUM         = WOS.WRK_ORD_NUM
+        AND RD.PO_RCV_TRX_LINE_NUM = WOS.WRK_ORD_DTL_LINE_NUM
+        AND WOS.EZCANCELFLAG       = '0'
+    </statement>
+    
+     <statement id="getWrkOrdDtl" parameterClass="Map" resultClass="Map">
+        SELECT
+            WOD.ORIG_GOODS_MDSE_CD
+           ,WOD.STK_STS_CD
+           ,WOD.ORIG_GOODS_ORD_QTY
+           ,WOD.WRK_ORD_DTL_LINE_NUM
+           ,RS.INVTY_LOC_CD  AS RCV_INVTY_LOC_CD
+        FROM
+            WRK_ORD        WO
+           ,WRK_ORD_DTL    WOD
+           ,RTL_SWH        RS
+           ,MDSE           MD
+        WHERE
+            WO.GLBL_CMPY_CD          = #glblCmpyCd#
+        AND WO.WRK_ORD_NUM           = #wrkOrdNum#
+        AND WO.EZCANCELFLAG          = '0'
+        AND WO.GLBL_CMPY_CD          = WOD.GLBL_CMPY_CD
+        AND WO.WRK_ORD_NUM           = WOD.WRK_ORD_NUM
+        AND WOD.EZCANCELFLAG         = '0'
+        AND WOD.GLBL_CMPY_CD         = RS.GLBL_CMPY_CD
+        AND WO.INVTY_LOC_CD          = RS.RTL_WH_CD
+        AND WOD.SPLY_RTL_SWH_CD      = RS.RTL_SWH_CD
+        AND RS.EZCANCELFLAG          = '0'
+        AND WOD.GLBL_CMPY_CD         = MD.GLBL_CMPY_CD
+        AND WOD.ORIG_GOODS_MDSE_CD   = MD.MDSE_CD
+        AND MD.INVTY_CTRL_FLG        = #flgY#
+        AND MD.EZCANCELFLAG          = '0'
+        ORDER BY
+            WOD.WRK_ORD_DTL_LINE_NUM
+    </statement>
+<!--08/30/2017 CITS T.Hakodate Add Sol#069(QC#18270) END-->
+
+    <statement id="getNonSerSvcMachMstrList" parameterClass="Map" resultClass="Map">
+        SELECT
+            SVC_MACH_MSTR_PK
+        FROM
+            (
+             SELECT
+                 SVC_MACH_MSTR_PK
+             FROM
+                 SVC_MACH_MSTR
+             WHERE
+                 GLBL_CMPY_CD                = #glblCmpyCd#
+             AND MDSE_CD                     = #mdseCd#
+             AND CUR_LOC_NUM                 = #invtyLocCd#
+             AND SVC_MACH_MSTR_LOC_STS_CD    = #locStsCd#
+             AND STK_STS_CD                  = #stkStsCd#
+             AND SVC_MACH_MAINT_AVAL_FLG     = #flgY#
+             AND SER_NUM            IS NULL
+             AND SVC_CONFIG_MSTR_PK IS NULL
+             AND TRX_HDR_NUM        IS NULL
+             AND SVC_MACH_MSTR_STS_CD &lt;&gt; #svcMachMstrStsTerm#
+             AND EZCANCELFLAG                = '0'
+             ORDER BY
+                 SVC_MACH_MSTR_PK
+            )
+        WHERE
+            ROWNUM &lt;= #rownum#
+    </statement>
+
+</sqlMap>

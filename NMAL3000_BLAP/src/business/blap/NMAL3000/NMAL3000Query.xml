@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NMAL3000Query">
+
+    <typeAlias alias="NMAL3000SMsg"    type="business.blap.NMAL3000.NMAL3000SMsg"/>
+    <typeAlias alias="NMAL3000_ASMsg"  type="business.blap.NMAL3000.NMAL3000_ASMsg"/>
+
+	<statement id="getSavedSearchOptionList" parameterClass="Map" resultClass="Map">
+        SELECT
+               SSO.SRCH_OPT_PK
+             , SSO.SRCH_OPT_NM
+         FROM
+             SAVE_SRCH_OPT SSO 
+         WHERE
+             SSO.GLBL_CMPY_CD        = #glblCmpyCd#
+             AND SSO.SRCH_OPT_APL_ID = #srchOptAplId#
+             AND SSO.SRCH_OPT_USR_ID = #srchOptUsrId#
+             AND SSO.EZCANCELFLAG    = '0'
+         ORDER BY
+               SSO.SRCH_OPT_NM
+    </statement>
+
+	<statement id="getDlrArzList" parameterClass="Map" resultMap="result.getDlrArzList">
+	    SELECT
+	        DAM.ROW_ID
+	        ,DAM.ACCOUNT_NUMBER
+	        ,DAM.ACCOUNT_DEALER_CODE
+	        ,DAM.ACCOUNT_NAME
+	        ,DAM.PRIMARY_LOCATION
+	        ,DAM.PRIMARY_ADDRESS
+	        ,DAM.CITY
+	        ,DAM.STATE
+	        ,DAM.ZIP
+	        ,DAM.MODEL
+	        ,DAM.SALES
+	        ,DAM.SERVICE
+	        ,DAM.EFFECTIVE_DATE_FROM
+	        ,DAM.EFFECTIVE_DATE_TO
+	        ,DAM.UPDATE_BY
+	        ,DAM.DATE_UPDATE
+	        ,DAM.EZUPTIME
+	        ,DAM.EZUPTIMEZONE
+	        <!-- Add Start 2016/11/16 M.Ohno S21_NA#2680 -->
+            , DAM.XX_REC_HIST_CRAT_TS
+            , DAM.XX_REC_HIST_CRAT_BY_NM
+            , DAM.XX_REC_HIST_UPD_TS
+            , DAM.XX_REC_HIST_UPD_BY_NM
+            , DAM.XX_REC_HIST_TBL_NM
+            <!-- Add End   2016/11/16 M.Ohno S21_NA#2680 -->
+	    FROM
+	    (
+        SELECT
+             ROW_NUMBER() OVER(ORDER BY DD.GLBL_CMPY_CD) AS ROW_ID
+            ,DD.DS_ACCT_CUST_NUM                         AS ACCOUNT_NUMBER
+            ,DD.DS_ACCT_DLR_CD                           AS ACCOUNT_DEALER_CODE
+            ,DA.DS_ACCT_NM                               AS ACCOUNT_NAME
+            ,DA.LOC_NUM                                  AS PRIMARY_LOCATION
+            ,PLW.FIRST_LINE_ADDR
+             || ' '
+             || PLW.SCD_LINE_ADDR
+             || ' '
+             || PLW.THIRD_LINE_ADDR
+             || ' '
+             || PLW.FRTH_LINE_ADDR                       AS PRIMARY_ADDRESS 
+            ,PLW.CTY_ADDR                                AS CITY 
+            ,PLW.ST_CD                                   AS STATE 
+            ,PLW.POST_CD                                 AS ZIP 
+            <!-- QC#5169 -->
+            ,MM.MKT_MDL_CD                               AS MODEL 
+            ,DD.SLS_AUTH_FLG                             AS SALES 
+            ,DD.SVC_AUTH_FLG                             AS SERVICE 
+            ,DD.EFF_FROM_DT                              AS EFFECTIVE_DATE_FROM
+            ,DD.EFF_THRU_DT                              AS EFFECTIVE_DATE_TO
+            ,DD.UPLD_USER_ID                             AS UPDATE_BY
+            ,DD.UPLD_DT                                  AS DATE_UPDATE
+            ,DD.EZUPTIME                                 AS EZUPTIME
+            ,DD.EZUPTIMEZONE                             AS EZUPTIMEZONE
+            <!-- Add Start 2016/11/16 M.Ohno S21_NA#2680 -->
+            , DD.EZINTIME                                AS XX_REC_HIST_CRAT_TS
+            , DD.EZINUSERID                              AS XX_REC_HIST_CRAT_BY_NM
+            , DD.EZUPTIME                                AS XX_REC_HIST_UPD_TS
+            , DD.EZUPUSERID                              AS XX_REC_HIST_UPD_BY_NM
+            , 'DS_DLR_AUTH_INFO '                        AS XX_REC_HIST_TBL_NM
+            <!-- Add End   2016/11/16 M.Ohno S21_NA#2680 -->
+        FROM
+             DS_DLR_AUTH_INFO DD
+            ,SELL_TO_CUST DA
+            ,PTY_LOC_WRK PLW
+            ,MKT_MDL MM
+            ,DS_ACCT_DLR DAD
+        WHERE
+            DD.GLBL_CMPY_CD     = #glblCmpyCd#
+        AND DD.EZCANCELFLAG     = '0'
+        AND DD.GLBL_CMPY_CD     = DA.GLBL_CMPY_CD
+        AND DD.EZCANCELFLAG     = DA.EZCANCELFLAG
+        AND DD.DS_ACCT_CUST_NUM = DA.SELL_TO_CUST_CD
+
+        AND DA.GLBL_CMPY_CD     = PLW.GLBL_CMPY_CD
+        AND DA.EZCANCELFLAG     = PLW.EZCANCELFLAG
+        AND DA.LOC_NUM          = PLW.LOC_NUM
+
+        AND DD.GLBL_CMPY_CD     = MM.GLBL_CMPY_CD
+        AND DD.EZCANCELFLAG     = MM.EZCANCELFLAG
+        <!-- QC#5169 -->
+        AND DD.MKT_MDL_CD       = MM.MKT_MDL_CD
+
+        <!-- QC#5169 -->
+        AND DD.GLBL_CMPY_CD     = DAD.GLBL_CMPY_CD(+)
+        AND DD.EZCANCELFLAG     = DAD.EZCANCELFLAG(+)
+        AND DD.DS_ACCT_DLR_CD   = DAD.DS_ACCT_DLR_CD(+)
+
+        <isNotNull property="accountNum">
+            AND DD.DS_ACCT_CUST_NUM LIKE #accountNum#
+        </isNotNull>
+        <isNotNull property="model">
+            AND MM.MKT_MDL_CD LIKE #model#
+        </isNotNull>
+        <isNotNull property="dealerCd">
+            AND DAD.DS_ACCT_DLR_CD LIKE #dealerCd#
+        </isNotNull>
+
+        <isNotNull property="effDateFrom">
+            AND DD.EFF_FROM_DT &gt;= #effDateFrom#
+        </isNotNull>
+        <isNotNull property="effDateTo">
+            AND (DD.EFF_THRU_DT IS NULL 
+            OR   DD.EFF_THRU_DT &lt;= #effDateTo#)
+        </isNotNull>
+        <isNotNull property="sales">
+            AND DD.SLS_AUTH_FLG = #sales#
+        </isNotNull>
+        <isNotNull property="service">
+           AND DD.SVC_AUTH_FLG = #service#
+        </isNotNull>
+         ORDER BY
+            DD.DS_ACCT_CUST_NUM ASC
+           ,DD.DS_ACCT_DLR_CD ASC
+           <!-- QC#5169 -->
+           ,MM.MKT_MDL_CD ASC
+        ) DAM
+        <isNotNull property="rowNum">
+            WHERE ROWNUM &lt;= #rowNum#
+        </isNotNull>
+	</statement>
+	<resultMap id="result.getDlrArzList" class="NMAL3000_ASMsg">
+		<result property="xxRowId_A"          column="ROW_ID"              javaType="EZDBStringItem"/>
+        <result property="dsAcctCustNum_A"    column="ACCOUNT_NUMBER"      javaType="EZDBStringItem"/>
+        <result property="dsAcctDlrCd_A"      column="ACCOUNT_DEALER_CODE" javaType="EZDBStringItem"/>
+        <result property="dsAcctNm_A"         column="ACCOUNT_NAME"        javaType="EZDBStringItem"/>
+        <result property="locNum_A"           column="PRIMARY_LOCATION"    javaType="EZDBStringItem"/>
+        <result property="xxAllLineAddr_A"    column="PRIMARY_ADDRESS"     javaType="EZDBStringItem"/>
+        <result property="ctyAddr_A"          column="CITY"                javaType="EZDBStringItem"/>
+        <result property="stCd_A"             column="STATE"               javaType="EZDBStringItem"/>
+        <result property="postCd_A"           column="ZIP"                 javaType="EZDBStringItem"/>
+        <!-- QC#5169 -->
+        <result property="mktMdlCd_A"         column="MODEL"               javaType="EZDBStringItem"/>
+        <result property="slsAuthFlg_A"       column="SALES"               javaType="EZDBStringItem"/>
+        <result property="svcAuthFlg_A"       column="SERVICE"             javaType="EZDBStringItem"/>
+        <result property="effFromDt_A"        column="EFFECTIVE_DATE_FROM" javaType="EZDSDateItem"/>
+        <result property="effThruDt_A"        column="EFFECTIVE_DATE_TO"   javaType="EZDSDateItem"/>
+        <result property="upldUserId_A"       column="UPDATE_BY"           javaType="EZDSStringItem"/>
+        <result property="upldDt_A"           column="DATE_UPDATE"         javaType="EZDSStringItem"/>
+        <result property="ezUpTime_A"         column="EZUPTIME"            javaType="EZDCStringItem"/>
+        <result property="ezUpTimeZone_A"     column="EZUPTIMEZONE"        javaType="EZDCStringItem"/>
+        <!-- Add Start 2016/11/16 M.Ohno S21_NA#2680 -->
+        <result property="xxRecHistCratTs_A"    column="XX_REC_HIST_CRAT_TS"     javaType="EZDSStringItem" />
+        <result property="xxRecHistCratByNm_A"  column="XX_REC_HIST_CRAT_BY_NM"  javaType="EZDSStringItem" />
+        <result property="xxRecHistUpdTs_A"     column="XX_REC_HIST_UPD_TS"      javaType="EZDSStringItem" />
+        <result property="xxRecHistUpdByNm_A"   column="XX_REC_HIST_UPD_BY_NM"   javaType="EZDSStringItem" />
+        <result property="xxRecHistTblNm_A"     column="XX_REC_HIST_TBL_NM"      javaType="EZDSStringItem" />
+        <!-- Add End   2016/11/16 M.Ohno S21_NA#2680 -->
+    </resultMap>
+
+    <!-- Add Start 2018/11/28 QC#27336 -->
+    <statement id="getOverlapCount" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+               COUNT(1) AS COUNT
+         FROM
+             DS_DLR_AUTH_INFO DAI 
+         WHERE
+                 DAI.GLBL_CMPY_CD     = #glblCmpyCd#
+             AND DAI.EZCANCELFLAG     = '0'
+             AND DAI.DS_ACCT_CUST_NUM = #accountNum#
+             AND DAI.MKT_MDL_CD       = #model#
+             AND (DAI.EFF_THRU_DT     &gt;= #effDateFrom#
+              OR  DAI.EFF_THRU_DT     IS NULL)
+         <isNotNull property="effDateTo">
+             AND DAI.EFF_FROM_DT      &lt;= #effDateTo#
+         </isNotNull>
+    </statement>
+    <!-- Add End 2018/11/28 QC#27336 -->
+</sqlMap>

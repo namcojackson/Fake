@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NWAL1500QueryForAddlHeader">
+
+    <statement id="getFreightTermInfoList"  parameterClass="Map" resultClass="Map">
+        SELECT DISTINCT
+            FC.FRT_COND_CD       AS FRT_COND_CD
+           ,FC.FRT_COND_DESC_TXT AS FRT_COND_DESC_TXT
+        FROM
+            FRT_COND              FC
+           ,FRT_COND_SVC_LVL_RELN FCSLR
+        WHERE
+            FC.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND FC.FRT_COND_DESC_TXT LIKE #frtCondDescTxt#
+            AND FC.EZCANCELFLAG      = '0'
+
+            AND FC.GLBL_CMPY_CD      = FCSLR.GLBL_CMPY_CD
+            AND FC.FRT_COND_CD       = FCSLR.FRT_COND_CD
+            AND FCSLR.LINE_BIZ_TP_CD = #lineBizTpCd#
+            AND FCSLR.EZCANCELFLAG   = '0'
+    </statement>
+
+    <statement id="getPaymentTermInfoList"  parameterClass="Map" resultClass="Map">
+        SELECT
+            PT.PMT_TERM_CASH_DISC_CD       AS PMT_TERM_CASH_DISC_CD
+           ,PT.PMT_TERM_CASH_DISC_DESC_TXT AS PMT_TERM_CASH_DISC_DESC_TXT
+           ,PT.PMT_CC_FLG                  AS PMT_CC_FLG
+        FROM
+            PMT_TERM_CASH_DISC PT
+        WHERE
+            PT.GLBL_CMPY_CD                    = #glblCmpyCd#
+            AND PT.PMT_TERM_CASH_DISC_DESC_TXT LIKE #pmtTermCashDiscDescTxt#
+            AND PT.EZCANCELFLAG                = '0'
+            AND ROWNUM                     &lt;= 2  <!-- 2018/10/26 QC#28870 Add -->
+    </statement>
+
+    <statement id="getCarrSvcLvlInfoList"  parameterClass="Map" resultClass="Map">
+        SELECT
+            CSL.CARR_SVC_LVL_CD       AS CARR_SVC_LVL_CD
+           ,CSL.CARR_SVC_LVL_DESC_TXT AS CARR_SVC_LVL_DESC_TXT
+        FROM
+            CARR_SVC_LVL          CSL
+           ,FRT_COND_SVC_LVL_RELN RELN
+           ,DS_ORD_TP_PROC_DFN    OTD
+        WHERE
+            CSL.GLBL_CMPY_CD              = #glblCmpyCd#
+            AND UPPER(CSL.CARR_SVC_LVL_DESC_TXT)
+                                       LIKE UPPER(#carrSvcLvlDescTxt#)
+            AND CSL.EZCANCELFLAG          = '0'
+
+            AND CSL.GLBL_CMPY_CD     = RELN.GLBL_CMPY_CD
+            AND CSL.CARR_SVC_LVL_CD  = RELN.CARR_SVC_LVL_CD
+            AND RELN.FRT_COND_CD     = #frtCondCd#
+            AND RELN.SHPG_SVC_LVL_CD = #shpgSvcLvlCd#
+            AND RELN.EZCANCELFLAG    = '0'
+
+            AND RELN.GLBL_CMPY_CD   = OTD.GLBL_CMPY_CD
+            AND RELN.LINE_BIZ_TP_CD = OTD.LINE_BIZ_TP_CD
+            AND OTD.DS_ORD_TP_CD    = #dsOrdTpCd#
+            AND OTD.EZCANCELFLAG    = '0'
+    </statement>
+
+    <statement id="getCsmpContrInfoList"  parameterClass="Map" resultClass="Map">
+        SELECT
+            CC.CSMP_NUM    AS CSMP_NUM
+           ,CC.DLR_REF_NUM AS DLR_REF_NUM
+        FROM
+            CSMP_CONTR CC
+        WHERE
+            CC.GLBL_CMPY_CD            = #glblCmpyCd#
+            <isNotNull property="csmpContrNum">
+                AND CC.CSMP_NUM        LIKE #csmpContrNum#
+            </isNotNull>
+            <isNotNull property="dlrRefNum">
+                AND CC.DLR_REF_NUM     LIKE #dlrRefNum#
+            </isNotNull>
+            AND CC.DS_ACCT_NUM         = #sellToCustCd#
+            AND CC.CSMP_CONTR_ACTV_FLG = #csmpContrActvFlg#
+            AND CC.EFF_FROM_DT         &lt;= #slsDt#
+            AND NVL(CC.EFF_THRU_DT, '99991231') &gt;= #slsDt#
+            AND (CC.CSMP_NUM IS NOT NULL OR CC.DLR_REF_NUM IS NOT NULL)
+            AND CC.EZCANCELFLAG        = '0'
+            AND ROWNUM             &lt;= 2  <!-- 2018/10/26 QC#28870 Add -->
+    </statement>
+
+    <!-- 2018/07/17 S21_NA#27073 Mod Start -->
+    <!-- <statement id="getPrcContrInfoList"  parameterClass="Map" resultClass="Map"> -->
+    <statement id="getCustPrcContrInfoList"  parameterClass="Map" resultClass="Map">
+    <!-- 2018/07/17 S21_NA#27073 Mod End -->
+        SELECT DISTINCT
+            CPCV.PRC_CONTR_NUM
+            ,CPCV.PRC_CONTR_NM
+        FROM
+            CUST_PRC_CONTR_V CPCV
+        WHERE
+            CPCV.EZCANCELFLAG               = '0'
+            AND CPCV.GLBL_CMPY_CD           = #glblCmpyCd#
+            AND CPCV.LINE_BIZ_TP_CD         = #lineBizTpCd#
+            AND CPCV.ACTV_FLG               = #actvFlg#
+            AND CPCV.DS_ACCT_NUM            = #dsAcctNum#
+            AND CPCV.PRC_CONTR_EFF_FROM_DT   &lt;= #slsDt#
+            AND NVL(CPCV.PRC_CONTR_EFF_THRU_DT, '99991231') &gt;= #slsDt#
+            AND CPCV.DS_PRC_CATG_EFF_FROM_DT   &lt;= #slsDt#
+            AND NVL(CPCV.DS_PRC_CATG_EFF_THRU_DT, '99991231') &gt;= #slsDt#
+            AND
+            (
+                CPCV.CSMP_NUM IS NULL
+                OR
+                (
+                    CPCV.CSMP_NUM IS NOT NULL
+                    AND CPCV.CSMP_CONTR_EFF_FROM_DT   &lt;= #slsDt#
+                    AND NVL(CPCV.CSMP_CONTR_EFF_THRU_DT, '99991231') &gt;= #slsDt#
+                )
+            )
+            <isNotNull property="prcContrNm">
+                AND CPCV.PRC_CONTR_NM  LIKE #prcContrNm#
+            </isNotNull>
+            <isNotNull property="prcContrNum">
+                AND CPCV.PRC_CONTR_NUM LIKE #prcContrNum#
+            </isNotNull>
+    </statement>
+
+    <statement id="getPrcContrInfoListByPrcContr"  parameterClass="Map" resultClass="Map">
+        SELECT
+            PCON.PRC_CONTR_NM
+            , PC.PRC_CONTR_NUM 
+        FROM
+            CSMP_CONTR CC
+            , PRC_CATG PC
+            , PRC_CONTR PCON 
+        WHERE
+            CC.GLBL_CMPY_CD         = #glblCmpyCd#
+            AND CC.DS_ACCT_NUM      = #sellToCustCd#
+            <isNotNull property = "csmpContrNum">
+            AND CC.CSMP_NUM         = #csmpContrNum#
+            </isNotNull>
+            <isNotNull property = "dlrRefNum">
+            AND CC.DLR_REF_NUM      = #dlrRefNum#
+            </isNotNull>
+            AND CC.EFF_FROM_DT      <![CDATA[<=]]> #slsDt# 
+            AND NVL(CC.EFF_THRU_DT, '99991231')     <![CDATA[>=]]> #slsDt#
+            AND CC.EZCANCELFLAG     = '0'
+
+            AND CC.GLBL_CMPY_CD     = PC.GLBL_CMPY_CD
+            AND CC.PRC_CATG_CD      = PC.PRC_CATG_CD
+            AND PC.EFF_FROM_DT      <![CDATA[<=]]> #slsDt#
+            AND NVL(PC.EFF_THRU_DT, '99991231')     <![CDATA[>=]]> #slsDt#
+            AND PC.EZCANCELFLAG     = '0'
+
+            AND PC.GLBL_CMPY_CD     = PCON.GLBL_CMPY_CD
+            AND PC.PRC_CONTR_NUM    = PCON.PRC_CONTR_NUM
+            AND PCON.ACTV_FLG       = #actvFlg#
+            AND PCON.EFF_FROM_DT    <![CDATA[<=]]> #slsDt#
+            AND NVL(PCON.EFF_THRU_DT, '99991231')   <![CDATA[>=]]> #slsDt#
+            AND PCON.EZCANCELFLAG   = '0'
+    </statement>
+    <!-- 2018/07/17 S21_NA#27073 Add Start -->
+    <statement id="getPrcContrInfoList" parameterClass="Map" resultClass="Map">
+        SELECT
+            PC.PRC_CONTR_NUM
+            ,PC.PRC_CONTR_NM
+        FROM
+            PRC_CONTR PC
+        WHERE
+            PC.EZCANCELFLAG               = '0'
+            AND PC.GLBL_CMPY_CD           = #glblCmpyCd#
+            AND PC.ACTV_FLG               = #actvFlg#
+            AND PC.EFF_FROM_DT            &lt;= #slsDt#
+            AND NVL(PC.EFF_THRU_DT, '99991231') &gt;= #slsDt#
+            <isNotNull property="prcContrNm">
+                AND PC.PRC_CONTR_NM  LIKE #prcContrNm#
+            </isNotNull>
+            <isNotNull property="prcContrNum">
+                AND PC.PRC_CONTR_NUM LIKE #prcContrNum#
+            </isNotNull>
+    </statement>
+    <!-- 2018/07/17 S21_NA#27073 Add End -->
+</sqlMap>

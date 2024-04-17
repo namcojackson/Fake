@@ -1,0 +1,113 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<sqlMap namespace="NSAB014001">
+    <statement id="getUpdateSvcInvList" parameterClass="Map" resultClass="Map">
+        SELECT
+            -- for Service Invoice
+             RANK() OVER (PARTITION BY INV.SVC_INV_NUM ORDER BY ILN.SVC_INV_LINE_PK, ILM.SVC_INV_LINE_MTR_PK) INV_RANK
+            ,INV.SVC_INV_PK            AS SVC_INV_PK
+            ,INV.SVC_INV_NUM           AS SVC_INV_NUM
+            ,CTR.SVC_CONTR_BR_CD       AS SVC_CONTR_BR_CD
+            ,ACC.DS_ACCT_NM            AS DS_ACCT_NM
+            ,ACC.DS_ACCT_DLR_CD        AS DS_ACCT_DLR_CD
+            ,ACD.DS_ACCT_DLR_DESC_TXT  AS DS_ACCT_DLR_DESC_TXT
+            -- for Service Invoice Line
+            ,RANK() OVER (PARTITION BY INV.SVC_INV_NUM, ILN.SVC_INV_LINE_PK ORDER BY ILM.SVC_INV_LINE_MTR_PK) INV_LINE_RANK
+            ,ILN.SVC_INV_LINE_PK       AS SVC_INV_LINE_PK
+            ,SUBSTR(DMI.MDSE_DESC_SHORT_TXT, 1, #svcPgmMdseNmLen#)   AS MDSE_DESC_SHORT_TXT
+            ,MMM.SER_NUM               AS SER_NUM
+            ,MMM.SVC_MACH_MSTR_PK      AS SVC_MACH_MSTR_PK
+            ,SCM.SVC_CONFIG_MSTR_PK    AS SVC_CONFIG_MSTR_PK
+            ,NVL(ILN.INV_LINE_DEAL_SLS_AMT, 0)  AS INV_LINE_DEAL_SLS_AMT
+            -- for Service Invoice Line Meter
+            ,ILM.SVC_INV_LINE_MTR_PK   AS SVC_INV_LINE_MTR_PK
+            ,MLB.MTR_LB_CD             AS MTR_LB_CD
+<!-- QC#26621 Mod Start -->
+<!--             ,(SELECT -->
+            ,(SELECT /*+ index(MRS SVC_PHYS_MTR_READ_I3) */
+<!-- QC#26621 Mod End -->
+                  MRS.MTR_READ_DT
+              FROM
+                  SVC_PHYS_MTR_READ MRS
+              WHERE
+                      ILM.GLBL_CMPY_CD              = MRS.GLBL_CMPY_CD
+                  AND ILM.PREV_PHYS_MTR_READ_GRP_SQ = MRS.SVC_PHYS_MTR_READ_GRP_SQ
+                  AND MRS.EZCANCELFLAG              = '0'
+                  AND ROWNUM                        = 1
+              ) AS PREV_MTR_READ_DT
+<!-- QC#26621 Mod Start -->
+<!--       ,(SELECT  -->
+            ,(SELECT /*+ index(MRE SVC_PHYS_MTR_READ_I3) */
+<!-- QC#26621 Mod End -->
+                  MRE.MTR_READ_DT
+              FROM
+                  SVC_PHYS_MTR_READ MRE
+              WHERE
+                      ILM.GLBL_CMPY_CD              = MRE.GLBL_CMPY_CD
+                  AND ILM.SVC_PHYS_MTR_READ_GRP_SQ  = MRE.SVC_PHYS_MTR_READ_GRP_SQ
+                  AND MRE.EZCANCELFLAG              = '0'
+                  AND ROWNUM                        = 1
+              ) AS MTR_READ_DT
+        FROM
+            -- for Service Invoice
+             SVC_INV           INV
+            ,DS_CONTR          CTR
+            ,SELL_TO_CUST      ACC
+            ,DS_ACCT_DLR       ACD
+            -- for Service Invoice Line
+            ,SVC_INV_LINE      ILN
+            ,MDSE              DMI
+            ,SVC_MACH_MSTR     SMM
+            ,SVC_CONFIG_MSTR   SCM
+            ,SVC_MACH_MSTR     MMM
+            -- for Service Invoice Line Meter
+            ,SVC_INV_LINE_MTR  ILM
+            ,DS_CONTR_BLLG_MTR CBM
+            ,MTR_LB            MLB
+        WHERE
+            -- for Service Invoice
+                INV.GLBL_CMPY_CD         = #glblCmpyCd#
+            AND INV.SVC_INV_OM_LINK_FLG  = #svcInvOmLinkFlg#
+            AND INV.SVC_INV_FETCH_STS_CD IS NULL
+            AND INV.GLBL_CMPY_CD         = CTR.GLBL_CMPY_CD
+            AND INV.DS_CONTR_PK          = CTR.DS_CONTR_PK
+            AND INV.GLBL_CMPY_CD         = ACC.GLBL_CMPY_CD
+            AND INV.DS_ACCT_NUM          = ACC.SELL_TO_CUST_CD
+            AND ACC.GLBL_CMPY_CD         = ACD.GLBL_CMPY_CD(+)
+            AND ACC.DS_ACCT_DLR_CD       = ACD.DS_ACCT_DLR_CD(+)
+            AND INV.EZCANCELFLAG         = '0'
+            AND CTR.EZCANCELFLAG         = '0'
+            AND ACC.EZCANCELFLAG         = '0'
+            AND ACD.EZCANCELFLAG(+)      = '0'
+            -- for Service Invoice Line
+            AND INV.GLBL_CMPY_CD         = ILN.GLBL_CMPY_CD
+            AND INV.SVC_INV_NUM          = ILN.SVC_INV_NUM
+            AND ILN.GLBL_CMPY_CD         = DMI.GLBL_CMPY_CD
+            AND ILN.SVC_PGM_MDSE_CD      = DMI.MDSE_CD
+            AND ILN.GLBL_CMPY_CD         = SMM.GLBL_CMPY_CD(+)
+            AND ILN.SVC_MACH_MSTR_PK     = SMM.SVC_MACH_MSTR_PK(+)
+            AND SMM.GLBL_CMPY_CD         = SCM.GLBL_CMPY_CD(+)
+            AND SMM.SVC_CONFIG_MSTR_PK   = SCM.SVC_CONFIG_MSTR_PK(+)
+            AND SCM.GLBL_CMPY_CD         = MMM.GLBL_CMPY_CD(+)
+            AND SCM.SVC_MACH_MSTR_PK     = MMM.SVC_MACH_MSTR_PK(+)
+            AND ILN.EZCANCELFLAG         = '0'
+            AND DMI.EZCANCELFLAG         = '0'
+            AND SMM.EZCANCELFLAG(+)      = '0'
+            AND SCM.EZCANCELFLAG(+)      = '0'
+            AND MMM.EZCANCELFLAG(+)      = '0'
+            -- for Service Invoice Line Meter
+            AND ILN.GLBL_CMPY_CD         = ILM.GLBL_CMPY_CD(+)
+            AND ILN.SVC_INV_LINE_PK      = ILM.SVC_INV_LINE_PK(+)
+            AND ILM.GLBL_CMPY_CD         = CBM.GLBL_CMPY_CD(+)
+            AND ILM.DS_CONTR_BLLG_MTR_PK = CBM.DS_CONTR_BLLG_MTR_PK(+)
+            AND CBM.GLBL_CMPY_CD         = MLB.GLBL_CMPY_CD(+)
+            AND CBM.BLLG_MTR_LB_CD       = MLB.MTR_LB_CD(+)
+            AND ILM.EZCANCELFLAG(+)      = '0'
+            AND CBM.EZCANCELFLAG(+)      = '0'
+            AND MLB.EZCANCELFLAG(+)      = '0'
+        ORDER BY
+             SVC_INV_NUM
+            ,SVC_INV_LINE_PK
+            ,SVC_INV_LINE_MTR_PK
+    </statement>
+</sqlMap>

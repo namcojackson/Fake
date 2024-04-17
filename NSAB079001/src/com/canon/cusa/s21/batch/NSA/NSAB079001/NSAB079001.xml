@@ -1,0 +1,395 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<sqlMap namespace="NSAB079001">
+
+    <statement id="getNSAI0240" parameterClass="Map" resultClass="Map">
+        SELECT DISTINCT
+             I1.DVC_SER_NUM
+            ,UTR.IMG_SPLY_COLOR_TP_CD
+            ,I1.USR_CUST_ID
+        FROM
+             NSAI0240_01    I1
+            ,NSAI0240_02    I2
+            ,UGW_TONER_RELN UTR
+        WHERE
+                I1.INTERFACE_ID      = #interfaceId#
+            AND I1.TRANSACTION_ID    = #transactionId#
+            AND I1.INTERFACE_ID      = I2.INTERFACE_ID
+            AND I1.TRANSACTION_ID    = I2.TRANSACTION_ID
+            AND I1.SEGMENT_ID        = I2.SEGMENT_ID
+            AND I1.UNIT_ID           = I2.UNIT_ID
+            AND I2.DVC_ALARM_NTC_FLG = #flg1#
+            AND I1.EZCANCELFLAG      = '0'
+            AND I2.EZCANCELFLAG      = '0'
+            AND I2.DVC_ALARM_CD      = UTR.DVC_ALARM_CD
+            AND UTR.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND UTR.EZCANCELFLAG     = '0'
+        ORDER BY
+             I1.DVC_SER_NUM
+            ,UTR.IMG_SPLY_COLOR_TP_CD
+            ,I1.USR_CUST_ID
+    </statement>
+
+    <statement id="getDsContrDtl" parameterClass="Map" resultClass="Map">
+<!-- START 2018/05/25 K.Kim [QC#15410(Sol#246),MOD] -->
+        SELECT
+              DS_CONTR_DTL_PK
+             ,PRNT_DS_CONTR_DTL_PK
+             ,DS_CONTR_CATG_CD
+        FROM
+            (
+              SELECT
+                    DCD.DS_CONTR_DTL_PK
+                   ,DCD.PRNT_DS_CONTR_DTL_PK
+                   ,DC.DS_CONTR_CATG_CD
+              FROM
+                   DS_CONTR_DTL       DCD
+                  ,DS_CONTR           DC
+                  ,DS_CONTR_DTL_STS_V DCDV
+                  ,MDSE               MDS
+                  ,SVC_COV_TMPL_TP    SCTT
+                  ,SVC_COV_TMPL_DTL   SCTD
+              WHERE
+                      DCD.GLBL_CMPY_CD                                 = #glblCmpyCd#
+                  AND DCD.SVC_MACH_MSTR_PK                             = #svcMachMstrPk#
+                  AND DCD.DS_CONTR_DTL_STS_CD                   &lt;&gt; #dsContrDtlStsOrdr#
+                  AND DCD.CONTR_EFF_FROM_DT                        &lt;= #salesDate#
+                  AND NVL(DCD.CONTR_CLO_DT, DCD.CONTR_EFF_THRU_DT) &gt;= #salesDate#
+                  AND DCD.EZCANCELFLAG                                 = '0'
+                  AND DCD.GLBL_CMPY_CD                                 = DC.GLBL_CMPY_CD
+                  AND DCD.DS_CONTR_PK                                  = DC.DS_CONTR_PK
+                  AND DC.DS_CONTR_TP_CD                         &lt;&gt; #dsContrTpWrty#
+                  AND DC.EZCANCELFLAG                                  = '0'
+                  AND DC.GLBL_CMPY_CD                                  = DCDV.GLBL_CMPY_CD
+                  AND DCD.DS_CONTR_DTL_PK                              = DCDV.DS_CONTR_DTL_PK
+                  AND DCDV.ETTL_AVAL_FLG                               = 'Y'
+                  AND DCDV.EZCANCELFLAG                                = '0'
+                  AND DCD.GLBL_CMPY_CD                                 = MDS.GLBL_CMPY_CD(+)
+                  AND DCD.SVC_PGM_MDSE_CD                              = MDS.MDSE_CD(+)
+                  AND MDS.EZCANCELFLAG(+)                              = '0'
+                  AND MDS.GLBL_CMPY_CD                                 = SCTT.GLBL_CMPY_CD(+)
+                  AND MDS.SVC_COV_TMPL_TP_CD                           = SCTT.SVC_COV_TMPL_TP_CD(+)
+                  AND SCTT.EZCANCELFLAG(+)                             = '0'
+                  AND SCTT.GLBL_CMPY_CD                                = SCTD.GLBL_CMPY_CD(+)
+                  AND SCTT.SVC_COV_TMPL_TP_CD                          = SCTD.SVC_COV_TMPL_TP_CD(+)
+                  AND SCTD.SVC_COV_FEAT_CD(+)                          = #svcCovFeatCd#
+                  AND SCTD.EFF_FROM_DT(+)                          &lt;= #salesDate#
+                  AND NVL(SCTD.EFF_THRU_DT(+), #defEffThruDt#)     &gt;= #salesDate#
+                  AND SCTD.EZCANCELFLAG(+)                             = '0'
+              ORDER BY
+                  SCTD.SVC_COV_FEAT_CD NULLS LAST
+            )
+        WHERE
+            ROWNUM = 1
+<!-- END 2018/05/25 K.Kim [QC#15410(Sol#246),MOD] -->
+    </statement>
+
+    <statement id="getTonerInfo" parameterClass="Map" resultClass="Map">
+<!-- START 2018/01/09 M.Naito [QC#18616, MOD] -->
+        SELECT
+              MDSE_CD
+             ,IMG_SPLY_COLOR_TP_CD
+             ,ORD_TAKE_MDSE_FLG
+             ,ORD_TAKE_MDSE_CD
+        FROM
+            (
+                SELECT
+                     SUB.MDSE_CD
+                     ,M.IMG_SPLY_COLOR_TP_CD
+                     ,SUB.ORD_TAKE_MDSE_FLG
+                     ,SUB.ORD_TAKE_MDSE_CD
+                     <!-- START 2018/01/09 M.Naito [QC#18616, ADD] -->
+                     ,ROW_NUMBER() OVER (PARTITION BY SUB.MDL_ID, M.IMG_SPLY_COLOR_TP_CD ORDER BY M.IMG_SPLY_YIELD_TP_CD,SUB.SPLY_CONTR_QTY DESC, M.IMG_SPLY_YIELD_CNT, M.MDSE_CD) AS ROW_NUM
+                     <!-- END 2018/01/09 M.Naito [QC#18616, ADD] -->
+            FROM
+                (
+                    SELECT
+                         SCM.GLBL_CMPY_CD
+                         ,NVL(NVL(OTMS.MDSE_CD, OTM.MDSE_CD), NVL(DMSR.MDSE_CD, DMSR.ORD_TAKE_MDSE_CD)) AS MDSE_CD
+                         ,NVL(OTMS.ORD_TAKE_MDSE_CD, OTM.ORD_TAKE_MDSE_CD)                              AS ORD_TAKE_MDSE_CD
+                         ,CASE WHEN OTMS.MDSE_CD IS NOT NULL THEN 'Y'
+                               WHEN OTM.MDSE_CD  IS NOT NULL THEN 'Y'
+                               ELSE 'N' END                                                             AS ORD_TAKE_MDSE_FLG
+                         <!-- START 2018/01/09 M.Naito [QC#18616, ADD] -->
+                         ,DMSR.MDL_ID
+                         ,DMSR.SPLY_CONTR_QTY
+                         <!-- END 2018/01/09 M.Naito [QC#18616, ADD] -->
+                    FROM
+                         SVC_CONFIG_MSTR    SCM
+                        ,DS_MDL_SPLY_RELN   DMSR
+                        ,ORD_TAKE_MDSE      OTM
+                        ,ORD_TAKE_MDSE      OTMS
+                    WHERE
+                            SCM.GLBL_CMPY_CD                        = #glblCmpyCd#
+                        AND SCM.SVC_CONFIG_MSTR_PK                  = #svcConfigMstrPk#
+                        AND SCM.EZCANCELFLAG                        = '0'
+                        AND SCM.GLBL_CMPY_CD                        = DMSR.GLBL_CMPY_CD
+                        AND SCM.MDL_ID                              = DMSR.MDL_ID
+                        AND DMSR.EZCANCELFLAG                       = '0'
+                        AND DMSR.GLBL_CMPY_CD                       = OTM.GLBL_CMPY_CD(+)
+                        AND DMSR.ORD_TAKE_MDSE_CD                   = OTM.ORD_TAKE_MDSE_CD(+)
+                        AND OTM.EZCANCELFLAG(+)                     = '0'
+                        AND DMSR.GLBL_CMPY_CD                       = OTMS.GLBL_CMPY_CD(+)
+                        AND SUBSTR(DMSR.MDSE_CD,#one#,#eight#)      = OTMS.ORD_TAKE_MDSE_CD(+)
+                        AND OTMS.EZCANCELFLAG(+)                    = '0'
+                ) SUB
+                ,MDSE M
+            WHERE
+                    SUB.GLBL_CMPY_CD     = M.GLBL_CMPY_CD
+                <!-- START 2018/01/09 M.Naito [QC#18616, MOD] -->
+                AND (SUB.MDSE_CD         = M.MDSE_CD
+                    OR SUB.ORD_TAKE_MDSE_CD = SUBSTR(M.MDSE_CD,#one#,#eight#))
+                <!-- END 2018/01/09 M.Naito [QC#18616, MOD] -->
+                AND M.IMG_SPLY_TP_CD = #imgSplyTpCd#
+                AND M.EZCANCELFLAG   = '0'
+            ORDER BY
+                SUB.MDSE_CD
+            )
+        WHERE
+             ROW_NUM = 1
+<!-- END 2018/01/09 M.Naito [QC#18616, MOD] -->
+    </statement>
+
+     <statement id="getSupplyOrderInfo" parameterClass="Map" resultClass="String">
+        SELECT
+            CPO_ORD_NUM
+        FROM
+            (SELECT
+                 CPO.CPO_ORD_NUM AS CPO_ORD_NUM
+             FROM
+                  CPO                  CPO
+                 ,CPO_DTL              CD
+                 ,SVC_SPLY_ORD_TP_RELN SSOR
+             WHERE
+                     CPO.GLBL_CMPY_CD                 = #glblCmpyCd#
+                 AND CPO.DS_CPO_CRAT_TS           &gt;= TO_CHAR(TO_DATE(#salesDate#, #dateFormat#) - #ugwSplyOrdrLimitDay#, #dateFormat#)
+                 AND CPO.EZCANCELFLAG                 = '0'
+                 AND CPO.ORD_HDR_STS_CD        &lt;&gt; #cancelled#
+                 AND CPO.GLBL_CMPY_CD                 = CD.GLBL_CMPY_CD
+                 AND CPO.CPO_ORD_NUM                  = CD.CPO_ORD_NUM
+                 AND CD.DS_CONTR_NUM                  = #dsContrNum#
+                 <isNotEqual property="dsContrCatgCd" compareValue="FLT">
+                 AND CD.SVC_MACH_MSTR_PK              = #svcMachMstrPk#
+                 </isNotEqual>
+                 <isEqual property="ordTakeFlg" compareValue="Y">
+                 AND SUBSTR(CD.MDSE_CD,#one#,#eight#) = #ordTakeMdseCd#
+                 </isEqual>
+                 <isEqual property="ordTakeFlg" compareValue="N">
+                 AND CD.MDSE_CD                       = #mdseCd#
+                 </isEqual>
+                 AND CD.EZCANCELFLAG                  = '0'
+                 AND CPO.GLBL_CMPY_CD                 = SSOR.GLBL_CMPY_CD
+                 AND CPO.DS_ORD_CATG_CD               = SSOR.DS_ORD_CATG_CD
+                 AND CPO.DS_ORD_TP_CD                 = SSOR.DS_ORD_TP_CD
+                 AND CD.DS_ORD_LINE_CATG_CD           = SSOR.DS_ORD_LINE_CATG_CD
+                 AND SSOR.EZCANCELFLAG                = '0'
+             ORDER BY
+                 CPO.CPO_ORD_NUM DESC
+             )
+         WHERE
+             ROWNUM = 1
+    </statement>
+
+    <statement id="getInstructions" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            COUNT(*)
+        FROM
+             SHIP_TO_CUST      STC
+            ,DS_CUST_SPCL_MSG  DCSM
+            ,SVC_LINE_BIZ_RELN SLBR
+        WHERE
+                STC.GLBL_CMPY_CD       = #glblCmpyCd#
+            AND STC.SHIP_TO_CUST_CD    = #shipToCustCd#
+            AND STC.EZCANCELFLAG       = '0'
+            AND STC.GLBL_CMPY_CD       = DCSM.GLBL_CMPY_CD
+            AND STC.SELL_TO_CUST_CD    = DCSM.DS_ACCT_NUM
+            <!-- mod start 2023/07/18 QC#61421 -->
+            <!-- AND DCSM.DS_BIZ_AREA_CD    = #supplies# -->
+            AND DCSM.DS_BIZ_AREA_CD   IN (#supplies#, #all#)
+            <!-- mod end 2023/07/18 QC#61421 -->
+            AND DCSM.EFF_FROM_DT                     &lt;= #salesDate#
+            AND NVL(DCSM.EFF_THRU_DT, #salesDate#)   &gt;= #salesDate#
+            AND DCSM.EZCANCELFLAG      = '0'
+            AND DCSM.GLBL_CMPY_CD      = SLBR.GLBL_CMPY_CD
+            AND DCSM.LINE_BIZ_TP_CD    = SLBR.LINE_BIZ_TP_CD
+            <isNotNull property="svcByLineBizTpCd">
+            AND SLBR.SVC_LINE_BIZ_CD   = #svcByLineBizTpCd# 
+            </isNotNull>
+            AND SLBR.EZCANCELFLAG      = '0'
+    </statement>
+
+    <statement id="getDeliveryInstallPsnName" parameterClass="Map" resultClass="String">
+        SELECT
+            CP.CTAC_PSN_FIRST_NM
+                || DECODE(CP.CTAC_PSN_MID_NM, NULL,  '' , ' ' || CP.CTAC_PSN_MID_NM)
+                || DECODE(CP.CTAC_PSN_LAST_NM, NULL, '' , ' ' || CP.CTAC_PSN_LAST_NM)
+        FROM
+             SVC_MACH_CTAC_PSN SMCP
+            ,DS_CTAC_PNT       DCP
+            ,CTAC_PSN          CP
+        WHERE
+                 SMCP.GLBL_CMPY_CD     = #glblCmpyCd#
+             AND SMCP.SVC_MACH_MSTR_PK = #svcMachMstrPk#
+             AND SMCP.SVC_CTAC_TP_CD   = #svcCtacTpCd#
+             AND SMCP.EZCANCELFLAG     = '0'
+             AND SMCP.GLBL_CMPY_CD     = DCP.GLBL_CMPY_CD
+             AND SMCP.DS_CTAC_PNT_PK   = DCP.DS_CTAC_PNT_PK
+             AND DCP.EZCANCELFLAG      = '0'
+             AND DCP.GLBL_CMPY_CD      = CP.GLBL_CMPY_CD
+             AND DCP.CTAC_PSN_PK       = CP.CTAC_PSN_PK
+             AND CP.EZCANCELFLAG       = '0'
+
+    </statement>
+
+    <statement id="getSalesRep" parameterClass="Map" resultClass="String">
+        <!-- START 2018/09/10 K.Kitachi [QC#26260, MOD] -->
+        <!-- SELECT -->
+        <!--     SCB.TOC_CD -->
+        <!-- FROM -->
+        <!--      COA_BR                 CBR -->
+        <!--     ,SUB_CONTR_BR_MAP       SCB -->
+        <!-- WHERE -->
+        <!--         CBR.GLBL_CMPY_CD        = #glblCmpyCd# -->
+        <!--     AND CBR.COA_BR_CD           = #coaBrCd# -->
+        <!--     AND CBR.EZCANCELFLAG        = '0' -->
+        <!--     AND CBR.GLBL_CMPY_CD        = SCB.GLBL_CMPY_CD -->
+        <!--     AND CBR.COA_BR_CD           = SCB.SVC_CONTR_BR_CD -->
+            <!-- START 2018/01/09 M.Kidokoro [QC#20635,ADD] -->
+        <!--     AND SCB.SVC_LINE_BIZ_CD     = #svcLineBizCd# -->
+            <!-- END 2018/01/09 M.Kidokoro [QC#20635,ADD] -->
+        <!--     AND SCB.ENBL_FLG            = 'Y' -->
+        <!--     AND SCB.EZCANCELFLAG        = '0' -->
+        <!-- ORDER BY -->
+        <!--     SCB.TOC_CD -->
+        SELECT
+            NVL(SCB2.TOC_CD, SCB.TOC_CD) TOC_CD
+        FROM
+             COA_BR                 CBR
+            ,SUB_CONTR_BR_MAP       SCB
+            ,SUB_CONTR_BR_MAP       SCB2
+        WHERE
+                CBR.GLBL_CMPY_CD         = #glblCmpyCd#
+            AND CBR.COA_BR_CD            = #coaBrCd#
+            AND CBR.EZCANCELFLAG         = '0'
+            AND CBR.GLBL_CMPY_CD         = SCB.GLBL_CMPY_CD     (+)
+            AND CBR.COA_BR_CD            = SCB.SVC_CONTR_BR_CD  (+)
+            AND SCB.SVC_LINE_BIZ_CD  (+) = #svcLineBizCd#
+            AND SCB.ENBL_FLG         (+) = 'Y'
+            AND SCB.EZCANCELFLAG     (+) = '0'
+            AND CBR.GLBL_CMPY_CD         = SCB2.GLBL_CMPY_CD    (+)
+            AND CBR.COA_BR_CD            = SCB2.SVC_CONTR_BR_CD (+)
+            AND SCB2.SVC_LINE_BIZ_CD (+) = #sldByLineBizTpCd#
+            AND SCB2.ENBL_FLG        (+) = 'Y'
+            AND SCB2.EZCANCELFLAG    (+) = '0'
+        <!-- END 2018/09/10 K.Kitachi [QC#26260, MOD] -->
+    </statement>
+
+    <statement id="selectToc" parameterClass="Map" resultClass="Map">
+        SELECT
+            PSN.GEO_CD
+           ,PSN.FIRST_LINE_ADDR
+           ,PSN.SCD_LINE_ADDR
+           ,PSN.CTY_ADDR
+           ,PSN.ST_CD
+           ,PSN.POST_CD
+           ,PSN.CTRY_CD
+           ,C.CNTY_NM
+        FROM
+            TOC           TOC
+           ,ORG_FUNC_ASG  OFA
+           ,S21_PSN       PSN
+           ,CNTY          C
+        WHERE
+                TOC.GLBL_CMPY_CD           = #glblCmpyCd#
+            AND TOC.EZCANCELFLAG           = '0'
+            AND TOC.TOC_CD                 = #slsRepOrSlsTeamTocCd#
+            AND TOC.GLBL_CMPY_CD           = OFA.GLBL_CMPY_CD
+            AND TOC.EZCANCELFLAG           = OFA.EZCANCELFLAG
+            AND TOC.TOC_CD                 = OFA.TOC_CD
+            AND OFA.EFF_FROM_DT        &lt;= #prcBaseDt#
+            AND (OFA.EFF_THRU_DT       &gt;= #prcBaseDt# OR OFA.EFF_THRU_DT IS NULL )
+            AND OFA.GLBL_CMPY_CD           = PSN.GLBL_CMPY_CD
+            AND OFA.EZCANCELFLAG           = PSN.EZCANCELFLAG
+            AND OFA.PSN_CD                 = PSN.PSN_CD
+            AND PSN.GLBL_CMPY_CD           = C.GLBL_CMPY_CD(+)
+            AND PSN.EZCANCELFLAG           = C.EZCANCELFLAG(+)
+            AND PSN.CNTY_PK                = C.CNTY_PK(+)
+    </statement>
+
+    <!-- START 2018/01/15 K.Kojima [QC#23214,ADD] -->
+    <statement id="getHdrRepUseFlg" parameterClass="Map" resultClass="Map">
+        SELECT
+             DC.TOC_CD
+            ,DCC.HDR_REP_USE_FLG
+        FROM
+             DS_CONTR     DC
+            ,DS_CONTR_CLS DCC
+        WHERE
+                DC.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND DC.DS_CONTR_PK     = #dsContrPk#
+            AND DC.EZCANCELFLAG    = '0'
+            AND DC.GLBL_CMPY_CD    = DCC.GLBL_CMPY_CD
+            AND DC.DS_CONTR_CLS_CD = DCC.DS_CONTR_CLS_CD
+            AND DCC.EZCANCELFLAG   = '0'
+    </statement>
+    <!-- END 2018/01/15 K.Kojima [QC#23214,ADD] -->
+    <!-- START 2018/02/19 U/Kim [QC#20297(Sol#379), ADD]-->
+        <statement id="getDefaultFreightTermInfo"  parameterClass="Map" resultClass="Map">
+        SELECT
+             DFN.FRT_COND_CD
+            ,DFN.DEF_SHPG_SVC_LVL_CD
+        FROM
+             DS_ORD_TP_PROC_DFN DFN
+            ,FRT_COND           FRT
+        WHERE
+                DFN.GLBL_CMPY_CD   = #glblCmpyCd#
+            AND DFN.DS_ORD_TP_CD   = #dsOrdTpCd#
+            AND DFN.LINE_BIZ_TP_CD = #lineBizTpCd#
+            AND DFN.EZCANCELFLAG   = '0'
+            AND DFN.GLBL_CMPY_CD   = FRT.GLBL_CMPY_CD
+            AND DFN.FRT_COND_CD    = FRT.FRT_COND_CD
+            AND FRT.EZCANCELFLAG   = '0'
+    </statement>
+    <!-- END 2018/02/19 U/Kim [QC#20297(Sol#379), ADD]-->
+
+    <!-- START 2018/07/02 T.Wada [QC#23726, ADD] -->
+    <statement id="getCarrSvcLvl" parameterClass="Map" resultClass="String">
+        SELECT
+            CARR_SVC_LVL_CD
+        FROM
+            (
+             SELECT
+                 SSLCR.CARR_SVC_LVL_CD
+                 ,CSL.CARR_SVC_LVL_DESC_TXT
+             FROM
+                 SHPG_SVC_LVL_CARR_RELN SSLCR
+                ,CARR_SVC_LVL           CSL
+             WHERE
+                 SSLCR.GLBL_CMPY_CD        = #glblCmpyCd#
+                 AND SSLCR.SHPG_SVC_LVL_CD = #shpgSvcLvlCd#
+                 AND SSLCR.CARR_CD         = #carrCd#
+                 AND SSLCR.EZCANCELFLAG    = '0'
+                 AND SSLCR.GLBL_CMPY_CD    = CSL.GLBL_CMPY_CD
+                 AND SSLCR.CARR_SVC_LVL_CD = CSL.CARR_SVC_LVL_CD
+                 AND CSL.EZCANCELFLAG      = '0'
+             ORDER BY
+                 SSLCR.CARR_SVC_LVL_CD DESC
+            )
+        WHERE
+            ROWNUM = 1
+    </statement>
+    <!-- END 2018/07/02 T.Wada [QC#23726, ADD] -->
+
+    <!-- START 2018/09/10 K.Kitachi [QC#26260, ADD] -->
+    <statement id="convLineBizTpToSvcLineBiz" parameterClass="Map" resultClass="String">
+        SELECT
+            RELN.SVC_LINE_BIZ_CD
+        FROM
+            SVC_LINE_BIZ_RELN RELN
+        WHERE
+                RELN.GLBL_CMPY_CD   = #glblCmpyCd#
+            AND RELN.LINE_BIZ_TP_CD = #lineBizTpCd#
+            AND RELN.EZCANCELFLAG   = '0'
+    </statement>
+    <!-- END 2018/09/10 K.Kitachi [QC#26260, ADD] -->
+</sqlMap>

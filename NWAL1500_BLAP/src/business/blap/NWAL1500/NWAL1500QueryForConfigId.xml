@@ -1,0 +1,139 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NWAL1500QueryForConfigId">
+
+    <statement id="getComponentList" parameterClass="Map" resultClass="Map">
+        SELECT
+             SMM.SVC_MACH_MSTR_PK
+            ,SMM.MDSE_CD
+            ,SMM.CUR_LOC_NUM
+            ,SMM.SER_NUM
+        FROM
+            SVC_MACH_MSTR SMM
+        WHERE
+                SMM.EZCANCELFLAG        = '0'
+            AND SMM.GLBL_CMPY_CD        = #glblCmpyCd#
+            AND SMM.SVC_CONFIG_MSTR_PK  = #svcConfigMstrPk#
+            AND SMM.SVC_MACH_USG_STS_CD = #svcMachUsgStsCd#
+        ORDER BY
+            SMM.SVC_MACH_TP_CD
+    </statement>
+
+    <!-- 2016/06/28 S21_NA#545 Add Start, Without modifying comments -->
+    <statement id="getCoaProd" parameterClass="Map" resultClass="Map">
+        SELECT
+             M.COA_PROD_CD
+            ,CP.COA_PROD_DESC_TXT
+            ,CPJ.COA_PROJ_CD        AS COA_MDSE_TP_CD
+            ,CPJ.COA_PROJ_DESC_TXT  AS COA_MDSE_TP_DESC_TXT
+            ,DMSP.PKG_UOM_CD
+        FROM
+             MDSE M
+            ,COA_PROD CP
+            ,COA_PROJ CPJ
+            ,MDSE_STORE_PKG DMSP
+        WHERE
+                M.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND M.MDSE_CD               = #mdseCd#
+            AND M.RGTN_STS_CD           = #rgtnStsCd#
+            AND M.EZCANCELFLAG          = '0'
+
+            AND M.GLBL_CMPY_CD          = CP.GLBL_CMPY_CD(+)
+            AND M.COA_PROD_CD           = CP.COA_PROD_CD(+)
+            AND CP.EZCANCELFLAG(+)      = '0'
+
+            AND M.GLBL_CMPY_CD          = CPJ.GLBL_CMPY_CD(+)
+            AND M.COA_MDSE_TP_CD        = CPJ.COA_PROJ_CD(+)
+            AND CPJ.EZCANCELFLAG(+)     = '0'
+
+            AND M.GLBL_CMPY_CD          = DMSP.GLBL_CMPY_CD
+            AND M.MDSE_CD               = DMSP.MDSE_CD
+            AND DMSP.BASE_PKG_UOM_CD    IS NOT NULL
+            AND DMSP.EZCANCELFLAG       = '0'
+            AND ROWNUM                  = 1
+    </statement>
+    <!-- 2016/06/28 S21_NA#545 Add End -->
+
+    <statement id="getPrimaryOrdLineCatg" parameterClass="Map" resultClass="Map">
+            DOLCDS_ORD_LINE_CATG_CD
+           ,DOLCDS_ORD_LINE_CATG_DESC_TXT
+        FROM
+            DS_ORD_LINE_PROC_DFN DOLPD
+           ,DS_ORD_LINE_CATG DOLC
+        WHERE
+                DOLPD.GLBL_CMPY_CD                  = #glblCmpyCd#
+            AND DOLPD.DS_ORD_TP_CD                  = #dsOrdTpCd#
+            AND DOLPD.ACTV_FLG                      = #actvFlg#
+            AND DOLPD.PRIM_LINE_CATG_FLG            = #primLineCatgFlg#
+            AND DOLPD.EFF_FROM_DT                   &lt;= #effDt#
+            AND NVL(DOLPD.EFF_THRU_DT, '99991231')  &gt;= #effDt#
+            AND DOLPD.EZCANCELFLAG                  = '0'
+            AND DOLPD.GLBL_CMPY_CD                  = DOLC.GLBL_CMPY_CD
+            AND DOLPD.DS_ORD_LINE_CATG_CD           = DOLC.DS_ORD_LINE_CATG_CD
+            AND DOLC.DS_ORD_LINE_DRCTN_CD           = #dsOrdLineDrctnCd#
+            AND DOLC.EZCANCELFLAG                   = '0'
+            AND ROWNUM                              = 1
+    </statement>
+
+    <statement id="getPrimaryRtlSubLoc" parameterClass="Map" resultClass="Map">
+        SELECT
+             RS.RTL_WH_CD
+            ,RS.RTL_SWH_CD
+        FROM 
+            RTL_SWH RS
+        WHERE 
+                RS.EZCANCELFLAG                 = '0'
+            AND RS.GLBL_CMPY_CD                 = #glblCmpyCd#
+            AND RS.RTL_WH_CD                    = #rtlWhCd#
+            AND RS.EFF_FROM_DT                  &lt;= #slsDt#
+            AND NVL(RS.EFF_THRU_DT, '99991231') &gt;= #slsDt#
+            AND ROWNUM                          = 1
+    </statement>
+
+    <statement id="getChildMdseList" parameterClass="Map" resultClass="Map">
+        SELECT 
+            <!-- 2018/01/23 S21_NA#23650 Del Start -->
+             <!-- NVL(CMP.CHILD_MDSE_CD, CMP.CHILD_ORD_TAKE_MDSE_CD) AS MDSE_CD -->
+            <!-- 2018/01/23 S21_NA#23650 Del End -->
+            <!-- 2018/01/23 S21_NA#23650 Add Start -->
+            CASE
+                WHEN CMP.CHILD_MDSE_CD IS NOT NULL AND OTM.ORD_TAKE_MDSE_CD IS NOT NULL THEN
+                    OTM.ORD_TAKE_MDSE_CD
+                WHEN CMP.CHILD_MDSE_CD IS NOT NULL AND OTM.ORD_TAKE_MDSE_CD IS NULL THEN
+                    CMP.CHILD_MDSE_CD
+                ELSE
+                    CMP.CHILD_ORD_TAKE_MDSE_CD
+            END AS MDSE_CD
+            <!-- 2018/01/23 S21_NA#23650 Add End -->
+            ,CMP.CHILD_MDSE_QTY 
+        FROM
+            CMPSN CMP
+            <!-- 2018/01/23 S21_NA#23650 Add Start -->
+            ,ORD_TAKE_MDSE OTM
+            <!-- 2018/01/23 S21_NA#23650 Add End -->
+        WHERE 
+                CMP.GLBL_CMPY_CD                    = #glblCmpyCd#
+            AND CMP.EZCANCELFLAG                    = '0'
+            AND CMP.PRNT_MDSE_CD                    = #prntMdseCd#
+          <isNotNull property="mdseCd">
+            AND (
+                        CMP.CHILD_MDSE_CD           = #mdseCd#
+                    OR CMP.CHILD_ORD_TAKE_MDSE_CD   = #mdseCd#
+                )
+          </isNotNull>
+            AND CMP.EFF_FROM_DT                     &lt;= #slsDt#
+            AND NVL(CMP.EFF_THRU_DT, '99991231')    &gt;= #slsDt#
+            <!-- 2018/06/28 S21_NA#25227 Add Start -->
+            AND CMP.ACTV_FLG                        = 'Y'
+            <!-- 2018/06/28 S21_NA#25227 Add End -->
+            <!-- 2018/01/23 S21_NA#23650 Add Start -->
+            AND CMP.GLBL_CMPY_CD                    = OTM.GLBL_CMPY_CD(+)
+            AND SUBSTR(CMP.CHILD_MDSE_CD,1,#ordTakeLen#) = OTM.ORD_TAKE_MDSE_CD(+)
+            AND OTM.EZCANCELFLAG(+)                 = '0'
+            <!-- 2018/01/23 S21_NA#23650 Add End -->
+        <!-- 2017/03/01 QC#16800 Add Start -->
+        ORDER BY
+            CMP.CMPSN_PK
+        <!-- 2017/03/01 QC#16800 Add End   -->
+     </statement>
+
+</sqlMap>

@@ -1,0 +1,363 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NLCB009001">
+    <statement id="getPurgeWorkDiscrepancyReport" parameterClass="Map">
+     SELECT
+            GLBL_CMPY_CD
+           ,INVTY_DISCR_RPT_WRK_PK
+     FROM
+            INVTY_DISCR_RPT_WRK
+     WHERE
+            GLBL_CMPY_CD             =  #glblCmpyCd#
+     AND    INVTY_DISCR_RPT_CRAT_DT  &lt;  #dateCondition#
+    </statement>
+
+    <statement id="getWMSInterface" parameterClass="Map">
+     SELECT
+               T1.SEGMENT_ID                   SEGMENT_ID
+              ,T1.UNIT_ID                      UNIT_ID
+              ,T1.SEQ_NUMBER                   SEQ_NUM
+              ,RSW.INVTY_LOC_CD                INVTY_LOC_CD
+              ,M1.FIRST_PROD_CTRL_CD           PROD_LINE
+              ,T1.ITEM_CODE_IF                 MDSE_CD
+              ,M1.MDSE_NM                      MDSE_NM
+              ,CASE  T1.STOCK_STATUS_IF
+                     WHEN  'S1'  THEN  '1'
+                     WHEN  'S2'  THEN  '2'
+                     WHEN  'S3'  THEN  '3'
+                     WHEN  'S4'  THEN  '4'
+                     WHEN  'S5'  THEN  '5'
+                     WHEN  'SZ'  THEN  'Z'
+                                 ELSE  '*'
+               END                             STK_STS_CD
+              ,T1.ALL_OF_ON_HAND_IF            INVTY_QTY
+              ,O1.LOC_STS_CD
+              ,O1.INVTY_ORD_NUM                INVTY_ORD_NUM
+              ,O1.INVTY_ORD_LINE_NUM           INVTY_ORD_LINE_NUM
+              ,O1.ORD_QTY                      ORD_QTY
+     FROM
+               NLCI0050_01  T1
+              ,MDSE         M1
+              ,RTL_WH       RWH
+              ,RTL_SWH      RSW
+              ,(SELECT
+                          OD.INVTY_ORD_NUM
+                         ,OD.INVTY_ORD_LINE_NUM
+                         ,OD.MDSE_CD
+                         ,OD.LOC_STS_CD
+                         ,OD.STK_STS_CD
+                         ,OD.INVTY_LOC_CD 
+                         ,OD.ORD_QTY
+                         ,RSW.RTL_WH_CD
+                         ,RSW.RTL_SWH_CD
+                FROM
+                          INVTY_ORD      OH
+                         ,INVTY_ORD_DTL  OD
+                         ,RTL_WH         RWH
+                         ,RTL_SWH        RSW
+                WHERE
+                               OH.GLBL_CMPY_CD                      =  #glblCmpyCd#
+                          AND  OH.INVTY_ORD_TP_CD                   =  #invtyOrdTpCd#
+                          AND  OH.EZCANCELFLAG                      =  '0'
+                          AND  OD.GLBL_CMPY_CD                      =  OH.GLBL_CMPY_CD
+                          AND  OD.INVTY_ORD_NUM                     =  OH.INVTY_ORD_NUM
+                          AND  OD.LOC_STS_CD                     IN (#locStsCd#)
+                          AND  OD.INVTY_ORD_DTL_STS_CD  NOT IN      (#invtyOrdStsCdClosed#, #invtyOrdStsCdCancel#)
+                          AND  OD.EZCANCELFLAG                      =  '0'
+                          AND  OD.INVTY_LOC_CD                      =  RSW.INVTY_LOC_CD
+                          AND  RWH.GLBL_CMPY_CD                     =  #glblCmpyCd#
+                          AND  NVL(RWH.WMS_WH_CD, RWH.RTL_WH_CD)   =  #wmsWhCd# 
+                          AND  RWH.EZCANCELFLAG                     =  '0'
+                          AND  RSW.GLBL_CMPY_CD                     =  RWH.GLBL_CMPY_CD
+                          AND  RSW.RTL_WH_CD                        =  RWH.RTL_WH_Cd
+                          AND  RSW.EZCANCELFLAG                     =  '0'
+               )            O1
+     WHERE
+                    T1.INTERFACE_ID     =  #interfaceID#
+               <iterate property="transactionID" var="elem[]" open="AND T1.TRANSACTION_ID IN (" close=") " conjunction=",">
+                    #elem[]#
+               </iterate>
+               AND  T1.CLOSED_DATE_IF   =  #closedDateIf#
+               AND  T1.EZCANCELFLAG     =  '0'
+               AND  M1.GLBL_CMPY_CD(+)  =  #glblCmpyCd#
+               AND  M1.MDSE_CD(+)       =  T1.ITEM_CODE_IF
+               AND  M1.EZCANCELFLAG(+)  =  '0'
+               AND  O1.MDSE_CD(+)       =  T1.ITEM_CODE_IF
+               AND  O1.STK_STS_CD(+)    =  (CASE  T1.STOCK_STATUS_IF
+                                                  WHEN  'S1'  THEN  '1'
+                                                  WHEN  'S2'  THEN  '2'
+                                                  WHEN  'S3'  THEN  '3'
+                                                  WHEN  'S4'  THEN  '4'
+                                                  WHEN  'S5'  THEN  '5'
+                                                              ELSE  ''
+                                            END)
+               AND  RWH.GLBL_CMPY_CD       = #glblCmpyCd#
+               AND  RWH.RTL_WH_CD          = T1.WAREHOUSE_CODE_IF
+               AND  NVL(RWH.WMS_WH_CD, RWH.RTL_WH_CD)         = #wmsWhCd#
+               AND  RWH.EZCANCELFLAG       = '0'
+               AND  RSW.GLBL_CMPY_CD       = RWH.GLBL_CMPY_CD
+               AND  RSW.RTL_WH_CD          = RWH.RTL_WH_CD
+               AND  RSW.RTL_SWH_CD         = T1.WAREHOUSE_CODE2_IF
+               AND  RSW.EZCANCELFLAG       = '0'
+               AND  RSW.INVTY_LOC_CD       =  O1.INVTY_LOC_CD (+)
+ 
+     ORDER BY
+                    INVTY_LOC_CD            ASC
+                   ,T1.ITEM_CODE_IF         ASC
+                   ,NVL(O1.LOC_STS_CD,'03') ASC
+                   ,T1.STOCK_STATUS_IF      ASC
+                   ,O1.INVTY_ORD_NUM        ASC
+                   ,O1.INVTY_ORD_LINE_NUM   ASC
+    </statement>
+
+    <statement id="getEStoreInterface" parameterClass="Map">
+     SELECT
+               T1.SEGMENT_ID                                           SEGMENT_ID
+              ,T1.UNIT_ID                                              UNIT_ID
+              ,T1.SEQ_NUMBER                                           SEQ_NUM
+              ,NVL(T1.CODE_REGION_WH_IF || T1.NUM_STOCK_POINT_IF, '')  INVTY_LOC_CD
+              ,M1.FIRST_PROD_CTRL_CD                                   PROD_LINE
+              ,T1.CODE_ITEM_IF                                         MDSE_CD
+              ,M1.MDSE_NM                                              MDSE_NM
+              ,T1.CODE_STAT_STOCK_IF                                   STK_STS_CD
+              ,T1.QTY_ON_HAND_IF                                       INVTY_QTY
+              ,O1.INVTY_ORD_NUM                                        INVTY_ORD_NUM
+              ,O1.INVTY_ORD_LINE_NUM                                   INVTY_ORD_LINE_NUM
+              ,O1.ORD_QTY                                              ORD_QTY
+     FROM
+               NLCI0110_01  T1
+              ,MDSE         M1
+              ,(SELECT
+                          OD.INVTY_ORD_NUM
+                         ,OD.INVTY_ORD_LINE_NUM
+                         ,OD.MDSE_CD
+                         ,OD.STK_STS_CD
+                         ,OD.INVTY_LOC_CD
+                         ,OD.ORD_QTY
+                FROM
+                          INVTY_ORD      OH
+                         ,INVTY_ORD_DTL  OD
+                WHERE
+                               OH.GLBL_CMPY_CD               =  #glblCmpyCd#
+                          AND  OH.INVTY_ORD_TP_CD            =  #invtyOrdTpCd#
+                          AND  OH.EZCANCELFLAG               =  '0'
+                          AND  OD.GLBL_CMPY_CD               =  OH.GLBL_CMPY_CD
+                          AND  OD.INVTY_ORD_NUM              =  OH.INVTY_ORD_NUM
+                          AND  OD.LOC_STS_CD                 =  #locStsCd#
+                          AND  OD.INVTY_ORD_DTL_STS_CD  NOT IN  (#invtyOrdStsCdClosed#, #invtyOrdStsCdCancel#)
+                          AND  OD.EZCANCELFLAG               =  '0'
+               )            O1
+     WHERE
+                    T1.INTERFACE_ID     =  #interfaceID#
+               <iterate property="transactionID" var="elem[]" open="AND T1.TRANSACTION_ID IN (" close=") " conjunction=",">
+                    #elem[]#
+               </iterate>
+               AND  T1.REC_ID_01_IF     =  #recID#
+               AND  T1.EZCANCELFLAG     =  '0'
+               AND  M1.GLBL_CMPY_CD(+)  =  #glblCmpyCd#
+               AND  M1.MDSE_CD(+)       =  T1.CODE_ITEM_IF
+               AND  M1.EZCANCELFLAG(+)  =  '0'
+               AND  O1.MDSE_CD(+)       =  T1.CODE_ITEM_IF
+               AND  O1.STK_STS_CD(+)    =  T1.CODE_STAT_STOCK_IF
+               AND  O1.INVTY_LOC_CD(+)  =  T1.CODE_REGION_WH_IF || T1.NUM_STOCK_POINT_IF
+               AND  T1.CODE_REGION_WH_IF || T1.NUM_STOCK_POINT_IF     =  #invtyLocCd#
+     ORDER BY
+                    T1.CODE_REGION_WH_IF   ASC
+                   ,T1.NUM_STOCK_POINT_IF  ASC
+                   ,T1.CODE_ITEM_IF        ASC
+                   ,T1.CODE_STAT_STOCK_IF  ASC
+                   ,O1.INVTY_ORD_NUM       ASC
+                   ,O1.INVTY_ORD_LINE_NUM  ASC
+    </statement>
+
+    <statement id="getInventorySnapShot" parameterClass="Map">
+    WITH S21_INVTY AS ( 
+            SELECT
+                  NVL(T1.INVTY_LOC_CD, '') AS INVTY_LOC_CD
+                , M1.FIRST_PROD_CTRL_CD    AS PROD_LINE
+                , T1.MDSE_CD               AS MDSE_CD
+                , M1.MDSE_NM               AS MDSE_NM
+                , T1.LOC_STS_CD            AS LOC_STS_CD_ORDER
+                , T1.LOC_STS_CD            AS LOC_STS_CD
+                , T1.STK_STS_CD            AS STK_STS_CD
+                , T1.INVTY_QTY             AS INVTY_QTY
+                , T1.INVTY_AVAL_QTY        AS INVTY_AVAL_QTY
+                , O1.INVTY_ORD_NUM         AS INVTY_ORD_NUM
+                , O1.INVTY_ORD_LINE_NUM    AS INVTY_ORD_LINE_NUM
+                , O1.ORD_QTY               AS ORD_QTY
+            FROM
+                  (
+                   SELECT
+                       T1.MDSE_CD
+                      ,T1.INVTY_LOC_CD
+                      ,#dcStock# AS LOC_STS_CD
+                      ,T1.STK_STS_CD
+                      ,SUM(T1.INVTY_QTY) AS INVTY_QTY
+                      ,SUM(T1.INVTY_AVAL_QTY) AS INVTY_AVAL_QTY
+                   FROM
+                       INVTY_SNAP_SHOT T1
+                   WHERE 
+                       T1.GLBL_CMPY_CD        =  #glblCmpyCd#
+                   AND T1.INVTY_SNAP_SHOT_DT  =  #procDate#
+                   <iterate property="invtyLocCdList" var="elem[]" open="AND T1.INVTY_LOC_CD IN (" close=")" conjunction=",">
+                   #elem[]#
+                   </iterate>
+                   <iterate property="dcStockLocStsCd" var="elem[]" open="AND LOC_STS_CD IN (" close=")" conjunction=",">
+                   #elem[]#
+                   </iterate>
+                   AND T1.EZCANCELFLAG        =  '0'
+                   GROUP BY
+                       T1.MDSE_CD, T1.INVTY_LOC_CD, T1.STK_STS_CD
+                ) T1
+                , MDSE            M1
+                , ( 
+                    SELECT
+                              OD.INVTY_ORD_NUM
+                            , OD.INVTY_ORD_LINE_NUM
+                            , OD.MDSE_CD
+                            , OD.STK_STS_CD
+                            , OD.INVTY_LOC_CD
+                            , OD.LOC_STS_CD
+                            , OD.ORD_QTY
+                        FROM
+                              INVTY_ORD     OH
+                            , INVTY_ORD_DTL OD
+                        WHERE
+                                OH.GLBL_CMPY_CD               =  #glblCmpyCd#
+                            AND OH.INVTY_ORD_TP_CD            =  #invtyOrdTpCd#
+                            AND OH.EZCANCELFLAG               =  '0' 
+                            AND OD.GLBL_CMPY_CD               =  OH.GLBL_CMPY_CD 
+                            AND OD.INVTY_ORD_NUM              =  OH.INVTY_ORD_NUM 
+                            AND OD.INVTY_ORD_DTL_STS_CD  NOT IN (#invtyOrdStsCdClosed#, #invtyOrdStsCdCancel#)
+                            AND OD.EZCANCELFLAG               =  '0'
+                ) O1
+            WHERE
+                    M1.GLBL_CMPY_CD(+)     =  #glblCmpyCd#
+                AND M1.MDSE_CD(+)          =  T1.MDSE_CD
+                AND M1.EZCANCELFLAG(+)     =  '0'
+                AND O1.MDSE_CD(+)          =  T1.MDSE_CD
+                AND O1.STK_STS_CD(+)       =  T1.STK_STS_CD
+                AND O1.INVTY_LOC_CD(+)     =  T1.INVTY_LOC_CD
+                AND O1.LOC_STS_CD(+)       =  T1.LOC_STS_CD 
+            UNION ALL
+            -- Stock Status 'Z' for Insurance Claim Damaged
+            SELECT
+                  NVL(T2.INVTY_LOC_CD, '') AS INVTY_LOC_CD
+                , M2.FIRST_PROD_CTRL_CD    AS PROD_LINE
+                , T2.MDSE_CD               AS MDSE_CD
+                , M2.MDSE_NM               AS MDSE_NM
+                , #locStsCdInsClaimDmg#    AS LOC_STS_CD
+                , #locStsCdInsClaimDmg#    AS LOC_STS_CD_ORDER
+                , 'Z'                      AS STK_STS_CD
+                , SUM(T2.INVTY_QTY)        AS INVTY_QTY
+                , SUM(T2.INVTY_AVAL_QTY)   AS INVTY_AVAL_QTY
+                , NULL                     AS INVTY_ORD_NUM
+                , NULL                     AS INVTY_ORD_LINE_NUM
+                , NULL                     AS ORD_QTY
+            FROM
+                  INVTY_SNAP_SHOT T2
+                , MDSE            M2 
+            WHERE
+                    T2.GLBL_CMPY_CD       =  #glblCmpyCd#
+                AND T2.INVTY_SNAP_SHOT_DT =  #procDate#
+                <iterate property="invtyLocCdList" var="elem[]" open="AND T2.INVTY_LOC_CD IN (" close=")" conjunction=",">
+                #elem[]#
+                </iterate>
+                AND T2.LOC_STS_CD         =  #locStsCdInsClaimDmg#
+                AND T2.EZCANCELFLAG       =  '0'
+                AND M2.GLBL_CMPY_CD(+)    =  T2.GLBL_CMPY_CD
+                AND M2.MDSE_CD(+)         =  T2.MDSE_CD
+                AND M2.EZCANCELFLAG(+)    =  '0'
+            GROUP BY
+                  T2.INVTY_LOC_CD
+                , M2.FIRST_PROD_CTRL_CD
+                , T2.MDSE_CD
+                , M2.MDSE_NM
+        ) 
+        SELECT
+              INVTY_LOC_CD
+            , PROD_LINE
+            , MDSE_CD
+            , MDSE_NM
+            , LOC_STS_CD
+            , STK_STS_CD
+            , INVTY_QTY
+            , INVTY_AVAL_QTY
+            , INVTY_ORD_NUM
+            , INVTY_ORD_LINE_NUM
+            , ORD_QTY 
+        FROM
+            S21_INVTY 
+        ORDER BY
+              INVTY_LOC_CD       ASC
+            , MDSE_CD            ASC
+            , LOC_STS_CD_ORDER   ASC
+            , STK_STS_CD         ASC
+            , INVTY_ORD_NUM      ASC
+            , INVTY_ORD_LINE_NUM ASC
+    </statement>
+
+    <statement id="getPrinted" parameterClass="Map">
+     SELECT
+               GLBL_CMPY_CD             GLBL_CMPY_CD
+              ,INVTY_DISCR_RPT_WRK_PK   INVTY_DISCR_RPT_WRK_PK
+              ,INVTY_DISCR_RPT_CRAT_DT  INVTY_DISCR_RPT_CRAT_DT
+              ,INVTY_DISCR_RPT_CRAT_TM  INVTY_DISCR_RPT_CRAT_TM
+              ,INVTY_LOC_CD             INVTY_LOC_CD
+              ,FIRST_PROD_CTRL_CD       PROD_LINE
+              ,MDSE_CD                  MDSE_CD
+              ,LOC_STS_CD               LOC_STS_CD
+              ,STK_STS_CD               STK_STS_CD
+              ,ADJ_INVTY_ORD_NUM        INVTY_ORD_NUM
+              ,ADJ_INVTY_ORD_LINE_NUM   INVTY_ORD_LINE_NUM
+              ,S21_INVTY_QTY            INVTY_QTY
+              ,RELN_SYS_INVTY_QTY       RELN_QTY
+              ,DIFF_INVTY_QTY           DIFF_QTY
+              ,MDSE_NM                  MDSE_NM
+              ,ADJ_ORD_REF_INVTY_QTY    ORD_QTY
+              ,PHYS_WH_CD               PHYS_WH_CD
+     FROM
+               INVTY_DISCR_RPT_WRK
+     WHERE
+                    GLBL_CMPY_CD             =  #glblCmpyCd#
+               AND  INVTY_DISCR_RPT_CRAT_DT  =  #createRptDt#
+               AND  INVTY_DISCR_RPT_CRAT_TM  =  #createRptTm#
+          <!-- Modified 397579 start  -->
+               AND  PHYS_WH_CD               =  #physWhCd#
+          <!-- Modified 397579 end  -->
+               AND  EZCANCELFLAG             =  '0'
+     FOR  UPDATE
+   </statement>
+
+<!-- START 2014/06/12 [WDS-NA#401, ADD] -->
+    <statement id="getInvtyDiscrRptWrkForSendEMail" parameterClass="Map" resultClass="Map">
+       SELECT 
+            SUBSTR(NVL(IDPW.INVTY_LOC_CD, ''), 0, 6)                               AS WH
+           ,SUBSTR(NVL(IDPW.FIRST_PROD_CTRL_CD, ''), 0, 1)                         AS PR
+           ,SUBSTR(NVL(IDPW.MDSE_CD, ''), 0, 16)                                   AS ITEM
+           ,SUBSTR(NVL(IDPW.MDSE_NM, ''), 0, 26)                                   AS DESCRIPTION
+           ,NVL(IDPW.STK_STS_CD, '')                                               AS STK
+           ,TO_CHAR(LPAD(IDPW.S21_INVTY_QTY, '10', ' '),'9,999,999,999')           AS INVTY_QTY
+           ,TO_CHAR(LPAD(IDPW.RELN_SYS_INVTY_QTY, '10', ' '), '9,999,999,999')     AS RELATED_QTY
+           ,TO_CHAR(LPAD(IDPW.DIFF_INVTY_QTY, '10', ' '), '9,999,999,999')         AS DIFF_QTY
+           ,NVL(IDPW.ADJ_INVTY_ORD_NUM, '')                                        AS ADJ
+           ,TO_CHAR(LPAD(IDPW.ADJ_ORD_REF_INVTY_QTY, '11', ' '), '9,999,999,999')  AS ADJ_QTY
+       FROM
+           INVTY_DISCR_RPT_WRK     IDPW
+       WHERE
+           IDPW.EZCANCELFLAG            = '0'
+       AND
+           IDPW.GLBL_CMPY_CD            = #glblCmpyCd#
+       AND
+           IDPW.PHYS_WH_CD              = #invtyLocCd#
+       AND
+           IDPW.INVTY_DISCR_RPT_CRAT_DT = #procDate#
+       AND
+           IDPW.INVTY_DISCR_RPT_CRAT_TM = #procTime#
+       ORDER BY
+           ITEM ASC
+          ,STK ASC
+          ,LENGTH(WH) ASC
+          ,WH
+    </statement>
+<!-- END   2014/06/12 [WDS-NA#401, ADD] -->
+</sqlMap>

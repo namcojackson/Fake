@@ -1,0 +1,316 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NWAL1850Query">
+
+    <typeAlias alias="NWAL1850SMsg"    type="business.blap.NWAL1850.NWAL1850SMsg"/>
+    <typeAlias alias="NWAL1850_ASMsg"  type="business.blap.NWAL1850.NWAL1850_ASMsg"/>
+
+    <statement id="getDsOrdCatgList" parameterClass="Map" resultClass="Map">
+        SELECT
+            OC.DS_ORD_CATG_CD       AS DS_ORD_CATG_CD
+           ,OC.DS_ORD_CATG_DESC_TXT AS DS_ORD_CATG_DESC_TXT
+        FROM
+            DS_ORD_CATG           OC
+           ,DS_ORD_TP             OT
+           ,AVAL_DS_ORD_TP_APP_ID AI
+           ,DS_ORD_TP_PROC_DFN    OTPD
+        WHERE
+                OC.GLBL_CMPY_CD         = #glblCmpyCd#
+            AND OC.DS_ORD_CATG_DESC_TXT LIKE #dsOrdCatgDescTxt#
+            AND OC.EZCANCELFLAG         = '0'
+
+            AND OC.GLBL_CMPY_CD   = OT.GLBL_CMPY_CD
+            AND OC.DS_ORD_CATG_CD = OT.DS_ORD_CATG_CD
+            AND OT.EZCANCELFLAG   = '0'
+
+            AND OT.GLBL_CMPY_CD = AI.GLBL_CMPY_CD
+            AND OT.DS_ORD_TP_CD = AI.DS_ORD_TP_CD
+            AND AI.BIZ_APP_ID   = #bizId#
+            AND AI.EZCANCELFLAG = '0'
+
+            AND OT.GLBL_CMPY_CD   = OTPD.GLBL_CMPY_CD
+            AND OT.DS_ORD_TP_CD   = OTPD.DS_ORD_TP_CD
+            AND OTPD.ACTV_FLG     = 'Y'
+            AND OTPD.EZCANCELFLAG = '0'
+        GROUP BY
+            OC.DS_ORD_CATG_CD
+           ,OC.DS_ORD_CATG_DESC_TXT
+    </statement>
+
+    <statement id="getDsOrdTpTxt" parameterClass="Map" resultClass="Map">
+        SELECT 
+             DOT.DS_ORD_TP_CD           AS DS_ORD_TP_CD
+            ,DOT.DS_ORD_TP_DESC_TXT     AS DS_ORD_TP_DESC_TXT
+        FROM
+             AVAL_DS_ORD_TP_APP_ID  AD
+            ,DS_ORD_TP              DOT
+            ,DS_ORD_TP_PROC_DFN     DOTPD
+        WHERE
+                AD.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND AD.BIZ_APP_ID       = #bizId#
+            <isNotNull property="dsOrdCatgCd">
+            AND DOT.DS_ORD_CATG_CD  = #dsOrdCatgCd#
+            </isNotNull>
+            AND AD.EZCANCELFLAG     = '0'
+            AND AD.GLBL_CMPY_CD     = DOT.GLBL_CMPY_CD
+            AND AD.DS_ORD_TP_CD     = DOT.DS_ORD_TP_CD
+            AND DOT.EZCANCELFLAG    = '0'
+
+            AND DOT.GLBL_CMPY_CD    = DOTPD.GLBL_CMPY_CD
+            AND DOT.DS_ORD_TP_CD    = DOTPD.DS_ORD_TP_CD
+            AND DOTPD.ACTV_FLG      = 'Y'
+            AND DOTPD.EZCANCELFLAG  = '0'
+        ORDER BY
+            DOT.DS_ORD_TP_SORT_NUM
+    </statement>
+
+<!-- START 2022/06/02 K.Kitachi [QC#60037, ADD] -->
+    <statement id="getDelyHldTxt" parameterClass="Map" resultClass="Map">
+        SELECT
+             SADH.SCHD_AGMT_DELY_HLD_CD         AS SCHD_AGMT_DELY_HLD_CD
+            ,SADH.SCHD_AGMT_DELY_HLD_DESC_TXT   AS SCHD_AGMT_DELY_HLD_DESC_TXT
+        FROM
+            SCHD_AGMT_DELY_HLD  SADH
+        WHERE
+                SADH.GLBL_CMPY_CD   = #glblCmpyCd#
+            AND SADH.EZCANCELFLAG   = '0'
+        ORDER BY
+            SADH.SCHD_AGMT_DELY_HLD_SORT_NUM
+    </statement>
+<!-- END 2022/06/02 K.Kitachi [QC#60037, ADD] -->
+
+    <statement id="getSchdAgmt" parameterClass="Map" resultMap="result.getSchdAgmt">
+          SELECT *
+          FROM  (
+                SELECT 
+                          SA.SCHD_AGMT_NUM              AS SCHD_AGMT_NUM
+                        , SA.REF_CPO_ORD_NUM            AS CPO_ORD_NUM
+                        <!-- SOLD TO CUSTOMER -->
+                        , SA.SELL_TO_CUST_CD            AS SELL_TO_CUST_CD
+                        , SA.SOLD_TO_CUST_LOC_CD        AS SOLD_TO_CUST_LOC_CD
+                        , AC_SOLD.DS_ACCT_NM            AS SOLD_DS_ACCT_NM
+                        , RPAD (BTC.FIRST_LINE_ADDR,
+                                   LENGTH (BTC.FIRST_LINE_ADDR) + 1)
+                          || RPAD (BTC.SCD_LINE_ADDR, LENGTH (BTC.SCD_LINE_ADDR) + 1)
+                          || RPAD (BTC.THIRD_LINE_ADDR,
+                                   LENGTH (BTC.THIRD_LINE_ADDR) + 1)
+                          || RPAD (BTC.FRTH_LINE_ADDR, LENGTH (BTC.FRTH_LINE_ADDR) + 1)
+                          || CONCAT (BTC.CTY_ADDR, ',')
+                          || RPAD (BTC.ST_CD, LENGTH (BTC.ST_CD) + 1)
+                          || BTC.POST_CD 
+                                                        AS SOLD_TO_CUST_ADDR
+                        <!-- SHIP TO CUSTOMER -->
+                        , SA.SHIP_TO_CUST_ACCT_CD       AS SHIP_TO_CUST_ACCT_CD
+                        , SA.SHIP_TO_CUST_LOC_CD        AS SHIP_TO_CUST_LOC_CD
+                        , AC_SHIP.DS_ACCT_NM            AS SHIP_DS_ACCT_NM
+                        , RPAD (SA.SHIP_TO_FIRST_LINE_ADDR,
+                                   LENGTH (SA.SHIP_TO_FIRST_LINE_ADDR) + 1)
+                          || RPAD (SA.SHIP_TO_SCD_LINE_ADDR, LENGTH (SA.SHIP_TO_SCD_LINE_ADDR) + 1)
+                          || RPAD (SA.SHIP_TO_THIRD_LINE_ADDR,
+                                   LENGTH (SA.SHIP_TO_THIRD_LINE_ADDR) + 1)
+                          || RPAD (SA.SHIP_TO_FRTH_LINE_ADDR, LENGTH (SA.SHIP_TO_FRTH_LINE_ADDR) + 1)
+                          || CONCAT (SA.SHIP_TO_CTY_ADDR, ',')
+                          || RPAD (SA.SHIP_TO_ST_CD, LENGTH (SA.SHIP_TO_ST_CD) + 1)
+                          || SA.SHIP_TO_POST_CD
+                                                        AS SHIP_TO_CUST_ADDR
+                                                        
+                        , SA.SCHD_AGMT_CRAT_DT          AS SCHD_AGMT_CRAT_DT
+                        , SA.CUST_ISS_PO_NUM            AS CUST_ISS_PO_NUM
+                        , OC.DS_ORD_CATG_DESC_TXT       AS DS_ORD_CATG_DESC_TXT
+                        , OT.DS_ORD_TP_DESC_TXT         AS DS_ORD_TP_DESC_TXT
+                        , SAS.SCHD_AGMT_STS_DESC_TXT    AS SCHD_AGMT_STS_DESC_TXT
+                        , PSN.USR_NM
+                          || DECODE (PSN.USR_NM, NULL, '', '(')
+                          || PSN.FIRST_NM
+                          || DECODE (PSN.USR_NM, NULL, '', ' ')
+                          || PSN.LAST_NM
+                          || DECODE (PSN.USR_NM, NULL, '', ')')
+                                                        AS ADMIN_PSN_NM
+<!-- START 2022/06/02 K.Kitachi [QC#60037, ADD] -->
+                        , SA.SER_NUM                        AS SER_NUM
+                        , SA.SVC_CONFIG_MSTR_PK             AS SVC_CONFIG_MSTR_PK
+                        , SA.DS_CONTR_NUM                   AS DS_CONTR_NUM
+                        , SADH.SCHD_AGMT_DELY_HLD_DESC_TXT  AS SCHD_AGMT_DELY_HLD_DESC_TXT
+<!-- END 2022/06/02 K.Kitachi [QC#60037, ADD] -->
+                FROM 
+                          SCHD_AGMT     SA  
+                        , SELL_TO_CUST  AC_SOLD
+                        , SELL_TO_CUST  AC_SHIP
+                        , BILL_TO_CUST  BTC
+                        , DS_ORD_CATG   OC
+                        , DS_ORD_TP     OT
+                        , SCHD_AGMT_STS SAS
+                        , AUTH_PSN      PSN
+<!-- START 2022/06/02 K.Kitachi [QC#60037, ADD] -->
+                        , SCHD_AGMT_DELY_HLD    SADH
+<!-- END 2022/06/02 K.Kitachi [QC#60037, ADD] -->
+                WHERE 
+                          SA.GLBL_CMPY_CD         = #msg.glblCmpyCd#
+                      <isNotNull property="msg.schdAgmtNum">
+                      AND SA.SCHD_AGMT_NUM        LIKE #msg.schdAgmtNum#
+                      </isNotNull>
+                      <isNotNull property="msg.cpoOrdNum">
+                      AND SA.REF_CPO_ORD_NUM      LIKE #msg.cpoOrdNum#
+                      </isNotNull>
+                      <!--SOLD NUMBER -->
+                      <isNotNull property="msg.sellToCustCd">
+                      AND SA.SELL_TO_CUST_CD      LIKE #msg.sellToCustCd#
+                      </isNotNull>
+                      <!--SOLD LOCATION -->
+                      <isNotNull property="msg.soldToCustLocCd">
+                      AND SA.SOLD_TO_CUST_LOC_CD  LIKE #msg.soldToCustLocCd#
+                      </isNotNull>
+                      <!--SHIP NUMBER -->
+                      <isNotNull property="msg.shipToCustAcctCd">
+                      AND SA.SHIP_TO_CUST_ACCT_CD LIKE #msg.shipToCustAcctCd#
+                      </isNotNull>
+                      <!--SHIP LOCATION -->
+                      <isNotNull property="msg.shipToCustCd">
+                      AND SA.SHIP_TO_CUST_LOC_CD  LIKE #msg.shipToCustCd#
+                      </isNotNull>
+                      <isNotNull property="msg.dsOrdCatgCd">
+                      AND SA.DS_ORD_CATG_CD       = #msg.dsOrdCatgCd#
+                      </isNotNull>
+                      <isNotNull property="msg.dsOrdTpCd">
+                      AND SA.DS_ORD_TP_CD         = #msg.dsOrdTpCd#
+                      </isNotNull>
+                      <isNotNull property="msg.schdAgmtCratDt_FR">
+                      AND SA.SCHD_AGMT_CRAT_DT   &gt;= #msg.schdAgmtCratDt_FR#
+                      </isNotNull>
+                      <isNotNull property="msg.schdAgmtCratDt_TO">
+                      AND SA.SCHD_AGMT_CRAT_DT   &lt;= #msg.schdAgmtCratDt_TO#
+                      </isNotNull>
+                      <isNotNull property="msg.schdAgmtStsCd">
+                      AND SA.SCHD_AGMT_STS_CD     = #msg.schdAgmtStsCd#
+                      </isNotNull>
+                      <isNotNull property="msg.custIssPoNum">
+                      <!-- 2019/04/02 QA#30756 Mod Start -->
+                      <!-- AND SA.CUST_ISS_PO_NUM      LIKE #msg.custIssPoNum# -->
+                      AND UPPER(SA.CUST_ISS_PO_NUM)      LIKE #msg.custIssPoNum#
+                      <!-- 2019/04/02 QA#30756 Mod End -->
+                      </isNotNull>
+                      <isNotNull property="msg.adminPsnCd">
+                      AND SA.ADMIN_PSN_CD         LIKE #msg.adminPsnCd#
+                      </isNotNull>
+<!-- START 2022/06/02 K.Kitachi [QC#60037, ADD] -->
+                      <isNotNull property="msg.serNum">
+                      AND SA.SER_NUM                  LIKE #msg.serNum#
+                      </isNotNull>
+                      <isNotNull property="msg.xxScrItem30Txt">
+                      AND SA.SVC_CONFIG_MSTR_PK       LIKE #msg.xxScrItem30Txt#
+                      </isNotNull>
+                      <isNotNull property="msg.dsContrNum">
+                      AND SA.DS_CONTR_NUM             LIKE #msg.dsContrNum#
+                      </isNotNull>
+                      <isNotEqual property="msg.schdAgmtDelyHldCd" compareValue="ALL">
+                      <isNotEqual property="msg.schdAgmtDelyHldCd" compareValue="NULL">
+                      AND SA.SCHD_AGMT_DELY_HLD_CD    = #msg.schdAgmtDelyHldCd#
+                      </isNotEqual>
+                      <isEqual property="msg.schdAgmtDelyHldCd" compareValue="NULL">
+                      AND SA.SCHD_AGMT_DELY_HLD_CD    IS NULL
+                      </isEqual>
+                      </isNotEqual>
+<!-- END 2022/06/02 K.Kitachi [QC#60037, ADD] -->
+                      AND SA.EZCANCELFLAG         = '0'
+
+                      <!-- SOLD TO CUSTOMER -->
+                      AND SA.GLBL_CMPY_CD         = AC_SOLD.GLBL_CMPY_CD
+                      AND SA.SELL_TO_CUST_CD      = AC_SOLD.SELL_TO_CUST_CD
+                      <!--SOLD NAME -->
+                      <isNotNull property="msg.dsAcctNm_SO">
+                      AND AC_SOLD.DS_ACCT_NM      LIKE #msg.dsAcctNm_SO#
+                      </isNotNull>
+
+                      <!-- SOLD TO CUSTOMER ADDR  -->
+                      AND SA.GLBL_CMPY_CD         = BTC.GLBL_CMPY_CD(+)
+                      AND SA.SOLD_TO_CUST_LOC_CD  = BTC.BILL_TO_CUST_CD(+)
+                      AND BTC.EZCANCELFLAG(+)     = '0'
+
+                      <!-- SHIP TO CUSTOMER -->
+                      AND SA.GLBL_CMPY_CD         = AC_SHIP.GLBL_CMPY_CD
+                      AND SA.SHIP_TO_CUST_ACCT_CD = AC_SHIP.SELL_TO_CUST_CD
+                      <!--SHIP NAME -->
+                      <isNotNull property="msg.dsAcctNm_SI">
+                      AND AC_SHIP.DS_ACCT_NM      LIKE #msg.dsAcctNm_SI#
+                      </isNotNull>
+                      AND AC_SHIP.EZCANCELFLAG    = '0'
+
+                      AND SA.GLBL_CMPY_CD         = OC.GLBL_CMPY_CD(+)
+                      AND SA.DS_ORD_CATG_CD       = OC.DS_ORD_CATG_CD(+)
+                      AND OC.EZCANCELFLAG(+)      = '0'
+
+                      AND SA.GLBL_CMPY_CD         = OT.GLBL_CMPY_CD(+)
+                      AND SA.DS_ORD_TP_CD         = OT.DS_ORD_TP_CD(+)
+                      AND OT.EZCANCELFLAG(+)      = '0'
+
+                      AND SA.GLBL_CMPY_CD         = SAS.GLBL_CMPY_CD(+)
+                      AND SA.SCHD_AGMT_STS_CD     = SAS.SCHD_AGMT_STS_CD(+)
+                      AND SAS.EZCANCELFLAG(+)     = '0'
+                      
+                      AND SA.GLBL_CMPY_CD         = PSN.GLBL_CMPY_CD(+)
+                      AND SA.ADMIN_PSN_CD         = PSN.USR_NM(+)
+                      AND PSN.EZCANCELFLAG(+)     = '0'
+
+<!-- START 2022/06/02 K.Kitachi [QC#60037, ADD] -->
+                      AND SA.GLBL_CMPY_CD          = SADH.GLBL_CMPY_CD(+)
+                      AND SA.SCHD_AGMT_DELY_HLD_CD = SADH.SCHD_AGMT_DELY_HLD_CD(+)
+                      AND SADH.EZCANCELFLAG(+)     = '0'
+<!-- END 2022/06/02 K.Kitachi [QC#60037, ADD] -->
+
+                      <isNotNull property="msg.mdseCd">
+                      AND EXISTS 
+                                (SELECT 1 
+                                 FROM  
+                                       SCHD_AGMT_LINE SAL
+                                 WHERE 
+                                       SA.GLBL_CMPY_CD             = SAL.GLBL_CMPY_CD
+                                 AND   SA.SCHD_AGMT_NUM            = SAL.SCHD_AGMT_NUM
+                                 AND   SAL.MDSE_CD                 LIKE #msg.mdseCd#
+                                 AND   SAL.SCHD_AGMT_LINE_CANC_FLG = #schdAgmtLineCancFlg#
+                                 AND   SAL.EZCANCELFLAG            = '0'
+                                )
+                      </isNotNull>
+                ORDER BY
+                          SA.SCHD_AGMT_NUM
+                )
+          WHERE ROWNUM &lt;= #rowNum#
+    </statement>
+    <resultMap id="result.getSchdAgmt"   class="NWAL1850_ASMsg">
+        <result property="schdAgmtNum_A"          column="SCHD_AGMT_NUM"                javaType="EZDSStringItem"/>
+        <result property="cpoOrdNum_A"            column="CPO_ORD_NUM"                  javaType="EZDSStringItem"/>
+        <result property="sellToCustCd_A"         column="SELL_TO_CUST_CD"              javaType="EZDSStringItem"/>
+        <result property="soldToCustLocCd_A"      column="SOLD_TO_CUST_LOC_CD"          javaType="EZDSStringItem"/>
+        <result property="dsAcctNm_AO"            column="SOLD_DS_ACCT_NM"              javaType="EZDSStringItem"/>
+        <result property="xxAllLineAddr_AO"       column="SOLD_TO_CUST_ADDR"            javaType="EZDSStringItem"/>
+        <result property="shipToCustAcctCd_A"     column="SHIP_TO_CUST_ACCT_CD"         javaType="EZDSStringItem"/>
+        <result property="shipToCustCd_A"         column="SHIP_TO_CUST_LOC_CD"          javaType="EZDSStringItem"/>
+        <result property="dsAcctNm_AH"            column="SHIP_DS_ACCT_NM"              javaType="EZDSStringItem"/>
+        <result property="xxAllLineAddr_AH"       column="SHIP_TO_CUST_ADDR"            javaType="EZDSStringItem"/>
+        <result property="dsOrdCatgDescTxt_A"     column="DS_ORD_CATG_DESC_TXT"         javaType="EZDSStringItem"/>
+        <result property="dsOrdTpDescTxt_A"       column="DS_ORD_TP_DESC_TXT"           javaType="EZDSStringItem"/>
+        <result property="schdAgmtCratDt_A"       column="SCHD_AGMT_CRAT_DT"            javaType="EZDSDateItem"/>
+        <result property="schdAgmtStsDescTxt_A"   column="SCHD_AGMT_STS_DESC_TXT"       javaType="EZDSStringItem"/>
+        <result property="custIssPoNum_A"         column="CUST_ISS_PO_NUM"              javaType="EZDSStringItem"/>
+        <result property="xxPsnNm_A"              column="ADMIN_PSN_NM"                 javaType="EZDSStringItem"/>
+<!-- START 2022/06/02 K.Kitachi [QC#60037, ADD] -->
+        <result property="serNum_A"                   column="SER_NUM"                      javaType="EZDSStringItem"/>
+        <result property="svcConfigMstrPk_A"          column="SVC_CONFIG_MSTR_PK"           javaType="EZDSBigDecimalItem"/>
+        <result property="dsContrNum_A"               column="DS_CONTR_NUM"                 javaType="EZDSStringItem"/>
+        <result property="schdAgmtDelyHldDescTxt_A"   column="SCHD_AGMT_DELY_HLD_DESC_TXT"  javaType="EZDSStringItem"/>
+<!-- END 2022/06/02 K.Kitachi [QC#60037, ADD] -->
+    </resultMap>
+
+    <statement id="getSavedSearchOptionList" parameterClass="Map" resultClass="Map">
+        SELECT
+                  SSO.SRCH_OPT_PK
+                , SSO.SRCH_OPT_NM
+            FROM
+                SAVE_SRCH_OPT SSO 
+            WHERE
+                SSO.GLBL_CMPY_CD        = #glblCmpyCd#
+                AND SSO.SRCH_OPT_APL_ID = #srchOptAplId#
+                AND SSO.SRCH_OPT_USR_ID = #srchOptUsrId#
+                AND SSO.EZCANCELFLAG    = '0'
+            ORDER BY
+                  SSO.SRCH_OPT_NM
+    </statement>
+</sqlMap>

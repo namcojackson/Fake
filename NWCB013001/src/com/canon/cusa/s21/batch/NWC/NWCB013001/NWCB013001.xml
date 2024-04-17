@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NWCB013001">
+
+    <statement id="getRegenerationTargetInvoice" parameterClass="Map">
+        SELECT
+             INV.INV_NUM
+            ,INV.INV_TP_CD
+            ,INV.BILL_TO_CUST_CD
+            ,CBL.CONSL_BILL_PK
+            ,INV.CUST_ISS_PO_NUM
+            ,SINV.DS_CONTR_NUM
+            ,SINV.BLLG_PER_FROM_DT
+                 || DECODE(SINV.BLLG_PER_TO_DT, NULL, '', '-')
+                 || SINV.BLLG_PER_TO_DT  BLLG_PER
+            ,SINV.SER_NUM
+            ,SINV.MDL_NM
+            ,CB.BILL_TO_CUST_CD CONSL_BILL_TO_CUST_CD
+            ,CB.CUST_INV_SRC_CD
+            ,CB.INV_GRP_NUM
+            ,CB.EASY_PAC_FLG
+        FROM
+             INV                INV
+            ,CONSL_BILL_LINE    CBL
+            ,SVC_INV            SINV
+            ,CONSL_BILL         CB
+        WHERE
+                INV.GLBL_CMPY_CD            = #glblCmpyCd#
+            AND INV.INV_PRINT_STS_CD        = #invPrintStsCd#
+            AND INV.FNLZ_INV_FLG            = #fnlzInvFlg#
+            AND INV.SYS_SRC_CD             != #excludeSysSrcCd#
+            AND INV.EZCANCELFLAG            = '0'
+            AND (
+                INV.CR_REBIL_RSN_CATG_CD    IS NOT NULL
+            OR 
+                SINV.SVC_CR_REBIL_PK        IS NOT NULL
+            OR 
+                EXISTS (SELECT '1' FROM AR_CR_REBIL ACR WHERE ACR.EZCANCELFLAG = '0' 
+                AND ACR.GLBL_CMPY_CD = INV.GLBL_CMPY_CD AND ACR.INV_NUM = INV.INV_NUM)
+            )
+            AND INV.GLBL_CMPY_CD            = CBL.GLBL_CMPY_CD
+            AND INV.ORIG_INV_NUM            = CBL.CONSL_BILL_TRX_ID
+            AND CBL.EZCANCELFLAG            = '0'
+            AND INV.GLBL_CMPY_CD            = SINV.GLBL_CMPY_CD(+)
+            AND INV.INV_NUM                 = SINV.SVC_INV_NUM(+)
+            AND SINV.EZCANCELFLAG(+)        = '0'
+            AND CBL.GLBL_CMPY_CD            = CB.GLBL_CMPY_CD
+            AND CBL.CONSL_BILL_PK           = CB.CONSL_BILL_PK
+            AND CB.EZCANCELFLAG             = '0'
+            AND CB.CONSL_STS_CD            != #conslStsCd20# <!-- QC#53589 2019/10/15 Add -->
+            AND NOT EXISTS (
+                SELECT
+                    '1'
+                FROM
+                    CONSL_BILL_RGNR CBR
+                WHERE
+                        CBR.GLBL_CMPY_CD        = INV.GLBL_CMPY_CD
+                    AND CBR.INV_NUM             = INV.INV_NUM
+                    AND CBR.TRGT_CONSL_BILL_PK  = CBL.CONSL_BILL_PK
+                    AND CBR.EZCANCELFLAG        = '0'
+            )
+	        <!-- 2019/11/02 QC#53873 ADD START -->
+            AND NOT EXISTS (
+                SELECT
+                    '1'
+                FROM
+                    CANON_E193_CS_HEADERS CECH
+                WHERE
+                        CECH.TICKET_NUMBER = SINV.CUST_CARE_TKT_NUM
+                    AND CECH.CONS_BILL_STATUS = #consBillStatus#
+            )
+	        <!-- 2019/11/02 QC#53873 ADD END -->
+    </statement>
+    <statement id="getConslBillGrp" parameterClass="Map" resultClass="Map">
+        SELECT
+             DEF_INV_GRP_CD
+            ,DEF_INV_GRP_TXT
+        FROM
+            CONSL_BILL_GRP
+        WHERE
+            GLBL_CMPY_CD        = #glblCmpyCd#
+        AND CONSL_BILL_PK   = #conslBillPk#
+        AND EZCANCELFLAG        = '0'
+    </statement>
+</sqlMap>

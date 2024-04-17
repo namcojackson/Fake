@@ -1,0 +1,289 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sqlMap namespace="NFCB125001">
+
+    <statement id="SELECT_RECORDS" parameterClass="Map">
+        <!-- COND1  -->
+        SELECT
+        X.DS_ACCT_NUM
+        FROM
+        (
+            SELECT
+                 B.DS_ACCT_NUM
+                ,SUM(C.FUNC_RMNG_BAL_GRS_AMT) - SUM(NVL(C.RCPT_RMNG_BAL,0)) - MAX(B.AR_BAL_AMT) AS DIFF_BAL_AMT
+            FROM
+                 DS_ACCT_CR_PRFL    B
+                ,(
+                    SELECT
+                        C.BILL_TO_CUST_ACCT_CD
+                       ,C.AR_TRX_TP_CD
+                       ,CASE WHEN C.AR_TRX_TP_CD &lt;&gt; #arTrxTp_Rcpt# THEN SUM(NVL(C.FUNC_RMNG_BAL_GRS_AMT, 0)) ELSE 0 END AS FUNC_RMNG_BAL_GRS_AMT
+                       ,CASE WHEN C.AR_TRX_TP_CD        = #arTrxTp_Rcpt# THEN SUM(NVL(C.FUNC_RMNG_BAL_GRS_AMT, 0)) ELSE 0 END AS RCPT_RMNG_BAL
+                       ,SUM(NVL(D.FUNC_CLT_DSPT_AMT, 0))                                                                      AS FUNC_CLT_DSPT_AMT
+                    FROM
+                        AR_TRX_BAL C
+                       ,(
+                          SELECT
+                              CDT.GLBL_CMPY_CD
+                             ,CDT.EZCANCELFLAG
+                             ,CDT.AR_TRX_NUM
+                             ,NVL(SUM(CDT.FUNC_CLT_DSPT_AMT),0) AS FUNC_CLT_DSPT_AMT
+                         FROM
+                              CLT_DSPT_TRX CDT
+                         WHERE
+                                CDT.GLBL_CMPY_CD      = #glblCmpyCd#
+                            AND CDT.CLT_DSPT_STS_CD   = #cltDsptStsCdApproved#
+                            AND CDT.EZCANCELFLAG      = '0'
+                        GROUP BY
+                                CDT.GLBL_CMPY_CD
+                               ,CDT.EZCANCELFLAG
+                               ,CDT.AR_TRX_NUM
+                       ) D
+                    WHERE
+                            C.GLBL_CMPY_CD             = #glblCmpyCd#
+                        AND C.AR_CASH_APPLY_STS_CD   IN (#applyStsCd_U#,#applyStsCd_P#)
+                        AND C.AR_TRX_NUM               = D.AR_TRX_NUM(+)
+                        AND C.EZCANCELFLAG             = '0'
+                    GROUP BY
+                            C.BILL_TO_CUST_ACCT_CD
+                           ,C.AR_TRX_TP_CD
+                ) C
+            WHERE
+                B.GLBL_CMPY_CD                    = #glblCmpyCd#
+            AND B.DS_ACCT_NUM                     = C.BILL_TO_CUST_ACCT_CD
+            AND B.EZCANCELFLAG                    = '0'
+            GROUP BY
+                B.DS_ACCT_NUM
+
+        )X
+        , SELL_TO_CUST       A
+        WHERE
+            X.DIFF_BAL_AMT                    &lt;&gt;0
+        AND A.GLBL_CMPY_CD                    = #glblCmpyCd#
+        AND A.RGTN_STS_CD                     IN($rgtnStsCd$)
+        AND A.SELL_TO_CUST_CD                 = X.DS_ACCT_NUM
+        AND A.EZCANCELFLAG                    = '0'
+        <!-- COND2  -->
+        UNION
+        SELECT
+        X.DS_ACCT_NUM
+        FROM
+        (
+            SELECT
+                 B.DS_ACCT_NUM
+                ,(CASE WHEN TO_CHAR(TO_DATE(NVL(MIN(D.INV_DUE_DT),#procDt#), 'YYYYMMDD') + MAX(C.GRACE_PER_DAYS_AOT), 'YYYYMMDD') &lt; #procDt# THEN 'Y'
+                      ELSE 'N' END)AS DUE_FLG
+                ,MAX(B.OVD_WS_FLG) AS OVD_WS_FLG
+            FROM
+                 DS_ACCT_CR_PRFL    B
+                ,CR_RISK_CLS        C
+                ,AR_TRX_BAL         D
+                ,(
+                    SELECT
+                         CDT.GLBL_CMPY_CD
+                        ,CDT.EZCANCELFLAG
+                        ,CDT.AR_TRX_NUM
+                        ,NVL(SUM(CDT.FUNC_CLT_DSPT_AMT),0) AS FUNC_CLT_DSPT_AMT
+                    FROM
+                        CLT_DSPT_TRX CDT
+                    WHERE
+                            CDT.GLBL_CMPY_CD    = #glblCmpyCd#
+                        AND CDT.CLT_DSPT_STS_CD = #cltDsptStsCdApproved#
+                        AND CDT.EZCANCELFLAG    = '0'
+                    GROUP BY
+                         CDT.GLBL_CMPY_CD
+                        ,CDT.EZCANCELFLAG
+                        ,CDT.AR_TRX_NUM
+                ) E
+            WHERE
+                    B.GLBL_CMPY_CD          = #glblCmpyCd#
+                AND B.GLBL_CMPY_CD          = C.GLBL_CMPY_CD
+                AND B.CR_RISK_CLS_CD        = C.CR_RISK_CLS_CD
+                AND B.GLBL_CMPY_CD          = D.GLBL_CMPY_CD
+                AND B.DS_ACCT_NUM           = D.BILL_TO_CUST_ACCT_CD
+                AND D.AR_CASH_APPLY_STS_CD  in(#applyStsCd_U#,#applyStsCd_P#)
+                AND D.AR_TRX_TP_CD          = #arTrxTp_Inv#
+                AND D.GLBL_CMPY_CD          = E.GLBL_CMPY_CD(+)
+                AND D.AR_TRX_NUM            = E.AR_TRX_NUM(+)
+                AND D.FUNC_RMNG_BAL_GRS_AMT &lt;&gt; E.FUNC_CLT_DSPT_AMT(+)
+                AND B.EZCANCELFLAG          = '0'
+                AND C.EZCANCELFLAG          = '0'
+                AND D.EZCANCELFLAG          = '0'
+                AND E.EZCANCELFLAG(+)       = '0'
+            GROUP BY
+                B.DS_ACCT_NUM
+        )X
+        , SELL_TO_CUST       A
+        WHERE
+            X.OVD_WS_FLG&lt;&gt;X.DUE_FLG
+        AND A.SELL_TO_CUST_CD       = X.DS_ACCT_NUM
+        AND A.GLBL_CMPY_CD          = #glblCmpyCd#
+        AND A.RGTN_STS_CD           IN ($rgtnStsCd$)
+        AND A.EZCANCELFLAG          = '0'
+        <!-- COND3  -->
+        UNION
+        SELECT
+        X.SELL_TO_CUST_CD AS DS_ACCT_NUM
+        FROM
+        (
+            SELECT
+                 MAX(A.SELL_TO_CUST_CD) AS SELL_TO_CUST_CD
+                ,MAX(A.BILL_TO_CUST_CD) AS BILL_TO_CUST_CD
+                ,SUM(NVL(F.FUNC_RMNG_BAL_GRS_AMT,0)) - SUM(NVL(F.RCPT_RMNG_BAL,0)) - MAX(NVL(B.AR_BAL_AMT,0)) AS DIFF_BAL_AMT
+            FROM
+                 BILL_TO_CUST       A
+                ,CUST_CR_PRFL       B
+                ,(
+                  SELECT
+                      D.BILL_TO_CUST_CD
+                     ,D.AR_TRX_TP_CD
+                     ,CASE WHEN D.AR_TRX_TP_CD &lt;&gt; #arTrxTp_Rcpt# THEN SUM(NVL(D.FUNC_RMNG_BAL_GRS_AMT, 0)) ELSE 0 END AS FUNC_RMNG_BAL_GRS_AMT
+                     ,CASE WHEN D.AR_TRX_TP_CD        = #arTrxTp_Rcpt# THEN SUM(NVL(D.FUNC_RMNG_BAL_GRS_AMT, 0)) ELSE 0 END AS RCPT_RMNG_BAL
+                     ,SUM(NVL(E.FUNC_CLT_DSPT_AMT, 0))                                                                      AS FUNC_CLT_DSPT_AMT
+                    FROM
+                        AR_TRX_BAL  D
+                       ,(
+                            SELECT
+                                 CDT.GLBL_CMPY_CD
+                                ,CDT.EZCANCELFLAG
+                                ,CDT.AR_TRX_NUM
+                            ,NVL(SUM(CDT.FUNC_CLT_DSPT_AMT),0) AS FUNC_CLT_DSPT_AMT
+                        FROM
+                            CLT_DSPT_TRX CDT
+                        WHERE
+                                CDT.GLBL_CMPY_CD      = #glblCmpyCd#
+                            AND CDT.CLT_DSPT_STS_CD   = #cltDsptStsCdApproved#
+                            AND CDT.EZCANCELFLAG      = '0'
+                        GROUP BY
+                             CDT.GLBL_CMPY_CD
+                            ,CDT.EZCANCELFLAG
+                            ,CDT.AR_TRX_NUM
+                    ) E
+                    WHERE
+                            D.GLBL_CMPY_CD            = #glblCmpyCd#
+                        AND D.AR_CASH_APPLY_STS_CD  IN (#applyStsCd_U#,#applyStsCd_P#)
+                        AND D.AR_TRX_NUM              = E.AR_TRX_NUM(+)
+                        AND D.EZCANCELFLAG            = '0'
+                    GROUP BY
+                        D.BILL_TO_CUST_CD
+                      , D.AR_TRX_TP_CD
+                ) F
+            WHERE
+                    A.GLBL_CMPY_CD          = #glblCmpyCd#
+                AND A.GLBL_CMPY_CD          = B.GLBL_CMPY_CD
+                AND A.RGTN_STS_CD           IN($rgtnStsCd$)
+                AND A.BILL_TO_CUST_CD       = B.BILL_TO_CUST_CD
+                AND A.BILL_TO_CUST_CD       = F.BILL_TO_CUST_CD
+                AND A.EZCANCELFLAG          = '0'
+                AND B.EZCANCELFLAG          = '0'
+            GROUP BY
+                 A.SELL_TO_CUST_CD
+                ,A.BILL_TO_CUST_CD
+        )X
+        WHERE
+            X.DIFF_BAL_AMT&lt;&gt;0
+        GROUP BY
+            X.SELL_TO_CUST_CD
+        <!-- COND4  -->
+        UNION
+        SELECT
+        X.SELL_TO_CUST_CD AS DS_ACCT_NUM
+        FROM
+        (
+            SELECT
+                 MAX(A.SELL_TO_CUST_CD) AS SELL_TO_CUST_CD
+                ,MAX(A.BILL_TO_CUST_CD) AS BILL_TO_CUST_CD
+                ,(CASE WHEN TO_CHAR(TO_DATE(NVL(MIN(E.INV_DUE_DT),#procDt#),'YYYYMMDD') + MAX(C.GRACE_PER_DAYS_AOT),'YYYYMMDD') &lt; #procDt# THEN 'Y'
+                      ELSE 'N' END)AS DUE_FLG
+                ,MAX(B.OVD_WS_FLG) AS OVD_WS_FLG
+            FROM
+                 BILL_TO_CUST       A
+                ,CUST_CR_PRFL       B
+                ,CR_RISK_CLS        C
+                ,AR_TRX_BAL         E
+            WHERE
+                    A.GLBL_CMPY_CD          =#glblCmpyCd#
+                AND A.GLBL_CMPY_CD          = B.GLBL_CMPY_CD
+                AND A.GLBL_CMPY_CD          = C.GLBL_CMPY_CD
+                AND A.GLBL_CMPY_CD          = E.GLBL_CMPY_CD
+                AND A.RGTN_STS_CD           IN($rgtnStsCd$)
+                AND A.BILL_TO_CUST_CD       = B.BILL_TO_CUST_CD
+                AND B.CR_RISK_CLS_CD        = C.CR_RISK_CLS_CD
+                AND A.BILL_TO_CUST_CD       = E.BILL_TO_CUST_CD
+                AND E.AR_CASH_APPLY_STS_CD  in(#applyStsCd_U#,#applyStsCd_P#)
+                AND E.AR_TRX_TP_CD          = #arTrxTp_Inv#
+                AND A.EZCANCELFLAG          = '0'
+                AND B.EZCANCELFLAG          = '0'
+                AND C.EZCANCELFLAG          = '0'
+                AND E.EZCANCELFLAG          = '0'
+            GROUP BY
+                 A.SELL_TO_CUST_CD
+                ,A.BILL_TO_CUST_CD
+        )X
+        WHERE
+            X.OVD_WS_FLG&lt;&gt;X.DUE_FLG
+        <!-- COND5  -->
+        UNION
+        SELECT
+             B.DS_ACCT_NUM
+        FROM
+             SELL_TO_CUST       A
+            ,DS_ACCT_CR_PRFL    B
+            ,CR_RISK_CLS        C
+            ,AR_TRX_BAL         D
+            ,(
+                SELECT
+                     CDT.GLBL_CMPY_CD
+                    ,CDT.EZCANCELFLAG
+                    ,CDT.AR_TRX_NUM
+                    ,NVL(SUM(CDT.DEAL_CLT_DSPT_AMT),0) AS DEAL_CLT_DSPT_AMT
+                FROM
+                    CLT_DSPT_TRX CDT
+                WHERE
+                        CDT.GLBL_CMPY_CD    = #glblCmpyCd#
+                    AND CDT.CLT_DSPT_STS_CD = #cltDsptStsCdApproved#
+                    AND CDT.EZCANCELFLAG    = '0'
+                 GROUP BY
+                     CDT.GLBL_CMPY_CD
+                    ,CDT.EZCANCELFLAG
+                    ,CDT.AR_TRX_NUM
+            ) E
+            ,SVC_INV            F
+            ,DS_CONTR           G
+        WHERE
+                A.GLBL_CMPY_CD          =#glblCmpyCd#
+            AND A.GLBL_CMPY_CD          = B.GLBL_CMPY_CD
+            AND A.GLBL_CMPY_CD          = C.GLBL_CMPY_CD
+            AND A.GLBL_CMPY_CD          = D.GLBL_CMPY_CD
+            AND A.GLBL_CMPY_CD          = E.GLBL_CMPY_CD(+)
+            AND A.GLBL_CMPY_CD          = F.GLBL_CMPY_CD
+            AND A.GLBL_CMPY_CD          = G.GLBL_CMPY_CD
+            AND A.RGTN_STS_CD           IN($rgtnStsCd$)
+            AND A.SELL_TO_CUST_CD       = B.DS_ACCT_NUM
+            AND B.CR_RISK_CLS_CD        = C.CR_RISK_CLS_CD
+            AND A.SELL_TO_CUST_CD       = D.BILL_TO_CUST_ACCT_CD
+            AND D.AR_CASH_APPLY_STS_CD  in(#applyStsCd_U#,#applyStsCd_P#)
+            AND D.AR_TRX_TP_CD          = #arTrxTp_Inv#
+            AND D.AR_TRX_NUM            = E.AR_TRX_NUM(+)
+            AND D.AR_TRX_NUM            = F.SVC_INV_NUM
+            AND F.DS_CONTR_PK           = G.DS_CONTR_PK
+            AND D.FUNC_RMNG_BAL_GRS_AMT &gt; E.DEAL_CLT_DSPT_AMT
+            AND (
+                    (G.CONTR_HLD_FLG         = 'N' 
+                    AND D.INV_DUE_DT &lt; (TO_CHAR(TO_DATE(#procDt#,'YYYYMMDD')-C.GRACE_PER_DAYS_AOT,'YYYYMMDD'))
+                    )
+                OR
+                    (G.CONTR_HLD_FLG         = 'Y'
+                    AND D.INV_DUE_DT &gt;= (TO_CHAR(TO_DATE(#procDt#,'YYYYMMDD')-C.GRACE_PER_DAYS_AOT,'YYYYMMDD'))
+                    )
+                )
+            AND A.EZCANCELFLAG          = '0'
+            AND B.EZCANCELFLAG          = '0'
+            AND C.EZCANCELFLAG          = '0'
+            AND D.EZCANCELFLAG          = '0'
+            AND E.EZCANCELFLAG(+)       = '0'
+            AND F.EZCANCELFLAG          = '0'
+            AND G.EZCANCELFLAG          = '0'
+        GROUP BY
+            B.DS_ACCT_NUM
+    </statement>
+</sqlMap>

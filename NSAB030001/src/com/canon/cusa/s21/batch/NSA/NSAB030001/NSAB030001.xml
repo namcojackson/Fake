@@ -1,0 +1,518 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<sqlMap namespace="NSAB030001">
+    <statement id="getDsContrUpdateKeyList" parameterClass="Map" resultClass="Map">
+        <!-- START 2022/09/20 [QC#60045,ADD] -->
+        <!-- START 2023/05/09 K.Kitachi [QC#61469, DEL] -->
+<!--        WITH DEF_WIN_DAYS AS ( -->
+<!--            SELECT -->
+<!--                 A.MTR_READ_WIN_MLY_DAYS_AOT -->
+<!--                ,A.MTR_READ_WIN_OTH_DAYS_AOT -->
+<!--            FROM -->
+<!--                DS_WIN_DAYS A -->
+<!--            WHERE -->
+<!--                    A.GLBL_CMPY_CD             = #glblCmpyCd# -->
+<!--                AND A.EZCANCELFLAG             = '0' -->
+<!--                AND A.DS_WIN_DAYS_TRGT_PER_TXT = '*' -->
+<!--                AND A.SVC_LINE_BIZ_CD          = '*' -->
+<!--            ) -->
+        <!-- END 2023/05/09 K.Kitachi [QC#61469, DEL] -->
+        <!-- END   2022/09/20 [QC#60045,ADD] -->
+        SELECT
+             DS_CONTR_PK
+            ,DS_CONTR_DTL_PK
+            ,DS_CONTR_BLLG_MTR_PK
+            ,DS_CONTR_PRC_EFF_PK
+        FROM
+        (
+                SELECT
+                     D.DS_CONTR_PK          AS DS_CONTR_PK
+                    ,P.DS_CONTR_DTL_PK      AS DS_CONTR_DTL_PK
+                    ,P.DS_CONTR_BLLG_MTR_PK AS DS_CONTR_BLLG_MTR_PK
+                    ,P.DS_CONTR_PRC_EFF_PK  AS DS_CONTR_PRC_EFF_PK
+                FROM
+                     DS_CONTR_PRC_EFF P
+                    ,DS_CONTR_DTL     D
+                    <!-- START 2017/12/15 K.Kojima [QC#22142,ADD] -->
+                    ,DS_CONTR                C
+                    <!-- START 2022/09/20 [QC#60045,DEL] -->
+                    <!-- ,DS_CONTR_INTFC_DEF_RULE R -->
+                    <!-- END   2022/09/20 [QC#60045,DEL] -->
+                    ,DS_CONTR_BLLG_MTR       B
+                    ,BLLG_CYCLE              Y
+                    <!-- END 2017/12/15 K.Kojima [QC#22142,ADD] -->
+                WHERE
+                        P.GLBL_CMPY_CD            =  #glblCmpyCd#
+                    <iterate property="dsContrCtrlStsCdArray" var="dsContrCtrlStsCd[]" open="AND P.DS_CONTR_PRC_EFF_STS_CD IN (" close=")" conjunction=",">
+                        #dsContrCtrlStsCd[]#
+                    </iterate>
+                    AND P.USG_CHRG_FLG            =  #usgChrgFlgY#
+                    AND P.MTR_HLD_FLG             =  #mtrHldFlgY#
+                    AND P.GLBL_CMPY_CD            =  D.GLBL_CMPY_CD
+                    AND P.DS_CONTR_DTL_PK         =  D.DS_CONTR_DTL_PK
+<!-- START 2017/09/19 K.Kim [QC#21066,ADD] -->
+                    AND D.QLTY_ASRN_HLD_FLG       =  'N'
+<!-- END 2017/09/19 K.Kim [QC#21066,ADD] -->
+                    AND P.EZCANCELFLAG            =  '0'
+                    AND D.EZCANCELFLAG            =  '0'
+                    <!-- START 2017/12/15 K.Kojima [QC#22142,ADD] -->
+                    AND D.GLBL_CMPY_CD           =  C.GLBL_CMPY_CD
+                    AND D.DS_CONTR_PK            =  C.DS_CONTR_PK
+                    AND C.EZCANCELFLAG           =  '0'
+                    <!-- START 2022/09/20 [QC#60045,DEL] -->
+                    <!-- AND C.GLBL_CMPY_CD           =  R.GLBL_CMPY_CD          (+) -->
+                    <!-- AND C.DS_CONTR_SRC_TP_CD     =  R.CONTR_INTFC_SRC_TP_CD (+) -->
+                    <!-- AND C.DS_CONTR_CLS_CD        =  R.DS_CONTR_CLS_CD       (+) -->
+                    <!-- AND C.SVC_LINE_BIZ_CD        =  R.SVC_LINE_BIZ_CD       (+) -->
+                    <!-- AND R.EFF_FROM_DT  (+)       &lt;= #salesDate# -->
+                    <!-- AND R.ENBL_FLG     (+)       =  'Y' -->
+                    <!-- AND R.EZCANCELFLAG (+)       =  '0' -->
+                    <!-- END   2022/09/20 [QC#60045,DEL] -->
+                    AND P.GLBL_CMPY_CD           =  B.GLBL_CMPY_CD
+                    AND P.DS_CONTR_BLLG_MTR_PK   =  B.DS_CONTR_BLLG_MTR_PK
+                    AND B.EZCANCELFLAG           =  '0'
+                    AND B.GLBL_CMPY_CD           =  Y.GLBL_CMPY_CD(+)
+                    AND B.BLLG_MTR_BLLG_CYCLE_CD =  Y.BLLG_CYCLE_CD(+)
+                    AND Y.EZCANCELFLAG(+)        =  '0'
+                    <!-- END 2017/12/15 K.Kojima [QC#22142,ADD] -->
+                    AND NOT EXISTS (
+                        SELECT
+                            1
+                        FROM
+                        (
+                            SELECT
+                                 S.BLLG_SCHD_THRU_DT
+                                <!-- START 2022/09/20 [QC#60045,MOD] -->
+                                <!-- ,NVL(DECODE(Y.BLLG_CYCLE_UOM_CD, #months#, R.MTR_READ_WIN_MLY_DAYS_AOT, R.MTR_READ_WIN_OTH_DAYS_AOT), #defBefDays#) AS BEF_DAYS -->
+                                <!-- START 2023/02/09 S.Naya [QC#60045, MOD] -->
+                                <!-- ,DECODE(Y.BLLG_CYCLE_UOM_CD, #months#, COALESCE(DWD.MTR_READ_WIN_MLY_DAYS_AOT, (SELECT MTR_READ_WIN_MLY_DAYS_AOT FROM DEF_WIN_DAYS), #defBefDays#), COALESCE(DWD.MTR_READ_WIN_OTH_DAYS_AOT, (SELECT MTR_READ_WIN_OTH_DAYS_AOT FROM DEF_WIN_DAYS), #defBefDays#)) AS BEF_DAYS -->
+                                <!-- START 2023/05/09 K.Kitachi [QC#61469, MOD] -->
+                                <!-- ,DECODE(Y.BLLG_CYCLE_UOM_CD, #months#, COALESCE(DWD.MTR_READ_WIN_MLY_DAYS_AOT, DWD2.MTR_READ_WIN_MLY_DAYS_AOT, (SELECT MTR_READ_WIN_MLY_DAYS_AOT FROM DEF_WIN_DAYS), #defBefDays#), COALESCE(DWD.MTR_READ_WIN_OTH_DAYS_AOT, DWD2.MTR_READ_WIN_OTH_DAYS_AOT, (SELECT MTR_READ_WIN_OTH_DAYS_AOT FROM DEF_WIN_DAYS), #defBefDays#)) AS BEF_DAYS -->
+                                ,DECODE(Y.BLLG_CYCLE_UOM_CD, #months#, COALESCE(DWD.MTR_READ_WIN_MLY_DAYS_AOT, DWD2.MTR_READ_WIN_MLY_DAYS_AOT, #mtrReadWinMlyDaysAot#, #defBefDays#), COALESCE(DWD.MTR_READ_WIN_OTH_DAYS_AOT, DWD2.MTR_READ_WIN_OTH_DAYS_AOT, #mtrReadWinOthDaysAot#, #defBefDays#)) AS BEF_DAYS
+                                <!-- END 2023/05/09 K.Kitachi [QC#61469, MOD] -->
+                                <!-- END   2023/02/09 S.Naya [QC#60045, MOD] -->
+                                <!-- END   2022/09/20 [QC#60045,MOD] -->
+                            FROM
+                                 DS_CONTR_BLLG_SCHD      S
+                                <!-- START 2017/12/15 K.Kojima [QC#22142,DEL] -->
+                                <!-- ,DS_CONTR                C -->
+                                <!-- ,DS_CONTR_INTFC_DEF_RULE R -->
+                                <!-- ,DS_CONTR_BLLG_MTR       B -->
+                                <!-- ,BLLG_CYCLE              Y -->
+                                <!-- END 2017/12/15 K.Kojima [QC#22142,DEL] -->
+                                <!-- START 2022/09/20 [QC#60045,ADD] -->
+                                ,DS_WIN_DAYS  DWD
+                                <!-- END   2022/09/20 [QC#60045,ADD] -->
+                                <!-- START 2023/02/09 S.Naya [QC#60045, ADD] -->
+                                ,DS_WIN_DAYS  DWD2
+                                <!-- END   2023/02/09 S.Naya [QC#60045, ADD] -->
+                            WHERE
+                                    P.GLBL_CMPY_CD           =  S.GLBL_CMPY_CD
+                                AND P.DS_CONTR_DTL_PK        =  S.DS_CONTR_DTL_PK
+                                AND P.DS_CONTR_BLLG_MTR_PK   =  S.DS_CONTR_BLLG_MTR_PK
+                                AND P.DS_CONTR_PRC_EFF_PK    =  S.DS_CONTR_PRC_EFF_PK
+                                AND S.MTR_ENTRY_CPLT_FLG     =  #mtrEntryCpltFlgN#
+                                AND S.EZCANCELFLAG           =  '0'
+                                <!-- START 2017/12/15 K.Kojima [QC#22142,DEL] -->
+                                <!-- AND D.GLBL_CMPY_CD           =  C.GLBL_CMPY_CD -->
+                                <!-- AND D.DS_CONTR_PK            =  C.DS_CONTR_PK -->
+                                <!-- AND C.EZCANCELFLAG           =  '0' -->
+                                <!-- AND C.GLBL_CMPY_CD           =  R.GLBL_CMPY_CD          (+) -->
+                                <!-- AND C.DS_CONTR_SRC_TP_CD     =  R.CONTR_INTFC_SRC_TP_CD (+) -->
+                                <!-- AND C.DS_CONTR_CLS_CD        =  R.DS_CONTR_CLS_CD       (+) -->
+                                <!-- AND C.SVC_LINE_BIZ_CD        =  R.SVC_LINE_BIZ_CD       (+) -->
+                                <!-- AND R.EFF_FROM_DT  (+)       &lt;= #salesDate# -->
+                                <!-- AND R.ENBL_FLG     (+)       =  'Y' -->
+                                <!-- AND R.EZCANCELFLAG (+)       =  '0' -->
+                                <!-- AND S.GLBL_CMPY_CD           =  B.GLBL_CMPY_CD -->
+                                <!-- AND S.DS_CONTR_BLLG_MTR_PK   =  B.DS_CONTR_BLLG_MTR_PK -->
+                                <!-- AND B.EZCANCELFLAG           =  '0' -->
+                                <!-- AND B.GLBL_CMPY_CD           =  Y.GLBL_CMPY_CD -->
+                                <!-- AND B.BLLG_MTR_BLLG_CYCLE_CD =  Y.BLLG_CYCLE_CD -->
+                                <!-- AND Y.EZCANCELFLAG           =  '0' -->
+                                <!-- END 2017/12/15 K.Kojima [QC#22142,DEL] -->
+                                <!-- START 2022/09/20 [QC#60045,ADD] -->
+                                AND S.GLBL_CMPY_CD                     = DWD.GLBL_CMPY_CD(+)
+                                AND DWD.EZCANCELFLAG(+)                = '0'
+                                AND SUBSTR(S.BLLG_SCHD_THRU_DT, 0, 6)  = DWD.DS_WIN_DAYS_TRGT_PER_TXT(+)
+                                AND C.SVC_LINE_BIZ_CD                  = DWD.SVC_LINE_BIZ_CD(+)
+                                <!-- END   2022/09/20 [QC#60045,ADD] -->
+                                <!-- START 2023/02/09 S.Naya [QC#60045, ADD] -->
+                                AND S.GLBL_CMPY_CD                     = DWD2.GLBL_CMPY_CD(+)
+                                AND DWD2.EZCANCELFLAG(+)               = '0'
+                                AND SUBSTR(S.BLLG_SCHD_THRU_DT, 0, 6)  = DWD2.DS_WIN_DAYS_TRGT_PER_TXT(+)
+                                AND DWD2.SVC_LINE_BIZ_CD(+)            = '*'
+                                <!-- END   2023/02/09 S.Naya [QC#60045, ADD] -->
+                           ) X
+                       WHERE 
+                           X.BLLG_SCHD_THRU_DT   &lt;= TO_CHAR((TO_DATE(#salesDate#, #dateFormat#) + TO_NUMBER(X.BEF_DAYS)), #dateFormat#) 
+                    )
+            ) 
+            UNION
+            (
+            SELECT
+                 D.DS_CONTR_PK          AS DS_CONTR_PK
+                ,B.DS_CONTR_DTL_PK      AS DS_CONTR_DTL_PK
+                ,B.DS_CONTR_BLLG_MTR_PK AS DS_CONTR_BLLG_MTR_PK
+                ,NULL                   AS DS_CONTR_PRC_EFF_PK
+            FROM
+                 DS_CONTR_BLLG_MTR     B
+                ,DS_CONTR_DTL          D
+                <!-- START 2017/12/15 K.Kojima [QC#22142,ADD] -->
+                ,DS_CONTR                C
+                <!-- START 2022/09/20 [QC#60045,DEL] -->
+                <!-- ,DS_CONTR_INTFC_DEF_RULE R -->
+                <!-- END   2022/09/20 [QC#60045,DEL] -->
+                ,BLLG_CYCLE              Y
+                <!-- END 2017/12/15 K.Kojima [QC#22142,ADD] -->
+            WHERE
+                    B.GLBL_CMPY_CD            =  #glblCmpyCd#
+                <iterate property="dsContrCtrlStsCdArray" var="dsContrCtrlStsCd[]" open="AND B.DS_CONTR_BLLG_MTR_STS_CD IN (" close=")" conjunction=",">
+                    #dsContrCtrlStsCd[]#
+                </iterate>
+                AND B.MTR_HLD_FLG             =  #mtrHldFlgY#
+                AND B.GLBL_CMPY_CD            =  D.GLBL_CMPY_CD
+                AND B.DS_CONTR_DTL_PK         =  D.DS_CONTR_DTL_PK
+<!-- START 2017/09/19 K.Kim [QC#21066,ADD] -->
+                AND B.QLTY_ASRN_HLD_FLG       =  'N'
+                AND D.QLTY_ASRN_HLD_FLG       =  'N'
+<!-- END 2017/09/19 K.Kim [QC#21066,ADD] -->
+                AND B.EZCANCELFLAG            =  '0'
+                AND D.EZCANCELFLAG            =  '0'
+                <!-- START 2017/12/15 K.Kojima [QC#22142,ADD] -->
+                AND D.GLBL_CMPY_CD            =  C.GLBL_CMPY_CD
+                AND D.DS_CONTR_PK             =  C.DS_CONTR_PK
+                AND C.EZCANCELFLAG            =  '0'
+                <!-- START 2022/09/20 [QC#60045,DEL] -->
+                <!-- AND C.GLBL_CMPY_CD            =  R.GLBL_CMPY_CD           (+) -->
+                <!-- AND C.DS_CONTR_SRC_TP_CD      =  R.CONTR_INTFC_SRC_TP_CD  (+) -->
+                <!-- AND C.DS_CONTR_CLS_CD         =  R.DS_CONTR_CLS_CD        (+) -->
+                <!-- AND C.SVC_LINE_BIZ_CD         =  R.SVC_LINE_BIZ_CD        (+) -->
+                <!-- AND R.EFF_FROM_DT   (+)       &lt;= #salesDate# -->
+                <!-- AND R.ENBL_FLG      (+)       =  'Y' -->
+                <!-- AND R.EZCANCELFLAG  (+)       =  '0' -->
+                <!-- END   2022/09/20 [QC#60045,DEL] -->
+                AND B.GLBL_CMPY_CD            =  Y.GLBL_CMPY_CD(+)
+                AND B.BLLG_MTR_BLLG_CYCLE_CD  =  Y.BLLG_CYCLE_CD(+)
+                AND Y.EZCANCELFLAG(+)         =  '0'
+                <!-- END 2017/12/15 K.Kojima [QC#22142,ADD] -->
+                AND NOT EXISTS (
+                    SELECT
+                        1
+                    FROM
+                    (
+                        SELECT
+                             S.BLLG_SCHD_THRU_DT
+                            <!-- START 2022/09/20 [QC#60045,MOD] -->
+                            <!-- ,NVL(DECODE(Y.BLLG_CYCLE_UOM_CD, #months#, R.MTR_READ_WIN_MLY_DAYS_AOT, R.MTR_READ_WIN_OTH_DAYS_AOT), #defBefDays#) AS BEF_DAYS -->
+                            <!-- START 2023/02/09 S.Naya [QC#60045, MOD] -->
+                            <!-- ,DECODE(Y.BLLG_CYCLE_UOM_CD, #months#, COALESCE(DWD.MTR_READ_WIN_MLY_DAYS_AOT, (SELECT MTR_READ_WIN_MLY_DAYS_AOT FROM DEF_WIN_DAYS), #defBefDays#), COALESCE(DWD.MTR_READ_WIN_OTH_DAYS_AOT, (SELECT MTR_READ_WIN_OTH_DAYS_AOT FROM DEF_WIN_DAYS), #defBefDays#)) AS BEF_DAYS -->
+                            <!-- START 2023/05/09 K.Kitachi [QC#61469, MOD] -->
+                            <!-- ,DECODE(Y.BLLG_CYCLE_UOM_CD, #months#, COALESCE(DWD.MTR_READ_WIN_MLY_DAYS_AOT, DWD2.MTR_READ_WIN_MLY_DAYS_AOT, (SELECT MTR_READ_WIN_MLY_DAYS_AOT FROM DEF_WIN_DAYS), #defBefDays#), COALESCE(DWD.MTR_READ_WIN_OTH_DAYS_AOT, DWD2.MTR_READ_WIN_OTH_DAYS_AOT, (SELECT MTR_READ_WIN_OTH_DAYS_AOT FROM DEF_WIN_DAYS), #defBefDays#)) AS BEF_DAYS -->
+                            ,DECODE(Y.BLLG_CYCLE_UOM_CD, #months#, COALESCE(DWD.MTR_READ_WIN_MLY_DAYS_AOT, DWD2.MTR_READ_WIN_MLY_DAYS_AOT, #mtrReadWinMlyDaysAot#, #defBefDays#), COALESCE(DWD.MTR_READ_WIN_OTH_DAYS_AOT, DWD2.MTR_READ_WIN_OTH_DAYS_AOT, #mtrReadWinOthDaysAot#, #defBefDays#)) AS BEF_DAYS
+                            <!-- END 2023/05/09 K.Kitachi [QC#61469, MOD] -->
+                            <!-- END   2023/02/09 S.Naya [QC#60045, MOD] -->
+                            <!-- END   2022/09/20 [QC#60045,MOD] -->
+                        FROM
+                             DS_CONTR_BLLG_SCHD      S
+                            <!-- START 2017/12/15 K.Kojima [QC#22142,DEL] -->
+                            <!-- ,DS_CONTR                C -->
+                            <!-- ,DS_CONTR_INTFC_DEF_RULE R -->
+                            <!-- ,BLLG_CYCLE              Y -->
+                            <!-- END 2017/12/15 K.Kojima [QC#22142,DEL] -->
+                            <!-- START 2022/09/20 [QC#60045,ADD] -->
+                            ,DS_WIN_DAYS  DWD
+                            <!-- END   2022/09/20 [QC#60045,ADD] -->
+                            <!-- START 2023/02/09 S.Naya [QC#60045, ADD] -->
+                            ,DS_WIN_DAYS  DWD2
+                            <!-- END   2023/02/09 S.Naya [QC#60045, ADD] -->
+                        WHERE 
+                                B.GLBL_CMPY_CD            =  S.GLBL_CMPY_CD
+                            AND B.DS_CONTR_DTL_PK         =  S.DS_CONTR_DTL_PK
+                            AND B.DS_CONTR_BLLG_MTR_PK    =  S.DS_CONTR_BLLG_MTR_PK
+                            AND S.MTR_ENTRY_CPLT_FLG      =  #mtrEntryCpltFlgN#
+                            AND S.EZCANCELFLAG            =  '0'
+                            <!-- START 2017/12/15 K.Kojima [QC#22142,DEL] -->
+                            <!-- AND D.GLBL_CMPY_CD            =  C.GLBL_CMPY_CD -->
+                            <!-- AND D.DS_CONTR_PK             =  C.DS_CONTR_PK -->
+                            <!-- AND C.EZCANCELFLAG            =  '0' -->
+                            <!-- END 2017/12/15 K.Kojima [QC#22142,DEL] -->
+                            AND C.DS_CONTR_CATG_CD        &lt;&gt; #dsContrCatgCdFleet#
+                            <!-- START 2017/12/15 K.Kojima [QC#22142,DEL] -->
+                            <!-- AND C.GLBL_CMPY_CD            =  R.GLBL_CMPY_CD           (+) -->
+                            <!-- AND C.DS_CONTR_SRC_TP_CD      =  R.CONTR_INTFC_SRC_TP_CD  (+) -->
+                            <!-- AND C.DS_CONTR_CLS_CD         =  R.DS_CONTR_CLS_CD        (+) -->
+                            <!-- AND C.SVC_LINE_BIZ_CD         =  R.SVC_LINE_BIZ_CD        (+) -->
+                            <!-- AND R.EFF_FROM_DT   (+)       &lt;= #salesDate# -->
+                            <!-- AND R.ENBL_FLG      (+)       =  'Y' -->
+                            <!-- AND R.EZCANCELFLAG  (+)       =  '0' -->
+                            <!-- AND B.GLBL_CMPY_CD            =  Y.GLBL_CMPY_CD -->
+                            <!-- AND B.BLLG_MTR_BLLG_CYCLE_CD  =  Y.BLLG_CYCLE_CD -->
+                            <!-- AND Y.EZCANCELFLAG            =  '0' -->
+                            <!-- END 2017/12/15 K.Kojima [QC#22142,DEL] -->
+                        <!-- START 2017/12/12 K.Kim [QC#23050,DEL] -->
+                        <!-- UNION -->
+                        <!-- SELECT -->
+                        <!--      S.BLLG_SCHD_THRU_DT -->
+                        <!--     ,NVL(DECODE(PY.BLLG_CYCLE_UOM_CD, #months#, R.MTR_READ_WIN_MLY_DAYS_AOT, R.MTR_READ_WIN_OTH_DAYS_AOT), #defBefDays#) AS BEF_DAYS -->
+                        <!-- FROM -->
+                        <!--      DS_CONTR_BLLG_SCHD      S -->
+                        <!--     ,DS_CONTR                C -->
+                        <!--     ,DS_CONTR_INTFC_DEF_RULE R -->
+                        <!--     ,DS_CONTR_BLLG_SCHD      PS -->
+                        <!--     ,DS_CONTR_BLLG_MTR       PB -->
+                        <!--     ,BLLG_CYCLE              PY -->
+                        <!-- WHERE  -->
+                        <!--         B.GLBL_CMPY_CD            =  S.GLBL_CMPY_CD -->
+                        <!--     AND B.DS_CONTR_DTL_PK         =  S.DS_CONTR_DTL_PK -->
+                        <!--     AND B.DS_CONTR_BLLG_MTR_PK    =  S.DS_CONTR_BLLG_MTR_PK -->
+                        <!--     AND S.MTR_ENTRY_CPLT_FLG      =  #mtrEntryCpltFlgN# -->
+                        <!--     AND S.DS_CONTR_PRC_EFF_PK     IS NULL -->
+                        <!--     AND S.EZCANCELFLAG            =  '0' -->
+                        <!--     AND D.GLBL_CMPY_CD            =  C.GLBL_CMPY_CD -->
+                        <!--     AND D.DS_CONTR_PK             =  C.DS_CONTR_PK -->
+                        <!--     AND C.EZCANCELFLAG            =  '0' -->
+                        <!--     AND C.DS_CONTR_CATG_CD        =  #dsContrCatgCdFleet# -->
+                        <!--     AND C.GLBL_CMPY_CD            =  R.GLBL_CMPY_CD           (+) -->
+                        <!--     AND C.DS_CONTR_SRC_TP_CD      =  R.CONTR_INTFC_SRC_TP_CD  (+) -->
+                        <!--     AND C.DS_CONTR_CLS_CD         =  R.DS_CONTR_CLS_CD        (+) -->
+                        <!--     AND C.SVC_LINE_BIZ_CD         =  R.SVC_LINE_BIZ_CD        (+) -->
+                        <!--     AND R.EFF_FROM_DT   (+)       &lt;= #salesDate# -->
+                        <!--     AND R.ENBL_FLG      (+)       =  'Y' -->
+                        <!--     AND R.EZCANCELFLAG  (+)       =  '0' -->
+                        <!--     AND S.GLBL_CMPY_CD            =  PS.GLBL_CMPY_CD -->
+                        <!--     AND S.PRNT_DS_CONTR_BLLG_SCHD_PK -->
+                        <!--                                   =  PS.DS_CONTR_BLLG_SCHD_PK -->
+                        <!--     AND PS.EZCANCELFLAG           =  '0' -->
+                        <!--     AND PS.GLBL_CMPY_CD           =  PB.GLBL_CMPY_CD -->
+                        <!--     AND PS.DS_CONTR_BLLG_MTR_PK   =  PB.DS_CONTR_BLLG_MTR_PK -->
+                        <!--     AND PB.EZCANCELFLAG           =  '0' -->
+                        <!--     AND PB.GLBL_CMPY_CD           =  PY.GLBL_CMPY_CD -->
+                        <!--     AND PB.BLLG_MTR_BLLG_CYCLE_CD =  PY.BLLG_CYCLE_CD -->
+                        <!--     AND PY.EZCANCELFLAG           =  '0' -->
+                        <!-- END 2017/12/12 K.Kim [QC#23050,DEL] -->
+                            <!-- START 2022/09/20 [QC#60045,ADD] -->
+                            AND S.GLBL_CMPY_CD                     = DWD.GLBL_CMPY_CD(+)
+                            AND DWD.EZCANCELFLAG(+)                = '0'
+                            AND SUBSTR(S.BLLG_SCHD_THRU_DT, 0, 6)  = DWD.DS_WIN_DAYS_TRGT_PER_TXT(+)
+                            AND C.SVC_LINE_BIZ_CD                  = DWD.SVC_LINE_BIZ_CD(+)
+                            <!-- END   2022/09/20 [QC#60045,ADD] -->
+                        <!-- START 2023/02/09 S.Naya [QC#60045, ADD] -->
+                        AND S.GLBL_CMPY_CD                     = DWD2.GLBL_CMPY_CD(+)
+                        AND DWD2.EZCANCELFLAG(+)               = '0'
+                        AND SUBSTR(S.BLLG_SCHD_THRU_DT, 0, 6)  = DWD2.DS_WIN_DAYS_TRGT_PER_TXT(+)
+                        AND DWD2.SVC_LINE_BIZ_CD(+)            = '*'
+                        <!-- END   2023/02/09 S.Naya [QC#60045, ADD] -->
+                   ) X
+                   WHERE 
+                       X.BLLG_SCHD_THRU_DT   &lt;= TO_CHAR((TO_DATE(#salesDate#, #dateFormat#) + TO_NUMBER(X.BEF_DAYS)), #dateFormat#) 
+                )
+                <!-- START 2017/12/12 K.Kim [QC#23050,ADD] -->
+                AND NOT EXISTS (
+                    SELECT
+                        1
+                    FROM
+                    (
+                        SELECT
+                             S.BLLG_SCHD_THRU_DT
+                            <!-- START 2022/09/20 [QC#60045,MOD] -->
+                            <!-- ,NVL(DECODE(PY.BLLG_CYCLE_UOM_CD, #months#, R.MTR_READ_WIN_MLY_DAYS_AOT, R.MTR_READ_WIN_OTH_DAYS_AOT), #defBefDays#) AS BEF_DAYS -->
+                            <!-- START 2023/02/09 S.Naya [QC#60045, MOD] -->
+                            <!-- ,DECODE(Y.BLLG_CYCLE_UOM_CD, #months#, COALESCE(DWD.MTR_READ_WIN_MLY_DAYS_AOT, (SELECT MTR_READ_WIN_MLY_DAYS_AOT FROM DEF_WIN_DAYS), #defBefDays#), COALESCE(DWD.MTR_READ_WIN_OTH_DAYS_AOT, (SELECT MTR_READ_WIN_OTH_DAYS_AOT FROM DEF_WIN_DAYS), #defBefDays#)) AS BEF_DAYS -->
+                            <!-- START 2023/05/09 K.Kitachi [QC#61469, MOD] -->
+                            <!-- ,DECODE(Y.BLLG_CYCLE_UOM_CD, #months#, COALESCE(DWD.MTR_READ_WIN_MLY_DAYS_AOT, DWD2.MTR_READ_WIN_MLY_DAYS_AOT, (SELECT MTR_READ_WIN_MLY_DAYS_AOT FROM DEF_WIN_DAYS), #defBefDays#), COALESCE(DWD.MTR_READ_WIN_OTH_DAYS_AOT, DWD2.MTR_READ_WIN_OTH_DAYS_AOT, (SELECT MTR_READ_WIN_OTH_DAYS_AOT FROM DEF_WIN_DAYS), #defBefDays#)) AS BEF_DAYS -->
+                            ,DECODE(Y.BLLG_CYCLE_UOM_CD, #months#, COALESCE(DWD.MTR_READ_WIN_MLY_DAYS_AOT, DWD2.MTR_READ_WIN_MLY_DAYS_AOT, #mtrReadWinMlyDaysAot#, #defBefDays#), COALESCE(DWD.MTR_READ_WIN_OTH_DAYS_AOT, DWD2.MTR_READ_WIN_OTH_DAYS_AOT, #mtrReadWinOthDaysAot#, #defBefDays#)) AS BEF_DAYS
+                            <!-- END 2023/05/09 K.Kitachi [QC#61469, MOD] -->
+                            <!-- START 2023/02/09 S.Naya [QC#60045, MOD] -->
+                            <!-- END   2022/09/20 [QC#60045,MOD] -->
+                        FROM
+                             DS_CONTR_BLLG_SCHD      S
+                            <!-- START 2017/12/15 K.Kojima [QC#22142,DEL] -->
+                            <!-- ,DS_CONTR                C -->
+                            <!-- ,DS_CONTR_INTFC_DEF_RULE R -->
+                            <!-- END 2017/12/15 K.Kojima [QC#22142,DEL] -->
+                            ,DS_CONTR_BLLG_SCHD      PS
+                            ,DS_CONTR_BLLG_MTR       PB
+                            ,BLLG_CYCLE              PY
+                            <!-- START 2022/09/20 [QC#60045,ADD] -->
+                            ,DS_WIN_DAYS  DWD
+                            <!-- END   2022/09/20 [QC#60045,ADD] -->
+                            <!-- START 2023/02/09 S.Naya [QC#60045, ADD] -->
+                            ,DS_WIN_DAYS             DWD2
+                            <!-- END   2023/02/09 S.Naya [QC#60045, ADD] -->
+                        WHERE 
+                                B.GLBL_CMPY_CD            =  S.GLBL_CMPY_CD
+                            AND B.DS_CONTR_DTL_PK         =  S.DS_CONTR_DTL_PK
+                            AND B.DS_CONTR_BLLG_MTR_PK    =  S.DS_CONTR_BLLG_MTR_PK
+                            AND S.MTR_ENTRY_CPLT_FLG      =  #mtrEntryCpltFlgN#
+                            AND S.DS_CONTR_PRC_EFF_PK     IS NULL
+                            AND S.EZCANCELFLAG            =  '0'
+                            <!-- START 2017/12/15 K.Kojima [QC#22142,DEL] -->
+                            <!-- AND D.GLBL_CMPY_CD            =  C.GLBL_CMPY_CD -->
+                            <!-- AND D.DS_CONTR_PK             =  C.DS_CONTR_PK -->
+                            <!-- AND C.EZCANCELFLAG            =  '0' -->
+                            <!-- END 2017/12/15 K.Kojima [QC#22142,DEL] -->
+                            AND C.DS_CONTR_CATG_CD        =  #dsContrCatgCdFleet#
+                            <!-- START 2017/12/15 K.Kojima [QC#22142,DEL] -->
+                            <!-- AND C.GLBL_CMPY_CD            =  R.GLBL_CMPY_CD           (+) -->
+                            <!-- AND C.DS_CONTR_SRC_TP_CD      =  R.CONTR_INTFC_SRC_TP_CD  (+) -->
+                            <!-- AND C.DS_CONTR_CLS_CD         =  R.DS_CONTR_CLS_CD        (+) -->
+                            <!-- AND C.SVC_LINE_BIZ_CD         =  R.SVC_LINE_BIZ_CD        (+) -->
+                            <!-- AND R.EFF_FROM_DT   (+)       &lt;= #salesDate# -->
+                            <!-- AND R.ENBL_FLG      (+)       =  'Y' -->
+                            <!-- AND R.EZCANCELFLAG  (+)       =  '0' -->
+                            <!-- END 2017/12/15 K.Kojima [QC#22142,DEL] -->
+                            AND S.GLBL_CMPY_CD            =  PS.GLBL_CMPY_CD
+                            AND S.PRNT_DS_CONTR_BLLG_SCHD_PK
+                                                          =  PS.DS_CONTR_BLLG_SCHD_PK
+                            AND PS.EZCANCELFLAG           =  '0'
+                            AND PS.GLBL_CMPY_CD           =  PB.GLBL_CMPY_CD
+                            AND PS.DS_CONTR_BLLG_MTR_PK   =  PB.DS_CONTR_BLLG_MTR_PK
+                            AND PB.EZCANCELFLAG           =  '0'
+                            AND PB.GLBL_CMPY_CD           =  PY.GLBL_CMPY_CD
+                            AND PB.BLLG_MTR_BLLG_CYCLE_CD =  PY.BLLG_CYCLE_CD
+                            AND PY.EZCANCELFLAG           =  '0'
+                            <!-- START 2022/09/20 [QC#60045,ADD] -->
+                            AND S.GLBL_CMPY_CD                    = DWD.GLBL_CMPY_CD(+)
+                            AND DWD.EZCANCELFLAG(+)               = '0'
+                            AND SUBSTR(S.BLLG_SCHD_THRU_DT, 0, 6) = DWD.DS_WIN_DAYS_TRGT_PER_TXT(+)
+                            AND C.SVC_LINE_BIZ_CD                 = DWD.SVC_LINE_BIZ_CD(+)
+                            <!-- END   2022/09/20 [QC#60045,ADD] -->
+                            <!-- START 2023/02/09 S.Naya [QC#60045, ADD] -->
+                            AND S.GLBL_CMPY_CD                    = DWD2.GLBL_CMPY_CD(+)
+                            AND DWD2.EZCANCELFLAG(+)              = '0'
+                            AND SUBSTR(S.BLLG_SCHD_THRU_DT, 0, 6) = DWD2.DS_WIN_DAYS_TRGT_PER_TXT(+)
+                            AND DWD2.SVC_LINE_BIZ_CD(+)           = '+'
+                            <!-- END   2023/02/09 S.Naya [QC#60045, ADD] -->
+                   ) X
+                   WHERE 
+                       X.BLLG_SCHD_THRU_DT   &lt;= TO_CHAR((TO_DATE(#salesDate#, #dateFormat#) + TO_NUMBER(X.BEF_DAYS)), #dateFormat#) 
+                )
+                <!-- END 2017/12/12 K.Kim [QC#23050,ADD] -->
+        )
+        ORDER BY
+             DS_CONTR_PK
+            ,DS_CONTR_DTL_PK
+            ,DS_CONTR_BLLG_MTR_PK
+            ,DS_CONTR_PRC_EFF_PK
+    </statement>
+    <statement id="isDsContrBllgMtrPk" parameterClass="Map" resultClass="Map">
+        SELECT
+             B.GLBL_CMPY_CD         AS GLBL_CMPY_CD
+            ,B.DS_CONTR_BLLG_MTR_PK AS DS_CONTR_BLLG_MTR_PK
+        FROM 
+            DS_CONTR_BLLG_MTR B
+        WHERE
+                B.GLBL_CMPY_CD             =  #glblCmpyCd#
+            AND B.DS_CONTR_BLLG_MTR_PK     =  #dsContrBllgMtrPk#
+            <iterate property="dsContrCtrlStsCdArray" var="dsContrCtrlStsCd[]" open="AND B.DS_CONTR_BLLG_MTR_STS_CD IN (" close=")" conjunction=",">
+                #dsContrCtrlStsCd[]#
+            </iterate>
+            AND B.MTR_HLD_FLG              =  #mtrHldFlgY#
+            AND B.EZCANCELFLAG             =  '0'
+            AND NOT EXISTS (
+                SELECT
+                    1
+                FROM
+                    DS_CONTR_PRC_EFF P
+                WHERE
+                        B.GLBL_CMPY_CD            = P.GLBL_CMPY_CD
+                    AND B.DS_CONTR_DTL_PK         = P.DS_CONTR_DTL_PK
+                    AND B.DS_CONTR_BLLG_MTR_PK    = P.DS_CONTR_BLLG_MTR_PK
+                    <iterate property="dsContrCtrlStsCdArray" var="dsContrCtrlStsCd[]" open="AND P.DS_CONTR_PRC_EFF_STS_CD IN (" close=")" conjunction=",">
+                        #dsContrCtrlStsCd[]#
+                    </iterate>
+                    AND P.MTR_HLD_FLG             = #mtrHldFlgY#
+                    AND P.EZCANCELFLAG            = '0'
+            )
+    </statement>
+    <statement id="isDsContrDtlPk" parameterClass="Map" resultClass="Map">
+        SELECT
+             D.GLBL_CMPY_CD    AS GLBL_CMPY_CD
+            ,D.DS_CONTR_DTL_PK AS DS_CONTR_DTL_PK
+        FROM
+            DS_CONTR_DTL D
+        WHERE
+                D.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND D.DS_CONTR_DTL_PK = #dsContrDtlPk#
+            AND D.MTR_HLD_FLG     = #mtrHldFlgY#
+            AND D.EZCANCELFLAG    = '0'
+            AND NOT EXISTS (
+                SELECT
+                    1
+                FROM
+                    DS_CONTR_BLLG_MTR B
+                WHERE
+                        D.GLBL_CMPY_CD             =  B.GLBL_CMPY_CD
+                    AND D.DS_CONTR_DTL_PK          =  B.DS_CONTR_DTL_PK
+                    <iterate property="dsContrCtrlStsCdArray" var="dsContrCtrlStsCd[]" open="AND B.DS_CONTR_BLLG_MTR_STS_CD IN (" close=")" conjunction=",">
+                        #dsContrCtrlStsCd[]#
+                    </iterate>
+                    AND B.MTR_HLD_FLG              =  #mtrHldFlgY#
+                    AND B.EZCANCELFLAG             =  '0'
+            )
+    </statement>
+    <statement id="isDsContrPk" parameterClass="Map" resultClass="Map">
+        SELECT
+             C.GLBL_CMPY_CD AS GLBL_CMPY_CD
+            ,C.DS_CONTR_PK  AS DS_CONTR_PK
+        FROM
+            DS_CONTR C
+        WHERE
+                C.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND C.DS_CONTR_PK     = #dsContrPk#
+            AND C.MTR_HLD_FLG     = #mtrHldFlgY#
+            AND C.EZCANCELFLAG    = '0'
+            AND NOT EXISTS (
+                SELECT
+                    1
+                FROM
+                    DS_CONTR_DTL D
+                WHERE
+                        C.GLBL_CMPY_CD        =  D.GLBL_CMPY_CD
+                    AND C.DS_CONTR_PK         =  D.DS_CONTR_PK
+                    <iterate property="dsContrCtrlStsCdArray" var="dsContrCtrlStsCd[]" open="AND D.DS_CONTR_DTL_STS_CD IN (" close=")" conjunction=",">
+                        #dsContrCtrlStsCd[]#
+                    </iterate>
+                    AND D.MTR_HLD_FLG         =  #mtrHldFlgY#
+                    AND D.EZCANCELFLAG        =  '0'
+            )
+    </statement>
+    <!-- START 2017/06/27 K.Kojima [QC#19530,ADD] -->
+    <statement id="getDsContrUpdateKeyListForHeader" parameterClass="Map" resultClass="Map">
+        SELECT
+            C.DS_CONTR_PK
+        FROM
+            DS_CONTR C
+        WHERE
+                C.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND C.MTR_HLD_FLG     = #mtrHldFlgY#
+            AND C.EZCANCELFLAG    = '0'
+            AND NOT EXISTS (
+                SELECT
+                    1
+                FROM
+                    DS_CONTR_DTL D
+                WHERE
+                        C.GLBL_CMPY_CD   =  D.GLBL_CMPY_CD
+                    AND C.DS_CONTR_PK    =  D.DS_CONTR_PK
+                    <iterate property="dsContrCtrlStsCdArray" var="dsContrCtrlStsCd[]" open="AND D.DS_CONTR_DTL_STS_CD IN (" close=")" conjunction=",">
+                        #dsContrCtrlStsCd[]#
+                    </iterate>
+                    AND D.MTR_HLD_FLG    =  #mtrHldFlgY#
+                    AND D.EZCANCELFLAG   =  '0'
+            )
+            AND EXISTS (
+                SELECT
+                    1
+                FROM
+                    SVC_CONTR_BLLG SCB
+                WHERE
+                        C.GLBL_CMPY_CD   =  SCB.GLBL_CMPY_CD
+                    AND C.DS_CONTR_PK    =  SCB.DS_CONTR_PK
+                    AND SCB.USG_CHRG_FLG =  #usgChrgFlgY#
+                    AND SCB.EZCANCELFLAG =  '0'
+            )
+    </statement>
+    <!-- END 2017/06/27 K.Kojima [QC#19530,ADD] -->
+</sqlMap>

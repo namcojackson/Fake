@@ -1,0 +1,773 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NWAL2170Query">
+
+    <statement id="getBllgCycleList" parameterClass="Map" resultClass="Map">
+        SELECT
+                  BC.BLLG_CYCLE_CD
+                , BC.BLLG_CYCLE_DESC_TXT
+                , BLLG_CYCLE_MTH_AOT
+            FROM
+                BLLG_CYCLE BC
+            WHERE
+                BC.GLBL_CMPY_CD             = #glblCmpyCd#
+                AND BC.BLLG_CYCLE_ACTV_FLG  = 'Y'
+                AND BC.EFF_FROM_DT         &lt;= #slsDt#
+                AND ( 
+                    BC.EFF_THRU_DT         &gt;= #slsDt#
+                    OR BC.EFF_THRU_DT          IS NULL
+                )
+                AND BC.OM_CYCLE_FLG = 'Y'
+                AND BC.EZCANCELFLAG = '0'
+            ORDER BY
+                BC.BLLG_CYCLE_SORT_NUM
+    </statement>
+
+
+    <statement id="getBaseDtlLineNum" parameterClass="Map" resultClass="Map">
+        SELECT
+                  DCD.CPO_DTL_LINE_NUM
+                , DCD.CPO_DTL_LINE_SUB_NUM 
+                <!-- 2018/04/24 QC#10374 Add Start -->
+                , DCD.DS_ORD_POSN_NUM
+                <!-- 2018/04/24 QC#10374 Add End -->
+            FROM
+                CPO_DTL_V DCD 
+            WHERE
+                DCD.GLBL_CMPY_CD        = #glblCmpyCd#
+                AND DCD.CPO_ORD_NUM     = #cpoOrdNum#
+                AND DCD.DS_ORD_POSN_NUM = ( 
+                    SELECT
+                              D.DS_ORD_POSN_NUM 
+                        FROM
+                            CPO_DTL D 
+                        WHERE
+                            D.GLBL_CMPY_CD              = DCD.GLBL_CMPY_CD 
+                            AND D.CPO_ORD_NUM           = DCD.CPO_ORD_NUM 
+                            <!-- 2018/04/24 QC#10374 Add Start -->
+                            AND D.DS_ORD_POSN_NUM       = #dsOrdPosnNum#
+                            <!-- 2018/04/24 QC#10374 Add End -->
+                            AND D.CPO_DTL_LINE_NUM      = #cpoDtlLineNum#
+                            AND D.CPO_DTL_LINE_SUB_NUM  = #cpoDtlLineSubNum#
+                            AND D.EZCANCELFLAG          = '0'
+                ) 
+                AND DCD.BASE_CMPT_FLG   = 'Y'
+                AND DCD.EZCANCELFLAG    = '0'
+    </statement>
+
+
+    <statement id="getBillToCustInfoList" parameterClass="Map" resultClass="Map">
+        SELECT
+            BTC.BILL_TO_CUST_CD AS BILL_TO_CUST_CD
+
+                , ( 
+                    RPAD( 
+                        BTC.FIRST_LINE_ADDR
+                        , LENGTH(BTC.FIRST_LINE_ADDR) + 1
+                    ) || RPAD( 
+                        BTC.SCD_LINE_ADDR
+                        , LENGTH(BTC.SCD_LINE_ADDR) + 1
+                    ) || RPAD( 
+                        BTC.THIRD_LINE_ADDR
+                        , LENGTH(BTC.THIRD_LINE_ADDR) + 1
+                    ) || RPAD( 
+                        BTC.FRTH_LINE_ADDR
+                        , LENGTH(BTC.FRTH_LINE_ADDR) + 1
+                    ) || CONCAT(BTC.CTY_ADDR, ',') || RPAD(BTC.ST_CD, LENGTH(BTC.ST_CD) + 1) || RPAD(BTC.POST_CD, LENGTH(BTC.POST_CD) + 1)
+                ) BILL_TO_ADDR
+
+            ,(
+              CASE WHEN BTC.FIRST_LINE_ADDR IS NOT NULL THEN
+                  
+                     DECODE (BTC.FIRST_LINE_ADDR, NULL, '', CONCAT(BTC.FIRST_LINE_ADDR, CHR(13) || CHR(10)))
+                  || DECODE (BTC.SCD_LINE_ADDR, NULL, '', CONCAT(BTC.SCD_LINE_ADDR, CHR(13) || CHR(10)))
+                  || DECODE (BTC.THIRD_LINE_ADDR, NULL, '', CONCAT(BTC.THIRD_LINE_ADDR, CHR(13) || CHR(10)))
+                  || DECODE (BTC.FRTH_LINE_ADDR, NULL, '', CONCAT(BTC.FRTH_LINE_ADDR, CHR(13) || CHR(10)))
+                  || CONCAT (BTC.CTY_ADDR, ',')
+                  || RPAD (BTC.ST_CD, LENGTH (BTC.ST_CD) + 1)
+                  || BTC.POST_CD
+              END)                  AS ENT_BILL_TO_ADDR
+            ,DAC.SELL_TO_CUST_CD    AS DS_ACCT_NUM
+            ,DAC.DS_ACCT_NM         AS DS_ACCT_NM
+        FROM
+            BILL_TO_CUST    BTC
+           ,SELL_TO_CUST    DAC
+        WHERE
+            BTC.GLBL_CMPY_CD        = #glblCmpyCd#
+            AND BTC.BILL_TO_CUST_CD LIKE #custCd#
+            AND BTC.RGTN_STS_CD     = #rgtnStsCd#
+            AND BTC.EZCANCELFLAG    = '0'
+
+            AND BTC.GLBL_CMPY_CD     = DAC.GLBL_CMPY_CD
+            AND BTC.SELL_TO_CUST_CD  = DAC.SELL_TO_CUST_CD
+            AND DAC.RGTN_STS_CD      = #rgtnStsCd#
+            AND DAC.EZCANCELFLAG     = '0'
+            AND ROWNUM           &lt;= 2  <!-- 2018/03/12 S21_NA#24090 Add -->
+    </statement>
+
+    <statement id="getBillToCustCount" parameterClass="Map" resultClass="Integer">
+        SELECT
+                  COUNT(B.GLBL_CMPY_CD) COUNT
+            FROM
+                BILL_TO_CUST B
+            WHERE
+                B.GLBL_CMPY_CD          = #glblCmpyCd#
+                AND B.BILL_TO_CUST_CD   = #billToCustCd#
+                AND B.RGTN_STS_CD       = #rgtnStsCd#
+                AND B.EZCANCELFLAG      = '0'
+    </statement>
+
+    <statement id="getDsAcctCustCount" parameterClass="Map" resultClass="Integer">
+        SELECT
+                  COUNT(A.GLBL_CMPY_CD) COUNT 
+            FROM
+                SELL_TO_CUST A 
+            WHERE
+                A.GLBL_CMPY_CD      = #glblCmpyCd#
+                AND A.SELL_TO_CUST_CD   = #dsAcctNum#
+                AND A.RGTN_STS_CD   = #rgtnStsCd#
+                AND A.EZCANCELFLAG  = '0'
+    </statement>
+
+    <statement id="getOrderBillToInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+                  DC.BILL_TO_CUST_ACCT_CD
+                , DC.BILL_TO_CUST_ACCT_NM
+                , DC.BILL_TO_CUST_CD
+                , DC.BILL_TO_CUST_LOC_ADDR
+            FROM
+                CPO_V DC 
+            WHERE
+                DC.GLBL_CMPY_CD     = #glblCmpyCd#
+                AND DC.CPO_ORD_NUM  = #cpoOrdNum#
+                AND DC.EZCANCELFLAG = '0'
+    </statement>
+
+    <statement id="getContractIndicatorList" parameterClass="Map" resultClass="Map">
+        SELECT
+                  C.DS_CONTR_CATG_CD
+                , C.DS_CONTR_CATG_DESC_TXT
+            FROM
+                DS_CONTR_CATG   C
+            WHERE
+                C.GLBL_CMPY_CD      = #glblCmpyCd#
+                AND C.OM_CATG_FLG   = 'Y'
+                AND C.EZCANCELFLAG  = '0'
+            ORDER BY
+                C.DS_CONTR_CATG_SORT_NUM
+    </statement>
+
+    <statement id="getInitDataFromDsImpSvc" parameterClass="Map" resultClass="Map">
+        SELECT DISTINCT
+                  DIO.DS_IMPT_ORD_PK
+                , DIO.ORD_SRC_REF_NUM
+                --
+                , DISD.DS_IMPT_SVC_DTL_PK           CPO_SVC_DTL_PK
+                , DISD.DS_IMPT_SVC_LINE_NUM         CPO_SVC_LINE_NUM
+                , DISD.DS_IMPT_SVC_MDSE_CD          CPO_SVC_MDSE_CD
+                , DISD.PRC_SVC_CONTR_TP_CD          PRC_SVC_CONTR_TP_CD
+                , DISD.PRC_SVC_PLN_TP_CD            PRC_SVC_PLN_TP_CD
+                , DISD.DS_CONTR_CATG_CD             DS_CONTR_CATG_CD
+                , DISD.BASE_BLLG_CYCLE_CD           BASE_BLLG_CYCLE_CD
+                , DISD.USG_BLLG_CYCLE_CD            USG_BLLG_CYCLE_CD
+                , DISD.FROM_PER_MTH_NUM             FROM_PER_MTH_NUM
+                , DISD.TO_PER_MTH_NUM               TO_PER_MTH_NUM
+                , NVL( 
+                    DISD.TERM_MTH_AOT
+                    , DISD.TO_PER_MTH_NUM - DISD.FROM_PER_MTH_NUM + 1
+                )                                   TERM_MTH_NUM
+                , DISD.FIX_TERM_IN_MTH_AOT          FIX_TERM_IN_MTH_AOT
+                , DISD.MAX_UPLFT_PCT                MAX_UPLFT_PCT
+                , DISD.CPO_SVC_LINE_ACT_CD          CPO_SVC_LINE_ACT_CD
+                , DISD.BILL_WITH_EQUIP_FLG          BILL_WITH_EQUIP_FLG
+                , DISD.BILL_BY_TP_CD                BILL_BY_TP_CD
+                , DISD.SOLD_TO_CUST_LOC_CD          SOLD_TO_CUST_LOC_CD
+                , DISD.SELL_TO_CUST_CD              SELL_TO_CUST_CD
+                , DISD.SVC_AGMT_VRSN_NUM            CPO_SVC_AGMT_VER_NUM
+                , DISD.DS_CONTR_PK                  DS_CONTR_PK
+                , C.DS_CONTR_NUM                    DS_CONTR_NUM
+                , DISD.MAN_CONTR_OVRD_FLG           MAN_CONTR_OVRD_FLG
+                , DISD.MAN_CONTR_OVRD_RSN_CD        MAN_CONTR_OVRD_RSN_CD
+                <!-- 2018/05/07 QC#22482 Add Start -->
+                , SMR.SVC_MEMO_RSN_DESC_TXT         SVC_MEMO_RSN_DESC_TXT
+                <!-- 2018/05/07 QC#22482 Add End -->
+                , DISD.MAN_CONTR_OVRD_CMNT_TXT      MAN_CONTR_OVRD_CMNT_TXT
+                , DISD.USE_EQUIP_BILL_TO_FLG        APPLY_EQUIP_BILL_TO_FLG
+                --
+                , DISC.DS_IMPT_SVC_CONFIG_REF_PK    CPO_SVC_CONFIG_REF_PK
+                , DISC.CUST_ISS_PO_NUM              CUST_ISS_PO_NUM
+                , DISC.CUST_ISS_PO_DT               CUST_ISS_PO_DT
+                , DISC.MTR_READ_METH_CD             MTR_READ_METH_CD
+                --
+                , CASE (
+                        SELECT
+                                  COUNT(DR.GLBL_CMPY_CD)
+                            FROM
+                                DS_IMPT_SVC_CONFIG_REF DR
+                            WHERE
+                                DR.GLBL_CMPY_CD            = DISD.GLBL_CMPY_CD
+                                AND DR.DS_IMPT_SVC_DTL_PK  = DISD.DS_IMPT_SVC_DTL_PK
+                                AND DR.DS_IMPT_SVC_PRC_PK  &gt; 0
+                                AND DR.EZCANCELFLAG        = '0'
+                    )
+                    WHEN 0 THEN 'N'
+                    ELSE        'Y'
+                    END                             PRICE_XX_EXST_FLG
+                --
+                , DISP.BASE_PRC_DEAL_AMT            BASE_PRC_DEAL_AMT
+                -- , DIAB.ADDL_BASE_PRC_DEAL_AMT
+                -- , DIAC.ADDL_CHRG_PRC_DEAL_AMT
+                --
+                , DIOD.DS_ORD_POSN_NUM              DS_ORD_POSN_NUM
+                , DIOD.DS_IMPT_ORD_CONFIG_PK        DS_CPO_CONFIG_PK
+                , DIOD.MDSE_CD                      MDSE_CD
+                , CASE
+                    WHEN ORD_SRC_REF_LINE_NUM IS NULL THEN NULL
+                    WHEN ORD_SRC_REF_LINE_SUB_NUM IS NULL THEN ORD_SRC_REF_LINE_NUM
+                    ELSE ORD_SRC_REF_LINE_NUM || '.' || ORD_SRC_REF_LINE_SUB_NUM
+                  END                               DPLY_LINE_NUM
+                , DIOD.ORD_SRC_REF_LINE_NUM         CPO_DTL_LINE_NUM
+                , DIOD.ORD_SRC_REF_LINE_SUB_NUM     CPO_DTL_LINE_SUB_NUM
+                --
+                , DIOC.MDL_ID                       MDL_ID
+                , MN.T_MDL_NM                       T_MDL_NM
+                , DIOC.MDL_DESC_TXT                 MDL_DESC_TXT
+                , ( 
+                    RPAD( 
+                        DIOC.SHIP_TO_FIRST_LINE_ADDR
+                        , LENGTH(DIOC.SHIP_TO_FIRST_LINE_ADDR) + 1
+                    ) || RPAD( 
+                        DIOC.SHIP_TO_SCD_LINE_ADDR
+                        , LENGTH(DIOC.SHIP_TO_SCD_LINE_ADDR) + 1
+                    ) || RPAD( 
+                        DIOC.SHIP_TO_THIRD_LINE_ADDR
+                        , LENGTH(DIOC.SHIP_TO_THIRD_LINE_ADDR) + 1
+                    ) || RPAD( 
+                        DIOC.SHIP_TO_FRTH_LINE_ADDR
+                        , LENGTH(DIOC.SHIP_TO_FRTH_LINE_ADDR) + 1
+                    ) || CONCAT(DIOC.SHIP_TO_CTY_ADDR, ',') || RPAD( 
+                        DIOC.SHIP_TO_ST_CD
+                        , LENGTH(DIOC.SHIP_TO_ST_CD) + 1
+                    ) || RPAD( 
+                        DIOC.SHIP_TO_POST_CD
+                        , LENGTH(DIOC.SHIP_TO_POST_CD) + 1
+                    )
+                )                                   SHIP_TO_SRCH_TXT
+                --
+                , AMV.MDSE_DESC_SHORT_TXT           MDSE_DESC_SHORT_TXT
+                , AMV.MDSE_DESC_LONG_TXT            MDSE_DESC_LONG_TXT
+                , PSCT.PRC_SVC_CONTR_TP_DESC_TXT    PRC_SVC_CONTR_TP_DESC_TXT
+                , PSPT.PRC_SVC_PLN_TP_DESC_TXT      PRC_SVC_PLN_TP_DESC_TXT
+                , CC.DS_CONTR_CATG_DESC_TXT         DS_CONTR_CATG_DESC_TXT
+                , BBC.BLLG_CYCLE_DESC_TXT           BASE_BLLG_CYCLE_DESC_TXT
+                , UBC.BLLG_CYCLE_DESC_TXT           USG_BLLG_CYCLE_DESC_TXT
+                , BBT.BILL_BY_TP_DESC_TXT           BILL_BY_TP_DESC_TXT
+                , MRM.MTR_READ_METH_DESC_TXT        MTR_READ_METH_DESC_TXT
+                , DAC.DS_ACCT_NM                    DS_ACCT_NM
+                <!-- 2017/01/30 QC#17119 Mod Start -->
+                , CASE
+                        WHEN BTC.BILL_TO_CUST_CD IS NULL THEN
+                            RPAD (
+                                DISD.SLD_TO_FIRST_LINE_ADDR
+                                , LENGTH (DISD.SLD_TO_FIRST_LINE_ADDR) + 1
+                            ) || RPAD(
+                                DISD.SLD_TO_SCD_LINE_ADDR
+                                , LENGTH (DISD.SLD_TO_SCD_LINE_ADDR) + 1
+                            ) || RPAD(
+                                DISD.SLD_TO_THIRD_LINE_ADDR
+                                , LENGTH (DISD.SLD_TO_THIRD_LINE_ADDR) + 1
+                            ) || RPAD(
+                                DISD.SLD_TO_FRTH_LINE_ADDR
+                                , LENGTH (DISD.SLD_TO_FRTH_LINE_ADDR) + 1
+                            ) || CONCAT(DISD.SLD_TO_CTY_ADDR, ',') || RPAD (DISD.SLD_TO_ST_CD, LENGTH (DISD.SLD_TO_ST_CD) + 1) || RPAD (DISD.SLD_TO_POST_CD, LENGTH (DISD.SLD_TO_POST_CD) + 1)
+                        ELSE
+                            RPAD( 
+                                BTC.FIRST_LINE_ADDR
+                                , LENGTH(BTC.FIRST_LINE_ADDR) + 1
+                            ) || RPAD( 
+                                BTC.SCD_LINE_ADDR
+                                , LENGTH(BTC.SCD_LINE_ADDR) + 1
+                            ) || RPAD( 
+                                BTC.THIRD_LINE_ADDR
+                                , LENGTH(BTC.THIRD_LINE_ADDR) + 1
+                            ) || RPAD( 
+                                BTC.FRTH_LINE_ADDR
+                                , LENGTH(BTC.FRTH_LINE_ADDR) + 1
+                            ) || CONCAT(BTC.CTY_ADDR, ',') || RPAD(BTC.ST_CD, LENGTH(BTC.ST_CD) + 1) || RPAD(BTC.POST_CD, LENGTH(BTC.POST_CD) + 1)
+                         END BILL_TO_SRCH_TXT -- LOC_ADDR_TXT
+                <!-- 2017/01/30 QC#17119 Mod Start -->
+                --
+                , DIOC.BILL_TO_CUST_LOC_CD          BILL_TO_CUST_LOC_CD
+                , DIOC.SHIP_TO_CUST_LOC_CD          SHIP_TO_CUST_LOC_CD
+                , DIOC.SVC_CONFIG_MSTR_PK           SVC_CONFIG_MSTR_PK
+                , DISP.DS_IMPT_SVC_PRC_PK           CPO_SVC_PRC_PK
+                --
+                , DIO.IMPT_STS_CD                   IMPT_STS_CD
+                , DIO.EZUPTIME                      EZUPTIME
+                , DIO.EZUPTIMEZONE                  EZUPTIMEZONE
+                --
+                , DISD.EZUPTIME                     EZUPTIME_DTL
+                , DISD.EZUPTIMEZONE                 EZUPTIMEZONE_DTL
+                <!-- 2018/04/04 QC#20162 Add Start -->
+                , DISC.DS_PO_EXPR_DT                DS_PO_EXPR_DT
+                <!-- 2018/04/04 QC#20162 Add End -->
+                <!-- 2019/02/06 QC#20237 Add Start -->
+                , DIO.DS_ORD_CATG_CD                DS_ORD_CATG_CD
+                , DIO.DS_ORD_TP_CD                  DS_ORD_TP_CD
+                <!-- 2019/02/06 QC#20237 Add End -->
+            FROM
+                DS_IMPT_ORD              DIO
+                , DS_IMPT_SVC_DTL        DISD
+                , DS_IMPT_SVC_CONFIG_REF DISC
+                , DS_IMPT_SVC_PRC        DISP
+                , DS_IMPT_ORD_DTL        DIOD
+                , DS_IMPT_ORD_CONFIG     DIOC
+                , DS_IMPT_SVC_ADDL_BASE  DIAB
+                , DS_IMPT_SVC_ADDL_CHRG  DIAC
+                , ALL_MDSE_V             AMV
+                , PRC_SVC_CONTR_TP       PSCT
+                , PRC_SVC_PLN_TP         PSPT
+                , DS_CONTR_CATG          CC
+                , BLLG_CYCLE             BBC
+                , BLLG_CYCLE             UBC
+                , BILL_BY_TP             BBT
+                , MTR_READ_METH          MRM
+                , SELL_TO_CUST           DAC
+                , BILL_TO_CUST           BTC
+                , CNTY                   CNTY
+                , DS_CONTR               C
+                , MDL_NM                 MN
+                <!-- 2018/05/07 QC#22482 Add Start -->
+                , SVC_MEMO_RSN           SMR
+                <!-- 2018/05/07 QC#22482 Add End -->
+            WHERE
+                DIO.GLBL_CMPY_CD                = #glblCmpyCd#
+                AND DIO.ORD_SRC_REF_NUM         = #ordSrcRefNum#
+                <isNotNull property="dsImptOrdPk">
+                AND DIO.DS_IMPT_ORD_PK          = #dsImptOrdPk#
+                </isNotNull>
+                AND DIO.EZCANCELFLAG            = '0'
+                --
+                AND DIO.GLBL_CMPY_CD            = DISD.GLBL_CMPY_CD
+                AND DIO.DS_IMPT_ORD_PK          = DISD.DS_IMPT_ORD_PK
+                AND DISD.EZCANCELFLAG           = '0'
+                --
+                AND DISD.GLBL_CMPY_CD           = DISC.GLBL_CMPY_CD
+                AND DISD.DS_IMPT_SVC_DTL_PK     = DISC.DS_IMPT_SVC_DTL_PK
+                AND DISC.EZCANCELFLAG           = '0'
+                --
+                <!-- 2018/12/07 S21_NA#29484 Mod Start -->
+                <!-- AND DISC.GLBL_CMPY_CD           = DISP.GLBL_CMPY_CD  -->
+                <!-- AND DISC.DS_IMPT_SVC_PRC_PK     = DISP.DS_IMPT_SVC_PRC_PK -->
+                <!-- AND DISC.DS_IMPT_SVC_DTL_PK     = DISP.DS_IMPT_SVC_DTL_PK -->
+                <!-- AND DISP.EZCANCELFLAG           = '0' -->
+                AND DISC.GLBL_CMPY_CD           = DISP.GLBL_CMPY_CD (+)
+                AND DISC.DS_IMPT_SVC_PRC_PK     = DISP.DS_IMPT_SVC_PRC_PK(+)
+                AND DISC.DS_IMPT_SVC_DTL_PK     = DISP.DS_IMPT_SVC_DTL_PK(+)
+                AND DISP.EZCANCELFLAG(+)        = '0'
+                <!-- 2018/12/07 S21_NA#29484 Mod End -->
+                --
+                AND DISC.GLBL_CMPY_CD           = DIOD.GLBL_CMPY_CD(+)
+                AND DISC.DS_IMPT_ORD_DTL_PK     = DIOD.DS_IMPT_ORD_DTL_PK(+)
+                AND DIOD.EZCANCELFLAG(+)        = '0'
+                --
+                AND DIOD.GLBL_CMPY_CD           = DIOC.GLBL_CMPY_CD(+)
+                AND DIOD.DS_IMPT_ORD_CONFIG_PK  = DIOC.DS_IMPT_ORD_CONFIG_PK(+)
+                AND DIOC.EZCANCELFLAG(+)        = '0'
+                --
+                AND DISC.GLBL_CMPY_CD           = DIAB.GLBL_CMPY_CD(+) 
+                AND DISC.DS_IMPT_SVC_DTL_PK     = DIAB.DS_IMPT_SVC_DTL_PK(+)
+                AND DISC.DS_IMPT_ORD_DTL_PK     = DIAB.DS_IMPT_ORD_DTL_PK(+)
+                AND DIAB.EZCANCELFLAG(+)        = '0'
+                --
+                AND DISC.GLBL_CMPY_CD           = DIAC.GLBL_CMPY_CD(+)
+                AND DISC.DS_IMPT_SVC_DTL_PK     = DIAC.DS_IMPT_SVC_DTL_PK(+)
+                AND DISC.DS_IMPT_ORD_DTL_PK     = DIAC.DS_IMPT_ORD_DTL_PK(+)
+                AND DIAC.EZCANCELFLAG(+)        = '0'
+                --
+                AND DISD.GLBL_CMPY_CD           = AMV.GLBL_CMPY_CD(+)
+                AND DISD.DS_IMPT_SVC_MDSE_CD    = AMV.MDSE_CD(+)
+                AND AMV.EZCANCELFLAG(+)         = '0'
+                --
+                AND DISD.GLBL_CMPY_CD           = PSCT.GLBL_CMPY_CD(+) 
+                AND DISD.PRC_SVC_CONTR_TP_CD    = PSCT.PRC_SVC_CONTR_TP_CD(+)
+                AND PSCT.EZCANCELFLAG(+)        = '0'
+                --
+                AND DISD.GLBL_CMPY_CD           = PSPT.GLBL_CMPY_CD(+)
+                AND DISD.PRC_SVC_PLN_TP_CD      = PSPT.PRC_SVC_PLN_TP_CD(+)
+                AND PSPT.EZCANCELFLAG(+)        = '0'
+                --
+                AND DISD.GLBL_CMPY_CD           = CC.GLBL_CMPY_CD(+)
+                AND DISD.DS_CONTR_CATG_CD       = CC.DS_CONTR_CATG_CD(+)
+                AND CC.EZCANCELFLAG(+)          = '0'
+                --
+                AND DISD.GLBL_CMPY_CD           = BBC.GLBL_CMPY_CD(+)
+                AND DISD.BASE_BLLG_CYCLE_CD     = BBC.BLLG_CYCLE_CD(+) 
+                AND BBC.EZCANCELFLAG(+)         = '0'
+                --
+                AND DISD.GLBL_CMPY_CD           = UBC.GLBL_CMPY_CD(+)
+                AND DISD.USG_BLLG_CYCLE_CD      = UBC.BLLG_CYCLE_CD(+)
+                AND UBC.EZCANCELFLAG(+)         = '0'
+                --
+                AND DISD.GLBL_CMPY_CD           = BBT.GLBL_CMPY_CD(+)
+                AND DISD.BILL_BY_TP_CD          = BBT.BILL_BY_TP_CD(+)
+                AND BBT.EZCANCELFLAG(+)         = '0'
+                --
+                AND DISC.GLBL_CMPY_CD           = MRM.GLBL_CMPY_CD(+)
+                AND DISC.MTR_READ_METH_CD       = MRM.MTR_READ_METH_CD(+)
+                AND MRM.EZCANCELFLAG(+)         = '0'
+                --
+                AND DISD.GLBL_CMPY_CD           = DAC.GLBL_CMPY_CD(+)
+                AND DISD.SELL_TO_CUST_CD        = DAC.SELL_TO_CUST_CD(+)
+                AND DAC.EZCANCELFLAG(+)         = '0'
+                --
+                AND DISD.GLBL_CMPY_CD           = BTC.GLBL_CMPY_CD(+)
+                AND DISD.SOLD_TO_CUST_LOC_CD    = BTC.BILL_TO_CUST_CD(+)
+                AND BTC.EZCANCELFLAG(+)         = '0'
+                --
+                AND BTC.GLBL_CMPY_CD            = CNTY.GLBL_CMPY_CD(+)
+                AND BTC.CNTY_PK                 = CNTY.CNTY_PK(+)
+                AND CNTY.EZCANCELFLAG(+)        = '0'
+                --
+                AND DISD.GLBL_CMPY_CD           = C.GLBL_CMPY_CD(+)
+                AND DISD.DS_CONTR_PK            = C.DS_CONTR_PK(+)
+                AND C.EZCANCELFLAG(+)           = '0'
+                --
+                AND DIOC.GLBL_CMPY_CD           = MN.T_GLBL_CMPY_CD(+)
+                AND DIOC.MDL_ID                 = MN.T_MDL_ID(+)
+                AND MN.EZCANCELFLAG(+)          = '0'
+                --
+                <!-- 2018/05/07 QC#22482 Add Start -->
+                AND DISD.GLBL_CMPY_CD           = SMR.GLBL_CMPY_CD(+)
+                AND DISD.MAN_CONTR_OVRD_RSN_CD  = SMR.SVC_MEMO_RSN_CD(+)
+                AND SMR.EZCANCELFLAG(+)        = '0'
+                <!-- 2018/05/07 QC#22482 Add End -->
+
+            ORDER BY
+                DIO.ORD_SRC_REF_NUM
+                , DISD.DS_IMPT_SVC_LINE_NUM
+                , TO_NUMBER(DIOD.DS_ORD_POSN_NUM)
+
+    </statement>
+
+    <statement id="getImptSvcPrcHdr" parameterClass="Map" resultClass="Map">
+        SELECT  DISTINCT
+                  CSD.DS_IMPT_SVC_LINE_NUM  CPO_SVC_LINE_NUM
+                , '0'                       DS_ORD_POSN_NUM
+                , CSP.DS_IMPT_SVC_PRC_PK    CPO_SVC_PRC_PK
+                , CSD.DS_IMPT_SVC_DTL_PK    CPO_SVC_DTL_PK
+                , CSP.MDL_ID                MDL_ID
+                , CSP.MAINT_PRC_CATG_CD     MAINT_PRC_CATG_CD
+                , CSP.MAINT_FL_PRC_CATG_CD  MAINT_FL_PRC_CATG_CD
+                , CSP.PRC_MTR_PKG_PK        PRC_MTR_PKG_PK
+                , CSP.PRC_TIER_SVC_OFFER_CD PRC_TIER_SVC_OFFER_CD
+                , CSP.BASE_PRC_DEAL_AMT     BASE_PRC_DEAL_AMT
+                , CSP.BASE_PRC_FUNC_AMT     BASE_PRC_FUNC_AMT
+                , CSP.DEAL_PRC_LIST_PRC_AMT DEAL_PRC_LIST_PRC_AMT
+                , CSP.FUNC_PRC_LIST_PRC_AMT FUNC_PRC_LIST_PRC_AMT
+            FROM
+                DS_IMPT_ORD                CS
+                , DS_IMPT_SVC_DTL          CSD
+                , DS_IMPT_SVC_PRC          CSP
+                , DS_IMPT_SVC_CONFIG_REF   CCR
+                , DS_IMPT_ORD_DTL          DCD
+            WHERE
+                CS.GLBL_CMPY_CD              = #glblCmpyCd#
+                AND CS.DS_IMPT_ORD_PK        = #dsImptOrdPk#
+                AND CS.EZCANCELFLAG          = '0'
+                AND CS.GLBL_CMPY_CD          = CSD.GLBL_CMPY_CD
+                AND CS.DS_IMPT_ORD_PK        = CSD.DS_IMPT_ORD_PK
+<!--                AND CSD.DS_IMPT_SVC_LINE_NUM = #dsImptSvcLineNum#-->
+                AND CSD.EZCANCELFLAG         = '0'
+                AND CSD.GLBL_CMPY_CD         = CSP.GLBL_CMPY_CD
+                AND CSD.DS_IMPT_SVC_DTL_PK   = CSP.DS_IMPT_SVC_DTL_PK
+                AND CSP.EZCANCELFLAG         = '0'
+                AND CSD.GLBL_CMPY_CD         = CCR.GLBL_CMPY_CD 
+                AND CSD.DS_IMPT_SVC_DTL_PK   = CCR.DS_IMPT_SVC_DTL_PK 
+                AND CCR.EZCANCELFLAG         = '0' 
+                AND CCR.GLBL_CMPY_CD         = DCD.GLBL_CMPY_CD 
+                AND CCR.DS_IMPT_ORD_DTL_PK   = DCD.DS_IMPT_ORD_DTL_PK 
+                AND DCD.EZCANCELFLAG = '0'
+            ORDER BY
+                CSD.DS_IMPT_SVC_LINE_NUM
+                , CSP.MDL_ID
+    </statement>
+
+    <statement id="getImptSvcAddlBasePrc" parameterClass="Map" resultClass="Map">
+        SELECT
+                  CSD.DS_IMPT_SVC_LINE_NUM          CPO_SVC_LINE_NUM
+                , DIOD.ORD_SRC_REF_LINE_NUM         CPO_DTL_LINE_NUM
+                , DIOD.ORD_SRC_REF_LINE_SUB_NUM     CPO_DTL_LINE_SUB_NUM
+                , SAP.DS_IMPT_ORD_DTL_PK
+                , SAP.ADDL_BASE_PRC_CATG_CD         ADDL_BASE_PRC_CATG_CD
+                , SAP.ADDL_BASE_PRC_DEAL_AMT        ADDL_BASE_PRC_DEAL_AMT
+                , SAP.ADDL_BASE_PRC_FUNC_AMT        ADDL_BASE_PRC_FUNC_AMT
+                , SAP.DEAL_PRC_LIST_PRC_AMT         DEAL_PRC_LIST_PRC_AMT
+                , SAP.FUNC_PRC_LIST_PRC_AMT         FUNC_PRC_LIST_PRC_AMT
+                , SAP.DS_IMPT_SVC_ADDL_BASE_PK      CPO_SVC_ADDL_BASE_PRC_PK
+                , CSD.DS_IMPT_SVC_DTL_PK            CPO_SVC_DTL_PK
+                , CS.DS_IMPT_ORD_PK
+                , SAP.PRC_LIST_EQUIP_CONFIG_NUM     PRC_LIST_EQUIP_CONFIG_NUM
+--                , SAP.ADDL_EQUIP_PRC_DEAL_AMT
+--                , SAP.ADDL_EQUIP_PRC_FUNC_AMT
+--                , SAP.ADDL_SVC_PRC_DEAL_AMT
+--                , SAP.ADDL_SVC_PRC_FUNC_AMT
+                <!-- 2018/08/03 QC#26325 Mod Start -->
+                <!-- , SAP.SVC_PRC_CATG_CD               SVC_PRC_CATG_CD -->
+                , NVL(SAP.SVC_PRC_CATG_CD, 'AUBC') AS SVC_PRC_CATG_CD
+                <!-- 2018/08/03 QC#26325 Mod End -->
+--                , SAP.BILL_WITH_EQUIP_INVD_FLG
+                <!-- 2018/04/24 QC#10374 Add Start -->
+                , DIOD.DS_ORD_POSN_NUM              DS_ORD_POSN_NUM
+                <!-- 2018/04/24 QC#10374 Add End -->
+            FROM
+                DS_IMPT_ORD             CS
+                , DS_IMPT_ORD_DTL       DIODW
+                , DS_IMPT_ORD_DTL       DIOD
+                , DS_IMPT_SVC_DTL       CSD
+                , DS_IMPT_SVC_ADDL_BASE SAP
+            WHERE
+                CS.GLBL_CMPY_CD             = #glblCmpyCd#
+                AND CS.DS_IMPT_ORD_PK       = #dsImptOrdPk#
+                AND CS.EZCANCELFLAG         = '0'
+                AND CS.GLBL_CMPY_CD         = CSD.GLBL_CMPY_CD
+                AND CS.DS_IMPT_ORD_PK       = CSD.DS_IMPT_ORD_PK
+<!--                AND CSD.DS_IMPT_SVC_LINE_NUM = #dsImptSvcLineNum#-->
+                AND CSD.EZCANCELFLAG        = '0'
+                AND CSD.GLBL_CMPY_CD        = SAP.GLBL_CMPY_CD
+                AND CSD.DS_IMPT_SVC_DTL_PK  = SAP.DS_IMPT_SVC_DTL_PK
+                AND SAP.EZCANCELFLAG        = '0'
+                --
+                AND SAP.GLBL_CMPY_CD        = DIODW.GLBL_CMPY_CD
+                AND SAP.DS_IMPT_ORD_DTL_PK  = DIODW.DS_IMPT_ORD_DTL_PK
+                AND DIODW.EZCANCELFLAG      = '0'
+                --
+                AND DIODW.GLBL_CMPY_CD      = DIOD.GLBL_CMPY_CD
+                AND DIODW.DS_IMPT_ORD_PK    = DIOD.DS_IMPT_ORD_PK
+                AND DIODW.DS_ORD_POSN_NUM   = DIOD.DS_ORD_POSN_NUM
+                AND DIOD.BASE_CMPT_FLG      = 'Y'
+                AND DIOD.EZCANCELFLAG       = '0'
+            ORDER BY
+                CSD.DS_IMPT_SVC_LINE_NUM
+                , SAP.DS_IMPT_ORD_DTL_PK
+    </statement>
+
+    <statement id="getImptSvcAddlChrgPrc" parameterClass="Map" resultClass="Map">
+        SELECT
+                  CSD.DS_IMPT_SVC_LINE_NUM          CPO_SVC_LINE_NUM
+                , SAP.ADDL_CHRG_PRC_CATG_CD         ADDL_CHRG_PRC_CATG_CD
+                , SAP.ADDL_CHRG_MDSE_CD             ADDL_CHRG_MDSE_CD
+                , SAP.ADDL_CHRG_PRC_DEAL_AMT        ADDL_CHRG_PRC_DEAL_AMT
+                , SAP.ADDL_CHRG_PRC_FUNC_AMT        ADDL_CHRG_PRC_FUNC_AMT
+                , SAP.DEAL_PRC_LIST_PRC_AMT         DEAL_PRC_LIST_PRC_AMT
+                , SAP.FUNC_PRC_LIST_PRC_AMT         FUNC_PRC_LIST_PRC_AMT
+                , SAP.DS_IMPT_SVC_ADDL_CHRG_PK      CPO_SVC_ADDL_CHRG_PRC_PK
+                , CSD.DS_IMPT_SVC_DTL_PK            CPO_SVC_DTL_PK
+                , CS.DS_IMPT_ORD_PK
+                , SAP.DS_IMPT_ORD_DTL_PK
+                , DIOD.ORD_SRC_REF_LINE_NUM         CPO_DTL_LINE_NUM
+                , DIOD.ORD_SRC_REF_LINE_SUB_NUM     CPO_DTL_LINE_SUB_NUM
+                , SAP.ADDL_CHRG_PRC_CATG_CD         ADDL_CHRG_PRC_CATG_CD
+                , SAP.ADDL_CHRG_MDSE_CD             ADDL_CHRG_MDSE_CD
+                , SAP.ADDL_CHRG_PRC_DEAL_AMT        ADDL_CHRG_PRC_DEAL_AMT
+                , SAP.ADDL_CHRG_PRC_FUNC_AMT        ADDL_CHRG_PRC_FUNC_AMT
+                , SAP.DEAL_PRC_LIST_PRC_AMT         DEAL_PRC_LIST_PRC_AMT
+                , SAP.FUNC_PRC_LIST_PRC_AMT         FUNC_PRC_LIST_PRC_AMT
+                , SAP.SVC_PRC_CATG_CD               SVC_PRC_CATG_CD
+               -- , SAP.BILL_WITH_EQUIP_INVD_FLG
+                <!-- 2018/04/24 QC#10374 Add Start -->
+                , DIOD.DS_ORD_POSN_NUM              DS_ORD_POSN_NUM
+                <!-- 2018/04/24 QC#10374 Add End -->
+            FROM
+                DS_IMPT_ORD             CS
+                , DS_IMPT_SVC_DTL       CSD
+                , DS_IMPT_SVC_ADDL_CHRG SAP
+                , DS_IMPT_ORD_DTL       DIOD
+            WHERE
+                CS.GLBL_CMPY_CD             = #glblCmpyCd#
+                AND CS.DS_IMPT_ORD_PK       = #dsImptOrdPk#
+                AND CS.EZCANCELFLAG         = '0'
+                AND CS.GLBL_CMPY_CD         = CSD.GLBL_CMPY_CD
+                AND CS.DS_IMPT_ORD_PK       = CSD.DS_IMPT_ORD_PK
+<!--                AND CSD.DS_IMPT_SVC_LINE_NUM = #dsImptSvcLineNum#-->
+                AND CSD.EZCANCELFLAG        = '0'
+                AND CSD.GLBL_CMPY_CD        = SAP.GLBL_CMPY_CD
+                AND CSD.DS_IMPT_SVC_DTL_PK  = SAP.DS_IMPT_SVC_DTL_PK
+                AND SAP.EZCANCELFLAG        = '0'
+                --
+                AND SAP.GLBL_CMPY_CD        = DIOD.GLBL_CMPY_CD
+                AND SAP.DS_IMPT_ORD_DTL_PK  = DIOD.DS_IMPT_ORD_DTL_PK
+                AND DIOD.EZCANCELFLAG      = '0'
+            ORDER BY
+                CSD.DS_IMPT_SVC_LINE_NUM
+                , SAP.DS_IMPT_ORD_DTL_PK
+    </statement>
+
+    <statement id="getImptMntBillAsEquipInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+                  V.DS_ACCT_NUM
+                , DAC.DS_ACCT_NM                           DS_ACCT_NM
+                , V.BILL_TO_CUST_CD SOLD_TO_CUST_LOC_CD
+                , RPAD( 
+                    BTC.FIRST_LINE_ADDR
+                    , LENGTH(BTC.FIRST_LINE_ADDR) + 1
+                ) || RPAD( 
+                    BTC.SCD_LINE_ADDR
+                    , LENGTH(BTC.SCD_LINE_ADDR) + 1
+                ) || RPAD( 
+                    BTC.THIRD_LINE_ADDR
+                    , LENGTH(BTC.THIRD_LINE_ADDR) + 1
+                ) || RPAD( 
+                    BTC.FRTH_LINE_ADDR
+                    , LENGTH(BTC.FRTH_LINE_ADDR) + 1
+                ) || CONCAT(BTC.CTY_ADDR, ',')
+                  || RPAD(BTC.ST_CD, LENGTH(BTC.ST_CD) + 1)
+                  || BTC.POST_CD                            BILL_TO_CUST_LOC_ADDR
+            FROM
+                ( 
+                    SELECT
+                              1 PRIORITY
+                            , DC.GLBL_CMPY_CD
+                            , DC.BILL_TO_CUST_ACCT_CD       DS_ACCT_NUM
+                            , DC.BILL_TO_CUST_CD            BILL_TO_CUST_CD
+                            , DC.DS_ORD_CATG_CD
+                            , CD.APPLY_HDR_BILL_TO_FLG
+                            , CD.APPLY_HDR_SLD_TO_FLG
+                            , CD.APPLY_SPEC_CUST_FLG 
+                        FROM
+                            DS_IMPT_ORD                 DC
+                            , CPO_SVC_DEF_CUST_DECN     CD
+                        WHERE
+                            DC.GLBL_CMPY_CD                 = #glblCmpyCd#
+                            AND DC.DS_IMPT_ORD_PK           = #dsImptOrdPk#
+                            AND DC.EZCANCELFLAG             = '0'
+                            AND DC.GLBL_CMPY_CD             = CD.GLBL_CMPY_CD
+                            AND DC.DS_ORD_CATG_CD           = CD.DS_ORD_CATG_CD
+                            <!-- START 2018/02/06 K.Kojima [QC#23357,ADD] -->
+                            AND DC.DS_ORD_TP_CD             = CD.DS_ORD_TP_CD
+                            <!-- END 2018/02/06 K.Kojima [QC#23357,ADD] -->
+                            AND CD.BILL_BY_TP_CD            = #billByTpCd#
+                            AND CD.APPLY_HDR_BILL_TO_FLG    = 'Y'
+                            AND CD.EZCANCELFLAG             = '0'
+                    UNION 
+                    SELECT
+                              2 PRIORITY
+                            , DC.GLBL_CMPY_CD
+                            , DC.SELL_TO_CUST_CD            DS_ACCT_NUM
+                            , DC.SOLD_TO_CUST_LOC_CD        BILL_TO_CUST_CD
+                            , DC.DS_ORD_CATG_CD
+                            , CD.APPLY_HDR_BILL_TO_FLG
+                            , CD.APPLY_HDR_SLD_TO_FLG
+                            , CD.APPLY_SPEC_CUST_FLG 
+                        FROM
+                            DS_IMPT_ORD                 DC
+                            , CPO_SVC_DEF_CUST_DECN     CD
+                        WHERE
+                            DC.GLBL_CMPY_CD                 = #glblCmpyCd#
+                            AND DC.DS_IMPT_ORD_PK           = #dsImptOrdPk#
+                            AND DC.EZCANCELFLAG             = '0'
+                            AND DC.GLBL_CMPY_CD             = CD.GLBL_CMPY_CD
+                            AND DC.DS_ORD_CATG_CD           = CD.DS_ORD_CATG_CD
+                            <!-- START 2018/02/06 K.Kojima [QC#23357,ADD] -->
+                            AND DC.DS_ORD_TP_CD             = CD.DS_ORD_TP_CD
+                            <!-- END 2018/02/06 K.Kojima [QC#23357,ADD] -->
+                            AND CD.BILL_BY_TP_CD            = #billByTpCd#
+                            AND CD.APPLY_HDR_SLD_TO_FLG     = 'Y'
+                            AND CD.EZCANCELFLAG             = '0'
+                    UNION
+                    SELECT
+                              3 PRIORITY
+                            , DC.GLBL_CMPY_CD
+                            , CD.SPEC_DS_ACCT_NUM           DS_ACCT_NUM
+                            , CD.SPEC_BILL_TO_CUST_CD       BILL_TO_CUST_CD
+                            , DC.DS_ORD_CATG_CD
+                            , CD.APPLY_HDR_BILL_TO_FLG
+                            , CD.APPLY_HDR_SLD_TO_FLG
+                            , CD.APPLY_SPEC_CUST_FLG 
+                        FROM
+                            DS_IMPT_ORD                 DC
+                            , CPO_SVC_DEF_CUST_DECN     CD
+                        WHERE
+                            DC.GLBL_CMPY_CD                 = #glblCmpyCd#
+                            AND DC.DS_IMPT_ORD_PK           = #dsImptOrdPk#
+                            AND DC.EZCANCELFLAG             = '0'
+                            AND DC.GLBL_CMPY_CD             = CD.GLBL_CMPY_CD
+                            AND DC.DS_ORD_CATG_CD           = CD.DS_ORD_CATG_CD
+                            <!-- START 2018/02/06 K.Kojima [QC#23357,ADD] -->
+                            AND DC.DS_ORD_TP_CD             = CD.DS_ORD_TP_CD
+                            <!-- END 2018/02/06 K.Kojima [QC#23357,ADD] -->
+                            AND CD.BILL_BY_TP_CD            = #billByTpCd#
+                            AND CD.APPLY_SPEC_CUST_FLG      = 'Y'
+                            AND CD.EZCANCELFLAG             = '0'
+                ) V
+                , SELL_TO_CUST DAC
+                , BILL_TO_CUST BTC 
+            WHERE
+                V.GLBL_CMPY_CD                      = DAC.GLBL_CMPY_CD(+)
+                AND V.DS_ACCT_NUM                   = DAC.SELL_TO_CUST_CD(+)
+                AND DAC.RGTN_STS_CD(+)              = #rgtnStsCd#
+                AND DAC.EFF_FROM_DT(+)             &lt;= #slsDt#
+                AND ( 
+                    DAC.EFF_THRU_DT(+)             IS NULL
+                    OR DAC.EFF_THRU_DT(+)          &gt;= #slsDt#
+                ) 
+                AND DAC.DS_ACCT_ACTV_CUST_FLG(+)    = 'Y'
+                AND DAC.EZCANCELFLAG(+)             = '0'
+                             --
+                AND V.GLBL_CMPY_CD                  = BTC.GLBL_CMPY_CD(+)
+                AND V.BILL_TO_CUST_CD               = BTC.BILL_TO_CUST_CD(+)
+                AND BTC.RGTN_STS_CD(+)              = #rgtnStsCd#
+                AND BTC.EFF_FROM_DT(+)             &lt;= #slsDt#
+                AND ( 
+                    BTC.EFF_THRU_DT(+)             IS NULL
+                    OR BTC.EFF_THRU_DT(+)          &gt;= #slsDt#
+                ) 
+                AND BTC.EZCANCELFLAG(+)             = '0'
+            ORDER BY
+                V.PRIORITY
+    </statement>
+
+    <!-- 2018/04/06 QC#10374 Add Start -->
+    <statement id="getRentalOrderCnt" parameterClass="Map" resultClass="Integer">
+        SELECT
+              COUNT(OCBC.ORD_CATG_BIZ_CTX_PK)
+        FROM
+              DS_IMPT_ORD        DIO
+            , ORD_CATG_BIZ_CTX   OCBC
+        WHERE
+            DIO.GLBL_CMPY_CD              = #glblCmpyCd#
+            AND DIO.DS_IMPT_ORD_PK        = #dsImptOrdPk#
+            AND DIO.EZCANCELFLAG          = '0'
+
+            AND DIO.GLBL_CMPY_CD          = OCBC.GLBL_CMPY_CD
+            AND OCBC.ORD_CATG_CTX_TP_CD   = #ordCatgCtxTpCd#
+            AND OCBC.EZCANCELFLAG         = '0'
+            AND
+            (
+               (
+                    OCBC.DS_ORD_CATG_CD   IS NULL
+                AND OCBC.DS_ORD_TP_CD     IS NULL
+                AND OCBC.DS_ORD_RSN_CD    IS NULL
+               )
+             OR
+               (
+                    OCBC.DS_ORD_CATG_CD   = DIO.DS_ORD_CATG_CD
+                AND OCBC.DS_ORD_TP_CD     IS NULL
+                AND OCBC.DS_ORD_RSN_CD    IS NULL
+               )
+             OR
+               (
+                    OCBC.DS_ORD_CATG_CD   = DIO.DS_ORD_CATG_CD
+                AND OCBC.DS_ORD_TP_CD     = DIO.DS_ORD_TP_CD
+                AND OCBC.DS_ORD_RSN_CD    IS NULL
+               )
+             OR
+               (
+                    OCBC.DS_ORD_CATG_CD   = DIO.DS_ORD_CATG_CD
+                AND OCBC.DS_ORD_TP_CD     = DIO.DS_ORD_TP_CD
+                AND OCBC.DS_ORD_RSN_CD    = DIO.DS_ORD_RSN_CD
+               )
+            )
+    </statement>
+    <!-- 2018/04/06 QC#10374 Add End -->
+
+</sqlMap>

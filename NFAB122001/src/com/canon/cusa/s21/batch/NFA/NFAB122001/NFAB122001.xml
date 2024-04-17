@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NFAB122001">
+    <statement id="getDiffMachineData" parameterClass="Map" resultClass="Map">
+            SELECT
+                 FIN.SVC_MACH_MSTR_PK                    AS SVC_MACH_MSTR_PK
+                ,FIN.SER_NUM                             AS SER_NUM
+                ,FIN.DS_ACCT_NM                          AS DS_ACCT_NM
+                ,FIN.CTY_ADDR                            AS CTY_ADDR
+                ,FIN.POST_CD                             AS POST_CD
+                ,FIN.OLD_FIN_BR_CD                       AS OLD_FIN_BR_CD
+                ,FIN.FIN_BR_CD                           AS FIN_BR_CD
+                ,FIN.COA_BR_CD                           AS COA_BR_CD
+                ,FIN.FLD_SVC_BR_CD                       AS FLD_SVC_BR_CD
+                ,FIN.SLD_BY_LINE_BIZ_TP_CD               AS SLD_BY_LINE_BIZ_TP_CD
+                ,FIN.SLD_BY_LINE_BIZ_XREF_CD             AS SLD_BY_LINE_BIZ_XREF_CD
+            FROM
+                (
+                SELECT
+                     MMV.SVC_MACH_MSTR_PK                    AS SVC_MACH_MSTR_PK
+                    ,MMV.SER_NUM                             AS SER_NUM
+                    ,MMV.DS_ACCT_NM                          AS DS_ACCT_NM
+                    ,MMV.CTY_ADDR                            AS CTY_ADDR
+                    ,MMV.POST_CD                             AS POST_CD
+                    ,NVL(MMV.FIN_BR_CD, #dummyZ#)            AS OLD_FIN_BR_CD
+                    ,NVL(SBFBX_2.FIN_BR_CD, NVL(SBFBX_1.FIN_BR_CD, #defFinBrCd#))
+                                                             AS FIN_BR_CD
+                    ,CASE WHEN SBFBX_2.FIN_BR_CD IS NOT NULL
+                          THEN CB_2.COA_BR_CD
+                          WHEN SBFBX_1.FIN_BR_CD IS NOT NULL
+                          THEN CB_1.COA_BR_CD
+                     ELSE #defFinBrCd# END                          AS COA_BR_CD
+                    ,MMV.FLD_SVC_BR_CD                       AS FLD_SVC_BR_CD
+                    ,MMV.SLD_BY_LINE_BIZ_TP_CD               AS SLD_BY_LINE_BIZ_TP_CD
+                    ,MMV.SLD_BY_LINE_BIZ_XREF_CD             AS SLD_BY_LINE_BIZ_XREF_CD
+                FROM
+                    (
+                    SELECT
+                         SMM.GLBL_CMPY_CD
+                        ,SMM.SVC_MACH_MSTR_PK
+                        ,SMM.SER_NUM
+                        ,SMM.FIN_BR_CD
+                        ,SMM.FLD_SVC_BR_CD
+                        ,SEL.DS_ACCT_NM
+                        ,STC.CTY_ADDR
+                        ,STC.POST_CD
+                        ,DECODE(SMM.SLD_BY_LINE_BIZ_TP_CD, 'ALL', M.LINE_BIZ_TP_CD,
+                                                           NULL , M.LINE_BIZ_TP_CD,
+                                                                  SMM.SLD_BY_LINE_BIZ_TP_CD) AS SLD_BY_LINE_BIZ_TP_CD
+                        ,SBS.SLD_BY_LINE_BIZ_XREF_CD
+                     FROM
+                          SVC_MACH_MSTR SMM
+                         ,SHIP_TO_CUST  STC
+                         ,SELL_TO_CUST  SEL
+                         ,SLD_BIZ_SMRY  SBS
+                         ,MDSE          M
+                     WHERE 1=1
+                         AND SMM.GLBL_CMPY_CD           = #glblCmpyCd#
+                         AND SMM.EZCANCELFLAG           = '0'
+                         AND EXISTS(
+                             SELECT
+                                 1
+                             FROM
+                                 SVC_MACH_MSTR_STS SMMS
+                             WHERE
+                                     SMM.SVC_MACH_MSTR_STS_CD   = SMMS.SVC_MACH_MSTR_STS_CD
+                                 AND SMMS.SVC_CALL_AVAL_FLG     = 'Y'
+                                 AND SMM.GLBL_CMPY_CD           = SMMS.GLBL_CMPY_CD
+                                 AND SMMS.EZCANCELFLAG          = '0'
+                             <!-- START 2023/09/11 K.Watanabe [QC#61310, ADD] -->
+                             UNION
+                             SELECT
+                                 1
+                             FROM
+                                 RTL_SWH           RS
+                             WHERE
+                                 <iterate property="svcMachMstrStsCdList" var="svcMachMstrStsCd[]" open="SMM.SVC_MACH_MSTR_STS_CD IN (" close=")" conjunction=",">
+                                     #svcMachMstrStsCd[]#
+                                 </iterate>
+                                 AND SMM.CUR_LOC_NUM                 = RS.INVTY_LOC_CD
+                                 <!-- START 2023/09/21 K.Watanabe [QC#61310, ADD] -->
+                                 AND SMM.GLBL_CMPY_CD                = RS.GLBL_CMPY_CD
+                                 <!-- END 2023/09/21 K.Watanabe [QC#61310, ADD] -->
+                                 AND RS.EZCANCELFLAG                 = '0'
+                                 AND RS.RTL_WH_CATG_CD               = #rtlWhCatgCd#
+                                 AND RS.EFF_FROM_DT                  &lt;= #slsDt#
+                                 AND NVL(RS.EFF_THRU_DT, #maxDt#)    &gt;= #slsDt#
+                             <!-- END 2023/09/11 K.Watanabe [QC#61310, ADD] -->
+                         )
+                         
+                         AND SMM.GLBL_CMPY_CD           = M.GLBL_CMPY_CD(+)
+                         AND SMM.MDSE_CD                = M.MDSE_CD(+)
+                         AND M.EZCANCELFLAG(+)          = '0'
+
+                         AND SMM.CUR_LOC_NUM            = STC.SHIP_TO_CUST_CD
+                         AND SMM.GLBL_CMPY_CD           = STC.GLBL_CMPY_CD
+                         AND STC.EZCANCELFLAG           = '0'
+
+                         <!-- START 2023/09/11 K.Watanabe [QC#61310, MOD] -->
+                         <!-- AND SMM.CUR_LOC_ACCT_NUM       = SEL.SELL_TO_CUST_CD -->
+                         <!-- AND SMM.GLBL_CMPY_CD           = SEL.GLBL_CMPY_CD -->
+                         <!-- AND SEL.EZCANCELFLAG           = '0' -->
+                         AND SMM.CUR_LOC_ACCT_NUM       = SEL.SELL_TO_CUST_CD(+)
+                         AND SMM.GLBL_CMPY_CD           = SEL.GLBL_CMPY_CD(+)
+                         AND SEL.EZCANCELFLAG(+)        = '0'
+                         <!-- END 2023/09/11 K.Watanabe [QC#61310, MOD] -->
+                         AND SMM.GLBL_CMPY_CD           = SBS.GLBL_CMPY_CD
+                         AND DECODE(SMM.SLD_BY_LINE_BIZ_TP_CD, 'ALL', M.LINE_BIZ_TP_CD,
+                                                               NULL , M.LINE_BIZ_TP_CD,
+                                                                      SMM.SLD_BY_LINE_BIZ_TP_CD)
+                                                        = SBS.SLD_BY_LINE_BIZ_TP_CD
+                         AND SBS.EZCANCELFLAG           = '0'
+                     )                   MMV
+                    ,SLD_BIZ_FIN_BR_XREF SBFBX_1
+                    ,SLD_BIZ_FIN_BR_XREF SBFBX_2
+                    ,COA_BR              CB_1
+                    ,COA_BR              CB_2
+                WHERE   1=1
+                     <!-- Get Fin Branch without Postal Code -->
+                    AND MMV.FLD_SVC_BR_CD                     = SBFBX_1.SVC_BR_CD(+)
+                    AND MMV.SLD_BY_LINE_BIZ_XREF_CD           = SBFBX_1.SLD_BY_LINE_BIZ_XREF_CD(+)
+                    AND MMV.GLBL_CMPY_CD                      = SBFBX_1.GLBL_CMPY_CD(+)
+                    AND SBFBX_1.EFF_FROM_DT(+)                &lt;= #slsDt#
+                    AND NVL(SBFBX_1.EFF_THRU_DT(+), #maxDt#)  &gt;= #slsDt#
+                    AND SBFBX_1.POST_CD(+)                    = '*'
+                    AND SBFBX_1.EZCANCELFLAG(+)               = '0'
+                     <!-- Get Fin Branch with Postal Code -->
+                    AND MMV.FLD_SVC_BR_CD                     = SBFBX_2.SVC_BR_CD(+)
+                    AND MMV.SLD_BY_LINE_BIZ_XREF_CD           = SBFBX_2.SLD_BY_LINE_BIZ_XREF_CD(+)
+                    AND MMV.GLBL_CMPY_CD                      = SBFBX_2.GLBL_CMPY_CD(+)
+                    AND SBFBX_2.EFF_FROM_DT(+)                &lt;= #slsDt#
+                    AND NVL(SBFBX_2.EFF_THRU_DT(+), #maxDt#)  &gt;= #slsDt#
+                    AND SUBSTR(MMV.POST_CD,1,5)               LIKE SBFBX_2.POST_CD(+)
+                    AND SBFBX_2.EZCANCELFLAG(+)               = '0'
+                    
+                    AND SBFBX_1.GLBL_CMPY_CD                  = CB_1.GLBL_CMPY_CD(+)
+                    AND CB_1.EZCANCELFLAG(+)                  = '0'
+                    AND SBFBX_1.FIN_BR_CD                     = CB_1.COA_BR_CD(+)
+
+                    AND SBFBX_2.GLBL_CMPY_CD                  = CB_2.GLBL_CMPY_CD(+)
+                    AND CB_2.EZCANCELFLAG(+)                  = '0'
+                    AND SBFBX_2.FIN_BR_CD                     = CB_2.COA_BR_CD(+)
+                ) FIN
+            WHERE
+                    FIN.OLD_FIN_BR_CD                       &lt;&gt; FIN.FIN_BR_CD
+    </statement>
+</sqlMap>

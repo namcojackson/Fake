@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NSBB021001">
+    <statement id="getSvcTask" parameterClass="Map" resultClass="Map">
+        WITH
+            TSK AS (
+                    SELECT
+                         TAS.GLBL_CMPY_CD
+                        ,TAS.SVC_TASK_NUM
+                        ,TAS.FSR_NUM
+                        ,TAS.SER_NUM
+                        ,SUBSTR(TAS.EZINTIME, 1, 14)    AS EZINTIME
+                        ,EVT.FSR_EVENT_EXE_TS
+                        ,TAS.EZINUSERID
+                        ,TAS.SVC_MACH_MSTR_PK
+                        ,NVL(VST.TECH_CD, TAS.TECH_CD)  AS TECH_CD
+                        ,CASE WHEN EVT.FSR_EVENT_EXE_TS IS NULL
+                              THEN TO_CHAR(TO_TIMESTAMP(SUBSTR(TAS.EZINTIME,         1, 14), 'YYYYMMDDHH24MISS') + (1 / 24 / 60 * #initIntvlMin#),   'YYYYMMDDHH24MISS')
+                              ELSE TO_CHAR(TO_TIMESTAMP(SUBSTR(EVT.FSR_EVENT_EXE_TS, 1, 14), 'YYYYMMDDHH24MISS') + (1 / 24 / 60 * #rentryIntvlMin#), 'YYYYMMDDHH24MISS')
+                         END                            AS ALERT_TS
+                    FROM
+                         SVC_TASK   TAS
+                        ,FSR_VISIT  VST
+                        ,(
+                            SELECT
+                                EVE.GLBL_CMPY_CD
+                                ,EVE.SVC_TASK_NUM
+                                ,MAX(EVE.FSR_EVENT_EXE_TS) AS FSR_EVENT_EXE_TS
+                            FROM
+                                FSR_EVENT EVE
+                            WHERE
+                                    EVE.GLBL_CMPY_CD        = #glblCmpyCd#
+                                AND EVE.SVC_DISPT_EVENT_CD  = #svcDisptEventCd_ACS#
+                                AND EVE.EZCANCELFLAG        = '0'
+                            GROUP BY
+                                 EVE.GLBL_CMPY_CD
+                                ,EVE.SVC_TASK_NUM) EVT  
+                    WHERE
+                            TAS.GLBL_CMPY_CD    = #glblCmpyCd#
+                        AND TAS.CRS_SVC_SR_NUM  IS NULL
+                        AND TAS.EZCANCELFLAG    = '0'
+                        AND TAS.GLBL_CMPY_CD    = VST.GLBL_CMPY_CD(+)
+                        AND TAS.SVC_TASK_NUM    = VST.SVC_TASK_NUM(+)
+                        <!-- QC#28835 2018/10/17 K.fujimoto [ADD] -->
+                        <iterate property="svcTaskStsCdList" var="svcTaskStsCd[]" open="AND TAS.SVC_TASK_STS_CD IN (" close=")" conjunction=",">
+                        #svcTaskStsCd[]#
+                        </iterate>
+                        <!-- QC#28835 2018/10/17 K.fujimoto [END] -->
+                        AND VST.EZCANCELFLAG(+) = '0'
+                        AND TAS.GLBL_CMPY_CD    = EVT.GLBL_CMPY_CD(+)
+                        AND TAS.SVC_TASK_NUM    = EVT.SVC_TASK_NUM(+))
+        SELECT
+             TSK.SVC_TASK_NUM
+            ,TSK.FSR_NUM
+            ,TSK.SER_NUM
+            ,SUBSTR(TSK.EZINTIME, 1, 14) AS EZINTIME
+            ,TSK.EZINUSERID
+            ,TSK.FSR_EVENT_EXE_TS
+            ,CST.DS_ACCT_NM
+            ,MDL.T_MDL_NM
+            ,TRUNC(TO_NUMBER(TO_DATE(SUBSTR(#procTs#, 1, 12), 'YYYYMMDDHH24MI') - TO_DATE(SUBSTR(TSK.EZINTIME, 1, 12), 'YYYYMMDDHH24MI')) * 24 * 60) AS NO_PROC_TM
+        FROM
+             TSK
+            ,S21_PSN            PSN
+            ,SVC_MACH_MSTR      MCH
+            ,SELL_TO_CUST       CST
+            ,SVC_CONFIG_MSTR    CFG
+            ,MDL_NM             MDL
+        WHERE
+                TSK.TECH_CD                 IS NOT NULL
+            AND TSK.GLBL_CMPY_CD            = PSN.GLBL_CMPY_CD
+            AND TSK.TECH_CD                 = PSN.PSN_CD
+            <iterate property="crsSvcPsnTpList" var="crsSvcPsnTp[]" open="AND PSN.PSN_TP_CD IN (" close=")" conjunction=",">
+            #crsSvcPsnTp[]#
+            </iterate>
+            AND PSN.EZCANCELFLAG            = '0'
+            AND TSK.GLBL_CMPY_CD            = MCH.GLBL_CMPY_CD
+            AND TSK.SVC_MACH_MSTR_PK        = MCH.SVC_MACH_MSTR_PK
+            AND MCH.EZCANCELFLAG            = '0'
+            AND MCH.GLBL_CMPY_CD            = CST.GLBL_CMPY_CD
+            AND MCH.CUR_LOC_ACCT_NUM        = CST.SELL_TO_CUST_CD
+            AND CST.EZCANCELFLAG            = '0'
+            AND MCH.GLBL_CMPY_CD            = CFG.GLBL_CMPY_CD(+)
+            AND MCH.SVC_CONFIG_MSTR_PK      = CFG.SVC_CONFIG_MSTR_PK(+)
+            AND CFG.EZCANCELFLAG(+)         = '0'
+            AND CFG.GLBL_CMPY_CD            = MDL.T_GLBL_CMPY_CD(+)
+            AND CFG.MDL_ID                  = MDL.T_MDL_ID(+)
+            AND MDL.EZCANCELFLAG(+)         = '0'
+            AND TSK.ALERT_TS             &lt; #procTs#
+            <!-- START 2019/07/11 T.Kanasaka [QC#51040, ADD] -->
+            AND MCH.SVC_BY_LINE_BIZ_TP_CD   = #lineBizTpCd_ESS#
+            AND(
+                   MCH.SLD_BY_LINE_BIZ_TP_CD &lt;&gt; #lineBizTpCd_ESS#
+                OR MCH.SLD_BY_LINE_BIZ_TP_CD IS NULL
+            )
+            <!-- END   2019/07/11 T.Kanasaka [QC#51040, ADD] -->
+            <isEqual property="rentryFlg" compareValue="N">
+            AND TSK.FSR_EVENT_EXE_TS IS NULL
+            </isEqual>
+            AND NOT EXISTS (
+                    SELECT 1
+                    FROM
+                         DS_CONTR_DTL       DTL
+                        ,DS_SUB_CONTR       SUB
+                        ,DS_CONTR_DTL_STS_V STS
+                    WHERE
+                            TSK.GLBL_CMPY_CD               = DTL.GLBL_CMPY_CD
+                        AND TSK.SVC_MACH_MSTR_PK           = DTL.SVC_MACH_MSTR_PK
+                        AND DTL.CONTR_EFF_FROM_DT      &lt;= #slsDate#
+                        AND CASE WHEN DTL.CONTR_CLO_DT IS NULL
+                                 THEN DTL.CONTR_EFF_THRU_DT
+                                 ELSE DTL.CONTR_CLO_DT
+                            END                        &gt;= #slsDate#
+                        AND DTL.EZCANCELFLAG               = '0'
+                        AND DTL.GLBL_CMPY_CD               = SUB.GLBL_CMPY_CD
+                        AND DTL.DS_CONTR_DTL_PK            = SUB.DS_CONTR_DTL_PK
+                        AND SUB.CONTR_TRMN_FLG             = 'N'
+                        AND SUB.EFF_FROM_DT            &lt;= #slsDate#
+                        AND SUB.EFF_THRU_DT            &gt;= #slsDate#
+                        AND SUB.EZCANCELFLAG               = '0'
+                        AND DTL.GLBL_CMPY_CD               = STS.GLBL_CMPY_CD
+                        AND DTL.DS_CONTR_DTL_PK            = STS.DS_CONTR_DTL_PK
+                        AND STS.DS_CONTR_CTRL_STS_CD   &lt;&gt; #dsContrCtrlStsCd_canc#
+                        AND STS.EZCANCELFLAG               = '0')
+        ORDER BY TSK.SVC_TASK_NUM ASC
+    </statement>
+</sqlMap>

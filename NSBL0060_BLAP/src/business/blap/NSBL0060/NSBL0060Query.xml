@@ -1,0 +1,511 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NSBL0060Query">
+
+    <typeAlias alias="NSBL0060CMsg" type="business.blap.NSBL0060.NSBL0060CMsg"/>
+    <typeAlias alias="NSBL0060_ASMsg" type="business.blap.NSBL0060.NSBL0060_ASMsg"/>
+
+    <statement id="getMachineInfo" parameterClass="Map" resultMap="result.getMachineInfo">
+        SELECT
+            SM.SER_NUM
+            ,SM.CUST_MACH_CTRL_NUM
+            ,SM.MDSE_CD
+            <!-- START 10/20/2016 Y.Zhang [QC#13901 ADD] -->
+            ,SM.SVC_BY_LINE_BIZ_TP_CD
+            ,NM.T_MDL_NM
+            <isNotNull property="svcTaskNum_HD">
+            ,ST.SVC_TEAM_TXT
+            </isNotNull>
+            <isNull property="svcTaskNum_HD">
+            ,NULL    AS SVC_TEAM_TXT
+            </isNull>
+            <!-- END 10/20/2016 Y.Zhang [QC#13901 ADD] -->
+            ,SM.SHIP_TO_CUST_CD
+            ,SC.LOC_NM
+            ,SM.ISTL_DT
+        FROM
+            SVC_MACH_MSTR SM
+            <!-- START 10/20/2016 Y.Zhang [QC#13901 ADD] -->
+            ,SVC_CONFIG_MSTR CON
+            ,DS_MDL DL
+            ,MDL_NM NM
+            <isNotNull property="svcTaskNum_HD">
+            ,SVC_TASK ST
+            </isNotNull>
+            <!-- END 10/20/2016 Y.Zhang [QC#13901 ADD] -->
+            ,SHIP_TO_CUST SC
+        WHERE
+                SM.EZCANCELFLAG       = '0'
+            AND SM.GLBL_CMPY_CD       = #cMsg.glblCmpyCd#
+            AND SM.SVC_MACH_MSTR_PK   = #cMsg.svcMachMstrPk#
+            <!-- START 10/20/2016 Y.Zhang [QC#13901 ADD] -->
+            <isNotNull property="svcTaskNum_HD">
+            AND SM.SVC_MACH_MSTR_PK   = ST.SVC_MACH_MSTR_PK
+            AND ST.SVC_TASK_NUM       = #cMsg.svcTaskNum_HD#
+            AND SM.GLBL_CMPY_CD       = ST.GLBL_CMPY_CD
+            AND ST.EZCANCELFLAG       = '0'
+            </isNotNull>
+            AND CON.EZCANCELFLAG      = '0'
+            AND SM.SVC_CONFIG_MSTR_PK = CON.SVC_CONFIG_MSTR_PK
+            AND SM.GLBL_CMPY_CD       =  CON.GLBL_CMPY_CD
+            AND DL.EZCANCELFLAG       = '0'
+            AND CON.MDL_ID            = DL.MDL_ID
+            AND DL.GLBL_CMPY_CD       =  CON.GLBL_CMPY_CD
+            AND NM.EZCANCELFLAG       = '0'
+            AND DL.MDL_ID             = NM.T_MDL_ID
+            AND DL.GLBL_CMPY_CD       =  NM.T_GLBL_CMPY_CD
+            <!-- END 10/20/2016 Y.Zhang [QC#13901 ADD] -->
+            AND SC.EZCANCELFLAG       = '0'
+            AND SM.GLBL_CMPY_CD       = SC.GLBL_CMPY_CD
+            AND SM.SHIP_TO_CUST_CD    = SC.SHIP_TO_CUST_CD
+    </statement>
+    <resultMap id="result.getMachineInfo" class="NSBL0060CMsg">
+        <result property="serNum"                column="SER_NUM"                  javaType="EZDCStringItem"/>
+        <result property="custMachCtrlNum"       column="CUST_MACH_CTRL_NUM"       javaType="EZDCStringItem"/>
+        <result property="mdseCd"                column="MDSE_CD"                  javaType="EZDCStringItem"/>
+        <!-- START 10/20/2016 Y.Zhang [QC#13901 ADD] -->
+        <result property="svcByLineBizTpCd"      column="SVC_BY_LINE_BIZ_TP_CD"    javaType="EZDCStringItem"/>        
+        <result property="mdlNm"                 column="T_MDL_NM"                 javaType="EZDCStringItem"/>
+        <result property="svcTeamTxt"            column="SVC_TEAM_TXT"             javaType="EZDCStringItem"/>
+        <!-- START 10/20/2016 Y.Zhang [QC#13901 ADD] -->
+        <result property="shipToCustCd"          column="SHIP_TO_CUST_CD"          javaType="EZDCStringItem"/>
+        <result property="locNm"                 column="LOC_NM"                   javaType="EZDCStringItem"/>
+        <result property="istlDt"                column="ISTL_DT"                  javaType="EZDCDateItem"/>
+<!--    <result property="orgLayerNum"           column="ORG_LAYER_NUM"            javaType="EZDCBigDecimalItem"/>
+        <result property="orgCd"                 column="ORG_CD"                   javaType="EZDCStringItem"/>
+        <result property="orgNm"                 column="ORG_NM"                   javaType="EZDCStringItem"/>
+-->
+    </resultMap>
+
+    <statement id="getResCntAndAvg" parameterClass="Map" resultClass="Map">
+        SELECT
+            COUNT(S.SVC_TASK_STS_CD) AS COUNT
+            ,ROUND(AVG(S.SVC_RSP_TM_NUM), 0) AS AVG
+        FROM
+            SVC_TASK S
+        WHERE
+                S.EZCANCELFLAG     = '0'
+            AND S.GLBL_CMPY_CD     = #cMsg.glblCmpyCd#
+            <iterate property="svcTaskStsCdList" var="svcTaskStsCd[]" open="AND S.SVC_TASK_STS_CD IN (" close=")" conjunction=",">
+                #svcTaskStsCd[]#
+            </iterate>
+            AND S.SVC_MACH_MSTR_PK = #cMsg.svcMachMstrPk#
+    </statement>
+
+    <statement id="getAvgMtrCnt" parameterClass="Map" resultClass="BigDecimal">
+        SELECT *
+        FROM
+            (
+            SELECT
+                A.AVG_MTR_READ_CNT
+            FROM
+                 SVC_ADCV_BY_SER   A
+                ,MTR_LB            B
+            WHERE
+                    A.GLBL_CMPY_CD      = #cMsg.glblCmpyCd#
+                AND A.SVC_MACH_MSTR_PK  = #cMsg.svcMachMstrPk#
+                AND A.EZCANCELFLAG      = '0'
+                AND A.GLBL_CMPY_CD      = B.GLBL_CMPY_CD
+                AND A.MTR_LB_CD         = B.MTR_LB_CD
+                AND B.TOT_MTR_FLG       = 'Y'
+                AND B.EZCANCELFLAG      = '0'
+            )
+        WHERE
+            ROWNUM = 1
+    </statement>
+
+    <statement id="getServiceTaskInfo" parameterClass="Map" resultMap="result.getServiceTaskInfo">
+        SELECT
+            X.SVC_TASK_NUM
+            ,X.FSR_NUM
+            ,X.FSR_VISIT_NUM
+            ,X.SVC_TASK_STS_CD
+            ,X.SVC_TASK_STS_NM_ST
+            ,X.FSR_VISIT_STS_CD
+            ,X.SVC_TASK_STS_NM_FV
+            ,X.DS_SVC_CALL_TP_CD
+            ,X.DS_SVC_CALL_TP_NM
+            ,X.SVC_PBLM_SYMP_TP_CD
+            ,X.SVC_PBLM_SYMP_TP_NM
+            ,X.SVC_PBLM_TP_CD
+            ,X.SVC_PBLM_TP_NM
+            ,X.SVC_PBLM_RSN_TP_CD
+            ,X.SVC_PBLM_RSN_TP_NM
+            ,X.SVC_PBLM_LOC_TP_CD
+            ,X.SVC_PBLM_LOC_TP_NM
+            ,X.SVC_PBLM_CRCT_TP_CD
+            ,X.SVC_PBLM_CRCT_TP_NM
+            ,X.TECH_CD_ST
+            ,X.TECH_NM_ST
+            ,X.TECH_CD_FV
+            ,X.TECH_NM_FV
+            ,X.SVC_TASK_RCV_DT
+            ,X.SVC_TASK_RCV_TM
+            ,X.SVC_TASK_CPLT_DT
+            ,X.SVC_TASK_CPLT_TM
+            ,X.SVC_RSP_TM_NUM
+            ,X.READ_MTR_CNT
+            ,X.TEST_MTR_CNT
+            ,X.SVC_BILL_TP_CD
+            ,X.SVC_BILL_TP_NM
+            ,X.SVC_PRT_DEAL_AMT
+            ,X.SVC_LBOR_DEAL_AMT_FVT
+            ,X.SVC_LBOR_DEAL_AMT_ST
+            ,X.SVC_TRVL_DEAL_AMT
+            ,X.INV_CCY_CD
+        FROM
+            (SELECT
+                B.SVC_TASK_NUM
+                ,B.FSR_NUM
+                ,B.FSR_VISIT_NUM
+                ,B.SVC_TASK_STS_CD
+                ,STS1.SVC_TASK_STS_NM AS SVC_TASK_STS_NM_ST
+                ,B.FSR_VISIT_STS_CD
+                ,STS2.SVC_TASK_STS_NM AS SVC_TASK_STS_NM_FV
+                ,B.DS_SVC_CALL_TP_CD
+                ,DS.DS_SVC_CALL_TP_NM
+                ,B.SVC_PBLM_SYMP_TP_CD
+                ,SPS.SVC_PBLM_SYMP_TP_NM
+                ,B.SVC_PBLM_TP_CD
+                ,CASE
+                    WHEN SP.SVC_PBLM_TP_NM IS NULL 
+                        THEN SP2.SVC_PBLM_TP_NM
+                        ELSE SP.SVC_PBLM_TP_NM
+                 END AS SVC_PBLM_TP_NM
+                ,B.SVC_PBLM_RSN_TP_CD
+                ,CASE
+                    WHEN SPR.SVC_PBLM_RSN_TP_NM IS NULL 
+                        THEN SPR2.SVC_PBLM_RSN_TP_NM
+                        ELSE SPR.SVC_PBLM_RSN_TP_NM
+                 END AS SVC_PBLM_RSN_TP_NM
+                ,B.SVC_PBLM_LOC_TP_CD
+                ,CASE
+                    WHEN SPL.SVC_PBLM_LOC_TP_NM IS NULL 
+                        THEN SPL2.SVC_PBLM_LOC_TP_NM
+                        ELSE SPL.SVC_PBLM_LOC_TP_NM
+                 END AS SVC_PBLM_LOC_TP_NM
+                ,B.SVC_PBLM_CRCT_TP_CD
+                ,CASE
+                    WHEN SPC.SVC_PBLM_CRCT_TP_NM IS NULL 
+                        THEN SPC2.SVC_PBLM_CRCT_TP_NM
+                        ELSE SPC.SVC_PBLM_CRCT_TP_NM
+                 END AS SVC_PBLM_CRCT_TP_NM
+                ,B.TECH_CD_ST
+                ,TM1.TECH_NM AS TECH_NM_ST
+                ,B.TECH_CD_FV
+                ,TM2.TECH_NM AS TECH_NM_FV
+                ,B.SVC_TASK_RCV_DT
+                ,B.SVC_TASK_RCV_TM
+                ,B.SVC_TASK_CPLT_DT
+                ,B.SVC_TASK_CPLT_TM
+                ,B.SVC_RSP_TM_NUM
+                ,SPMR.READ_MTR_CNT
+                ,SPMR.TEST_MTR_CNT
+                ,B.SVC_BILL_TP_CD
+                ,SB.SVC_BILL_TP_NM
+                ,(SELECT
+                        SUM(TRUNC(FU.SVC_PRT_DEAL_AMT, 2))
+                    FROM
+                        FSR_USG FU
+                    WHERE
+                            FU.EZCANCELFLAG  = '0'
+                        AND FU.GLBL_CMPY_CD  = B.GLBL_CMPY_CD
+<!-- START 12/06/2013 T.Nakamura [Def#3199 ADD] -->
+                        AND FU.FSR_NUM       = B.FSR_NUM
+<!-- E N D 12/06/2013 T.Nakamura [Def#3199 ADD] -->
+                        AND FU.FSR_VISIT_NUM = B.FSR_VISIT_NUM_FVT
+                        AND FU.SVC_TASK_NUM  = B.SVC_TASK_NUM
+                ) AS SVC_PRT_DEAL_AMT
+                ,TRUNC(B.SVC_LBOR_DEAL_AMT_FVT, 2) AS SVC_LBOR_DEAL_AMT_FVT
+                ,TRUNC(B.SVC_LBOR_DEAL_AMT, 2) AS SVC_LBOR_DEAL_AMT_ST
+                ,TRUNC(B.SVC_TRVL_DEAL_AMT, 2) AS SVC_TRVL_DEAL_AMT
+                ,B.INV_CCY_CD
+            FROM
+                (SELECT
+                        A.GLBL_CMPY_CD
+                        ,A.SVC_TASK_NUM
+                        ,A.FSR_NUM
+                        ,A.SVC_TASK_STS_CD
+                        ,A.SVC_MACH_MSTR_PK
+                        ,A.DS_SVC_CALL_TP_CD
+                        ,A.SVC_BILL_TP_CD
+                        ,A.SVC_PBLM_SYMP_TP_CD
+                        ,A.TECH_CD_ST
+                        ,A.SVC_TASK_RCV_DT
+                        ,A.SVC_TASK_RCV_TM
+                        ,A.SVC_TASK_CPLT_DT
+                        ,A.SVC_TASK_CPLT_TM
+                        ,A.SVC_RSP_TM_NUM
+                        ,A.SVC_LBOR_DEAL_AMT
+                        ,A.INV_CCY_CD
+                        ,A.FIRST_PROD_CTRL_CD
+                        ,A.FSR_VISIT_NUM
+                        ,A.FSR_VISIT_STS_CD
+                        ,A.TECH_CD_FV
+                        ,A.SVC_TRVL_DEAL_AMT
+                        ,FVT.FSR_VISIT_NUM AS FSR_VISIT_NUM_FVT
+                        ,FVT.SVC_LBOR_DEAL_AMT AS SVC_LBOR_DEAL_AMT_FVT
+                        ,FVT.SVC_PBLM_TP_CD
+                        ,FVT.SVC_PBLM_RSN_TP_CD
+                        ,FVT.SVC_PBLM_LOC_TP_CD
+                        ,FVT.SVC_PBLM_CRCT_TP_CD 
+                    FROM
+                        (SELECT
+                            ST.GLBL_CMPY_CD
+                            ,ST.SVC_TASK_NUM
+                            ,ST.FSR_NUM
+                            ,ST.SVC_TASK_STS_CD
+                            ,ST.SVC_MACH_MSTR_PK
+                            ,ST.DS_SVC_CALL_TP_CD
+                            ,ST.SVC_BILL_TP_CD
+                            ,ST.SVC_PBLM_SYMP_TP_CD
+                            ,ST.TECH_CD AS TECH_CD_ST
+                            ,ST.SVC_TASK_RCV_DT
+                            ,ST.SVC_TASK_RCV_TM
+                            ,ST.SVC_TASK_CPLT_DT
+                            ,ST.SVC_TASK_CPLT_TM
+                            ,ST.SVC_RSP_TM_NUM
+                            ,ST.SVC_LBOR_DEAL_AMT
+                            ,ST.INV_CCY_CD
+                            ,FV.FSR_VISIT_NUM
+                            ,FV.FSR_VISIT_STS_CD
+                            ,FV.TECH_CD AS TECH_CD_FV
+                            ,FV.SVC_TRVL_DEAL_AMT
+                            ,MD.FIRST_PROD_CTRL_CD
+                        FROM
+                            SVC_TASK ST
+                            ,FSR_VISIT FV
+                            ,FSR           FS
+                            ,SVC_MACH_MSTR SM
+                            ,MDSE          MD
+                        WHERE
+                                ST.EZCANCELFLAG       = '0'
+                            AND ST.GLBL_CMPY_CD       = #cMsg.glblCmpyCd#
+                            AND ST.SVC_MACH_MSTR_PK   = #cMsg.svcMachMstrPk#
+                        <isNotNull property="cMsg.xxFromDt">
+                            AND ST.SVC_TASK_RCV_DT    &gt; #fromDt#
+                        </isNotNull>
+                        <isNotNull property="cMsg.xxToDt">
+                            AND ST.SVC_TASK_RCV_DT    &lt; #toDt#
+                        </isNotNull>
+                            AND FV.EZCANCELFLAG(+)    = '0'
+                            AND ST.GLBL_CMPY_CD       = FV.GLBL_CMPY_CD(+)
+                            AND ST.FSR_NUM            = FV.FSR_NUM(+)
+                            AND FS.EZCANCELFLAG(+)    = '0'
+                            AND FV.GLBL_CMPY_CD       = FS.GLBL_CMPY_CD(+)
+                            AND FV.FSR_NUM            = FS.FSR_NUM(+)
+                            AND SM.EZCANCELFLAG(+)    = '0'
+                            AND FS.GLBL_CMPY_CD       = SM.GLBL_CMPY_CD(+)
+                            AND FS.SVC_MACH_MSTR_PK   = SM.SVC_MACH_MSTR_PK(+)
+                            AND MD.EZCANCELFLAG(+)    = '0'
+                            AND SM.GLBL_CMPY_CD       = MD.GLBL_CMPY_CD(+)
+                            AND SM.MDSE_CD            = MD.MDSE_CD(+)
+                            AND MD.RGTN_STS_CD(+)     = #rgtnStsCd#
+                        ) A
+                        ,FSR_VISIT_TASK FVT
+                    WHERE
+                            FVT.EZCANCELFLAG(+)     = '0'
+                      AND A.GLBL_CMPY_CD          = FVT.GLBL_CMPY_CD(+)
+                      AND A.SVC_TASK_NUM          = FVT.SVC_TASK_NUM(+)
+                      AND A.FSR_NUM               = FVT.FSR_NUM(+)
+                      AND A.FSR_VISIT_NUM         = FVT.FSR_VISIT_NUM(+)
+                ) B
+                ,(
+<!-- START 07/30/2018 T.Wada [QC#18613-2 MOD]  -->
+<!--
+                   SELECT 
+                          GLBL_CMPY_CD
+                          ,SVC_MACH_MSTR_PK
+                          ,FSR_NUM
+                          ,FSR_VISIT_NUM
+                          ,READ_MTR_CNT
+                          ,TEST_MTR_CNT
+                   FROM
+                          SVC_PHYS_MTR_READ
+                   WHERE
+                          GLBL_CMPY_CD      =   #cMsg.glblCmpyCd#
+                     AND  EZCANCELFLAG      =   '0'
+                     AND  MTR_CLS_TP_CD     =   #mtrClsTpCd#
+                     AND  SVC_MACH_MSTR_PK  =   #cMsg.svcMachMstrPk#
+                     AND  FSR_NUM IS NOT NULL
+                     AND  FSR_VISIT_NUM IS NOT NULL
+                  
+                   UNION
+                  
+                  SELECT 
+                          GLBL_CMPY_CD
+                          ,SVC_MACH_MSTR_PK
+                          ,FSR_NUM
+                          ,FSR_VISIT_NUM
+                          ,SUM(READ_MTR_CNT) READ_MTR_CNT
+                          ,SUM(TEST_MTR_CNT) TEST_MTR_CNT
+                   FROM
+                          SVC_PHYS_MTR_READ
+                   WHERE
+                          GLBL_CMPY_CD      =   #cMsg.glblCmpyCd#
+                     AND  EZCANCELFLAG      =   '0'
+                     AND  MTR_CLS_TP_CD    !=   #mtrClsTpCd#
+                     AND  SVC_MACH_MSTR_PK  =   #cMsg.svcMachMstrPk#
+                     AND  FSR_NUM IS NOT NULL
+                     AND  FSR_VISIT_NUM IS NOT NULL
+                GROUP BY  GLBL_CMPY_CD,SVC_MACH_MSTR_PK,FSR_NUM,FSR_VISIT_NUM
+-->
+                  SELECT 
+                          SPMR.GLBL_CMPY_CD
+                          ,SPMR.SVC_MACH_MSTR_PK
+                          ,SPMR.SVC_TASK_NUM
+                          ,SUM(SPMR.READ_MTR_CNT) READ_MTR_CNT
+                          ,SUM(SPMR.TEST_MTR_CNT) TEST_MTR_CNT
+                   FROM
+                          SVC_PHYS_MTR_READ SPMR
+                          ,MTR_LB           ML
+                   WHERE
+                          SPMR.GLBL_CMPY_CD        =   #cMsg.glblCmpyCd#
+                     AND  SPMR.EZCANCELFLAG        =   '0'
+                     AND  SPMR.SVC_MACH_MSTR_PK    =   #cMsg.svcMachMstrPk#
+                     AND  SPMR.SVC_TASK_NUM        IS NOT NULL
+                     AND  SPMR.GLBL_CMPY_CD        =   ML.GLBL_CMPY_CD
+                     AND  SPMR.MTR_LB_CD           =   ML.MTR_LB_CD
+                     <!-- START 2018/10/09 K.Fujimoto [QC#28592, ADD] -->
+                     AND  SPMR.VLD_MTR_FLG         =   'Y'
+                     <!-- END   2018/10/09 K.Fujimoto [QC#28592, ADD] -->
+                     AND  ML.EZCANCELFLAG          =   '0'
+                     AND  ML.TOT_MTR_FLG           =   #flgY#
+                     AND  DS_TEST_COPY_CLS_CD      =   #testCopyOut#
+                GROUP BY  
+                    SPMR.GLBL_CMPY_CD
+                    ,SPMR.SVC_MACH_MSTR_PK
+                    ,SPMR.SVC_TASK_NUM
+<!-- END   07/30/2018 T.Wada [QC#18613-2 MOD]  -->
+                 ) SPMR
+                <!-- Below Type / Master Table -->
+                ,SVC_TASK_STS STS1
+                ,SVC_TASK_STS STS2
+                ,DS_SVC_CALL_TP DS
+                ,SVC_PBLM_SYMP_TP SPS
+                ,SVC_BILL_TP SB
+                ,TECH_MSTR TM1
+                ,TECH_MSTR TM2
+                ,SVC_PBLM_TP SP
+                ,SVC_PBLM_RSN_TP SPR
+                ,SVC_PBLM_LOC_TP SPL
+                ,SVC_PBLM_CRCT_TP SPC
+                ,SVC_PBLM_TP SP2
+                ,SVC_PBLM_RSN_TP SPR2
+                ,SVC_PBLM_LOC_TP SPL2
+                ,SVC_PBLM_CRCT_TP SPC2
+            WHERE
+                    B.GLBL_CMPY_CD          = SPMR.GLBL_CMPY_CD(+)
+                AND B.SVC_MACH_MSTR_PK      = SPMR.SVC_MACH_MSTR_PK(+)
+<!-- START 07/30/2018 T.Wada [QC#18613-2 MOD]  -->
+<!-- 
+                AND B.FSR_NUM               = SPMR.FSR_NUM(+)
+                AND B.FSR_VISIT_NUM         = SPMR.FSR_VISIT_NUM(+)
+-->
+                AND B.SVC_TASK_NUM          = SPMR.SVC_TASK_NUM(+)
+<!-- END   07/30/2018 T.Wada [QC#18613-2 MOD]  -->
+                AND STS1.EZCANCELFLAG(+)    = '0'
+                AND B.GLBL_CMPY_CD          = STS1.GLBL_CMPY_CD(+)
+                AND B.SVC_TASK_STS_CD       = STS1.SVC_TASK_STS_CD(+)
+                AND STS2.EZCANCELFLAG(+)    = '0'
+                AND B.GLBL_CMPY_CD          = STS2.GLBL_CMPY_CD(+)
+                AND B.FSR_VISIT_STS_CD      = STS2.SVC_TASK_STS_CD(+)
+                AND DS.EZCANCELFLAG(+)      = '0'
+                AND B.GLBL_CMPY_CD          = DS.GLBL_CMPY_CD(+)
+                AND B.DS_SVC_CALL_TP_CD     = DS.DS_SVC_CALL_TP_CD(+)
+                AND SPS.EZCANCELFLAG(+)     = '0'
+                AND B.GLBL_CMPY_CD          = SPS.GLBL_CMPY_CD(+)
+                AND B.SVC_PBLM_SYMP_TP_CD   = SPS.SVC_PBLM_SYMP_TP_CD(+)
+                AND SB.EZCANCELFLAG(+)      = '0'
+                AND B.GLBL_CMPY_CD          = SB.GLBL_CMPY_CD(+)
+                AND B.SVC_BILL_TP_CD        = SB.SVC_BILL_TP_CD(+)
+                AND TM1.EZCANCELFLAG(+)     = '0'
+                AND B.GLBL_CMPY_CD          = TM1.GLBL_CMPY_CD(+)
+                AND B.TECH_CD_ST            = TM1.TECH_TOC_CD(+)
+                AND TM2.EZCANCELFLAG(+)     = '0'
+                AND B.GLBL_CMPY_CD          = TM2.GLBL_CMPY_CD(+)
+                AND B.TECH_CD_FV            = TM2.TECH_TOC_CD(+)
+
+                AND SP.EZCANCELFLAG(+)      = '0'
+                AND B.GLBL_CMPY_CD          = SP.GLBL_CMPY_CD(+)
+                AND B.SVC_PBLM_TP_CD        = SP.SVC_PBLM_TP_CD(+)
+                AND B.FIRST_PROD_CTRL_CD    = SP.FIRST_PROD_CTRL_CD(+)
+                AND SPR.EZCANCELFLAG(+)     = '0'
+                AND B.GLBL_CMPY_CD          = SPR.GLBL_CMPY_CD(+)
+                AND B.SVC_PBLM_RSN_TP_CD    = SPR.SVC_PBLM_RSN_TP_CD(+)
+                AND B.FIRST_PROD_CTRL_CD    = SPR.FIRST_PROD_CTRL_CD(+)
+                AND SPL.EZCANCELFLAG(+)     = '0'
+                AND B.GLBL_CMPY_CD          = SPL.GLBL_CMPY_CD(+)
+                AND B.SVC_PBLM_LOC_TP_CD    = SPL.SVC_PBLM_LOC_TP_CD(+)
+                AND B.FIRST_PROD_CTRL_CD    = SPL.FIRST_PROD_CTRL_CD(+)
+                AND SPC.EZCANCELFLAG(+)     = '0'
+                AND B.GLBL_CMPY_CD          = SPC.GLBL_CMPY_CD(+)
+                AND B.SVC_PBLM_CRCT_TP_CD   = SPC.SVC_PBLM_CRCT_TP_CD(+)
+                AND B.FIRST_PROD_CTRL_CD    = SPC.FIRST_PROD_CTRL_CD(+)
+
+                AND SP2.EZCANCELFLAG(+)          = '0'
+                AND B.GLBL_CMPY_CD               = SP2.GLBL_CMPY_CD(+)
+                AND B.SVC_PBLM_TP_CD             = SP2.SVC_PBLM_TP_CD(+)
+                AND SP2.FIRST_PROD_CTRL_CD(+)    = #asterisk#
+                AND SPR2.EZCANCELFLAG(+)         = '0'
+                AND B.GLBL_CMPY_CD               = SPR2.GLBL_CMPY_CD(+)
+                AND B.SVC_PBLM_RSN_TP_CD         = SPR2.SVC_PBLM_RSN_TP_CD(+)
+                AND SPR2.FIRST_PROD_CTRL_CD(+)   = #asterisk#
+                AND SPL2.EZCANCELFLAG(+)         = '0'
+                AND B.GLBL_CMPY_CD               = SPL2.GLBL_CMPY_CD(+)
+                AND B.SVC_PBLM_LOC_TP_CD         = SPL2.SVC_PBLM_LOC_TP_CD(+)
+                AND SPL2.FIRST_PROD_CTRL_CD(+)   = #asterisk#
+                AND SPC2.EZCANCELFLAG(+)         = '0'
+                AND B.GLBL_CMPY_CD               = SPC2.GLBL_CMPY_CD(+)
+                AND B.SVC_PBLM_CRCT_TP_CD        = SPC2.SVC_PBLM_CRCT_TP_CD(+)
+                AND SPC2.FIRST_PROD_CTRL_CD(+)   = #asterisk#
+            ORDER BY
+                B.SVC_TASK_RCV_DT DESC
+                ,B.SVC_TASK_RCV_TM DESC
+                ,B.SVC_TASK_NUM DESC
+                ,B.FSR_VISIT_NUM DESC
+            ) X
+        WHERE
+            ROWNUM &lt; $rowNum$
+    </statement>
+    <resultMap id="result.getServiceTaskInfo" class="NSBL0060_ASMsg">
+        <result property="svcTaskNum"          column="SVC_TASK_NUM"           javaType="EZDSStringItem"/>
+        <result property="fsrNum"              column="FSR_NUM"                javaType="EZDSStringItem"/>
+        <result property="fsrVisitNum"         column="FSR_VISIT_NUM"          javaType="EZDSStringItem"/>
+        <result property="svcTaskStsCd"        column="SVC_TASK_STS_CD"        javaType="EZDSStringItem"/>
+        <result property="svcTaskStsNm_ST"     column="SVC_TASK_STS_NM_ST"     javaType="EZDSStringItem"/>
+        <result property="fsrVisitStsCd"       column="FSR_VISIT_STS_CD"       javaType="EZDSStringItem"/>
+        <result property="svcTaskStsNm_FV"     column="SVC_TASK_STS_NM_FV"     javaType="EZDSStringItem"/>
+        <result property="dsSvcCallTpCd"       column="DS_SVC_CALL_TP_CD"      javaType="EZDSStringItem"/>
+        <result property="dsSvcCallTpNm"       column="DS_SVC_CALL_TP_NM"      javaType="EZDSStringItem"/>
+        <result property="svcPblmSympTpCd"     column="SVC_PBLM_SYMP_TP_CD"    javaType="EZDSStringItem"/>
+        <result property="svcPblmSympTpNm"     column="SVC_PBLM_SYMP_TP_NM"    javaType="EZDSStringItem"/>
+        <result property="svcPblmTpCd"         column="SVC_PBLM_TP_CD"         javaType="EZDSStringItem"/>
+        <result property="svcPblmTpNm"         column="SVC_PBLM_TP_NM"         javaType="EZDSStringItem"/>
+        <result property="svcPblmRsnTpCd"      column="SVC_PBLM_RSN_TP_CD"     javaType="EZDSStringItem"/>
+        <result property="svcPblmRsnTpNm"      column="SVC_PBLM_RSN_TP_NM"     javaType="EZDSStringItem"/>
+        <result property="svcPblmLocTpCd"      column="SVC_PBLM_LOC_TP_CD"     javaType="EZDSStringItem"/>
+        <result property="svcPblmLocTpNm"      column="SVC_PBLM_LOC_TP_NM"     javaType="EZDSStringItem"/>
+        <result property="svcPblmCrctTpCd"     column="SVC_PBLM_CRCT_TP_CD"    javaType="EZDSStringItem"/>
+        <result property="svcPblmCrctTpNm"     column="SVC_PBLM_CRCT_TP_NM"    javaType="EZDSStringItem"/>
+        <result property="techCd_ST"           column="TECH_CD_ST"             javaType="EZDSStringItem"/>
+        <result property="techNm_ST"           column="TECH_NM_ST"             javaType="EZDSStringItem"/>
+        <result property="techCd_FV"           column="TECH_CD_FV"             javaType="EZDSStringItem"/>
+        <result property="techNm_FV"           column="TECH_NM_FV"             javaType="EZDSStringItem"/>
+        <result property="svcTaskRcvDt"        column="SVC_TASK_RCV_DT"        javaType="EZDSDateItem"/>
+        <result property="svcTaskRcvTm"        column="SVC_TASK_RCV_TM"        javaType="EZDSDateItem"/>
+        <result property="svcTaskCpltDt"       column="SVC_TASK_CPLT_DT"       javaType="EZDSDateItem"/>
+        <result property="svcTaskCpltTm"       column="SVC_TASK_CPLT_TM"       javaType="EZDSDateItem"/>
+        <result property="svcRspTmNum"         column="SVC_RSP_TM_NUM"         javaType="EZDSBigDecimalItem"/>
+        <result property="readMtrCnt"          column="READ_MTR_CNT"           javaType="EZDSBigDecimalItem"/>
+        <result property="testMtrCnt"          column="TEST_MTR_CNT"           javaType="EZDSBigDecimalItem"/>
+        <result property="svcBillTpCd"         column="SVC_BILL_TP_CD"         javaType="EZDSStringItem"/>
+        <result property="svcBillTpNm"         column="SVC_BILL_TP_NM"         javaType="EZDSStringItem"/>
+        <result property="svcPrtDealAmt"       column="SVC_PRT_DEAL_AMT"       javaType="EZDSBigDecimalItem"/>
+        <result property="svcLborDealAmt_FV"   column="SVC_LBOR_DEAL_AMT_FVT"  javaType="EZDSBigDecimalItem"/>
+        <result property="svcLborDealAmt_ST"   column="SVC_LBOR_DEAL_AMT_ST"   javaType="EZDSBigDecimalItem"/>
+        <result property="svcTrvlDealAmt"      column="SVC_TRVL_DEAL_AMT"      javaType="EZDSBigDecimalItem"/>
+        <result property="invCcyCd"            column="INV_CCY_CD"             javaType="EZDSStringItem"/>
+    </resultMap>
+
+</sqlMap>

@@ -1,0 +1,796 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NLCB015001">
+
+<!-- START Renewal 2016/07/01 T.Kikuhara V2.0-->
+<statement id="findInvtyTrx" parameterClass="Map">
+WITH RSLT_V AS (
+    SELECT
+        DISTINCT
+          ITR.INVTY_TRX_PK
+        , ITR.GLBL_CMPY_CD
+        , ITR.MDSE_CD
+        , (ITR.INVTY_TRX_QTY * (-1)) AS INVTY_TRX_QTY
+        , ITR.STK_STS_CD
+        , ITR.LOC_STS_CD
+        , ITR.INVTY_TRX_DT
+        , ITR.TRX_CD
+        , ITR.TRX_RSN_CD
+        , ITR.SHIP_FROM_LOC_CUST_CD
+        , ITR.BILL_TO_CUST_CD
+        , ITR.SHIP_TO_CUST_CD
+        , ITR.INVTY_LOC_CD
+        , ITR.WRK_ORD_NUM
+        , ITR.INVTY_CTRL_FLG
+        , ITR.SO_NUM
+        , ITR.SO_SLP_NUM
+        , ITR.LOC_TP_CD
+        <isEqual property="MDSE_INCL_TECH_INVTY_CINC_FLG" compareValue="Y">
+        --
+        , SI.SVC_INV_PK
+        </isEqual>
+        --
+    FROM
+        INVTY_TRX               ITR
+       ,MDSE                    DMI
+       <isEqual property="MDSE_INCL_TECH_INVTY_CINC_FLG" compareValue="Y">
+       --
+       ,SVC_INV                 SI
+       </isEqual>
+       --
+    WHERE
+        ITR.GLBL_CMPY_CD         = #GLBL_CMPY_CD#
+    AND ITR.INVTY_TRX_DT         &gt;= (
+        SELECT PROC_EXEC_DT FROM INTFC_SLS_MTH_MGT WHERE GLBL_CMPY_CD = #GLBL_CMPY_CD# AND EZCANCELFLAG = '0')
+    AND ITR.INVTY_TRX_DT         &lt;= #PROC_DATE#
+    AND ITR.EZCANCELFLAG         = '0'
+    AND ITR.MDSE_CD              = DMI.MDSE_CD
+    AND ITR.GLBL_CMPY_CD         = DMI.GLBL_CMPY_CD
+    AND DMI.MDSE_RGTN_TP_CD      = #MDSE_RGTN_TP#
+    AND DMI.EZCANCELFLAG         = '0'
+    <isEqual property="MDSE_INCL_TECH_INVTY_CINC_FLG" compareValue="Y">
+    --
+    AND ITR.GLBL_CMPY_CD         = SI.GLBL_CMPY_CD(+)
+    AND ITR.INVTY_TRX_SLP_NUM    = SI.FSR_NUM(+)
+    AND SI.EZCANCELFLAG(+)       = '0'
+    </isEqual>
+    --
+    AND NOT EXISTS 
+       (SELECT 1
+        FROM STK_OUT_RSLT_WRK SORW
+        WHERE
+            SORW.GLBL_CMPY_CD = ITR.GLBL_CMPY_CD
+        AND SORW.INVTY_TRX_PK = ITR.INVTY_TRX_PK
+        AND SORW.EZCANCELFLAG = '0')
+    AND EXISTS
+       (SELECT 1
+        FROM
+            DS_INVTY_LOC_V V
+           ,RTL_WH         W
+           ,INVTY_OWNR     O
+        WHERE
+            ITR.GLBL_CMPY_CD = V.GLBL_CMPY_CD
+        AND V.GLBL_CMPY_CD   = W.GLBL_CMPY_CD
+        AND W.GLBL_CMPY_CD   = O.GLBL_CMPY_CD
+        AND V.INVTY_LOC_CD   = ITR.INVTY_LOC_CD
+        AND V.RTL_WH_CD      = W.RTL_WH_CD
+        AND W.INVTY_OWNR_CD  = O.INVTY_OWNR_CD
+        AND O.CMPY_INVTY_FLG = 'Y'
+        AND V.EZCANCELFLAG   = '0'
+        AND W.EZCANCELFLAG   = '0'
+        AND O.EZCANCELFLAG   = '0')
+    AND (
+        -- 010:SALES
+           (ITR.TRX_CD = #T_SLS#
+            AND ITR.TRX_RSN_CD IN (#TR_CR_AND_REBIL#, #TR_TRIAL_TO_SLS#
+                                 , #CASH_MDSE#, #CASH_INI_SUP#, #CASH_SUP#, #CASH_CNT_SUP#, #R_CASH_RMA#))
+        -- 020:MOVEMENT
+        OR (ITR.TRX_CD = #T_MOVE#
+            AND (ITR.TRX_RSN_CD IN (#TR_TRIAL_SHIP_STK_OUT#, #TR_DROP_SHIP_TRIAL_STK_OUT#, #TR_TRIAL_TO_INVTY_STK_IN#, #TR_EXPT_SALE_SHIP_STK_OUT#)
+            OR  (ITR.TRX_RSN_CD IN (#TR_DRCT_SALE_SHIP_STK_OUT#, #TR_DRCT_SALE_SHIP_CANC_STK_IN#, #TR_DRCT_SALE_STOCK_OUT_INTANGIBLE_WITH_COST#)
+                 AND EXISTS
+                    (SELECT 1
+                     FROM
+                         CPO                  DC
+                        ,CPO_DTL              DCD
+                        ,DS_ORD_LINE_PROC_DFN PD
+                        , AJE_ACCT_BAT        AAB
+                     WHERE
+                         DC.GLBL_CMPY_CD         = ITR.GLBL_CMPY_CD
+                     AND DC.CPO_ORD_NUM          = ITR.CPO_ORD_NUM
+                     AND DC.EZCANCELFLAG         = '0'
+                     AND DC.GLBL_CMPY_CD         = DCD.GLBL_CMPY_CD
+                     AND DC.CPO_ORD_NUM          = DCD.CPO_ORD_NUM
+                     AND DCD.EZCANCELFLAG        = '0'
+                     AND DC.GLBL_CMPY_CD         = PD.GLBL_CMPY_CD
+                     AND DC.DS_ORD_TP_CD         = PD.DS_ORD_TP_CD
+                     AND DCD.DS_ORD_LINE_CATG_CD = PD.DS_ORD_LINE_CATG_CD
+                     AND PD.EZCANCELFLAG         = '0'
+                     AND PD.GLBL_CMPY_CD         = AAB.GLBL_CMPY_CD
+                     AND PD.AJE_ACCT_BAT_CD      = AAB.AJE_ACCT_BAT_CD
+                     AND AAB.EZCANCELFLAG        = '0'
+                     AND AAB.TRX_CD              = #T_RNTL_SHIP#)
+                )
+            <isEqual property="MDSE_INCL_TECH_INVTY_CINC_FLG" compareValue="N">
+            --
+            OR  (ITR.TRX_RSN_CD IN (#TR_WH_TRANS_STK_OUT#) AND ITR.LOC_TP_CD != #LOC_TP_CD_TECH#
+                 AND (SELECT ILV.INVTY_LOC_TP_CD 
+                      FROM SHPG_PLN SP, SHPG_STS STS, INVTY_LOC_V ILV
+                      WHERE 1=1
+                      AND ITR.GLBL_CMPY_CD         = SP.GLBL_CMPY_CD
+                      AND ITR.INVTY_ORD_NUM        = SP.TRX_HDR_NUM  
+                      AND ITR.INVTY_ORD_LINE_NUM   = SP.TRX_LINE_NUM 
+                      AND SP.GLBL_CMPY_CD          = ILV.GLBL_CMPY_CD
+                      AND SP.SHIP_TO_CUST_CD       = ILV.INVTY_LOC_CD
+                      AND SP.GLBL_CMPY_CD          = STS.GLBL_CMPY_CD
+                      AND SP.SHPG_STS_CD           = STS.SHPG_STS_CD
+                      AND STS.SHIP_FLG             = 'Y'
+                      AND SP.EZCANCELFLAG          = '0'
+                      AND STS.EZCANCELFLAG         = '0') =  #LOC_TP_CD_TECH#
+                )
+            OR  (ITR.TRX_RSN_CD IN (#TR_WH_TRANS_STK_OUT#) AND ITR.LOC_TP_CD = #LOC_TP_CD_TECH#
+                 AND (SELECT ILV.INVTY_LOC_TP_CD 
+                      FROM SHPG_PLN SP, SHPG_STS STS, INVTY_LOC_V ILV
+                      WHERE 1=1
+                      AND ITR.GLBL_CMPY_CD         = SP.GLBL_CMPY_CD
+                      AND ITR.INVTY_ORD_NUM        = SP.TRX_HDR_NUM  
+                      AND ITR.INVTY_ORD_LINE_NUM   = SP.TRX_LINE_NUM 
+                      AND SP.GLBL_CMPY_CD          = ILV.GLBL_CMPY_CD
+                      AND SP.SHIP_TO_CUST_CD       = ILV.INVTY_LOC_CD
+                      AND SP.GLBL_CMPY_CD          = STS.GLBL_CMPY_CD
+                      AND SP.SHPG_STS_CD           = STS.SHPG_STS_CD
+                      AND STS.SHIP_FLG             = 'Y'
+                      AND SP.EZCANCELFLAG          = '0'
+                      AND STS.EZCANCELFLAG         = '0') != #LOC_TP_CD_TECH#
+                )
+            </isEqual>
+            --
+            )
+        -- 030:EXPENCE SHIPMENT
+        OR (ITR.TRX_CD = #T_EXP_SHIP#
+            AND ITR.TRX_RSN_CD IN (#TR_EXP_SHIP#, #TR_EXP_RTN#, #EX_LOAN_SHIP_OUT#, #EX_LOAN_INVTY_OUT#, #EX_LOAN_DROP_OUT#, #EX_LOAN_INTANG_OUT#))
+        -- 050:RENTAL SHIPMENT
+        OR (ITR.TRX_CD = #T_RNTL_SHIP#
+            AND ITR.TRX_RSN_CD IN (#TR_RNTL_SHIP_STK_OUT#, #TR_RNTL_SHIP_DROP_STK_OUT#, #TR_RNTL_SHIP_STK_OUT_INTANG#, #TR_RNTL_TO_ASSET_RETURN#, #TR_RNTL_SHIP_STK_OUT_EXP#))
+        -- 060:ADJUSTMENT
+        OR (ITR.TRX_CD = #T_ADJ#
+            AND ITR.TRX_RSN_CD IN (#TR_DSPL#, #TR_ADJ#, #TR_ITEM_CHNG_STK_OUT#, #TR_ITEM_CHNG_STK_IN#
+                                 , #CYCLE_ADJ#, #PI_ADJ#, #RE_VEND_OUT#, #RE_EXP_OUT#, #KIT_OUT#, #KIT_IN#, #WH_TR_OUT#))
+        -- 230:PARTS USAGE
+        <isEqual property="MDSE_INCL_TECH_INVTY_CINC_FLG" compareValue="Y">
+        --
+        OR (ITR.TRX_CD = #T_PARTS_USG#
+            AND ITR.TRX_RSN_CD IN (#TR_PARTS_USG#))
+        </isEqual>
+        --
+        OR (ITR.TRX_CD = #T_PARTS_USG#
+            AND ITR.TRX_RSN_CD IN (#TR_PARTS_USG_RTN#))
+        -- 240:REMANUFACTURING
+        OR (ITR.TRX_CD = #T_REMAN#
+            AND ITR.TRX_RSN_CD IN (#REMAN_PART_USE#, #REMAN_ITEM_OUT#, #REMAN_ITEM_IN#, #REMAN_PART_RETURN#, #REMAN_COMP_IN#, #REMAN_COMP_OUT#))
+        -- 310:EMSD_SHIPMENT
+        OR (ITR.TRX_CD = #T_EMSD_SHIP#
+            AND ITR.TRX_RSN_CD IN (#EMSD_OUT#, #EMSD_DROP_OUT# , #EMSD_OUT_INTG#, #EMSD_OUT_EXP#))
+        )
+    )
+) -- END WITH
+    SELECT
+        RSLT_V.INVTY_TRX_PK
+       ,RSLT_V.GLBL_CMPY_CD
+       ,RSLT_V.MDSE_CD
+       ,RSLT_V.MDSE_CD AS LOCAL_MDSE_CD
+       ,RSLT_V.STK_STS_CD
+       ,RSLT_V.LOC_STS_CD
+       ,RSLT_V.INVTY_TRX_DT AS TRX_DT
+       ,RSLT_V.TRX_CD
+       ,RSLT_V.TRX_RSN_CD
+       ,RSLT_V.SHIP_TO_CUST_CD
+       ,RSLT_V.INVTY_CTRL_FLG
+       ,RSLT_V.SHIP_TO_CUST_CD AS WRK_CUST_CD
+       ,NVL((SELECT
+                G.GLBL_CMPY_CD
+             FROM
+                BILL_TO_CUST BT
+                , GLBL_CMPY G
+             WHERE
+                BT.GLBL_CMPY_CD = RSLT_V.GLBL_CMPY_CD
+                AND BT.BILL_TO_CUST_CD = RSLT_V.BILL_TO_CUST_CD
+                AND BT.EZCANCELFLAG = '0'
+                AND BT.COA_AFFL_CD = G.COA_AFFL_CD
+                AND G.EZCANCELFLAG = '0'), '000') AS SHIP_GLBL_CMPY_CD
+       ,#DUMMY_WH_CD# AS WH_CD
+       ,#DUMMY_WH_CD# AS DEF_WH_CD
+       --QTY01
+       ,CASE
+            WHEN RSLT_V.TRX_CD = #T_SLS#
+                THEN CASE
+                    WHEN (RSLT_V.TRX_RSN_CD IN (#TR_CR_AND_REBIL#)
+                      AND RSLT_V.LOC_STS_CD NOT IN (#IN_SHED#))
+                        THEN RSLT_V.INVTY_TRX_QTY
+                    WHEN RSLT_V.TRX_RSN_CD IN (#CASH_MDSE#, #CASH_INI_SUP#, #CASH_SUP#, #CASH_CNT_SUP#, #R_CASH_RMA#)
+                        THEN RSLT_V.INVTY_TRX_QTY
+                    ELSE 0
+                END
+            <isEqual property="MDSE_INCL_TECH_INVTY_CINC_FLG" compareValue="Y">
+            --
+            WHEN RSLT_V.TRX_CD = #T_PARTS_USG#
+                THEN CASE 
+                    WHEN (RSLT_V.TRX_RSN_CD IN (#TR_PARTS_USG#)
+                          AND RSLT_V.SVC_INV_PK IS NOT NULL)
+                        THEN RSLT_V.INVTY_TRX_QTY
+                    ELSE 0
+                END
+            </isEqual>
+            --
+            WHEN RSLT_V.TRX_CD = #T_EMSD_SHIP#
+                THEN CASE
+                    WHEN RSLT_V.TRX_RSN_CD IN (#EMSD_OUT#, #EMSD_DROP_OUT# , #EMSD_OUT_INTG#)
+                        THEN RSLT_V.INVTY_TRX_QTY
+                    ELSE 0
+                END
+            ELSE 0
+        END AS WRK_DB_QTY_01
+        -- QTY02
+        ,CASE
+            WHEN RSLT_V.TRX_CD = #T_SLS#
+                THEN CASE
+                    WHEN RSLT_V.TRX_RSN_CD IN (#TR_TRIAL_TO_SLS#)
+                        THEN RSLT_V.INVTY_TRX_QTY
+                    ELSE 0
+                END
+            ELSE 0
+        END AS WRK_DB_QTY_02
+        --QTY03
+        ,0 AS WRK_DB_QTY_03
+        -- QTY04
+        ,CASE
+            WHEN RSLT_V.TRX_CD = #T_RNTL_SHIP#
+                THEN CASE
+                    WHEN RSLT_V.TRX_RSN_CD IN (#TR_RNTL_SHIP_STK_OUT#, #TR_RNTL_SHIP_DROP_STK_OUT#, #TR_RNTL_SHIP_STK_OUT_INTANG#)
+                        THEN RSLT_V.INVTY_TRX_QTY
+                    ELSE 0
+                END
+            ELSE 0
+        END AS WRK_DB_QTY_04
+        -- QTY05
+        ,0 AS WRK_DB_QTY_05
+        --QTY06
+        ,CASE
+            WHEN RSLT_V.TRX_CD = #T_EXP_SHIP#
+                THEN CASE
+                    WHEN (RSLT_V.TRX_RSN_CD IN (#TR_EXP_SHIP#, #TR_EXP_RTN#)
+                            AND RSLT_V.LOC_STS_CD NOT IN (#IN_SHED#))
+                        THEN RSLT_V.INVTY_TRX_QTY
+                    WHEN RSLT_V.TRX_RSN_CD IN (#EX_LOAN_SHIP_OUT#, #EX_LOAN_DROP_OUT#, #EX_LOAN_INTANG_OUT#)
+                        THEN RSLT_V.INVTY_TRX_QTY
+                    WHEN RSLT_V.TRX_RSN_CD IN (#EX_LOAN_INVTY_OUT#)
+                        THEN ABS(RSLT_V.INVTY_TRX_QTY)
+                    ELSE 0
+                END
+            WHEN RSLT_V.TRX_CD = #T_RNTL_SHIP#
+                THEN CASE 
+                    WHEN RSLT_V.TRX_RSN_CD IN (#TR_RNTL_SHIP_STK_OUT_EXP#)
+                        THEN RSLT_V.INVTY_TRX_QTY
+                    ELSE 0
+                 END
+            WHEN RSLT_V.TRX_CD = #T_EMSD_SHIP#
+                THEN CASE 
+                    WHEN RSLT_V.TRX_RSN_CD IN (#EMSD_OUT_EXP#)
+                        THEN RSLT_V.INVTY_TRX_QTY
+                    ELSE 0
+                 END
+            <isEqual property="MDSE_INCL_TECH_INVTY_CINC_FLG" compareValue="Y">
+            --
+            WHEN RSLT_V.TRX_CD = #T_PARTS_USG#
+                THEN CASE 
+                    WHEN (RSLT_V.TRX_RSN_CD IN (#TR_PARTS_USG#)
+                          AND RSLT_V.SVC_INV_PK IS NULL)
+                        THEN RSLT_V.INVTY_TRX_QTY
+                    ELSE 0
+                 END
+            </isEqual>
+            --
+            ELSE 0
+        END AS WRK_DB_QTY_06
+        --QTY07
+        ,0 AS WRK_DB_QTY_07
+        -- QTY08
+        ,CASE
+            WHEN RSLT_V.TRX_CD = #T_ADJ#
+                THEN CASE
+                    WHEN RSLT_V.TRX_RSN_CD IN (#TR_DSPL#)
+                        THEN RSLT_V.INVTY_TRX_QTY
+                    ELSE 0
+                END
+            ELSE 0
+        END AS WRK_DB_QTY_08
+        -- QTY09
+        ,CASE
+            WHEN RSLT_V.TRX_CD = #T_ADJ#
+                THEN CASE
+                    WHEN RSLT_V.TRX_RSN_CD IN (#TR_ADJ#, #CYCLE_ADJ#, #PI_ADJ#)
+                    <isEqual property="MDSE_INCL_TECH_INVTY_CINC_FLG" compareValue="N">
+                    --
+                    AND RSLT_V.LOC_TP_CD != #LOC_TP_CD_TECH#
+                    </isEqual>
+                    --
+                        THEN RSLT_V.INVTY_TRX_QTY
+                    ELSE 0
+                END
+            ELSE 0
+        END AS WRK_DB_QTY_09
+        -- QTY10
+        ,CASE
+            WHEN RSLT_V.TRX_CD = #T_ADJ#
+                THEN CASE
+                    WHEN RSLT_V.TRX_RSN_CD IN (#TR_ITEM_CHNG_STK_OUT#, #TR_ITEM_CHNG_STK_IN#
+                                             , #RE_VEND_OUT#, #RE_EXP_OUT# , #KIT_OUT#, #KIT_IN#)
+                        THEN RSLT_V.INVTY_TRX_QTY
+                    WHEN RSLT_V.TRX_RSN_CD IN (#WH_TR_OUT#)
+                    <isEqual property="MDSE_INCL_TECH_INVTY_CINC_FLG" compareValue="N">
+                    --
+                    AND RSLT_V.LOC_TP_CD != #LOC_TP_CD_TECH#
+                    </isEqual>
+                    --
+                        THEN RSLT_V.INVTY_TRX_QTY
+                    ELSE 0
+                END
+            WHEN RSLT_V.TRX_CD = #T_RNTL_SHIP#
+                THEN CASE
+                    WHEN RSLT_V.TRX_RSN_CD IN (#TR_RNTL_TO_ASSET_RETURN#)
+                        THEN ABS(RSLT_V.INVTY_TRX_QTY) * -1
+                    ELSE 0
+                END
+            WHEN RSLT_V.TRX_CD = #T_REMAN#
+                THEN CASE
+                    WHEN RSLT_V.TRX_RSN_CD IN (#REMAN_ITEM_OUT#, #REMAN_ITEM_IN#, #REMAN_COMP_IN#, #REMAN_COMP_OUT#)
+                        THEN RSLT_V.INVTY_TRX_QTY
+                    ELSE 0
+                END
+            <isEqual property="MDSE_INCL_TECH_INVTY_CINC_FLG" compareValue="N">
+            --
+             WHEN RSLT_V.TRX_CD = #T_MOVE#
+                THEN CASE
+                    WHEN RSLT_V.TRX_RSN_CD IN (#TR_WH_TRANS_STK_OUT#)
+                         AND RSLT_V.LOC_TP_CD != #LOC_TP_CD_TECH#
+                        THEN RSLT_V.INVTY_TRX_QTY
+                    WHEN RSLT_V.TRX_RSN_CD IN (#TR_WH_TRANS_STK_OUT#)
+                         AND RSLT_V.LOC_TP_CD  =  #LOC_TP_CD_TECH#
+                        THEN RSLT_V.INVTY_TRX_QTY * -1
+                    ELSE 0
+                END
+             </isEqual>
+             --
+            ELSE 0
+        END AS WRK_DB_QTY_10
+        -- QTY11
+        ,CASE
+            WHEN RSLT_V.TRX_CD = #T_PARTS_USG#
+                THEN CASE
+                    WHEN RSLT_V.TRX_RSN_CD IN (#TR_PARTS_USG_RTN#)
+                        THEN RSLT_V.INVTY_TRX_QTY
+                    ELSE 0
+                END
+            WHEN RSLT_V.TRX_CD = #T_REMAN#
+                THEN CASE
+                    WHEN RSLT_V.TRX_RSN_CD IN (#REMAN_PART_USE#, #REMAN_PART_RETURN#)
+                        THEN RSLT_V.INVTY_TRX_QTY
+                    ELSE 0
+                END
+            ELSE 0
+        END AS WRK_DB_QTY_11
+        -- QTY12
+        ,CASE
+            WHEN RSLT_V.TRX_CD = #T_MOVE#
+                THEN CASE
+                    WHEN RSLT_V.TRX_RSN_CD IN (#TR_TRIAL_SHIP_STK_OUT#
+                                             , #TR_DROP_SHIP_TRIAL_STK_OUT#
+                                             , #TR_TRIAL_TO_INVTY_STK_IN#)
+                            AND RSLT_V.LOC_STS_CD NOT IN (#IN_SHED#)
+                        THEN RSLT_V.INVTY_TRX_QTY
+                    ELSE 0
+                END
+            WHEN RSLT_V.TRX_CD = #T_EXP_SHIP#
+                THEN CASE
+                    WHEN RSLT_V.TRX_RSN_CD IN (#EX_LOAN_INVTY_OUT#)
+                        THEN ABS(RSLT_V.INVTY_TRX_QTY) * -1
+                    ELSE 0
+                END
+            ELSE 0
+        END AS WRK_DB_QTY_12
+        -- QTY13
+        ,0 AS WRK_DB_QTY_13
+        -- QTY14
+        ,CASE
+            WHEN RSLT_V.TRX_CD = #T_MOVE#
+                THEN CASE
+                    WHEN RSLT_V.TRX_RSN_CD IN (#TR_DRCT_SALE_SHIP_STK_OUT#, #TR_DRCT_SALE_SHIP_CANC_STK_IN#, #TR_DRCT_SALE_STOCK_OUT_INTANGIBLE_WITH_COST#)
+                        THEN RSLT_V.INVTY_TRX_QTY
+                    ELSE 0
+                END
+            ELSE 0
+        END AS WRK_DB_QTY_14
+        -- QTY15
+        ,CASE
+            WHEN RSLT_V.TRX_CD = #T_MOVE#
+                THEN CASE
+                    WHEN RSLT_V.TRX_RSN_CD IN (#TR_EXPT_SALE_SHIP_STK_OUT#)
+                        THEN RSLT_V.INVTY_TRX_QTY
+                    ELSE 0
+                END
+            ELSE 0
+        END AS WRK_DB_QTY_15
+        -- QTY16
+        ,0 AS WRK_DB_QTY_16
+        -- QTY17
+        ,0 AS WRK_DB_QTY_17
+        -- QTY18
+        ,CASE
+            WHEN RSLT_V.TRX_CD = #T_RNTL_SHIP#
+                THEN CASE
+                    WHEN RSLT_V.TRX_RSN_CD IN (#TR_RNTL_TO_ASSET_RETURN#)
+                        THEN ABS(RSLT_V.INVTY_TRX_QTY)
+                    ELSE 0
+                END
+            ELSE 0
+        END AS WRK_DB_QTY_18
+        -- QTY19
+        ,0 AS WRK_DB_QTY_19
+        -- QTY20
+        ,0 AS WRK_DB_QTY_20
+    FROM
+        RSLT_V
+</statement>
+<!-- END Renewal 2016/07/01 T.Kikuhara V2.0-->
+
+    <!-- QC#50420 Update SQL -->
+    <statement id="findRentalToSales" parameterClass="Map">
+        <![CDATA[
+        SELECT
+                      INVTY_TRX_SQ.NEXTVAL AS INVTY_TRX_PK
+                    , I.GLBL_CMPY_CD
+                    , L.MDSE_CD
+                    , L.MDSE_CD AS LOCAL_MDSE_CD
+                    , NVL((SELECT
+                            G.GLBL_CMPY_CD
+                        FROM
+                            BILL_TO_CUST BT
+                            , GLBL_CMPY G
+                        WHERE
+                            BT.GLBL_CMPY_CD        = I.GLBL_CMPY_CD
+                            AND BT.BILL_TO_CUST_CD = I.BILL_TO_CUST_CD
+                            AND BT.EZCANCELFLAG    = '0'
+                            AND BT.COA_AFFL_CD     = G.COA_AFFL_CD
+                            AND G.EZCANCELFLAG     = '0'), '000') AS SHIP_GLBL_CMPY_CD
+
+                    -- START MOD 09/04/2013 MEX-IF021
+                    --STOCK POINT CODE (WH)
+                    , #DUMMY_WH_CD# AS WH_CD
+                    
+                    -- START ADD 2013/10/30 Def.2928
+                    , #DUMMY_WH_CD# AS DEF_WH_CD
+                    -- END   ADD 2013/10/30 Def.2928
+
+                    , B.SHIP_TO_CUST_CD AS WRK_CUST_CD
+
+                    --API PARAM
+                    
+                    -- END   MOD 09/04/2013 MEX-IF021
+
+                    --QTY01
+                    , 0 AS WRK_DB_QTY_01
+                    -- QTY02
+                    , 0 AS WRK_DB_QTY_02
+                    --QTY03
+                    , 0 AS WRK_DB_QTY_03
+                    -- QTY04
+                    , 0 AS WRK_DB_QTY_04
+                    -- QTY05
+                    , 0 AS WRK_DB_QTY_05
+                    --QTY06
+                    , 0 AS WRK_DB_QTY_06
+                    --QTY07
+                    , 0 AS WRK_DB_QTY_07
+                    -- QTY08
+                    , 0 AS WRK_DB_QTY_08
+                    -- QTY09
+                    , 0 AS WRK_DB_QTY_09
+                    -- QTY10
+                    , 0 AS WRK_DB_QTY_10
+                    -- QTY11
+                    , 0 AS WRK_DB_QTY_11
+                    -- QTY12
+                    , 0 AS WRK_DB_QTY_12
+                    -- QTY13
+                    , 0 AS WRK_DB_QTY_13
+                    -- QTY14
+                    , 0 AS WRK_DB_QTY_14
+                    -- QTY15
+                    , 0 AS WRK_DB_QTY_15
+
+                    -- START MOD 09/04/2013 MEX-IF021
+                    -- QTY16
+                    , CASE
+                        WHEN L.TRX_CD = #TRX_SALES#
+                            THEN CASE
+                                -- START MOD 10/17/2013 [Def.2719]
+                                WHEN L.TRX_RSN_CD     = #TRX_RSN_RENTAL_TO_SALES#
+                                 AND CD.CPO_ORD_TP_CD = #CPO_TP_LOAN_TO_SALES#
+                                -- END   MOD 10/17/2013 [Def.2719]
+                                    THEN L.SHIP_QTY
+                                ELSE 0
+                            END
+                        ELSE 0
+                    END AS WRK_DB_QTY_16
+                    -- , 0 AS WRK_DB_QTY_16 
+                    
+                    -- QTY17
+                    , CASE
+                        WHEN L.TRX_CD = #TRX_SALES#
+                            THEN CASE
+                                WHEN L.TRX_RSN_CD = #TRX_RSN_RENTAL_TO_SALES#
+                                -- START ADD 10/17/2013 [Def.2719]
+                                 AND CD.CPO_ORD_TP_CD = #CPO_TP_RENTAL_TO_SALES#
+                                -- END   ADD 10/17/2013 [Def.2719]
+                                    THEN L.SHIP_QTY
+                                ELSE 0
+                            END
+                        ELSE 0
+                    END AS WRK_DB_QTY_17
+                    -- , L.SHIP_QTY AS WRK_DB_QTY_17 
+                    -- END   MOD 09/04/2013 MEX-IF021
+
+                    -- QTY18
+                    , 0 AS WRK_DB_QTY_18
+                    -- QTY19
+                    , 0 AS WRK_DB_QTY_19
+                    -- QTY20
+                    , 0 AS WRK_DB_QTY_20
+                    , L.STK_STS_CD
+                    , ''       AS LOC_STS_CD
+                    , I.INV_DT AS TRX_DT
+                    , L.TRX_CD
+                    , L.TRX_RSN_CD
+                    , B.SHIP_TO_CUST_CD
+                    , DMI.INVTY_CTRL_FLG
+            FROM
+                INV I
+                , INV_LINE L 
+                , INV_BOL  B
+                , MDSE     DMI
+                -- START ADD 10/17/2013 [Def.2719]
+                , CPO_DTL CD
+                -- END   ADD 10/17/2013 [Def.2719]
+            WHERE
+                I.INV_NUM = L.INV_NUM 
+                AND L.TRX_CD            = #TRX_SALES#
+                AND L.TRX_RSN_CD        = #TRX_RSN_RENTAL_TO_SALES#
+                AND L.INV_LINE_SUB_NUM <> '000' 
+                AND I.TRX_SRC_TP_CD    <> #TRX_SRC_TP_PARTS#
+                AND I.GLBL_CMPY_CD      = L.GLBL_CMPY_CD 
+                AND I.INV_DT BETWEEN (SELECT PROC_EXEC_DT FROM INTFC_SLS_MTH_MGT M 
+                                        WHERE M.GLBL_CMPY_CD = I.GLBL_CMPY_CD 
+                                        AND M.EZCANCELFLAG   = '0'
+                                        AND ROWNUM          <= 1)
+                                 AND #PROC_DATE#
+                AND B.INV_NUM          = L.INV_NUM
+                AND B.INV_BOL_LINE_NUM = L.INV_BOL_LINE_NUM
+                AND B.GLBL_CMPY_CD     = L.GLBL_CMPY_CD
+                AND B.EZCANCELFLAG     = '0'
+                AND I.GLBL_CMPY_CD     = #GLBL_CMPY_CD#
+                AND I.EZCANCELFLAG     = '0'
+                AND L.EZCANCELFLAG     = '0'
+
+                -- START ADD 09/04/2013 MEX-IF021 
+                AND L.GLBL_CMPY_CD       = DMI.GLBL_CMPY_CD 
+                AND L.MDSE_CD            = DMI.MDSE_CD
+                AND DMI.EZCANCELFLAG     = '0'
+                AND DMI.MDSE_RGTN_TP_CD  = #MDSE_RGTN_TP#
+                -- END   ADD 09/04/2013 MEX-IF021 
+
+                -- START ADD 10/17/2013 [Def.2719]
+                AND CD.CPO_ORD_NUM          = L.CPO_ORD_NUM
+                AND CD.CPO_DTL_LINE_NUM     = L.CPO_DTL_LINE_NUM
+                AND CD.CPO_DTL_LINE_SUB_NUM = L.CPO_DTL_LINE_SUB_NUM
+                -- END   ADD 10/17/2013 [Def.2719]
+        ]]>
+    </statement>
+
+
+    <statement id="findRentalInstalQty" parameterClass="Map">
+    <![CDATA[
+     WITH MMS AS (
+         SELECT
+             MMS.GLBL_CMPY_CD
+           , MMS.MDSE_CD
+           , MMS.SHIP_TO_CUST_CD
+           , MMS.SVC_MACH_MSTR_SNAP_SHOT_DT
+           , MMS.SVC_MACH_MSTR_PK
+         FROM
+               SVC_MACH_MSTR_SNAP_SHOT MMS
+             , MDSE MDE
+             , DS_ORD_TP DOT
+         WHERE
+               MMS.GLBL_CMPY_CD               = #GLBL_CMPY_CD#
+           AND MMS.GLBL_CMPY_CD               = MDE.GLBL_CMPY_CD
+           AND MDE.GLBL_CMPY_CD               = DOT.GLBL_CMPY_CD
+           AND MMS.SVC_MACH_MSTR_SNAP_SHOT_DT = #PROC_DATE#
+           AND MMS.MDSE_CD                    = MDE.MDSE_CD
+           AND MDE.MDSE_RGTN_TP_CD            = #MDSE_RGTN_TP#
+           AND MMS.MDSE_CD                    = MDE.MDSE_CD
+           AND MMS.DS_ORD_TP_CD               = DOT.DS_ORD_TP_CD
+           AND DOT.CPO_ORD_TP_CD              = #CPO_ORD_TP#
+           AND MMS.EZCANCELFLAG               = '0'
+           AND MDE.EZCANCELFLAG               = '0'
+           AND DOT.EZCANCELFLAG               = '0'
+           AND (
+                MMS.SHIP_FROM_WH_CD IS NULL
+             OR (
+                EXISTS
+                   (SELECT
+                         *
+                    FROM
+                         DS_INVTY_LOC_V V
+                        ,LOC_USG U
+                    WHERE
+                         MMS.GLBL_CMPY_CD = V.GLBL_CMPY_CD
+                     AND V.GLBL_CMPY_CD   = U.GLBL_CMPY_CD
+                     AND V.INVTY_LOC_CD   = MMS.SHIP_FROM_WH_CD
+                     AND V.PTY_LOC_PK     = U.PTY_LOC_PK
+                     AND U.LOC_ROLE_TP_CD = #RGRL_STK_WH#
+                     AND V.EZCANCELFLAG   = '0'
+                     AND U.EZCANCELFLAG   = '0')
+                    )
+               )
+           AND MMS.ISTL_DT                   IS NOT NULL
+           AND (
+                EXISTS
+                   (SELECT
+                         *
+                    FROM
+                         SVC_MACH_MSTR_SNAP_SHOT MMS_PRE
+                    WHERE
+                         MMS_PRE.GLBL_CMPY_CD               = MMS.GLBL_CMPY_CD
+                     AND MMS_PRE.SVC_MACH_MSTR_PK           = MMS.SVC_MACH_MSTR_PK
+                     AND MMS_PRE.SVC_MACH_MSTR_SNAP_SHOT_DT = #COMP_DATE#
+                     AND MMS_PRE.ISTL_DT     IS NULL
+                     AND MMS_PRE.EZCANCELFLAG = '0')
+                 OR NOT EXISTS
+                     (SELECT
+                           *
+                      FROM
+                           SVC_MACH_MSTR_SNAP_SHOT MMS_PRE
+                      WHERE
+                           MMS_PRE.GLBL_CMPY_CD               = MMS.GLBL_CMPY_CD
+                       AND MMS_PRE.SVC_MACH_MSTR_PK           = MMS.SVC_MACH_MSTR_PK
+                       AND MMS_PRE.SVC_MACH_MSTR_SNAP_SHOT_DT = #COMP_DATE#
+                       AND MMS_PRE.EZCANCELFLAG = '0')
+                )
+           AND  NOT EXISTS 
+               (
+                      SELECT 1
+                      FROM STK_OUT_RSLT_WRK SORW
+                      WHERE
+                           SORW.GLBL_CMPY_CD                 = MMS.GLBL_CMPY_CD
+                       AND SORW.INVTY_TRX_PK                 = - MMS.SVC_MACH_MSTR_PK
+               )
+     )
+     SELECT
+         - MMS.SVC_MACH_MSTR_PK AS INVTY_TRX_PK
+         , MMS.GLBL_CMPY_CD
+         , MMS.MDSE_CD
+         , MMS.MDSE_CD AS LOCAL_MDSE_CD
+         , NVL((SELECT
+                     G.GLBL_CMPY_CD
+                FROM
+                     BILL_TO_CUST BT
+                   , GLBL_CMPY G
+                   , SHIP_TO_CUST ST
+                WHERE
+                     BT.GLBL_CMPY_CD    = MMS.GLBL_CMPY_CD
+                 AND ST.GLBL_CMPY_CD    = BT.GLBL_CMPY_CD
+                 AND ST.SHIP_TO_CUST_CD = MMS.SHIP_TO_CUST_CD
+                 AND ST.BILL_TO_CUST_CD = BT.BILL_TO_CUST_CD
+                 AND BT.COA_AFFL_CD     = G.COA_AFFL_CD
+                 AND BT.EZCANCELFLAG    = '0'
+                 AND ST.EZCANCELFLAG    = '0'
+                 AND G.EZCANCELFLAG     = '0'), '000') AS SHIP_GLBL_CMPY_CD
+
+         --STOCK POINT CODE (WH)
+         , #DUMMY_WH_CD# AS WH_CD
+         , #DUMMY_WH_CD# AS DEF_WH_CD
+         , MMS.SHIP_TO_CUST_CD AS WRK_CUST_CD
+
+         --API PARAM
+         --QTY01
+         , 0 AS WRK_DB_QTY_01
+         -- QTY02
+         , 0 AS WRK_DB_QTY_02
+         --QTY03
+         , 0 AS WRK_DB_QTY_03
+         -- QTY04
+         , 1 AS WRK_DB_QTY_04
+         -- QTY05
+         , 0 AS WRK_DB_QTY_05
+         --QTY06
+         , 0 AS WRK_DB_QTY_06
+         --QTY07
+         , 0 AS WRK_DB_QTY_07
+         -- QTY08
+         , 0 AS WRK_DB_QTY_08
+         -- QTY09
+         , 0 AS WRK_DB_QTY_09
+         -- QTY10
+         , 0 AS WRK_DB_QTY_10
+         -- QTY11
+         , 0 AS WRK_DB_QTY_11
+         -- QTY12
+         , 0 AS WRK_DB_QTY_12
+         -- QTY13
+         , 0 AS WRK_DB_QTY_13
+         -- QTY14
+         , 0 AS WRK_DB_QTY_14
+         -- QTY15
+         , 0 AS WRK_DB_QTY_15
+         -- QTY16
+         , 0 AS WRK_DB_QTY_16
+         -- QTY17
+         , 0 AS WRK_DB_QTY_17 
+         -- QTY18
+         , 0 AS WRK_DB_QTY_18
+         -- QTY19
+         , 0 AS WRK_DB_QTY_19
+         -- QTY20
+         , 0 AS WRK_DB_QTY_20
+         , ''  AS STK_STS_CD
+         , ''  AS LOC_STS_CD
+         , MMS.SVC_MACH_MSTR_SNAP_SHOT_DT  AS TRX_DT
+         -- START MOD 2013/11/21 Def.3151
+         , #T_RNTL_SHIP#             AS TRX_CD
+         , #TR_RNTL_SHIP_OUT_DUMMY#  AS TRX_RSN_CD
+         -- END   MOD 2013/11/21 Def.3151
+         , MMS.SHIP_TO_CUST_CD
+     FROM
+           MMS
+    ]]>
+    </statement>
+
+
+    <statement id="findDeleteWrk" parameterClass="Map">
+        SELECT
+                  W.GLBL_CMPY_CD
+                , W.INVTY_TRX_PK 
+            FROM
+                STK_OUT_RSLT_WRK W 
+            WHERE
+                W.TRX_CD            =  #TRX_SALES#
+                AND W.TRX_RSN_CD    =  #TRX_RSN_RENTAL_TO_SALES#
+                AND W.GLBL_CMPY_CD  =  #GLBL_CMPY_CD#
+    </statement>
+
+    <statement id="getServiceMachineMasterSnapShotProcDate" parameterClass="Map" resultClass="String">
+           SELECT
+                SVC_MACH_MSTR_SNAP_SHOT_DT
+           FROM
+                SVC_MACH_MSTR_SNAP_SHOT MMS
+           WHERE
+                MMS.GLBL_CMPY_CD               = #GLBL_CMPY_CD#
+            AND MMS.SVC_MACH_MSTR_SNAP_SHOT_DT = #PROC_DATE#
+            AND MMS.EZCANCELFLAG            = '0'
+            AND ROWNUM &lt;= 1
+    </statement>
+
+    <statement id="getServiceMachineMasterSnapShotCompareDate" parameterClass="Map" resultClass="String">
+           SELECT
+                MIN(SVC_MACH_MSTR_SNAP_SHOT_DT) SVC_MACH_MSTR_SNAP_SHOT_DT
+           FROM
+                SVC_MACH_MSTR_SNAP_SHOT MMS
+               ,INTFC_SLS_MTH_MGT       MGT
+           WHERE
+                MMS.GLBL_CMPY_CD               = #GLBL_CMPY_CD#
+            AND MMS.GLBL_CMPY_CD               = MGT.GLBL_CMPY_CD
+            AND MMS.SVC_MACH_MSTR_SNAP_SHOT_DT &gt;= TO_CHAR(TO_DATE(MGT.PROC_EXEC_DT,'YYYYMMDD') - 1,'YYYYMMDD')
+            AND MMS.SVC_MACH_MSTR_SNAP_SHOT_DT &lt; #PROC_DATE#
+            AND MMS.EZCANCELFLAG               = '0'
+            AND MGT.EZCANCELFLAG               = '0'
+    </statement>
+</sqlMap>

@@ -1,0 +1,291 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NPAL1140Query">
+
+    <!-- *********************************************************** -->
+    <!-- ********** Bean Definition ******************************** -->
+    <!-- *********************************************************** -->
+
+    <statement id="getSearchList" parameterClass="Map" resultClass="Map">
+        SELECT 
+             PO_ACK_HDR_WRK_PK
+            ,ITRL_INTFC_ID
+            ,LOC_NM
+            ,EDI_PO_ORD_NUM
+            ,PO_ACK_NUM
+            ,ACK_EDI_PROC_STS_NM
+            ,OPEN_PO_ACK_WRK_FLG
+            ,EDI_RCV_DATE_TS
+            ,ORD_LAST_UPD_TS
+            ,VND_CPO_ORD_NUM
+            ,BAT_ERR_MSG_TXT
+            ,EZUPTIME
+            ,EZUPTIMEZONE
+            ,PO_ORD_DTL_LINE_NUM
+            ,EDI_PO_ORD_DTL_LINE_NUM
+        FROM (
+            SELECT 
+                 A.PO_ACK_HDR_WRK_PK
+                ,A.ITRL_INTFC_ID
+                ,D.DPLY_VND_NM AS LOC_NM
+                ,A.EDI_PO_ORD_NUM
+                ,A.PO_ACK_NUM
+                ,C.ACK_EDI_PROC_STS_NM
+                ,C.OPEN_PO_ACK_WRK_FLG
+                ,A.EDI_RCV_DATE_TS
+                ,A.ORD_LAST_UPD_TS
+                ,A.VND_CPO_ORD_NUM
+                ,B.BAT_ERR_MSG_TXT
+                ,A.EZUPTIME
+                ,A.EZUPTIMEZONE
+                ,E.PO_ORD_DTL_LINE_NUM
+                ,E.EDI_PO_ORD_DTL_LINE_NUM
+                ,A.VND_CD
+                ,B.PO_ACK_ERR_WRK_PK
+                ,ROW_NUMBER() OVER
+                (PARTITION BY
+                     A.PO_ACK_HDR_WRK_PK 
+                 ORDER BY 
+                     A.VND_CD
+                    ,A.EDI_PO_ORD_NUM
+                    ,TO_NUMBER(A.PO_ACK_NUM) DESC
+                    ,A.EDI_RCV_DATE_TS DESC
+                ) IDX
+            FROM 
+                 PO_ACK_HDR_WRK   A
+                ,PO_ACK_ERR_WRK   B
+                ,ACK_EDI_PROC_STS C
+                ,PO_VND_V         D
+                ,PO_ACK_DTL_WRK   E
+            WHERE
+                    A.GLBL_CMPY_CD         =     #glblCmpyCd#
+                AND A.EZCANCELFLAG         =     '0'
+                <isNotNull property="sMsg.vndCd_H1">
+                AND A.VND_CD               =     #sMsg.vndCd_H1#
+                </isNotNull>
+                <isNotNull property="sMsg.ediProcStsCd_0V">
+                AND A.ACK_EDI_PROC_STS_CD  =     #sMsg.ediProcStsCd_0V#
+                </isNotNull>
+                <isNotNull property="sMsg.ediPoOrdNum">
+                AND A.EDI_PO_ORD_NUM           =     #sMsg.ediPoOrdNum#
+                </isNotNull>
+                <isNotNull property="sMsg.xxCratDt_H1">
+                AND A.EDI_RCV_DATE_TS      &gt;= #sMsg.xxCratDt_H1#
+                </isNotNull>
+                <isNotNull property="sMsg.xxCratDt_H2">
+                AND A.EDI_RCV_DATE_TS      &lt;= #sMsg.xxCratDt_H2# || #endTime#
+                </isNotNull>
+                AND A.GLBL_CMPY_CD         =     B.GLBL_CMPY_CD(+)
+                AND A.PO_ACK_HDR_WRK_PK    =     B.PO_ACK_HDR_WRK_PK(+)
+                AND B.EZCANCELFLAG(+)      =     '0'
+                AND B.PO_ACK_DTL_WRK_PK(+) =     0
+                AND A.GLBL_CMPY_CD         =     C.GLBL_CMPY_CD(+)
+                AND A.ACK_EDI_PROC_STS_CD  =     C.ACK_EDI_PROC_STS_CD(+)
+                AND C.EZCANCELFLAG(+)      =     '0'
+                AND A.GLBL_CMPY_CD         =     D.GLBL_CMPY_CD(+)
+                AND A.VND_CD               =     D.VND_CD(+)
+                AND D.EZCANCELFLAG(+)      =     '0'
+                AND A.GLBL_CMPY_CD         =     E.GLBL_CMPY_CD(+)
+                AND A.PO_ACK_HDR_WRK_PK    =     E.PO_ACK_HDR_WRK_PK(+)
+                AND E.EZCANCELFLAG(+)      =     '0'
+                <isNotNull property="sMsg.batErrMsgTxt_H1">
+                AND EXISTS (
+                    SELECT
+                        *
+                    FROM
+                        PO_ACK_ERR_WRK   X
+                    WHERE
+                            X.GLBL_CMPY_CD      = A.GLBL_CMPY_CD
+                        AND X.PO_ACK_HDR_WRK_PK = A.PO_ACK_HDR_WRK_PK
+                        AND X.EZCANCELFLAG      = '0'
+                        AND X.BAT_ERR_MSG_TXT   like #sMsg.batErrMsgTxt_H1#
+                )
+                </isNotNull>
+           ORDER BY 
+                 A.VND_CD
+                ,A.EDI_PO_ORD_NUM
+                ,TO_NUMBER(A.PO_ACK_NUM) DESC
+                ,A.EDI_RCV_DATE_TS DESC
+       ) 
+       WHERE
+           ROWNUM                 &lt;   #rowNumSize#
+       AND IDX = 1
+       ORDER BY 
+           VND_CD
+          ,EDI_PO_ORD_NUM
+          ,TO_NUMBER(PO_ACK_NUM) DESC
+          ,EDI_RCV_DATE_TS DESC
+    </statement>
+
+    <statement id="getAckHeader" parameterClass="Map" resultClass="Map">
+            SELECT
+                 A.PO_ACK_HDR_WRK_PK 
+                ,A.ITRL_INTFC_ID
+                ,D.DPLY_VND_NM AS LOC_NM
+                ,C.ACK_EDI_PROC_STS_NM
+                ,C.OPEN_PO_ACK_WRK_FLG
+                ,A.EDI_RCV_DATE_TS
+                ,A.EDI_PO_ORD_NUM
+                ,CASE WHEN XREF.PO_ORD_NUM  IS NOT NULL THEN XREF.PO_ORD_NUM
+                      WHEN A.PO_ORD_NUM     IS NOT NULL THEN A.PO_ORD_NUM
+                      WHEN LENGTH(A.EDI_PO_ORD_NUM) &lt;= $poOrdNumLength$ THEN A.EDI_PO_ORD_NUM
+                      ELSE NULL
+                 END                        AS PO_ORD_NUM
+                ,A.PO_ACK_NUM
+                ,A.VND_CPO_ORD_NUM
+                ,B.BAT_ERR_MSG_TXT
+                ,A.VND_CD
+                ,A.EZUPTIME
+                ,A.EZUPTIMEZONE
+            FROM 
+                 PO_ACK_HDR_WRK   A
+                ,PO_ACK_ERR_WRK   B
+                ,ACK_EDI_PROC_STS C
+                ,PO_VND_V         D
+                ,EDI_PO_DTL_XREF  XREF
+            WHERE
+                    A.GLBL_CMPY_CD                  =     #glblCmpyCd#
+                AND A.EZCANCELFLAG                  =     '0'
+                AND A.PO_ACK_HDR_WRK_PK             =     #poAckHdrWrkPk#
+                AND A.GLBL_CMPY_CD                  =     B.GLBL_CMPY_CD(+)
+                AND A.PO_ACK_HDR_WRK_PK             =     B.PO_ACK_HDR_WRK_PK(+)
+                AND B.EZCANCELFLAG(+)               =     '0'
+                AND B.PO_ACK_DTL_WRK_PK(+)          =     0
+                AND A.GLBL_CMPY_CD                  =     C.GLBL_CMPY_CD(+)
+                AND A.ACK_EDI_PROC_STS_CD           =     C.ACK_EDI_PROC_STS_CD(+)
+                AND C.EZCANCELFLAG(+)               =     '0'
+                AND A.GLBL_CMPY_CD                  =     XREF.GLBL_CMPY_CD(+)
+                AND XREF.EDI_PO_ORD_NUM(+)          =     #ediPoOrdNum#
+                AND XREF.EDI_PO_ORD_DTL_LINE_NUM(+) =     #asterisk#
+                AND XREF.EZCANCELFLAG(+)            =     '0'
+                AND A.GLBL_CMPY_CD                  =     D.GLBL_CMPY_CD(+)
+                AND A.VND_CD                        =     D.VND_CD(+)
+                AND D.EZCANCELFLAG(+)               =     '0'
+            ORDER BY 
+                B.PO_ACK_ERR_WRK_PK
+    </statement>
+
+    <statement id="getAckDetial" parameterClass="Map" resultClass="Map">
+        SELECT
+             PO_ACK_DTL_WRK_PK
+            ,EDI_PO_ORD_DTL_LINE_NUM
+            ,HDN_EDI_PO_ORD_DTL_LINE_NUM
+            ,PO_ORD_DTL_LINE_NUM
+            ,HDN_PO_ORD_DTL_LINE_NUM
+            ,SHPG_PLN_NUM
+            ,SHPG_PLN_DPLY_LINE_NUM
+            ,PO_ACK_LINE_STS_CD
+            ,MDSE_CD
+            ,MDSE_DESC_SHORT_TXT
+            ,ORIG_VND_MDSE_CD
+            ,ORD_QTY
+            ,UOM_CD
+            ,ETD_DT
+            ,ETA_DT
+            ,ORD_DTL_LAST_UPD_TS
+            ,BAT_ERR_MSG_TXT
+            ,EZUPTIME
+            ,EZUPTIMEZONE
+        FROM (
+            SELECT
+                 A.PO_ACK_DTL_WRK_PK
+                ,CASE WHEN D.DISP_PO_DTL_LINE_NUM IS NOT NULL THEN D.DISP_PO_DTL_LINE_NUM
+                      ELSE A.EDI_PO_ORD_DTL_LINE_NUM
+                 END  AS  EDI_PO_ORD_DTL_LINE_NUM
+                ,A.EDI_PO_ORD_DTL_LINE_NUM AS HDN_EDI_PO_ORD_DTL_LINE_NUM
+            <isNotNull property="xrefUseFlg">
+               ,CASE WHEN E.DISP_PO_DTL_LINE_NUM IS NOT NULL THEN E.DISP_PO_DTL_LINE_NUM
+                     WHEN D.DISP_PO_DTL_LINE_NUM IS NOT NULL THEN D.DISP_PO_DTL_LINE_NUM
+                     ELSE A.PO_ORD_DTL_LINE_NUM
+                END  AS  PO_ORD_DTL_LINE_NUM
+            </isNotNull>
+            <isNull property="xrefUseFlg">
+                ,A.PO_ORD_DTL_LINE_NUM AS PO_ORD_DTL_LINE_NUM
+            </isNull>
+                ,A.PO_ORD_DTL_LINE_NUM AS HDN_PO_ORD_DTL_LINE_NUM
+                ,A.SHPG_PLN_NUM
+                ,A.SHPG_PLN_DPLY_LINE_NUM
+                ,A.PO_ACK_LINE_STS_CD
+                ,A.MDSE_CD
+                ,F.MDSE_DESC_SHORT_TXT
+                ,A.ORIG_VND_MDSE_CD
+                ,A.ORD_QTY
+                ,A.UOM_CD
+                ,A.ETD_DT
+                ,A.ETA_DT
+                ,A.ORD_DTL_LAST_UPD_TS
+                ,C.BAT_ERR_MSG_TXT
+                ,A.EZUPTIME
+                ,A.EZUPTIMEZONE
+            FROM 
+                 PO_ACK_DTL_WRK    A
+            <isNotNull property="xrefUseFlg">
+                ,EDI_PO_DTL_XREF   B
+            </isNotNull>
+                ,PO_ACK_ERR_WRK    C
+                ,PO_DTL            D
+                ,PO_DTL            E
+                ,MDSE              F
+            WHERE
+                    A.GLBL_CMPY_CD         =     #glblCmpyCd#
+                AND A.EZCANCELFLAG         =     '0'
+                AND A.PO_ACK_HDR_WRK_PK    =     #poAckHdrWrkPk#
+            <isNotNull property="xrefUseFlg">
+                AND A.GLBL_CMPY_CD         =     B.GLBL_CMPY_CD(+)
+                AND B.EDI_PO_ORD_NUM(+)            =     #ediPoOrdNum#
+                AND B.EDI_PO_ORD_DTL_LINE_NUM(+)   =     #ediPoOrdDtlLineNum#
+                AND B.EZCANCELFLAG(+)      =     '0'
+            </isNotNull>
+                AND A.GLBL_CMPY_CD         =     C.GLBL_CMPY_CD(+)
+                AND A.PO_ACK_HDR_WRK_PK    =     C.PO_ACK_HDR_WRK_PK(+)
+                AND A.PO_ACK_DTL_WRK_PK    =     C.PO_ACK_DTL_WRK_PK(+)
+                AND C.EZCANCELFLAG(+)      =     '0'
+                AND A.GLBL_CMPY_CD         =     D.GLBL_CMPY_CD(+)
+                AND A.EDI_PO_ORD_NUM           =     D.PO_ORD_NUM(+)
+                AND A.EDI_PO_ORD_DTL_LINE_NUM  =     D.PO_ORD_DTL_LINE_NUM(+)
+                AND D.EZCANCELFLAG(+)      =     '0'
+                AND B.GLBL_CMPY_CD         =     E.GLBL_CMPY_CD(+)
+                AND B.PO_ORD_NUM           =     E.PO_ORD_NUM(+)
+                AND B.PO_ORD_DTL_LINE_NUM  =     E.PO_ORD_DTL_LINE_NUM(+)
+                AND E.EZCANCELFLAG(+)      =     '0'
+                AND A.GLBL_CMPY_CD         =     F.GLBL_CMPY_CD(+)
+                AND A.MDSE_CD              =     F.MDSE_CD(+)
+                AND F.EZCANCELFLAG(+)      =     '0'
+            ORDER BY
+                 A.EDI_PO_ORD_DTL_LINE_NUM
+                ,C.BAT_ERR_MSG_TXT NULLS LAST
+                ,A.SHPG_PLN_NUM
+                ,A.SHPG_PLN_DPLY_LINE_NUM
+                ,C.PO_ACK_ERR_WRK_PK
+           ) 
+       WHERE
+           ROWNUM                 &lt;   #rowNumSize#
+     </statement>
+
+    <statement id="getIntdfcId" parameterClass="Map" resultClass="String">
+        SELECT
+            A.ITRL_INTFC_ID
+        FROM
+            PO_ACK_HDR_WRK A
+        WHERE
+                A.EZCANCELFLAG = '0'
+            AND A.GLBL_CMPY_CD = #glblCmpyCd#
+        GROUP BY
+            A.ITRL_INTFC_ID
+        ORDER BY
+            A.ITRL_INTFC_ID
+     </statement>
+
+    <statement id="getLogicLineNum" parameterClass="Map" resultClass="Map">
+            SELECT
+                 A.PO_ORD_DTL_LINE_NUM
+            FROM 
+                 PO_DTL   A
+            WHERE
+                    A.GLBL_CMPY_CD                  =     #glblCmpyCd#
+                AND A.PO_ORD_NUM                    =     #poOrdNum#
+                AND A.DISP_PO_DTL_LINE_NUM          =     #poOrdDtlLineNum#
+                AND A.EZCANCELFLAG                  =     '0'
+     </statement>
+
+</sqlMap>

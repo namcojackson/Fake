@@ -1,0 +1,192 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NSBL0040Query">
+	<typeAlias alias="NSBL0040_ASMsg"    type="business.blap.NSBL0040.NSBL0040_ASMsg"/>
+
+	<resultMap id="result.NSBL0010_ASMsg" class="NSBL0040_ASMsg">
+		<result property="ezUpTime_A1"			column="EZUPTIME"				javaType="EZDSStringItem"/>
+		<result property="ezUpTimeZone_A1"		column="EZUPTIMEZONE"			javaType="EZDSStringItem"/>
+		<result property="billToCustCd_A1"		column="BILL_TO_CUST_CD"		javaType="EZDSStringItem"/>
+		<result property="locNm_A1"				column="LOC_NM"					javaType="EZDSStringItem"/>
+		<result property="xxExstFlg_A1"			column="SVC_TASK_HLD_EXST_FLG"	javaType="EZDSStringItem"/>
+		<result property="fsrNum_A1"		    column="FSR_NUM"			    javaType="EZDSStringItem"/>
+		<result property="xxExstFlg_A2"			column="SVC_MEMO_EXST_FLG"		javaType="EZDSStringItem"/>
+		<result property="techCd_A1"			column="TECH_CD"				javaType="EZDSStringItem"/>
+		<result property="origInvCcyCd_A1"		column="ORIG_INV_CCY_CD"		javaType="EZDSStringItem"/>
+		<result property="svcLborDealAmt_A1"	column="SVC_LBOR_DEAL_AMT"		javaType="EZDSBigDecimalItem"/>
+		<result property="ezInUserID_A1"		column="EZINUSERID"				javaType="EZDSStringItem"/>
+		<result property="hrTtlNm_A1"			column="HR_TTL_NM"				javaType="EZDSStringItem"/>
+		<result property="pmtTermCashDiscCd_A1"	column="PMT_TERM_CASH_DISC_CD"	javaType="EZDSStringItem"/>
+		<result property="pmtTermCashDiscNm_A1"	column="PMT_TERM_CASH_DISC_NM"	javaType="EZDSStringItem"/>
+        <!-- START 2016/12/05 K.Kojima [QC#14204, ADD] -->
+        <result property="xxRecHistCratTs_A"    column="XX_REC_HIST_CRAT_TS_A"    javaType="EZDSStringItem"/>
+        <result property="xxRecHistCratByNm_A"  column="XX_REC_HIST_CRAT_BY_NM_A" javaType="EZDSStringItem"/>
+        <result property="xxRecHistUpdTs_A"     column="XX_REC_HIST_UPD_TS_A"     javaType="EZDSStringItem"/>
+        <result property="xxRecHistUpdByNm_A"   column="XX_REC_HIST_UPD_BY_NM_A"  javaType="EZDSStringItem"/>
+        <result property="xxRecHistTblNm_A"     column="XX_REC_HIST_TBL_NM_A"     javaType="EZDSStringItem"/>
+        <!-- END 2016/12/05 K.Kojima [QC#14204, ADD] -->
+	</resultMap>
+
+	<statement id="getHoldList" parameterClass="Map" resultMap="result.NSBL0010_ASMsg">
+	SELECT
+		A.*
+	FROM
+	(
+		SELECT
+            FSR.EZUPTIME
+        ,   FSR.EZUPTIMEZONE
+        ,   BTC.BILL_TO_CUST_CD
+        ,   BTC.LOC_NM
+        <!-- START 2017/09/01 K.Kim [QC#19896, MOD] -->
+        ,   'Y' AS SVC_TASK_HLD_EXST_FLG
+        <!-- ,   CASE WHEN EXISTS (                                         -->
+        <!--         SELECT                                                 -->
+        <!--             *                                                  -->
+        <!--         FROM                                                   -->
+        <!--             SVC_TASK STK                                       -->
+        <!--           , SVC_TASK_HLD STH                                   -->
+        <!--         WHERE                                                  -->
+        <!--             STK.FSR_NUM          = FSR.FSR_NUM                 -->
+        <!--         AND STK.SVC_TASK_REJ_DT IS NULL                        -->
+        <!--         AND STK.GLBL_CMPY_CD     = #glblCmpyCd#                -->
+        <!--         AND STK.EZCANCELFLAG     = '0'                         -->
+        <!--         AND STH.SVC_TASK_NUM     = STK.SVC_TASK_NUM            -->
+        <!--         AND STH.SVC_TASK_REL_FLG = 'N'                         -->
+        <!--         AND STH.GLBL_CMPY_CD     = STK.GLBL_CMPY_CD            -->
+        <!--         AND STH.EZCANCELFLAG     = STK.EZCANCELFLAG            -->
+        <!--                                                                -->
+        <!--     ) THEN                              'Y'                    -->
+        <!--     ELSE                                'N'                    -->
+        <!--     END                                 SVC_TASK_HLD_EXST_FLG  -->
+        <!-- END 2017/09/01 K.Kim [QC#19896, MOD] -->
+        ,   FSR.FSR_NUM
+        ,   CASE WHEN EXISTS (
+                                SELECT
+                    *
+                FROM
+                    SVC_MEMO SMO
+                WHERE
+                    SMO.FSR_NUM          = FSR.FSR_NUM
+                AND SMO.SVC_MEMO_CATG_CD = #svcMemoCatgCd#
+                AND SMO.SVC_MEMO_TP_CD   = #svcMemoTpCd#
+                AND SMO.GLBL_CMPY_CD     = #glblCmpyCd#
+                <!-- START 2017/12/04 M.Kidokoro [QC#21632, ADD] -->
+                AND SMO.SVC_MEMO_RSN_CD IS NOT NULL
+                <!-- END 2017/12/04 M.Kidokoro [QC#21632, ADD] -->
+                AND SMO.EZCANCELFLAG     = '0'
+            ) THEN                              'Y'
+            ELSE                                'N'
+            END                                 SVC_MEMO_EXST_FLG
+        ,   FSR.TECH_CD
+        ,   FSR.ORIG_INV_CCY_CD
+        ,   FSR.SVC_LBOR_DEAL_AMT
+        ,   FSR.EZINUSERID
+        ,   APN.HR_TTL_NM
+        ,   ROW_NUMBER() OVER (
+                ORDER   BY
+                    BTC.BILL_TO_CUST_CD
+                ,   FSR.FSR_NUM
+        )   ROW_NUM
+        ,   COUNT(*) OVER (
+            PARTITION BY
+                FSR.EZCANCELFLAG
+        )   CNT
+        ,   FSR.PMT_TERM_CASH_DISC_CD
+        ,   PTC.PMT_TERM_CASH_DISC_NM
+        <!-- START 2016/12/05 K.Kojima [QC#14204, ADD] -->
+        ,   FSR.EZINTIME    AS XX_REC_HIST_CRAT_TS_A
+        ,   FSR.EZINUSERID  AS XX_REC_HIST_CRAT_BY_NM_A
+        ,   FSR.EZUPTIME    AS XX_REC_HIST_UPD_TS_A
+        ,   FSR.EZUPUSERID  AS XX_REC_HIST_UPD_BY_NM_A
+        ,   FSR.EZTABLEID   AS XX_REC_HIST_TBL_NM_A
+        <!-- END 2016/12/05 K.Kojima [QC#14204, ADD] -->
+        FROM
+            FSR                 FSR
+        ,   SHIP_TO_CUST        SHC
+        ,   BILL_TO_CUST        BTC
+        ,   TECH_MSTR           TMR
+        ,   AUTH_PSN            APN
+        ,   PMT_TERM_CASH_DISC  PTC
+		WHERE
+		    FSR.GLBL_CMPY_CD            =       #glblCmpyCd#
+        AND FSR.EZCANCELFLAG            =       '0'
+        AND SHC.SHIP_TO_CUST_CD         =       FSR.SHIP_TO_CUST_CD
+        AND SHC.GLBL_CMPY_CD            =       #glblCmpyCd#
+        AND SHC.EZCANCELFLAG            =       '0'
+        AND BTC.BILL_TO_CUST_CD         =       FSR.BILL_TO_CUST_CD
+        AND BTC.GLBL_CMPY_CD            =       #glblCmpyCd#
+        AND BTC.EZCANCELFLAG            =       '0'
+        AND TMR.TECH_TOC_CD             (+)=    FSR.TECH_CD
+        AND TMR.GLBL_CMPY_CD            (+)=    #glblCmpyCd#
+        AND TMR.EZCANCELFLAG            (+)=    '0'
+        AND APN.USR_NM                  (+)=    FSR.EZINUSERID
+        AND APN.GLBL_CMPY_CD            (+)=    #glblCmpyCd#
+        AND APN.EZCANCELFLAG            (+)=    '0'
+        AND FSR.PMT_TERM_CASH_DISC_CD   =       PTC.PMT_TERM_CASH_DISC_CD(+)
+        AND FSR.GLBL_CMPY_CD            =       PTC.GLBL_CMPY_CD(+)
+        AND FSR.EZCANCELFLAG            =       PTC.EZCANCELFLAG(+)
+		<isNotNull property="billToCustCd">
+		AND	BTC.BILL_TO_CUST_CD			=		#billToCustCd#
+        <!-- START 2017/09/01 K.Kim [QC#19896, DEL] -->
+		<!-- AND SHC.BILL_TO_CUST_CD			=		#billToCustCd# -->
+        <!-- END 2017/09/01 K.Kim [QC#19896, DEL] -->
+		</isNotNull>
+		<isNotNull property="sellToCustCd">
+		AND	SHC.SELL_TO_CUST_CD			=		#sellToCustCd#
+		</isNotNull>
+		<isNotNull property="shipToCustCd">
+		AND	FSR.SHIP_TO_CUST_CD			=		#shipToCustCd#
+		AND	SHC.SHIP_TO_CUST_CD			=		#shipToCustCd#
+		</isNotNull>
+		<isNotNull property="fsrNum">
+		AND	FSR.FSR_NUM			        LIKE	#fsrNum#
+		</isNotNull>
+		<isNotNull property="techCd">
+		AND	FSR.TECH_CD					=		#techCd#
+		AND	TMR.TECH_TOC_CD				=		#techCd#
+		</isNotNull>
+		<isNotNull property="ezInUserID">
+		AND	FSR.EZINUSERID				=		#ezInUserID#
+		AND	APN.USR_NM					=		#ezInUserID#
+		</isNotNull>
+        <!-- START 2017/09/01 K.Kim [QC#19896, ADD] -->
+        AND EXISTS (
+                SELECT
+                    *
+                FROM
+                    SVC_TASK STK
+                  , SVC_TASK_HLD STH
+                WHERE
+                    STK.FSR_NUM          = FSR.FSR_NUM
+                AND STK.SVC_TASK_REJ_DT IS NULL
+                AND STK.GLBL_CMPY_CD     = #glblCmpyCd#
+                AND STK.EZCANCELFLAG     = '0'
+                AND STH.SVC_TASK_NUM     = STK.SVC_TASK_NUM
+                AND STH.SVC_TASK_REL_FLG = 'N'
+                AND STH.GLBL_CMPY_CD     = STK.GLBL_CMPY_CD
+                AND STH.EZCANCELFLAG     = STK.EZCANCELFLAG
+            )
+        <!-- END 2017/09/01 K.Kim [QC#19896, ADD] -->
+	)	A
+	WHERE
+		A.ROW_NUM						&lt;=	#rowNum#
+        <!-- START 2017/09/01 K.Kim [QC#19896, DEL] -->
+		<!-- AND A.SVC_TASK_HLD_EXST_FLG     =       #hldExstFlg# -->
+        <!-- END 2017/09/01 K.Kim [QC#19896, DEL] -->
+	ORDER BY
+		A.BILL_TO_CUST_CD
+	,	A.FSR_NUM
+	</statement>
+	<statement id="getHoldCnt" parameterClass="Map" resultClass="BigDecimal">
+	SELECT
+		COUNT(*)					CNT
+	FROM
+		SVC_MEMO					SMO
+	WHERE
+		SMO.SVC_TASK_NUM			=	#svcTaskNum#
+	AND	SMO.SVC_MEMO_CATG_CD		=	#svcMemoCatgCd#
+	AND	SMO.SVC_MEMO_TP_CD			=	#svcMemoTpCd#
+	AND	SMO.GLBL_CMPY_CD			=	#glblCmpyCd#
+	AND	SMO.EZCANCELFLAG			=	'0'
+	AND LENGTH(SMO.SVC_CMNT_TXT)	&gt;	0
+	</statement>
+</sqlMap>

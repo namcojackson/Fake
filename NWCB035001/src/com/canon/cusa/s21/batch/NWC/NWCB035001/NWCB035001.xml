@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NWCB035001">
+    <statement id="truncateTable" parameterClass="Map">
+        TRUNCATE TABLE 
+            LEASE_PKG_RPT_WRK
+    </statement>
+
+    <statement id="getCfsLeasePkgPo" parameterClass="Map" resultClass="Map">
+        SELECT
+            PH.CFS_LEASE_PKG_PO_HDR_PK
+            ,PH.DS_ACCT_NM
+            ,PH.CFS_APP_NUM
+            ,PH.CFS_PO_NUM
+            ,PH.CFS_PO_AMT
+            ,PH.INV_CPLT_TOT_DEAL_NET_AMT
+            ,PH.INV_CPLT_AMT_RATE
+            ,PH.LEASE_CMPY_USR_ID
+            ,PH.LEASE_CMPY_USR_NM
+            ,C.SLS_REP_TOC_CD
+            ,SP.PSN_FIRST_NM || ' ' || SP.PSN_LAST_NM AS PSN_NM
+            ,PD_CNT.DTL_CNT
+            ,PD.CFS_LEASE_PKG_PO_DTL_PK
+            ,PD.INV_NUM
+            ,PD.CPO_ORD_NUM
+            ,PD.INV_TOT_DEAL_NET_AMT
+            ,PD.GL_DT
+            ,PD.HDR_BR_CD
+            ,T.TOC_NM <!-- 2018/01/22 S21_NA#23439 Add -->
+        FROM
+            CFS_LEASE_PKG_PO_HDR  PH
+            ,CFS_LEASE_PKG_PO_DTL PD
+            ,(
+                SELECT
+                    <!-- 2019/04/04 QC#30756 Mod Start -->
+                    <!-- PH2.CFS_PO_NUM     AS CFS_PO_NUM -->
+                    <!-- ,PH2.CFS_APP_NUM   AS CFS_APP_NUM -->
+                     UPPER(PH2.CFS_PO_NUM)    AS CFS_PO_NUM
+                    ,UPPER(PH2.CFS_APP_NUM)   AS CFS_APP_NUM
+                    <!-- 2019/04/04 QC#30756 Mod Start -->
+                    ,COUNT(PH2.CFS_PO_NUM) AS DTL_CNT
+                FROM
+                    CFS_LEASE_PKG_PO_HDR  PH2
+                    ,CFS_LEASE_PKG_PO_DTL PD2
+                WHERE
+                    PH2.GLBL_CMPY_CD = #glblCmpyCd#
+                AND PH2.CFS_LEASE_PKG_PO_HDR_PK = PD2.CFS_LEASE_PKG_PO_HDR_PK
+                GROUP BY
+                    <!-- 2019/04/04 QC#30756 Mod Start -->
+                    <!-- PH2.CFS_PO_NUM -->
+                    <!-- ,PH2.CFS_APP_NUM -->
+                     UPPER(PH2.CFS_PO_NUM)
+                    ,UPPER(PH2.CFS_APP_NUM)
+                    <!-- 2019/04/04 QC#30756 Mod Start -->
+            ) PD_CNT
+            ,CPO                       C
+            ,S21_PSN                   SP
+            ,TOC                       T  <!-- 2018/01/22 S21_NA#23439 Add -->
+        WHERE
+            PH.GLBL_CMPY_CD            = #glblCmpyCd#
+        AND PH.CFS_LEASE_PKG_HLD_FLG   = 'N'
+        AND PH.LEASE_PKG_CRAT_FLG      = 'N'
+        <!-- 2022/09/30 QC#60253 Del Start -->
+        <!-- AND PH.CFS_LEASE_PO_INFO_PK    IS NOT NULL  -->
+        <!-- 2022/09/30 QC#60253 Del End -->
+        AND PH.EZCANCELFLAG            = '0'
+
+        <!-- 2019/04/04 QC#30756 Mod Start -->
+        <!-- AND PD_CNT.CFS_PO_NUM          = PH.CFS_PO_NUM -->
+        <!-- AND PD_CNT.CFS_APP_NUM         = PH.CFS_APP_NUM -->
+        <!-- 2022/09/30 QC#60253 Mod Start -->
+        AND (
+                (
+                       PD_CNT.CFS_PO_NUM          = UPPER(PH.CFS_PO_NUM)
+                  AND  PD_CNT.CFS_APP_NUM         = UPPER(PH.CFS_APP_NUM)
+                )
+            OR
+                (
+                       PD_CNT.CFS_PO_NUM          = UPPER(PH.CFS_PO_NUM)
+                  AND  PD_CNT.CFS_APP_NUM IS NULL
+                  AND  PH.CFS_APP_NUM     IS NULL
+                 )
+             )
+        <!-- AND PD_CNT.CFS_PO_NUM          = UPPER(PH.CFS_PO_NUM) -->
+        <!-- AND PD_CNT.CFS_APP_NUM         = UPPER(PH.CFS_APP_NUM) -->
+        <!-- 2022/09/30 QC#60253 Mod End -->
+        <!-- 2019/04/04 QC#30756 Mod End -->
+
+        AND PD.GLBL_CMPY_CD            = PH.GLBL_CMPY_CD
+        AND PD.CFS_LEASE_PKG_PO_HDR_PK = PH.CFS_LEASE_PKG_PO_HDR_PK
+        AND PD.EZCANCELFLAG            = '0'
+
+        AND C.GLBL_CMPY_CD             = PD.GLBL_CMPY_CD
+        AND C.CPO_ORD_NUM              = PD.CPO_ORD_NUM
+        AND C.EZCANCELFLAG             = '0'
+
+        AND C.GLBL_CMPY_CD             = SP.GLBL_CMPY_CD(+)
+        AND C.ADMIN_PSN_CD             = SP.PSN_CD(+)
+        AND SP.EZCANCELFLAG(+)         = '0'
+
+        <!-- 2018/01/22 S21_NA#23439 Add Start -->
+        AND C.GLBL_CMPY_CD = T.GLBL_CMPY_CD(+)
+        AND C.SLS_REP_TOC_CD = T.TOC_CD(+)
+        AND C.EZCANCELFLAG(+) = '0'
+        <!-- 2018/01/22 S21_NA#23439 Add End -->
+
+        ORDER BY
+            PH.CFS_PO_NUM
+    </statement>
+
+    <statement id="getInvRptCtrl" parameterClass="Map" resultClass="Map">
+        SELECT
+            IC.INV_PRT_CTRL_PK
+            ,IC.INV_NUM
+            ,IC.CONSL_BILL_FLG
+        FROM
+            INV_PRT_CTRL IC
+        WHERE
+            IC.GLBL_CMPY_CD   = #glblCmpyCd#
+        AND IC.EZCANCELFLAG   = '0'
+        AND IC.INV_NUM        = #invNum#
+        AND IC.CONSL_BILL_FLG = 'N'
+    </statement>
+
+    <statement id="getLeasePkgRptWrkForDelete" parameterClass="Map" resultClass="Map">
+        SELECT
+            LR.LEASE_PKG_RPT_WRK_PK
+        FROM
+            LEASE_PKG_RPT_WRK LR
+        WHERE
+            LR.GLBL_CMPY_CD   = #glblCmpyCd#
+        AND LR.EZCANCELFLAG   = '0'
+        <!-- 2019/04/04 QC#30756 Mod Start -->
+        <!-- AND LR.CFS_APP_NUM    = #cfsAppNum# -->
+        <!-- AND LR.CFS_PO_NUM     = #cfsPoNum# -->
+        <!-- 2022/09/30 QC#60253 Mod Start -->
+        <isNotNull property="cfsAppNum">
+        AND UPPER(LR.CFS_APP_NUM)    = UPPER(#cfsAppNum#)
+        </isNotNull>
+        <isNull property="cfsAppNum">
+        AND LR.CFS_APP_NUM IS NULL
+        </isNull>
+        <!-- 2022/09/30 QC#60253 Mod End -->
+        AND UPPER(LR.CFS_PO_NUM)     = UPPER(#cfsPoNum#)
+        <!-- 2019/04/04 QC#30756 Mod End -->
+    </statement>
+</sqlMap>

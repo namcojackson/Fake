@@ -1,0 +1,191 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NLZC403001">
+
+    <statement id="getSerialRangeList" parameterClass="Map" resultClass="Map">
+        SELECT
+                SR.LG_SER_NUM
+               ,SR.FROM_SER_NUM
+               ,SR.THRU_SER_NUM
+
+        FROM   MDSE_SER_NUM_RNG SR
+
+        WHERE  SR.GLBL_CMPY_CD  = #glblCmpyCd#
+        AND    SR.MDSE_CD       = #mdseCd#
+        AND    SR.EZCANCELFLAG  = '0'
+    </statement>	
+
+    <statement id="getItemMaster" parameterClass="Map" resultClass="Map">
+        SELECT
+                M.MDSE_CD
+               ,M.RCV_SER_TAKE_FLG
+               ,M.SHPG_SER_TAKE_FLG
+               ,M.INSTL_BASE_CTRL_FLG
+        FROM   MDSE M
+        WHERE  M.GLBL_CMPY_CD      = #glblCmpyCd#
+        AND    M.MDSE_CD           = #mdseCd#
+        AND    M.EZCANCELFLAG      = '0'
+    </statement>
+
+    <statement id="getSo" parameterClass="Map" resultClass="Map">
+        SELECT
+              SD.RTL_WH_CD
+            , SD.RTL_SWH_CD
+            , (SELECT COUNT(1)
+               FROM   SO_SER SS
+               WHERE  SS.GLBL_CMPY_CD = SD.GLBL_CMPY_CD
+               AND    SS.SO_NUM       = SD.SO_NUM
+               AND    SS.SO_SLP_NUM   = SD.SO_SLP_NUM
+               AND    SS.EZCANCELFLAG = '0'
+              ) CNT_SO_SER
+            , (SELECT COUNT(1)
+               FROM   SO_SER SS
+               WHERE  SS.GLBL_CMPY_CD = SD.GLBL_CMPY_CD
+               AND    SS.SO_NUM       = SD.SO_NUM
+               AND    SS.SO_SLP_NUM   = SD.SO_SLP_NUM
+               AND    SS.SER_NUM      = #serNum#
+               AND    SS.EZCANCELFLAG = '0'
+              ) CNT_SO_MATCH_SER
+        FROM
+            SHPG_ORD SO
+           ,SHPG_ORD_DTL SD
+        WHERE
+                SO.GLBL_CMPY_CD = #glblCmpyCd#
+            AND SO.SO_NUM       = #soNum#
+            AND SO.EZCANCELFLAG = '0'
+            AND SD.GLBL_CMPY_CD = SO.GLBL_CMPY_CD
+            AND SD.SO_NUM       = SO.SO_NUM
+            AND SD.MDSE_CD      = #mdseCd#
+            AND SD.EZCANCELFLAG = '0'
+    </statement>
+
+    <statement id="getRws" parameterClass="Map" resultClass="Map">
+        SELECT
+            *
+        FROM(
+            SELECT
+                  RH.SCE_ORD_TP_CD
+                , RD.RTL_WH_CD || RD.RTL_SWH_CD WH_CD
+                , (SELECT COUNT(1)
+                   FROM   RWS_SER RS
+                   WHERE  RS.GLBL_CMPY_CD   = RD.GLBL_CMPY_CD
+                   AND    RS.RWS_NUM        = RD.RWS_NUM
+                   AND    RS.RWS_LINE_NUM   = RD.RWS_DTL_LINE_NUM
+                   AND    RS.EZCANCELFLAG = '0'
+                  ) CNT_RWS_SER
+                , (SELECT COUNT(1)
+                   FROM   RWS_SER RS
+                   WHERE  RS.GLBL_CMPY_CD   = RD.GLBL_CMPY_CD
+                   AND    RS.RWS_NUM        = RD.RWS_NUM
+                   AND    RS.RWS_LINE_NUM   = RD.RWS_DTL_LINE_NUM
+                   AND    RS.SER_NUM        = #serNum#
+                   AND    RS.EZCANCELFLAG   = '0'
+                  ) CNT_RWS_MATCH_SER
+                , RH.RWS_NUM
+            FROM 
+                  RWS_HDR RH
+                , RWS_DTL RD
+            WHERE
+                    RH.GLBL_CMPY_CD               = #glblCmpyCd#
+                AND RH.RWS_REF_NUM                = #rwsRefNum#
+                AND RH.EZCANCELFLAG               = '0'
+                AND RD.GLBL_CMPY_CD               = RH.GLBL_CMPY_CD
+                AND RD.RWS_NUM                    = RH.RWS_NUM
+                AND RD.MDSE_CD                    = #mdseCd#
+                AND RD.EZCANCELFLAG               = '0'
+            )
+        ORDER BY
+            CNT_RWS_MATCH_SER DESC
+    </statement>
+
+    <statement id="getIb" parameterClass="Map" resultClass="Map">
+        SELECT
+              MM.SVC_MACH_MSTR_PK
+            , MM.SVC_MACH_MSTR_STS_CD
+            , MM.CUR_LOC_NUM
+            , MM.CUR_LOC_ACCT_NUM
+            , MM.SVC_MACH_MAINT_AVAL_FLG
+            , MM.SVC_MACH_MSTR_LOC_STS_CD
+        FROM 
+              SVC_MACH_MSTR MM
+        WHERE
+                MM.GLBL_CMPY_CD      = #glblCmpyCd#
+            AND MM.MDSE_CD           = #mdseCd#
+            AND MM.SER_NUM           = #serNum#
+            AND MM.EZCANCELFLAG      = '0'
+    </statement>
+    <statement id="getSoByRwsRefNum" parameterClass="Map" resultClass="Map">
+        SELECT DISTINCT
+             RH.RWS_NUM
+            ,PRD.PO_ORD_NUM
+            ,PRD.PRCH_REQ_NUM
+            ,SOD.SO_NUM
+        FROM
+             RWS_HDR RH
+            ,PRCH_REQ_DTL PRD
+            ,SHPG_ORD_DTL SOD
+        WHERE
+            RH.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND RH.RWS_REF_NUM         = #rwsRefNum#
+        AND RH.GLBL_CMPY_CD        = PRD.GLBL_CMPY_CD
+        AND RH.RWS_REF_NUM         = PRD.TRX_REF_NUM
+        AND PRD.GLBL_CMPY_CD       = SOD.GLBL_CMPY_CD
+        AND PRD.INVTY_ORD_NUM      = SOD.TRX_HDR_NUM
+        AND	RH.EZCANCELFLAG        = '0'
+        AND	PRD.EZCANCELFLAG       = '0'
+        AND	SOD.EZCANCELFLAG       = '0'
+    </statement>
+    <statement id="getRwsSerialList" parameterClass="Map" resultClass="String">
+        SELECT
+            RS.SER_NUM
+        FROM
+            RWS_SER RS
+        WHERE
+            RS.GLBL_CMPY_CD = #glblCmpyCd#
+        AND RS.RWS_NUM      = #rwsNum#
+        AND RS.MDSE_CD      = #mdseCd#
+        AND NOT EXISTS (
+                        SELECT
+                            1
+                        FROM
+                            RWS_PUT_AWAY_SER PS
+                        WHERE
+                            PS.GLBL_CMPY_CD = RS.GLBL_CMPY_CD
+                        AND PS.RWS_NUM      = RS.RWS_NUM
+                        AND PS.MDSE_CD      = RS.MDSE_CD
+                        AND PS.SER_NUM      = RS.SER_NUM
+                        AND PS.EZCANCELFLAG = '0'
+                       )
+        AND RS.EZCANCELFLAG = '0'
+    </statement>
+    <statement id="geRcvSerCheckCtrl" parameterClass="Map" resultClass="Map">
+        SELECT
+            DCC.DS_COND_CONST_GRP_ID
+           ,DCC.DS_COND_CONST_CD
+           ,DCC.DS_COND_CONST_NM
+           ,DCC.DS_COND_CONST_SORT_NUM
+           ,DCC.DS_COND_CONST_DESC_TXT
+           ,DCC.DS_COND_CONST_VAL_TXT_01
+           ,DCC.DS_COND_CONST_VAL_TXT_02
+           ,DCC.DS_COND_CONST_VAL_TXT_03
+           ,DCC.DS_COND_CONST_VAL_TXT_04
+           ,DCC.DS_COND_CONST_VAL_TXT_05
+           ,DCC.DS_COND_CONST_VAL_TXT_06
+           ,DCC.DS_COND_CONST_VAL_TXT_07
+           ,DCC.DS_COND_CONST_VAL_TXT_08
+           ,DCC.DS_COND_CONST_VAL_TXT_09
+           ,DCC.DS_COND_CONST_VAL_TXT_10
+           ,DCC.DS_COND_CONST_VAL_NUM_01
+           ,DCC.DS_COND_CONST_VAL_NUM_02
+           ,DCC.DS_COND_CONST_VAL_NUM_03
+           ,DCC.DS_COND_CONST_VAL_NUM_04
+           ,DCC.DS_COND_CONST_VAL_NUM_05
+        FROM
+            DS_COND_CONST    DCC
+        WHERE
+            DCC.GLBL_CMPY_CD         = #glblCmpyCd#
+        AND DCC.DS_COND_CONST_GRP_ID = #dsCondConstGrpId#
+        AND DCC.EZCANCELFLAG         = '0'
+    </statement>
+
+</sqlMap>

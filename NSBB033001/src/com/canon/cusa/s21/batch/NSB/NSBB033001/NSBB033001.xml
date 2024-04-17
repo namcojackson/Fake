@@ -1,0 +1,210 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NSBB033001">
+    <statement id="getSvcMod" parameterClass="Map" resultClass="Map">
+        SELECT
+             A.SVC_MOD_PLN_ID           AS SVC_MOD_PLN_ID
+            ,A.SVC_MOD_PK               AS SVC_MOD_PK
+            ,B.SVC_MOD_DTL_PK           AS SVC_MOD_DTL_PK
+            ,C.SVC_MOD_SER_RNG_PK       AS SVC_MOD_SER_RNG_PK
+            ,C.SVC_MOD_FROM_SER_NUM     AS SVC_MOD_FROM_SER_NUM
+            ,C.SVC_MOD_TO_SER_NUM       AS SVC_MOD_TO_SER_NUM
+            ,C.MDSE_CD                  AS MDSE_CD
+            ,C.LG_SER_NUM               AS LG_SER_NUM
+            ,C.LAST_BAT_EXEC_TS         AS LAST_BAT_EXEC_TS
+            ,D.ONE_TM_ONLY_FLG          AS ONE_TM_ONLY_FLG
+            ,D.CRAT_MOD_MLY_FLG         AS CRAT_MOD_MLY_FLG
+            ,D.CRAT_MOD_TERM_AOT        AS CRAT_MOD_TERM_AOT
+            ,(SELECT
+                  E.ORD_TAKE_MDSE_CD
+              FROM
+                  ORD_TAKE_MDSE     E
+              WHERE
+                      E.GLBL_CMPY_CD       = C.GLBL_CMPY_CD
+                  AND E.ORD_TAKE_MDSE_CD   = C.MDSE_CD
+                  AND E.EZCANCELFLAG       = '0')
+                                        AS ORD_TAKE_MDSE_CD
+        FROM
+             SVC_MOD                A
+            ,SVC_MOD_DTL            B
+            ,SVC_MOD_SER_RNG        C
+            ,AUTO_CRAT_RFRS_TMG     D
+        WHERE
+                A.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND A.EZCANCELFLAG          = '0'
+            AND A.GLBL_CMPY_CD          = B.GLBL_CMPY_CD
+            AND A.SVC_MOD_PK            = B.SVC_MOD_PK
+            AND B.EZCANCELFLAG          = '0'
+            AND B.SVC_MOD_START_DT      &lt;= #salesDate#
+            AND (   B.SVC_MOD_ON_HLD_DT &gt; #salesDate#
+                 OR B.SVC_MOD_ON_HLD_DT IS NULL)
+            AND (   B.SVC_MOD_CANC_DT   &gt;  #salesDate#
+                 OR B.SVC_MOD_CANC_DT   IS NULL)
+            AND (   B.SVC_MOD_OBSL_DT   &gt;  #salesDate#
+                 OR B.SVC_MOD_OBSL_DT   IS NULL)
+            AND B.GLBL_CMPY_CD          = C.GLBL_CMPY_CD
+            AND B.SVC_MOD_DTL_PK        = C.SVC_MOD_DTL_PK
+            AND C.EZCANCELFLAG          = '0'
+            AND C.AUTO_CRAT_CALL_FLG    = 'Y'
+            AND C.GLBL_CMPY_CD          = D.GLBL_CMPY_CD
+            AND C.AUTO_CRAT_RFRS_TMG_CD = D.AUTO_CRAT_RFRS_TMG_CD
+            AND D.EZCANCELFLAG          = '0'
+        ORDER BY
+             A.SVC_MOD_PK           ASC
+            ,B.SVC_MOD_DTL_PK       ASC
+            ,C.SVC_MOD_SER_RNG_PK   ASC
+    </statement>
+    <statement id="getSvcMachMstr" parameterClass="Map" resultClass="Map">
+        <!-- START 2018/09/25 K.Fujimoto [QC#28063, ADD] -->
+        SELECT
+             A.SVC_MACH_MSTR_PK         AS SVC_MACH_MSTR_PK
+            ,A.CUST_MACH_CTRL_NUM       AS CUST_MACH_CTRL_NUM
+            ,A.SER_NUM                  AS SER_NUM
+            ,A.CUST_ISS_PO_NUM          AS CUST_ISS_PO_NUM
+            ,A.DS_PO_EXPR_DT            AS DS_PO_EXPR_DT
+            ,B.FIRST_PROD_CTRL_CD       AS FIRST_PROD_CTRL_CD
+        FROM 
+             SVC_MACH_MSTR          A
+            ,MDSE                   B
+        WHERE
+                A.GLBL_CMPY_CD          = #glblCmpyCd#
+            <isNotNull property="mdseCd01">
+            AND A.MDSE_CD            LIKE #mdseCd01# 
+            </isNotNull>
+            <isNotNull property="mdseCd02">
+            AND A.MDSE_CD               = #mdseCd02#
+            </isNotNull>
+            AND LENGTH(A.SER_NUM)       = #lgSerNum#
+            AND A.EZCANCELFLAG          = '0'
+            AND A.GLBL_CMPY_CD          = B.GLBL_CMPY_CD
+            AND A.MDSE_CD               = B.MDSE_CD
+            AND A.SVC_MACH_MSTR_STS_CD  IN (#svcMachMstrStsW4I#, #svcMachMstrStsIstl#)
+            AND (
+                A.SVC_MACH_TP_CD &lt;&gt; #svcMachTpIsAcc#
+             OR A.SVC_MACH_TP_CD IS NULL
+            )
+            AND B.EZCANCELFLAG          = '0'
+            AND NOT EXISTS (
+                    SELECT
+                        *
+                    FROM
+                        SVC_MOD_STS C
+                    WHERE
+                            C.GLBL_CMPY_CD      = A.GLBL_CMPY_CD
+                        AND C.SVC_MOD_DTL_PK    = #svcModDtlPk#
+                        AND C.SVC_MACH_MSTR_PK  = A.SVC_MACH_MSTR_PK
+                        AND C.EZCANCELFLAG      = '0')
+            AND NOT EXISTS (
+                    SELECT
+                        *
+                    FROM
+                        SVC_TASK    D
+                    WHERE
+                            D.GLBL_CMPY_CD      = A.GLBL_CMPY_CD
+                        AND D.SVC_MOD_NUM       = #svcModNum#
+                        AND D.SVC_MACH_MSTR_PK  = A.SVC_MACH_MSTR_PK
+                        AND D.EZCANCELFLAG      = '0')
+            
+        UNION ALL
+        <!-- END 2018/09/25 K.Fujimoto [QC#28063, ADD] -->
+        
+        SELECT
+             A.SVC_MACH_MSTR_PK         AS SVC_MACH_MSTR_PK
+            ,A.CUST_MACH_CTRL_NUM       AS CUST_MACH_CTRL_NUM
+            ,A.SER_NUM                  AS SER_NUM
+            ,A.CUST_ISS_PO_NUM          AS CUST_ISS_PO_NUM
+            ,A.DS_PO_EXPR_DT            AS DS_PO_EXPR_DT
+            ,B.FIRST_PROD_CTRL_CD       AS FIRST_PROD_CTRL_CD
+        FROM
+             SVC_MACH_MSTR          A
+            ,MDSE                   B
+            <!-- START 2018/08/08 K.Kitachi [QC#27460, ADD] -->
+            ,MDSE_ITEM_FLIP_SET     C
+            <!-- END 2018/08/08 K.Kitachi [QC#27460, ADD] -->
+        WHERE
+                A.GLBL_CMPY_CD          = #glblCmpyCd#
+            <!-- START 2018/09/20 K.Fujimoto [QC#28063, MOD] -->
+            <!-- START 2018/08/08 K.Kitachi [QC#27460, MOD] -->
+            <isNotNull property="mdseCd01">
+            AND C.MDSE_CD           LIKE  #mdseCd01#
+            <!-- AND (A.MDSE_CD LIKE #mdseCd01# OR C.MDSE_CD LIKE #mdseCd01#) -->
+            </isNotNull>
+            <isNotNull property="mdseCd02">
+            AND C.MDSE_CD               = #mdseCd02# 
+            <!-- AND A.MDSE_CD =    #mdseCd02#            -->
+            </isNotNull>
+            <!-- END 2018/08/08 K.Kitachi [QC#27460, MOD] -->
+            AND LENGTH(A.SER_NUM)       = #lgSerNum#
+            AND A.EZCANCELFLAG          = '0'
+            AND A.GLBL_CMPY_CD          = B.GLBL_CMPY_CD
+            AND A.MDSE_CD               = B.MDSE_CD
+            AND A.SVC_MACH_MSTR_STS_CD  IN (#svcMachMstrStsW4I#, #svcMachMstrStsIstl#)
+<!-- START 2017/01/18 K.Kitachi [QC#15818, ADD] -->
+            AND (
+                A.SVC_MACH_TP_CD &lt;&gt; #svcMachTpIsAcc#
+             OR A.SVC_MACH_TP_CD IS NULL
+            )
+<!-- END 2017/01/18 K.Kitachi [QC#15818, ADD] -->
+            AND B.EZCANCELFLAG          = '0'
+            <!-- START 2018/08/08 K.Kitachi [QC#27460, ADD] -->
+            AND A.GLBL_CMPY_CD          = C.GLBL_CMPY_CD
+            AND A.MDSE_CD               = C.RELN_MDSE_CD
+            <iterate property="mdseItemRelnTpCdList" var="mdseItemRelnTpCd[]" open="AND C.MDSE_ITEM_RELN_TP_CD (+) IN (" close=")" conjunction=",">
+                #mdseItemRelnTpCd[]#
+            </iterate>
+            AND C.EZCANCELFLAG          = '0'
+            <!-- END 2018/09/20 K.Fujimoto [QC#28063, MOD] -->
+            <!-- END 2018/08/08 K.Kitachi [QC#27460, ADD] -->
+            AND NOT EXISTS (
+                    SELECT
+                        *
+                    FROM
+                        SVC_MOD_STS C
+                    WHERE
+                            C.GLBL_CMPY_CD      = A.GLBL_CMPY_CD
+                        AND C.SVC_MOD_DTL_PK    = #svcModDtlPk#
+                        AND C.SVC_MACH_MSTR_PK  = A.SVC_MACH_MSTR_PK
+                        AND C.EZCANCELFLAG      = '0')
+            AND NOT EXISTS (
+                    SELECT
+                        *
+                    FROM
+                        SVC_TASK    D
+                    WHERE
+                            D.GLBL_CMPY_CD      = A.GLBL_CMPY_CD
+                        AND D.SVC_MOD_NUM       = #svcModNum#
+                        AND D.SVC_MACH_MSTR_PK  = A.SVC_MACH_MSTR_PK
+                        AND D.EZCANCELFLAG      = '0')
+        ORDER BY
+             SVC_MACH_MSTR_PK         ASC
+    </statement>
+    <statement id="getEmlAddr" parameterClass="Map" resultClass="Map">
+        SELECT
+             A.CUST_TEL_NUM
+            ,A.CUST_TEL_EXTN_NUM
+            ,A.SVC_CUST_ATTN_TXT
+            ,A.CUST_EML_ADDR
+            ,A.SVC_CUST_CLLR_TXT
+            ,A.SVC_CUST_CLLR_TEL_NUM
+            ,A.SVC_CUST_CLLR_TEL_EXTN_NUM
+        FROM
+            SVC_TASK  A
+<!-- START 2019/11/19 T.Kanasaka [QC#54391, ADD] -->
+            ,DS_SVC_CALL_TP B
+<!-- END 2019/11/19 T.Kanasaka [QC#54391, ADD] -->
+        WHERE
+                A.GLBL_CMPY_CD      = #glblCmpyCd#
+            AND A.EZCANCELFLAG      = '0'
+            AND A.SVC_MACH_MSTR_PK  = #svcMachMstrPk#
+            AND A.CUST_EML_ADDR     IS NOT NULL
+            AND A.SVC_TASK_STS_CD   &lt;&gt; #svcTaskStsCancel#
+<!-- START 2019/11/19 T.Kanasaka [QC#54391, ADD] -->
+            AND A.GLBL_CMPY_CD      = B.GLBL_CMPY_CD
+            AND A.DS_SVC_CALL_TP_CD = B.DS_SVC_CALL_TP_CD
+            AND B.ONS_SPRT_CALL_FLG = 'N'
+            AND B.EZCANCELFLAG      = '0'
+<!-- END 2019/11/19 T.Kanasaka [QC#54391, ADD] -->
+        ORDER BY
+             A.SVC_TASK_RCV_DT DESC NULLS LAST
+            ,A.SVC_TASK_RCV_TM DESC NULLS LAST
+    </statement>
+</sqlMap>

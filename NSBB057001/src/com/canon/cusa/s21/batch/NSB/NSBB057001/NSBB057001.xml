@@ -1,0 +1,347 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NSBB057001">
+    <statement id="getFsrPartsInfo" parameterClass="Map" resultClass="Map">
+<!-- START 2023/03/03 L.Mandanas [CSA#61067, DEL] -->
+<!-- 
+        SELECT
+             STA.SER_NUM                   AS SER_NUM
+            ,STA.SVC_TASK_NUM              AS SVC_TASK_NUM
+            ,FUS.MDSE_CD                   AS MDSE_CD
+            ,FUS.SVC_PRT_QTY               AS SVC_PRT_QTY
+            ,FVI.FSR_VISIT_ARV_DT          AS FSR_VISIT_ARV_DT
+            ,FVI.FSR_VISIT_ARV_TM          AS FSR_VISIT_ARV_TM
+            ,MDS.MDSE_DESC_SHORT_TXT       AS MDSE_DESC_SHORT_TXT
+            ,MDS.COA_MDSE_TP_CD            AS COA_MDSE_TP_CD
+            ,MDS.THIS_MTH_TOT_STD_COST_AMT AS THIS_MTH_TOT_STD_COST_AMT
+            ,MDS.COST_CCY_CD               AS COST_CCY_CD
+
+        FROM
+             SVC_TASK                      STA
+            ,FSR_USG                       FUS
+            ,FSR_VISIT                     FVI
+            ,MDSE                          MDS
+        WHERE
+                STA.GLBL_CMPY_CD         = #glblCmpyCd#
+            AND STA.GLBL_CMPY_CD         = FUS.GLBL_CMPY_CD
+            AND STA.SVC_TASK_NUM         = FUS.SVC_TASK_NUM
+            AND STA.GLBL_CMPY_CD         = FVI.GLBL_CMPY_CD
+            AND STA.SVC_TASK_NUM         = FVI.SVC_TASK_NUM
+            AND FUS.GLBL_CMPY_CD         = MDS.GLBL_CMPY_CD
+            AND FUS.MDSE_CD              = MDS.MDSE_CD
+
+            AND STA.EZCANCELFLAG         = '0'
+            AND FUS.EZCANCELFLAG         = '0'
+            AND FVI.EZCANCELFLAG         = '0'
+            AND MDS.EZCANCELFLAG         = '0'
+            AND EXISTS (
+                SELECT 
+                    1
+                FROM
+                    FSR_EVENT    FEV
+                WHERE
+                        FEV.GLBL_CMPY_CD        = STA.GLBL_CMPY_CD
+                    AND FEV.SVC_TASK_NUM        = STA.SVC_TASK_NUM
+                    <iterate property   ="svcDisptEventCdList" var="svcDisptEventCd[]" open=" AND FEV.SVC_DISPT_EVENT_CD IN  (" close=")" conjunction=",">
+                    #svcDisptEventCd[]#
+                    </iterate>
+                    <isNotNull property ="lastProcTs">
+                    AND FEV.FSR_EVENT_EXE_TS &gt;  #lastProcTs#
+                    </isNotNull>
+                    AND FEV.FSR_EVENT_EXE_TS &lt;= #systemTs#
+                    AND FEV.EZCANCELFLAG         = '0'
+                GROUP BY
+                    FEV.SVC_TASK_NUM
+            )
+        ORDER BY
+             STA.SER_NUM         ASC
+            ,STA.SVC_TASK_NUM    ASC
+            ,FUS.MDSE_CD         ASC
+    </statement>
+ -->
+<!-- END 2023/03/03 L.Mandanas [CSA#61067, DEL] -->
+<!-- START 2023/03/03 L.Mandanas [CSA#61067, ADD] -->
+        WITH TASK_INFO AS (
+            SELECT
+                 F.FSR_NUM
+                ,FV.FSR_VISIT_NUM
+                ,ST.SVC_TASK_NUM
+<!-- START 2023/07/06 R.Jin [CSA#61067, MOD] -->
+<!--                ,ST.SER_NUM-->
+                ,CASE WHEN SMM.SLD_BY_LINE_BIZ_TP_CD = #crsSvcLobCd# and SMM.SVC_BY_LINE_BIZ_TP_CD &lt;&gt;#crsSvcLobCd# and ST.SER_NUM &lt;&gt; SMM.CUST_MACH_CTRL_NUM THEN SMM.CUST_MACH_CTRL_NUM 
+                      ELSE    ST.SER_NUM 
+                 END AS SER_NUM
+<!-- END 2023/07/06 R.Jin [CSA#61067, MOD] -->
+                ,FV.FSR_VISIT_ARV_DT
+                ,FV.FSR_VISIT_ARV_TM
+                ,DECODE(F.SHIP_TO_CUST_UPD_FLG, #flgY#, STC2.POST_CD, STC1.POST_CD) AS POST_CD
+                ,DECODE(F.SHIP_TO_CUST_UPD_FLG, #flgY#, STC2.CTRY_CD, STC1.CTRY_CD) AS CTRY_CD
+            FROM
+                 FSR               F
+                ,FSR_VISIT         FV
+                ,SVC_TASK          ST
+                ,SHIP_TO_CUST      STC1
+                ,SHIP_TO_CUST      STC2
+                <!-- START 2023/07/06 R.Jin [CSA#61067, ADD] -->
+                ,S21_PSN          PSN
+                ,SVC_MACH_MSTR    SMM
+                <!-- END 2023/07/06 R.Jin [CSA#61067, ADD] -->
+            WHERE
+                    F.GLBL_CMPY_CD        = #glblCmpyCd#
+                AND F.FSR_STS_CD          = #fsrStsCd#
+<!-- START 2023/07/06 R.Jin [CSA#61067, MOD] -->
+<!--                AND RPAD(F.FSR_CLO_DT || F.FSR_CLO_TM, #tsLen#, #flg0#) &gt; RPAD(#startTs#, #tsLen#, #flg0#)-->
+<!--                <isNotNull property="endTs">-->
+<!--                AND RPAD(F.FSR_CLO_DT || F.FSR_CLO_TM, #tsLen#, #flg0#) &lt; RPAD(#endTs#, #tsLen#, #flg0#)-->
+<!--                </isNotNull>-->
+<!--                AND F.FSR_CLO_DT BETWEEN TO_CHAR(TO_DATE(#targetDt#, 'YYYYMMDD'), 'YYYYMMDD')-->
+<!--                AND TO_CHAR(TO_DATE(#targetDt#, 'YYYYMMDD') + 1, 'YYYYMMDD')-->
+                AND F.FSR_CLO_DT BETWEEN TO_CHAR(TO_DATE(#slsDt#,  #dateFormat#) - #extrDys#,  #dateFormat#) AND TO_CHAR(TO_DATE(#slsDt#,  #dateFormat#) - 1,  #dateFormat#)
+<!-- END 2023/07/06 R.Jin [CSA#61067, MOD] -->
+                AND F.EZCANCELFLAG        = '0'
+                <!-- START 2023/07/06 R.Jin [CSA#61067, ADD] -->
+                AND F.FSR_NUM NOT LIKE '1%'
+                <!-- END 2023/07/06 R.Jin [CSA#61067, ADD] -->
+                AND F.GLBL_CMPY_CD        = FV.GLBL_CMPY_CD
+                AND F.FSR_NUM             = FV.FSR_NUM
+                AND FV.EZCANCELFLAG       = '0'
+                AND FV.GLBL_CMPY_CD       = ST.GLBL_CMPY_CD
+                AND FV.SVC_TASK_NUM       = ST.SVC_TASK_NUM 
+                AND ST.SVC_TASK_STS_CD    = #svcTaskStsCd#
+                AND ST.EZCANCELFLAG       = '0'
+                AND ST.GLBL_CMPY_CD       = STC1.GLBL_CMPY_CD
+                AND ST.SHIP_TO_CUST_CD    = STC1.SHIP_TO_CUST_CD
+                AND STC1.EZCANCELFLAG     = '0'
+                AND F.GLBL_CMPY_CD        = STC2.GLBL_CMPY_CD(+)
+                AND F.SHIP_TO_UPD_CUST_CD = STC2.SHIP_TO_CUST_CD(+)
+                AND STC2.EZCANCELFLAG(+)  = '0'
+                AND EXISTS(
+                    SELECT
+                        1
+                    FROM
+                        FSR_USG X
+                    WHERE
+                            ST.GLBL_CMPY_CD    = X.GLBL_CMPY_CD
+                        AND ST.SVC_TASK_NUM    = X.SVC_TASK_NUM
+                        AND X.SVC_PRT_QTY   &gt; #int0#
+                        AND X.EZCANCELFLAG     = '0'
+                )
+               <!-- START 2023/07/06 R.Jin [CSA#61067, ADD] -->
+               AND FV.TECH_CD           &lt;&gt; #crsSvcTechCd#
+               AND PSN.PSN_CD                  = FV.TECH_CD 
+               AND PSN.GLBL_CMPY_CD            = FV.GLBL_CMPY_CD
+               AND PSN.EZCANCELFLAG            = '0'
+               AND PSN.PSN_TP_CD           &lt;&gt; #cmpsDelerTp#
+               AND SMM.GLBL_CMPY_CD            = ST.GLBL_CMPY_CD
+               AND SMM.SVC_MACH_MSTR_PK        = ST.SVC_MACH_MSTR_PK
+               AND SMM.EZCANCELFLAG            = '0'
+               <!-- END 2023/07/06 R.Jin [CSA#61067, ADD] -->
+               <!-- START 2023/12/22 R.Jin [CSA#63380, ADD] -->
+               AND NOT EXISTS(
+                   SELECT 
+                       1
+                   FROM
+                      FSR_EVENT X
+                   WHERE
+                      F.GLBL_CMPY_CD            = X.GLBL_CMPY_CD
+                      AND F.FSR_NUM             = X.FSR_NUM
+                      AND X.SVC_DISPT_EVENT_CD  = #svcDisptEventClose#
+                      AND TO_CHAR(TO_DATE(#slsDt#,  #dateFormat#) - #extrDys#,  #dateFormat#) > TO_CHAR(TO_DATE(SUBSTR(X.EZUPTIME,1,8), #dateFormat#), #dateFormat#)
+              )
+              <!-- END 2023/12/22 R.Jin [CSA#63380, ADD] -->
+        )
+        ,PRT_USG_INFO AS (
+            SELECT
+                 FU.SVC_TASK_NUM
+                ,FU.MDSE_CD
+                ,SUM(FU.SVC_PRT_QTY) AS SVC_PRT_QTY
+            FROM
+                FSR_USG FU
+            WHERE
+                    FU.GLBL_CMPY_CD    = #glblCmpyCd#
+                AND FU.SVC_PRT_QTY  &gt; #int0#
+                AND FU.EZCANCELFLAG    = '0'
+                AND EXISTS(
+                    SELECT
+                        1
+                    FROM
+                        TASK_INFO X
+                    WHERE
+                        FU.SVC_TASK_NUM = X.SVC_TASK_NUM
+                )
+            GROUP BY
+                 FU.SVC_TASK_NUM
+                ,FU.MDSE_CD
+        )
+        ,PRT_PRC_INFO AS (
+            SELECT
+                 PLE.PRC_QLFY_VAL_TXT
+                ,PLE.PRC_CATG_CD
+                ,PLE.PRC_LIST_EQUIP_PRC_AMT
+            FROM
+                PRC_LIST_EQUIP PLE
+                ,PRC_CATG PC
+                ,PRC_LIST_TP PLT
+            WHERE
+                    PLE.GLBL_CMPY_CD                     = #glblCmpyCd#
+                AND PLE.PRC_CATG_CD                      = PC.PRC_CATG_CD
+                AND PC.PRC_LIST_TP_CD                    = PLT.PRC_LIST_TP_CD
+                AND PLT.PRC_LIST_TP_CD                   = #prcListTpCd#
+                AND PLE.EFF_FROM_DT                  &lt;= #targetDt#
+                AND NVL(PLE.EFF_THRU_DT, #targetDt#) &gt;= #targetDt#
+                AND PLE.DEL_FLG                          = #flgN#
+                AND PLE.EZCANCELFLAG                     = '0'
+                AND EXISTS(
+                    SELECT
+                        1
+                    FROM
+                        PRT_USG_INFO X
+                    WHERE
+                        PLE.PRC_QLFY_VAL_TXT = X.MDSE_CD
+                    UNION
+                    SELECT
+                        1
+                    FROM
+                        PRT_USG_INFO X
+                    WHERE
+<!-- START 2023/05/19 L.Mandanas [CSA#61067, MOD] -->
+<!--                         PLE.PRC_QLFY_VAL_TXT = SUBSTR(X.MDSE_CD, #substringStart#, #substringEnd#)  -->
+                        PLE.PRC_QLFY_VAL_TXT = (
+                            SELECT
+                                Z.ORD_TAKE_MDSE_CD
+                            FROM 
+                                ORD_TAKE_MDSE Z
+                            WHERE
+                                    Z.GLBL_CMPY_CD = #glblCmpyCd#
+                                AND Z.EZCANCELFLAG = '0' 
+                                AND Z.MDSE_CD = X.MDSE_CD)
+<!-- END 2023/05/19 L.Mandanas [CSA#61067, MOD] -->
+                )
+        )
+        ,PRT_COST_INFO AS (
+                SELECT
+                     AD.MDSE_CD
+                    ,AD.UNIT_PRC_AMT
+                FROM
+                    ASL_DTL AD
+                WHERE
+                        AD.EZCANCELFLAG                     = '0'
+                    AND AD.PRIM_SPLY_FLG                    = #flgY#
+                    AND AD.EFF_FROM_DT                  &lt;= #targetDt#
+                    AND NVL(AD.EFF_THRU_DT, #targetDt#) &gt;= #targetDt#
+                    AND EXISTS(
+                        SELECT
+                            1
+                        FROM
+                            PRT_USG_INFO X
+                        WHERE
+                            AD.MDSE_CD = X.MDSE_CD
+                        UNION
+                        SELECT
+                            1
+                        FROM
+                            PRT_USG_INFO X
+                        WHERE
+<!-- START 2023/05/19 L.Mandanas [CSA#61067, MOD] -->
+<!--                             AD.MDSE_CD = SUBSTR(X.MDSE_CD, #substringStart#, #substringEnd#)  -->
+                            AD.MDSE_CD = (
+                                SELECT
+                                    Z.ORD_TAKE_MDSE_CD
+                                FROM 
+                                    ORD_TAKE_MDSE Z
+                                WHERE
+                                        Z.GLBL_CMPY_CD = #glblCmpyCd# 
+                                    AND Z.EZCANCELFLAG = '0' 
+                                    AND Z.MDSE_CD = X.MDSE_CD)
+<!-- END 2023/05/19 L.Mandanas [CSA#61067, MOD] -->
+                    )
+        )
+        SELECT
+             TI.SER_NUM                                                                 AS SER_NUM
+            ,TI.FSR_NUM || #colon# || TI.SVC_TASK_NUM || #hyphen# || TI.FSR_VISIT_NUM   AS ORIG_CALL_TASK_NUM
+            ,PUI.MDSE_CD                                                                AS MDSE_CD
+            ,TI.FSR_VISIT_ARV_DT                                                        AS FSR_VISIT_ARV_DT
+            ,TI.FSR_VISIT_ARV_TM                                                        AS FSR_VISIT_ARV_TM
+<!-- START 2023/07/06 R.Jin [CSA#61067, MOD] -->
+<!--            ,M.MDSE_DESC_SHORT_TXT                                                      AS MDSE_DESC_SHORT_TXT-->
+            ,replace(M.MDSE_DESC_SHORT_TXT, UNISTR('\00A0'), ' ')                       AS MDSE_DESC_SHORT_TXT
+<!-- END 2023/07/06 R.Jin [CSA#61067, MOD] -->
+            ,DECODE(M.COA_MDSE_TP_CD, #mdseTpDrum#, #flg1#, #flg0#)                     AS DRUM_CHRG_FLG
+            ,PUI.SVC_PRT_QTY                                                            AS SVC_PRT_QTY
+            ,NVL(PCI1.UNIT_PRC_AMT, PCI3.UNIT_PRC_AMT)                                  AS ORIG_WS_UNIT_PRC_AMT
+<!-- START 2023/07/06 R.Jin [CSA#61067, MOD] -->
+<!--            ,NVL(NVL(PPI1.PRC_LIST_EQUIP_PRC_AMT, PPI3.PRC_LIST_EQUIP_PRC_AMT), 0)      AS FUNC_UNIT_PRC_AMT-->
+            ,NVL(PPI1.PRC_LIST_EQUIP_PRC_AMT, PPI3.PRC_LIST_EQUIP_PRC_AMT)              AS FUNC_UNIT_PRC_AMT
+<!-- END 2023/07/06 R.Jin [CSA#61067, MOD] -->
+            ,NVL(PCI1.UNIT_PRC_AMT, PCI3.UNIT_PRC_AMT)                                  AS THIS_MTH_TOT_STD_COST_AMT
+            ,M.COST_CCY_CD || #colon# || #countryCd#                                    AS ORIG_CCY_CTRY_CD
+            ,TO_CHAR(SYSDATE, #dateFormat#)                                             AS CRAT_DT
+            ,TO_CHAR(SYSDATE, #timeFormat#)                                             AS CRAT_TM
+            ,TI.POST_CD                                                                 AS POST_CD
+            ,TI.CTRY_CD                                                                 AS CTRY_CD
+        FROM
+             TASK_INFO      TI
+            ,PRT_USG_INFO   PUI
+            ,MDSE           M
+            ,PRT_PRC_INFO   PPI1
+            ,ORD_TAKE_MDSE  OTM
+            ,PRT_PRC_INFO   PPI3
+            ,PRT_COST_INFO  PCI1
+            ,PRT_COST_INFO  PCI3
+        WHERE
+                TI.SVC_TASK_NUM                                     = PUI.SVC_TASK_NUM
+            AND PUI.MDSE_CD                                         = M.MDSE_CD
+            AND M.GLBL_CMPY_CD                                      = #glblCmpyCd#
+            AND M.EZCANCELFLAG                                      = '0'
+            AND M.MDSE_CD                                           = PPI1.PRC_QLFY_VAL_TXT(+)
+            AND M.GLBL_CMPY_CD                                      = OTM.GLBL_CMPY_CD(+)
+<!-- START 2023/05/19 L.Mandanas [CSA#61067, MOD] -->
+<!--             AND SUBSTR(M.MDSE_CD, #substringStart#, #substringEnd#) = OTM.ORD_TAKE_MDSE_CD(+)  -->
+            AND M.MDSE_CD = OTM.MDSE_CD(+)
+<!-- END 2023/05/19 L.Mandanas [CSA#61067, MOD] -->
+            AND OTM.EZCANCELFLAG(+)                                 = '0'
+            AND OTM.ORD_TAKE_MDSE_CD                                = PPI3.PRC_QLFY_VAL_TXT(+)
+            AND M.MDSE_CD                                           = PCI1.MDSE_CD
+            AND OTM.ORD_TAKE_MDSE_CD                                = PCI3.MDSE_CD(+)
+        ORDER BY
+             TI.SER_NUM      ASC
+            ,TI.SVC_TASK_NUM ASC
+            ,PUI.MDSE_CD     ASC
+    </statement>
+    <statement id="getStartDt" parameterClass="Map" resultClass="String">
+        SELECT
+            SUBSTR(MAX(A.BAT_PROC_END_TS), #int1#, #dtLen#)
+        FROM
+            BAT_PROC_LOG A
+        WHERE
+                A.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND A.BAT_PROC_PGM_ID = #batProcPgmId#
+            AND A.BAT_PROC_END_TS &lt; RPAD(#slsDt#, #tsLen#, #str0#)
+            AND A.BAT_PROC_TRM_CD = #str0#
+            AND A.EZCANCELFLAG    = '0'
+    </statement>
+    <statement id="getStartTs" parameterClass="Map" resultClass="String">
+        SELECT
+            MIN(A.BAT_PROC_END_TS)
+        FROM
+            BAT_PROC_LOG A
+        WHERE
+                A.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND A.BAT_PROC_PGM_ID = #batProcPgmId#
+            AND A.BAT_PROC_END_TS like #startDt#
+            AND A.BAT_PROC_TRM_CD = #str0#
+            AND A.EZCANCELFLAG    = '0'
+    </statement>
+    <statement id="getEndTs" parameterClass="Map" resultClass="String">
+        SELECT
+            MIN(A.BAT_PROC_END_TS)
+        FROM
+            BAT_PROC_LOG A
+        WHERE
+                A.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND A.BAT_PROC_PGM_ID = #batProcPgmId#
+            AND A.BAT_PROC_END_TS &gt; RPAD(#slsDt#, #tsLen#, #str0#)
+            AND A.BAT_PROC_TRM_CD = #str0#
+            AND A.EZCANCELFLAG    = '0'
+    </statement>
+<!-- END 2023/03/03 L.Mandanas [CSA#61067, ADD] -->
+</sqlMap>

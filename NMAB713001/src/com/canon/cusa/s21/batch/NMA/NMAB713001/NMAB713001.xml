@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<sqlMap namespace="NMAB713001">
+
+     <statement id="getPrcContr" parameterClass="Map" resultClass="Map">
+       SELECT
+           PC.PRC_CONTR_PK
+         , PC.PRC_CONTR_NUM
+         , PC.EFF_FROM_DT
+         , PC.EFF_THRU_DT
+
+       FROM
+           PRC_CONTR PC
+
+       WHERE
+           PC.GLBL_CMPY_CD = #glblCmpyCd#
+       AND PC.EZCANCELFLAG = '0'
+       AND PC.EFF_FROM_DT  &lt;= #calcBaseDt#
+       AND (PC.EFF_THRU_DT IS NULL
+         OR PC.EFF_THRU_DT &gt;= #calcBaseDt# )
+       AND PC.ACTV_FLG     = 'Y'
+
+     </statement>
+     
+     <statement id="getEquipmentRevenueAchivedContractStartToDate" parameterClass="Map" resultClass="BigDecimal">
+      SELECT
+          NVL (
+              SUM (
+                  CASE
+                      WHEN I.INV_TP_CD = #invTpCd# 
+                      THEN - DISC.FUNC_SLS_CR_AMT
+                      ELSE   DISC.FUNC_SLS_CR_AMT
+                  END
+              )
+              ,0
+          ) AS EQUIP_REV_SUM_AMT
+
+      FROM
+          INV I
+        , INV_BOL IB
+        , INV_LINE IL
+        , DS_INV_SLS_CR DISC
+        , CPO DC
+        , ORD_CATG_BIZ_CTX OCBC
+
+      WHERE
+          I.GLBL_CMPY_CD = #glblCmpyCd#
+      AND I.EZCANCELFLAG = '0'
+      AND I.FNLZ_INV_FLG = 'Y'
+      AND I.INV_DT       &gt;= #effFromDt#
+      <isNotNull property="effThruDt">
+          AND I.INV_DT       &lt;= #effThruDt#
+      </isNotNull>
+        
+      AND I.GLBL_CMPY_CD          = IB.GLBL_CMPY_CD
+      AND I.EZCANCELFLAG          = IB.EZCANCELFLAG
+      AND I.INV_NUM               = IB.INV_NUM
+
+      AND IB.GLBL_CMPY_CD         = IL.GLBL_CMPY_CD
+      AND IB.EZCANCELFLAG         = IL.EZCANCELFLAG
+      AND IB.INV_NUM              = IL.INV_NUM
+      AND IB.INV_BOL_LINE_NUM     = IL.INV_BOL_LINE_NUM
+      AND IL.SVC_PRC_CATG_CD      IS NULL
+
+      AND IL.GLBL_CMPY_CD         = DISC.GLBL_CMPY_CD
+      AND IL.EZCANCELFLAG         = DISC.EZCANCELFLAG
+      AND IL.INV_NUM              = DISC.INV_NUM
+      AND IL.INV_BOL_LINE_NUM     = DISC.INV_BOL_LINE_NUM
+      AND IL.INV_LINE_NUM         = DISC.INV_LINE_NUM
+      AND IL.INV_LINE_SUB_NUM     = DISC.INV_LINE_SUB_NUM
+      AND IL.INV_LINE_SUB_TRX_NUM = DISC.INV_TRX_LINE_SUB_NUM
+      AND DISC.TRX_CD             = #trxCd#
+
+      AND IL.GLBL_CMPY_CD         = DC.GLBL_CMPY_CD
+      AND IL.EZCANCELFLAG         = DC.EZCANCELFLAG
+      AND IL.CPO_ORD_NUM          = DC.CPO_ORD_NUM
+
+      AND DC.GLBL_CMPY_CD         = OCBC.GLBL_CMPY_CD
+      AND DC.EZCANCELFLAG         = OCBC.EZCANCELFLAG
+      AND DC.DS_ORD_CATG_CD       = OCBC.DS_ORD_CATG_CD
+      AND OCBC.ORD_CATG_CTX_TP_CD = #ordCatgCtxTpCd#
+
+      AND EXISTS (
+              SELECT
+                  *
+              FROM
+                  PRC_CATG DPC
+
+              WHERE
+                  DPC.GLBL_CMPY_CD  = #glblCmpyCd#
+              AND DPC.EZCANCELFLAG  = '0'
+              AND DPC.PRC_CONTR_NUM = #prcContrNum#
+              AND DPC.PRC_CATG_CD   = IL.PRC_CATG_CD
+          )
+
+     </statement>
+     
+     <statement id="getNumberOfMainUnitsSoldToDate" parameterClass="Map" resultClass="BigDecimal">
+      SELECT
+          NVL (
+              SUM (IL.SHIP_QTY)
+            , 0
+          ) AS MAIN_UNIT_SUM_CNT
+
+      FROM
+          INV              I
+        , INV_BOL          IB
+        , INV_LINE         IL
+        , MDSE             M
+        , CPO              DC
+        , ORD_CATG_BIZ_CTX OCBC
+        , MDSE_TP_VAL_SET  MTVS
+
+      WHERE
+          I.GLBL_CMPY_CD = #glblCmpyCd#
+      AND I.EZCANCELFLAG = '0'
+      AND I.INV_TP_CD    = #invTpCd#
+      AND I.INV_DT       &gt;= #effFromDt#
+     <isNotNull property="effThruDt">
+          AND I.INV_DT   &lt;= #effThruDt#
+     </isNotNull>
+
+      AND I.GLBL_CMPY_CD = IB.GLBL_CMPY_CD
+      AND I.EZCANCELFLAG = IB.EZCANCELFLAG
+      AND I.INV_NUM      = IB.INV_NUM
+      AND IB.SHIP_FROM_INVTY_LOC_CD NOT IN 
+      <iterate property="curContrSmryExclWhList" var="curContrSmryExclWh[]" open=" (" close=")" conjunction=",">
+                    #curContrSmryExclWh[]#
+      </iterate> 
+
+      AND IB.GLBL_CMPY_CD     = IL.GLBL_CMPY_CD
+      AND IB.EZCANCELFLAG     = IL.EZCANCELFLAG
+      AND IB.INV_NUM          = IL.INV_NUM
+      AND IB.INV_BOL_LINE_NUM = IL.INV_BOL_LINE_NUM
+
+      AND IL.GLBL_CMPY_CD     = M.GLBL_CMPY_CD
+      AND IL.EZCANCELFLAG     = M.EZCANCELFLAG
+      AND IL.MDSE_CD          = M.MDSE_CD
+      AND IL.INV_LINE_SUB_NUM &lt;&gt; #invLineSubNum#
+
+      AND M.GLBL_CMPY_CD       = MTVS.GLBL_CMPY_CD
+      AND M.EZCANCELFLAG       = MTVS.EZCANCELFLAG
+      AND M.COA_MDSE_TP_CD     = MTVS.COA_MDSE_TP_CD
+      AND MTVS.MDSE_TP_CTX_TP_CD = #mdseTpCtxTpCd#
+
+      AND IL.GLBL_CMPY_CD         = DC.GLBL_CMPY_CD
+      AND IL.EZCANCELFLAG         = DC.EZCANCELFLAG
+      AND IL.CPO_ORD_NUM          = DC.CPO_ORD_NUM
+
+      AND DC.GLBL_CMPY_CD         = OCBC.GLBL_CMPY_CD
+      AND DC.EZCANCELFLAG         = OCBC.EZCANCELFLAG
+      AND DC.DS_ORD_CATG_CD       = OCBC.DS_ORD_CATG_CD
+      AND OCBC.ORD_CATG_CTX_TP_CD = #curContrSmryQty#
+    
+      AND EXISTS (
+          SELECT
+              *
+          FROM
+              PRC_CATG DPC
+          WHERE
+              DPC.GLBL_CMPY_CD  = #glblCmpyCd#
+          AND DPC.EZCANCELFLAG  = '0'
+          AND DPC.PRC_CONTR_NUM = #prcContrNum#
+          AND DPC.PRC_CATG_CD   = IL.PRC_CATG_CD
+      )
+
+     </statement>
+
+</sqlMap>

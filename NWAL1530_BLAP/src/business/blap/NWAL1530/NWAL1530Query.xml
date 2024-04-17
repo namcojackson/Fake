@@ -1,0 +1,845 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NWAL1530Query">
+   <typeAlias alias="NWAL1530_ACMsg" type="business.blap.NWAL1530.NWAL1530_ACMsg"/>
+   <typeAlias alias="NWAL1530_BCMsg" type="business.blap.NWAL1530.NWAL1530_BCMsg"/>
+   <typeAlias alias="NWAL1530_CCMsg" type="business.blap.NWAL1530.NWAL1530_CCMsg"/>
+   <typeAlias alias="NWAL1530_DCMsg" type="business.blap.NWAL1530.NWAL1530_DCMsg"/>
+   <typeAlias alias="NWAL1530_ECMsg" type="business.blap.NWAL1530.NWAL1530_ECMsg"/>
+
+    <!--Search-->
+    <statement id="getOrderDetail" parameterClass="Map" resultMap="result.NWAL1530_ACMsg">
+        SELECT
+            * 
+        FROM
+            (
+            <isNotNull property="isOutbound"> <!-- 2018/03/23 QC#22805 add -->
+            SELECT
+                 CD.CPO_ORD_NUM
+                ,CD.DS_ORD_POSN_NUM
+                ,TO_NUMBER(CD.DS_ORD_POSN_NUM) AS POSN
+                ,CD.DS_CPO_LINE_NUM
+                ,CD.DS_CPO_LINE_SUB_NUM
+                ,NVL(SP.ORD_QTY, CD.ORD_QTY) AS ORD_QTY
+                <!-- 2017/07/20 S21_NA#19965 Mod Start -->
+                <!-- ,SP.SO_NUM -->
+                ,NVL2(SP.INVTY_LOC_CD, SP.SO_NUM, NULL) AS SO_NUM
+                <!-- 2017/07/20 S21_NA#19965 Mod End -->
+                ,SP.INV_NUM
+                ,NVL(DOSV.ORD_LINE_STS_NM, DOSV2.ORD_LINE_STS_NM) AS ORD_LINE_STS_NM
+                ,NVL(
+                    (SELECT
+                        MAX(PRD.PRCH_REQ_NUM)
+                    FROM
+                        PRCH_REQ_DTL PRD
+                    WHERE
+                            SP.GLBL_CMPY_CD = PRD.GLBL_CMPY_CD
+                        AND SP.EZCANCELFLAG = PRD.EZCANCELFLAG
+                        AND SP.SHPG_PLN_NUM = PRD.SHPG_PLN_NUM
+                        AND SP.TRX_HDR_NUM  = PRD.TRX_REF_NUM
+                        AND SP.TRX_LINE_NUM = PRD.TRX_REF_LINE_NUM
+                        AND SP.TRX_LINE_SUB_NUM = PRD.TRX_REF_LINE_SUB_NUM
+                     )
+                    ,
+                    (SELECT
+                        PRD.PRCH_REQ_NUM
+                    FROM
+                        PRCH_REQ_DTL PRD
+                        ,PO_DTL PD
+                    WHERE
+                            SP.GLBL_CMPY_CD = PD.GLBL_CMPY_CD
+                        AND SP.EZCANCELFLAG = PD.EZCANCELFLAG
+                        AND SP.PO_ORD_NUM   = PD.PO_ORD_NUM
+                        AND SP.TRX_HDR_NUM  = PD.CPO_ORD_NUM
+                        AND SP.TRX_LINE_NUM = PD.CPO_DTL_LINE_NUM
+                        AND SP.TRX_LINE_SUB_NUM = PD.CPO_DTL_LINE_SUB_NUM
+
+                        AND PD.GLBL_CMPY_CD = PRD.GLBL_CMPY_CD
+                        AND PD.EZCANCELFLAG = PRD.EZCANCELFLAG
+                        AND PD.PO_ORD_NUM   = PRD.PO_ORD_NUM
+                        AND PD.CPO_ORD_NUM  = PRD.TRX_REF_NUM
+                        AND PD.CPO_DTL_LINE_NUM = PRD.TRX_REF_LINE_NUM
+                        AND PD.CPO_DTL_LINE_SUB_NUM = PRD.TRX_REF_LINE_SUB_NUM
+
+                        AND ROWNUM = 1
+                )) AS PRCH_REQ_NUM
+                ,SP.PO_ORD_NUM
+                ,NULL AS RWS_NUM
+                ,'1'            AS LINE_LEVEL_CD
+                ,#lineLvlNmOrd# AS LINE_LEVEL_NM
+                ,NVL(SP.SET_SHPG_PLN_NUM,SP.SHPG_PLN_NUM) AS SHPG_PLN_NUM
+                ,SHPG_PLN_DPLY_LINE_NUM
+                <!-- 2018/07/11 QC#19801 add start -->
+                ,MV.MDSE_CD
+                ,MV.MDSE_DESC_SHORT_TXT
+                ,MV.MNF_ITEM_CD
+                <!-- 2018/07/11 QC#19801 add end -->
+            FROM
+                 CPO_DTL CD
+                ,SHPG_PLN SP
+                ,DS_ORD_STS_V DOSV
+                ,DS_ORD_STS_V DOSV2
+                <!-- 2018/07/11 QC#19801 add start -->
+                ,ALL_MDSE_V MV
+                <!-- 2018/07/11 QC#19801 add end -->
+            WHERE
+                CD.GLBL_CMPY_CD                = #glblCmpyCd#
+                AND CD.CPO_ORD_NUM             = #cpoOrdNum#
+                <!-- 2018/03/23 QC#22805 add start -->
+                <isNotNull property="msgF">
+                <iterate property="msgF" var="f[]" open="AND (" close=")" conjunction="OR">
+                      (
+                       CD.DS_ORD_POSN_NUM       = #f[].dsOrdPosnNum_F#
+                   AND CD.DS_CPO_LINE_NUM      = #f[].dsCpoLineNum_F#
+                      )
+                </iterate>
+                </isNotNull>
+                <!-- 2018/03/23 QC#22805 add end -->
+                AND CD.EZCANCELFLAG            = '0'
+                AND CD.GLBL_CMPY_CD            = DOSV2.GLBL_CMPY_CD(+)
+                AND CD.EZCANCELFLAG            = DOSV2.EZCANCELFLAG(+)
+                AND CD.CPO_ORD_NUM             = DOSV2.CPO_ORD_NUM(+)
+                AND CD.CPO_DTL_LINE_NUM        = DOSV2.CPO_DTL_LINE_NUM(+)
+                AND CD.CPO_DTL_LINE_SUB_NUM    = DOSV2.CPO_DTL_LINE_SUB_NUM(+)
+                AND DOSV2.SHPG_PLN_NUM(+) IS NULL
+                AND CD.GLBL_CMPY_CD            = SP.GLBL_CMPY_CD(+)
+                AND CD.EZCANCELFLAG            = SP.EZCANCELFLAG(+)
+                AND CD.CPO_ORD_NUM             = SP.TRX_HDR_NUM(+)
+                AND CD.CPO_DTL_LINE_NUM        = SP.TRX_LINE_NUM(+)
+                AND CD.CPO_DTL_LINE_SUB_NUM    = SP.TRX_LINE_SUB_NUM(+)
+                AND SP.GLBL_CMPY_CD             = DOSV.GLBL_CMPY_CD(+)
+                AND SP.EZCANCELFLAG             = DOSV.EZCANCELFLAG(+)
+                AND SP.SHPG_PLN_NUM             = DOSV.SHPG_PLN_NUM(+)
+                AND SP.TRX_HDR_NUM              = DOSV.CPO_ORD_NUM(+)
+                AND SP.TRX_LINE_NUM             = DOSV.CPO_DTL_LINE_NUM(+)
+                AND SP.TRX_LINE_SUB_NUM         = DOSV.CPO_DTL_LINE_SUB_NUM(+)
+                <!-- 2018/07/11 QC#19801 add start -->
+                AND CD.GLBL_CMPY_CD             = MV.GLBL_CMPY_CD
+                AND CD.MDSE_CD                  = MV.MDSE_CD
+                AND CD.EZCANCELFLAG             = MV.EZCANCELFLAG
+                <!-- 2018/07/11 QC#19801 add start -->
+            <!-- 2018/03/23 QC#22805 add start -->
+            </isNotNull>
+            <isNotNull property="isAll">
+            UNION ALL
+            </isNotNull>
+            <isNotNull property="isInbound">
+            <!-- 2018/03/23 QC#22805 add end -->
+            SELECT
+                 DCRD.CPO_ORD_NUM
+                ,DCRD.DS_ORD_POSN_NUM
+                ,TO_NUMBER(DCRD.DS_ORD_POSN_NUM) AS POSN
+                ,DCRD.DS_CPO_LINE_NUM
+                ,DCRD.DS_CPO_LINE_SUB_NUM
+                ,DCRD.ORD_QTY
+                ,NULL AS SO_NUM
+                ,DCRD.INV_NUM AS INV_NUM
+                ,DOSV.ORD_LINE_STS_NM
+                ,NULL AS PRCH_REQ_NUM
+                ,NULL AS PO_ORD_NUM
+                ,RWS.RWS_NUM
+                ,'2'            AS LINE_LEVEL_CD
+                ,#lineLvlNmRma# AS LINE_LEVEL_NM
+                ,NULL AS SHPG_PLN_NUM
+                ,NULL AS SHPG_PLN_DPLY_LINE_NUM
+                <!-- 2018/07/11 QC#19801 add start -->
+                ,MV.MDSE_CD
+                ,MV.MDSE_DESC_SHORT_TXT
+                ,MV.MNF_ITEM_CD
+                <!-- 2018/07/11 QC#19801 add end -->
+            FROM
+                DS_CPO_RTRN_DTL DCRD
+                ,(
+                    SELECT
+                        RH.GLBL_CMPY_CD
+                        ,RH.RWS_NUM
+                        ,RH.TRX_ORD_NUM
+                        ,RD.TRX_LINE_NUM
+                        ,RD.TRX_LINE_SUB_NUM
+                    FROM
+                        RWS_HDR RH
+                       ,RWS_DTL RD
+                    WHERE
+                        RH.GLBL_CMPY_CD             = #glblCmpyCd#
+                        AND RH.TRX_ORD_NUM          = #cpoOrdNum#
+                        AND RH.EZCANCELFLAG         = '0'
+                        AND RH.GLBL_CMPY_CD         = RD.GLBL_CMPY_CD
+                        AND RH.RWS_NUM              = RD.RWS_NUM
+                        AND RD.EZCANCELFLAG         = '0'
+                 ) RWS
+                ,DS_ORD_STS_V DOSV
+                <!-- 2018/07/11 QC#19801 add start -->
+                ,ALL_MDSE_V MV
+                <!-- 2018/07/11 QC#19801 add end -->
+            WHERE
+                DCRD.GLBL_CMPY_CD                   = #glblCmpyCd#
+                AND DCRD.CPO_ORD_NUM                = #cpoOrdNum#
+                <!-- 2018/03/23 QC#22805 add start -->
+                <isNotNull property="msgF">
+                <iterate property="msgF" var="f[]" open="AND (" close=")" conjunction="OR">
+                      (
+                       DCRD.DS_ORD_POSN_NUM       = #f[].dsOrdPosnNum_F#
+                   AND DCRD.DS_CPO_LINE_NUM      = #f[].dsCpoLineNum_F#
+                      )
+                </iterate>
+                </isNotNull>
+                <!-- 2018/03/23 QC#22805 add end -->
+                AND DCRD.EZCANCELFLAG               = '0'
+                AND DCRD.GLBL_CMPY_CD               = RWS.GLBL_CMPY_CD(+)
+                AND DCRD.CPO_ORD_NUM                = RWS.TRX_ORD_NUM(+)
+                AND DCRD.DS_CPO_RTRN_LINE_NUM       = RWS.TRX_LINE_NUM(+)
+                AND DCRD.DS_CPO_RTRN_LINE_SUB_NUM   = RWS.TRX_LINE_SUB_NUM(+)
+                AND DCRD.GLBL_CMPY_CD               = DOSV.GLBL_CMPY_CD(+)
+                AND DCRD.EZCANCELFLAG               = DOSV.EZCANCELFLAG(+)
+                AND DCRD.CPO_ORD_NUM                = DOSV.CPO_ORD_NUM(+)
+                AND DCRD.DS_CPO_RTRN_LINE_NUM       = DOSV.DS_CPO_RTRN_LINE_NUM(+)
+                AND DCRD.DS_CPO_RTRN_LINE_SUB_NUM   = DOSV.DS_CPO_RTRN_LINE_SUB_NUM(+)
+               <!-- 2018/07/11 QC#19801 add start -->
+                AND DCRD.GLBL_CMPY_CD               = MV.GLBL_CMPY_CD
+                AND DCRD.MDSE_CD                    = MV.MDSE_CD
+                AND DCRD.EZCANCELFLAG               = MV.EZCANCELFLAG
+                <!-- 2018/07/11 QC#19801 add start -->
+            </isNotNull>
+            ORDER BY
+                 LINE_LEVEL_CD
+                ,CPO_ORD_NUM
+                ,POSN
+                ,DS_CPO_LINE_NUM
+                ,SHPG_PLN_NUM NULLS FIRST
+                ,DS_CPO_LINE_SUB_NUM NULLS FIRST
+                ,SHPG_PLN_DPLY_LINE_NUM NULLS FIRST
+            )
+        WHERE
+            ROWNUM &lt; #rowNum#
+    </statement>
+    <resultMap id="result.NWAL1530_ACMsg"       class="NWAL1530_ACMsg">
+        <result property="cpoOrdNum_A"          column="CPO_ORD_NUM"            javaType="EZDCStringItem"/>
+        <result property="dsOrdPosnNum_A"       column="DS_ORD_POSN_NUM"        javaType="EZDCStringItem"/>
+        <result property="dsCpoLineNum_A"       column="DS_CPO_LINE_NUM"        javaType="EZDCBigDecimalItem"/>
+        <result property="dsCpoLineSubNum_A"    column="DS_CPO_LINE_SUB_NUM"    javaType="EZDCBigDecimalItem"/>
+        <result property="ordQty_A"             column="ORD_QTY"                javaType="EZDCBigDecimalItem"/>
+        <result property="soNum_A"              column="SO_NUM"                 javaType="EZDCStringItem"/>
+        <result property="invNum_A"             column="INV_NUM"                javaType="EZDCStringItem"/>
+        <result property="ordLineStsNm_A"       column="ORD_LINE_STS_NM"        javaType="EZDCStringItem"/>
+        <result property="prchReqNum_A"         column="PRCH_REQ_NUM"           javaType="EZDCStringItem"/>
+        <result property="poOrdNum_A"           column="PO_ORD_NUM"             javaType="EZDCStringItem"/>
+        <result property="rwsNum_A"             column="RWS_NUM"                javaType="EZDCStringItem"/>
+        <result property="xxScrItem20Txt_A"     column="LINE_LEVEL_NM"          javaType="EZDCStringItem"/>
+        <!-- 2018/07/11 QC#19801 add start -->
+        <result property="mdseCd_A"             column="MDSE_CD"                javaType="EZDCStringItem"/>
+        <result property="mdseDescShortTxt_A"   column="MDSE_DESC_SHORT_TXT"    javaType="EZDCStringItem"/>
+        <result property="mnfItemCd_A"          column="MNF_ITEM_CD"            javaType="EZDCStringItem"/>
+        <!-- 2018/07/11 QC#19801 add end -->
+    </resultMap>
+
+    <statement id="getSoInfo" parameterClass="Map" resultMap="result.NWAL1530_BCMsg">
+        <!-- 2017/08/03 S21_NA#20016 Modified without any commnets -->
+        SELECT
+            * 
+        FROM
+            (
+            SELECT 
+                DCD.CPO_ORD_NUM
+                ,DCD.CPO_DTL_LINE_NUM
+                ,DCD.CPO_DTL_LINE_SUB_NUM
+                ,DCD.DS_ORD_POSN_NUM
+                ,DCD.DS_CPO_LINE_NUM
+                ,DCD.DS_CPO_LINE_SUB_NUM
+                ,SP.ORD_QTY
+                <!-- 2019/12/12 QC#54474 Del Start -->
+                <!-- ,SP.CARR_CD -->
+                <!-- 2019/12/12 QC#54474 Del End -->
+                <!-- 2017/08/03 S21_NA#20056 Mod Start -->
+                -- ,SP.RDD_DT
+                ,DCD.RDD_DT
+                <!-- 2017/08/03 S21_NA#20056 Mod End -->
+                ,SP.ACTL_SHIP_DT
+                ,SO.SO_NUM
+                ,SOD.SO_SLP_NUM
+                ,SO.WH_CD
+                ,SO.EXPT_SHPG_METH_CD
+                ,SO.CARR_ACCT_NUM
+                ,(CASE WHEN SOT.SCHD_REQ_FLG = 'Y' AND (
+                        SELECT
+                            COUNT(EXCL_SCHD_COORD_CD)
+                        FROM
+                            EXCL_SCHD_COORD EX
+                        WHERE
+                            C.GLBL_CMPY_CD = EX.GLBL_CMPY_CD
+                            AND C.DS_ORD_CATG_CD = EX.DS_ORD_CATG_CD
+                            AND (
+                                    C.DS_ORD_TP_CD = EX.DS_ORD_TP_CD
+                                    OR EX.DS_ORD_TP_CD IS NULL
+                                )
+                            AND EX.EZCANCELFLAG = '0'
+                    ) = 0 THEN
+                        SO.SCHD_DELY_DT
+                    ELSE 
+                        SO.PDD_DT
+                    END) AS PDD_DT
+                ,SOD.ACTL_DELY_DT
+                ,SOD.ACTL_DELY_TM
+                ,TO_CHAR(TO_DATE(SOD.ACTL_DELY_DT, 'YYYYMMDD') , 'MM/DD/YYYY') || ' ' || 
+                 TO_CHAR(TO_TIMESTAMP( SOD.ACTL_DELY_TM, 'HH24MISS') ,'HH12:MIAM', 'nls_date_language=AMERICAN') AS DELY_DT_TM
+                ,SOD.ACTL_DELY_DT || SOD.ACTL_DELY_TM AS DERY_DT_TM
+                <!-- 2019/12/12 QC#54474 Mod Start -->
+                <!-- ,SOCD.VND_CD -->
+                ,NVL(SP.CARR_CD,SOCD.VND_CD) AS VND_CD
+                <!-- 2019/12/12 QC#54474 Mod End -->
+                ,SOCD.PRO_NUM
+                ,DOSV.ORD_LINE_STS_NM
+                ,FC.FRT_COND_NM
+                 <!-- 2018/07/11 QC#19801 add start -->
+                ,MV.MDSE_CD
+                ,MV.MDSE_DESC_SHORT_TXT
+                ,MV.MNF_ITEM_CD
+                <!-- 2019/12/12 QC#54474 Mod Start -->
+                <!-- ,CR.CARR_TRK_URL -->
+                ,CASE WHEN SP.CARR_CD IS NOT NULL THEN CR.CARR_TRK_URL
+                      ELSE CR_SOCD.CARR_TRK_URL 
+                 END CARR_TRK_URL
+                <!-- 2019/12/12 QC#54474 Mod End -->
+                <!-- 2018/07/11 QC#19801 add end -->
+            FROM
+                 CPO_DTL DCD
+                ,CPO C
+                ,SHPG_PLN SP
+                ,SHPG_ORD SO
+                ,SHPG_ORD_DTL SOD
+                ,DS_ORD_STS_V DOSV
+                ,FRT_COND FC
+                ,SHPG_ORD_CONF_DTL SOCD
+                ,SCE_ORD_TP SOT
+                <!-- 2018/07/11 QC#19801 add start -->
+                ,ALL_MDSE_V MV
+                ,CARR_URL CR
+                <!-- 2018/07/11 QC#19801 add end -->
+                <!-- 2019/12/12 QC#54474 Add Start -->
+                ,CARR_URL CR_SOCD
+                <!-- 2019/12/12 QC#54474 Add End -->
+            WHERE 
+                DCD.GLBL_CMPY_CD            = #glblCmpyCd#
+                <isNotNull property="msg.cpoOrdNum">
+                AND DCD.CPO_ORD_NUM             = #msg.cpoOrdNum#
+                </isNotNull>
+                <isNotNull property="msgF">
+                <iterate property="msgF" var="f[]" open="AND (" close=")" conjunction="OR">
+                      (
+                       DCD.DS_ORD_POSN_NUM       = #f[].dsOrdPosnNum_F#
+                   AND DCD.DS_CPO_LINE_NUM      = #f[].dsCpoLineNum_F#
+                      )
+                </iterate>
+                </isNotNull>
+                <!-- 2018/03/23 QC#22805 add end -->
+                AND DCD.EZCANCELFLAG            = '0'
+                AND DCD.GLBL_CMPY_CD            = C.GLBL_CMPY_CD
+                AND DCD.CPO_ORD_NUM             = C.CPO_ORD_NUM
+                AND C.EZCANCELFLAG              = '0'
+
+                AND DCD.GLBL_CMPY_CD            = FC.GLBL_CMPY_CD
+                AND DCD.EZCANCELFLAG            = FC.EZCANCELFLAG
+                AND DCD.FRT_COND_CD             = FC.FRT_COND_CD
+                AND DCD.EZCANCELFLAG            = SP.EZCANCELFLAG
+                AND DCD.GLBL_CMPY_CD            = SP.GLBL_CMPY_CD
+                AND DCD.CPO_ORD_NUM             = SP.TRX_HDR_NUM
+                AND DCD.CPO_DTL_LINE_NUM        = SP.TRX_LINE_NUM
+                AND DCD.CPO_DTL_LINE_SUB_NUM    = SP.TRX_LINE_SUB_NUM
+                AND SP.GLBL_CMPY_CD             = SO.GLBL_CMPY_CD
+                AND SP.SO_NUM                   = SO.SO_NUM
+                AND SP.EZCANCELFLAG             = SO.EZCANCELFLAG
+                AND SP.GLBL_CMPY_CD             = DOSV.GLBL_CMPY_CD
+                AND SP.EZCANCELFLAG             = DOSV.EZCANCELFLAG
+                AND SP.SHPG_PLN_NUM             = DOSV.SHPG_PLN_NUM
+                AND SP.TRX_HDR_NUM              = DOSV.CPO_ORD_NUM
+                AND SP.TRX_LINE_NUM             = DOSV.CPO_DTL_LINE_NUM
+                AND SP.TRX_LINE_SUB_NUM         = DOSV.CPO_DTL_LINE_SUB_NUM
+                AND SP.GLBL_CMPY_CD             = SOD.GLBL_CMPY_CD
+                AND SP.EZCANCELFLAG             = SOD.EZCANCELFLAG
+                AND SP.SO_NUM                   = SOD.SO_NUM
+                AND SP.SO_SLP_NUM               = SOD.SO_SLP_NUM
+                AND SOCD.GLBL_CMPY_CD(+)        = SP.GLBL_CMPY_CD
+                AND SOCD.SO_NUM(+)              = SP.SO_NUM
+                AND SOCD.SO_SLP_NUM(+)          = SP.SO_SLP_NUM
+                AND SOCD.EZCANCELFLAG(+)        = '0'
+
+                AND SO.GLBL_CMPY_CD             = SOT.GLBL_CMPY_CD(+)
+                AND SO.SCE_ORD_TP_CD            = SOT.SCE_ORD_TP_CD(+)
+                AND SOT.INBD_OTBD_CD(+)         = #inbdOtbdCdOtbd#
+                AND SOT.EZCANCELFLAG(+)         = '0'
+                <!-- 2018/07/11 QC#19801 add start -->
+                AND DCD.GLBL_CMPY_CD            = MV.GLBL_CMPY_CD
+                AND DCD.MDSE_CD                 = MV.MDSE_CD
+                AND DCD.EZCANCELFLAG            = MV.EZCANCELFLAG
+
+                AND SP.GLBL_CMPY_CD             = CR.GLBL_CMPY_CD(+)
+                AND SP.CARR_CD                  = CR.VND_CD(+)
+                AND SP.EZCANCELFLAG             = CR.EZCANCELFLAG(+)
+                <!-- 2018/07/11 QC#19801 add end -->
+                <!-- 2019/12/12 QC#54474 Add Start -->
+                AND SOCD.GLBL_CMPY_CD             = CR_SOCD.GLBL_CMPY_CD(+)
+                AND SOCD.VND_CD                   = CR_SOCD.VND_CD(+)
+                AND SOCD.EZCANCELFLAG             = CR_SOCD.EZCANCELFLAG(+)
+                <!-- 2019/12/12 QC#54474 Add End -->
+            ORDER BY
+                 DCD.CPO_ORD_NUM
+                ,TO_NUMBER(DCD.DS_ORD_POSN_NUM)
+                ,DCD.DS_CPO_LINE_NUM
+                ,DCD.DS_CPO_LINE_SUB_NUM NULLS FIRST
+            )
+        WHERE
+            ROWNUM &lt; #rowNum#
+    </statement>
+    <resultMap id="result.NWAL1530_BCMsg"    class="NWAL1530_BCMsg">
+        <result property="cpoOrdNum_B"       column="CPO_ORD_NUM"          javaType="EZDCStringItem"/>
+        <result property="cpoDtlLineNum_B"    column="CPO_DTL_LINE_NUM"      javaType="EZDCStringItem"/>
+        <result property="cpoDtlLineSubNum_B" column="CPO_DTL_LINE_SUB_NUM"  javaType="EZDCStringItem"/>
+        <result property="dsOrdPosnNum_B"    column="DS_ORD_POSN_NUM"      javaType="EZDCStringItem"/>
+        <result property="dsCpoLineNum_B"    column="DS_CPO_LINE_NUM"      javaType="EZDCBigDecimalItem"/>
+        <result property="dsCpoLineSubNum_B" column="DS_CPO_LINE_SUB_NUM"  javaType="EZDCBigDecimalItem"/>
+        <result property="ordQty_B"          column="ORD_QTY"              javaType="EZDCBigDecimalItem"/>
+        <result property="rddDt_B"           column="RDD_DT"               javaType="EZDCDateItem"/>
+        <result property="actlShipDt_B"      column="ACTL_SHIP_DT"         javaType="EZDCDateItem"/>
+        <result property="soNum_B"           column="SO_NUM"               javaType="EZDCStringItem"/>
+        <result property="soSlpNum_B"        column="SO_SLP_NUM"           javaType="EZDCStringItem"/>
+        <result property="whCd_B"            column="WH_CD"                javaType="EZDCStringItem"/>
+        <result property="carrAcctNum_B"     column="CARR_ACCT_NUM"        javaType="EZDCStringItem"/>
+        <result property="pddDt_B"           column="PDD_DT"               javaType="EZDCDateItem"/>
+        <result property="vndCd_B"           column="VND_CD"               javaType="EZDCStringItem"/>
+        <result property="proNum_B"          column="PRO_NUM"              javaType="EZDCStringItem"/>
+        <result property="ordLineStsNm_B"    column="ORD_LINE_STS_NM"      javaType="EZDCStringItem"/>
+        <result property="frtCondNm_B"       column="FRT_COND_NM"          javaType="EZDCStringItem"/>
+        <result property="xxDtTm_B"          column="DELY_DT_TM"           javaType="EZDCStringItem"/>
+         <!-- 2018/07/11 QC#19801 add start -->
+        <result property="mdseCd_B"             column="MDSE_CD"                javaType="EZDCStringItem"/>
+        <result property="mdseDescShortTxt_B"   column="MDSE_DESC_SHORT_TXT"    javaType="EZDCStringItem"/>
+        <result property="mnfItemCd_B"          column="MNF_ITEM_CD"            javaType="EZDCStringItem"/>
+        <result property="carrTrkUrl_B"         column="CARR_TRK_URL"           javaType="EZDCStringItem"/>
+        <!-- 2018/07/11 QC#19801 add end -->
+    </resultMap>
+
+    <statement id="getPoInfo" parameterClass="Map" resultMap="result.NWAL1530_CCMsg">
+        SELECT
+            * 
+        FROM
+            (
+            SELECT
+                 CD.CPO_ORD_NUM
+                ,CD.DS_ORD_POSN_NUM
+                ,CD.DS_CPO_LINE_NUM
+                ,CD.DS_CPO_LINE_SUB_NUM
+                ,SP.ORD_QTY
+                ,SP.PRO_NUM
+                ,DOSV.ORD_LINE_STS_NM
+                ,PO.PO_ORD_NUM
+                ,PVV.DPLY_VND_NM
+                ,PD.SHIP_TO_LOC_NM
+                ,PD.PRCH_REQ_NUM
+                ,PD.VND_ISS_PO_ORD_NUM
+                <!-- 2017/07/31 S21_NA#18248 Mod Start -->
+                -- ,PAAI.VND_CPO_ORD_NUM
+                ,PAD.VND_CPO_ORD_NUM
+                <!-- 2017/07/31 S21_NA#18248 Mod Start -->
+                <!-- 2017/07/31 S21_NA#18248 Mod Start -->
+                <!-- ,PAAI.PSD_DT -->
+                <!-- ,PAAI.PDD_DT -->
+                ,PAD.ETD_DT AS PSD_DT
+                ,PAD.ETA_DT AS PDD_DT
+                <!-- 2017/07/31 S21_NA#18248 Mod End -->
+                ,PAD.VND_CPO_LINE_STS_CD
+                ,PAD.VND_PO_ACK_LINE_STS_TXT
+                <!-- 2017/07/31 S21_NA#18248 Mod Start -->
+                <!-- ,VW.VND_WH_NM -->
+                ,PVV.VND_NM
+                <!-- 2017/07/31 S21_NA#18248 Mod End -->
+                <!-- 2017/08/29 S21_NA#20825 Mod Start -->
+                ,ROW_NUMBER() OVER (PARTITION BY SP.SHPG_PLN_NUM ORDER BY PAD.VND_CPO_LINE_STS_CD DESC NULLS LAST) ROW_NUM
+                <!-- 2017/08/29 S21_NA#20825 Mod End -->
+                <!-- 2018/07/11 QC#19801 add start -->
+                ,MV.MDSE_CD
+                ,MV.MDSE_DESC_SHORT_TXT
+                ,MV.MNF_ITEM_CD
+                ,FC.FRT_COND_DESC_TXT
+                ,SSL.SHPG_SVC_LVL_DESC_TXT
+                <!-- 2019/09/27 QC#53186 mod start -->
+                <!-- ,OCV.CARR_NM -->
+                <!-- ,CR.CARR_TRK_URL -->
+                ,NVL(ACTL_OCV.CARR_NM, OCV.CARR_NM) CARR_NM
+                ,CASE WHEN ACTL_OCV.CARR_NM IS NOT NULL THEN ACTL_CR.CARR_TRK_URL
+                      ELSE CR.CARR_TRK_URL 
+                 END CARR_TRK_URL
+                <!-- 2019/09/27 QC#53186 mod end -->
+                <!-- 2018/07/11 QC#19801 add end -->
+            FROM
+                 CPO_DTL CD
+                ,SHPG_PLN SP
+                ,DS_ORD_STS_V DOSV
+                ,PO PO
+                ,PO_DTL PD
+                <!-- 2017/07/31 S21_NA#18248 Del Start -->
+                <!-- ,PO_ACK_ATP_INFO PAAI -->
+                <!-- 2017/07/31 S21_NA#18248 Del End -->
+                ,PO_ACK_DTL PAD
+                <!-- 2017/07/31 S21_NA#18248 Del Start -->
+                <!-- ,VND_WH VW -->
+                <!-- 2017/07/31 S21_NA#18248 Del End -->
+                ,PO_VND_V PVV
+                <!-- 2018/07/11 QC#19801 add start -->
+                ,ALL_MDSE_V MV
+                ,FRT_COND FC
+                ,SHPG_SVC_LVL SSL
+                ,OTBD_CARR_V OCV
+                ,CARR_URL CR
+                <!-- 2018/07/11 QC#19801 add end -->
+                <!-- 2019/09/27 QC#53186 add start -->
+                ,OTBD_CARR_V ACTL_OCV
+                ,CARR_URL    ACTL_CR
+                <!-- 2019/09/27 QC#53186 add end -->
+            WHERE
+                CD.GLBL_CMPY_CD                = #glblCmpyCd#
+                <isNotNull property="msg.cpoOrdNum">
+                AND CD.CPO_ORD_NUM             = #msg.cpoOrdNum#
+                </isNotNull>
+                <isNotNull property="msgF">
+                <iterate property="msgF" var="f[]" open="AND (" close=")" conjunction="OR">
+                      (
+                       CD.DS_ORD_POSN_NUM       = #f[].dsOrdPosnNum_F#
+                   AND CD.DS_CPO_LINE_NUM      = #f[].dsCpoLineNum_F#
+                      )
+                </iterate>
+                </isNotNull>
+                AND CD.EZCANCELFLAG            = '0'
+
+                AND CD.GLBL_CMPY_CD            = SP.GLBL_CMPY_CD
+                AND CD.CPO_ORD_NUM             = SP.TRX_HDR_NUM
+                AND CD.CPO_DTL_LINE_NUM        = SP.TRX_LINE_NUM
+                AND CD.CPO_DTL_LINE_SUB_NUM    = SP.TRX_LINE_SUB_NUM
+                AND CD.EZCANCELFLAG            = SP.EZCANCELFLAG
+
+                AND SP.GLBL_CMPY_CD             = DOSV.GLBL_CMPY_CD
+                AND SP.SHPG_PLN_NUM             = DOSV.SHPG_PLN_NUM
+                AND SP.EZCANCELFLAG             = DOSV.EZCANCELFLAG
+                AND SP.TRX_HDR_NUM              = DOSV.CPO_ORD_NUM
+                AND SP.TRX_LINE_NUM             = DOSV.CPO_DTL_LINE_NUM
+                AND SP.TRX_LINE_SUB_NUM         = DOSV.CPO_DTL_LINE_SUB_NUM
+
+                AND SP.GLBL_CMPY_CD             = PO.GLBL_CMPY_CD
+                AND SP.EZCANCELFLAG             = PO.EZCANCELFLAG
+                AND SP.PO_ORD_NUM               = PO.PO_ORD_NUM
+
+                AND SP.GLBL_CMPY_CD             = PD.GLBL_CMPY_CD
+                AND SP.EZCANCELFLAG             = PD.EZCANCELFLAG
+                AND SP.PO_ORD_NUM               = PD.PO_ORD_NUM
+                AND SP.TRX_HDR_NUM              = PD.CPO_ORD_NUM
+                AND SP.TRX_LINE_NUM             = PD.CPO_DTL_LINE_NUM
+                AND SP.TRX_LINE_SUB_NUM         = PD.CPO_DTL_LINE_SUB_NUM
+
+                <!-- 2017/07/31 S21_NA#18248 Del Start -->
+                <!-- AND PD.GLBL_CMPY_CD            = PAAI.GLBL_CMPY_CD(+) -->
+                <!-- AND PD.EZCANCELFLAG            = PAAI.EZCANCELFLAG(+) -->
+                <!-- AND PD.PO_ORD_NUM              = PAAI.PO_ORD_NUM(+) -->
+                <!-- 2017/07/31 S21_NA#18248 Del End -->
+
+                AND PD.GLBL_CMPY_CD            = PAD.GLBL_CMPY_CD(+)
+                AND PD.EZCANCELFLAG            = PAD.EZCANCELFLAG(+)
+                AND PD.PO_ORD_NUM              = PAD.PO_ORD_NUM(+)
+                AND PD.PO_ORD_DTL_LINE_NUM     = PAD.PO_ORD_DTL_LINE_NUM(+)
+                AND PAD.PO_ACK_DTL_LTST_FLG(+) = 'Y'
+
+                <!-- 2017/07/31 S21_NA#18248 Del Start -->
+                <!-- AND CD.GLBL_CMPY_CD             = VW.GLBL_CMPY_CD(+) -->
+                <!-- AND CD.EZCANCELFLAG             = VW.EZCANCELFLAG(+) -->
+                <!-- AND CD.INVTY_LOC_CD             = VW.VND_CD(+) -->
+                <!-- AND CD.VND_INVTY_LOC_CD         = VW.VND_WH_CD(+) -->
+                <!-- 2017/07/31 S21_NA#18248 Del End -->
+                AND PO.GLBL_CMPY_CD             = PVV.GLBL_CMPY_CD(+)
+                AND PO.VND_CD                   = PVV.VND_CD(+)
+                AND PO.EZCANCELFLAG             = PVV.EZCANCELFLAG(+)
+
+                <!-- 2018/07/11 QC#19801 add start -->
+                AND CD.GLBL_CMPY_CD             = MV.GLBL_CMPY_CD
+                AND CD.MDSE_CD                  = MV.MDSE_CD
+                AND CD.EZCANCELFLAG             = MV.EZCANCELFLAG
+
+                AND PD.GLBL_CMPY_CD             = FC.GLBL_CMPY_CD(+)
+                AND PD.FRT_COND_CD              = FC.FRT_COND_CD(+)
+                AND PD.EZCANCELFLAG             = FC.EZCANCELFLAG(+)
+
+                AND PD.GLBL_CMPY_CD             = SSL.GLBL_CMPY_CD(+)
+                AND PD.SHPG_SVC_LVL_CD          = SSL.SHPG_SVC_LVL_CD(+)
+                AND PD.EZCANCELFLAG             = SSL.EZCANCELFLAG(+)
+
+                AND PD.GLBL_CMPY_CD             = OCV.GLBL_CMPY_CD(+)
+                AND PD.CARR_CD                  = OCV.CARR_CD(+)
+                AND PD.EZCANCELFLAG             = OCV.EZCANCELFLAG(+)
+
+                AND PD.GLBL_CMPY_CD             = CR.GLBL_CMPY_CD(+)
+                AND PD.CARR_CD                  = CR.VND_CD(+)
+                AND PD.EZCANCELFLAG             = CR.EZCANCELFLAG(+)
+                <!-- 2018/07/11 QC#19801 add end -->
+                <!-- 2019/09/27 QC#53186 add start -->
+                AND SP.GLBL_CMPY_CD             = ACTL_OCV.GLBL_CMPY_CD(+)
+                AND SP.CARR_CD                  = ACTL_OCV.CARR_CD(+)
+                AND SP.EZCANCELFLAG             = ACTL_OCV.EZCANCELFLAG(+)
+                AND ACTL_OCV.GLBL_CMPY_CD       = ACTL_CR.GLBL_CMPY_CD(+)
+                AND ACTL_OCV.CARR_CD            = ACTL_CR.VND_CD(+)
+                AND ACTL_OCV.EZCANCELFLAG       = ACTL_CR.EZCANCELFLAG(+)
+                <!-- 2019/09/27 QC#53186 add end -->
+            )
+        WHERE
+            ROW_NUM = #rowNum# 
+        ORDER BY
+                 CPO_ORD_NUM
+                ,TO_NUMBER(DS_ORD_POSN_NUM)
+                ,DS_CPO_LINE_NUM
+                ,DS_CPO_LINE_SUB_NUM NULLS FIRST
+    </statement>
+    <resultMap id="result.NWAL1530_CCMsg"      class="NWAL1530_CCMsg">
+        <result property="cpoOrdNum_C"         column="CPO_ORD_NUM"          javaType="EZDCStringItem"/>
+        <result property="dsOrdPosnNum_C"      column="DS_ORD_POSN_NUM"      javaType="EZDCStringItem"/>
+        <result property="dsCpoLineNum_C"      column="DS_CPO_LINE_NUM"      javaType="EZDCBigDecimalItem"/>
+        <result property="dsCpoLineSubNum_C"   column="DS_CPO_LINE_SUB_NUM"  javaType="EZDCBigDecimalItem"/>
+        <result property="ordQty_C"            column="ORD_QTY"              javaType="EZDCBigDecimalItem"/>
+        <result property="ordLineStsNm_C"      column="ORD_LINE_STS_NM"      javaType="EZDCStringItem"/>
+        <result property="poOrdNum_C"          column="PO_ORD_NUM"           javaType="EZDCStringItem"/>
+        <result property="dplyVndNm_C"         column="DPLY_VND_NM"          javaType="EZDCStringItem"/>
+        <result property="shipToLocNm_C"       column="SHIP_TO_LOC_NM"       javaType="EZDCStringItem"/>
+        <result property="prchReqNum_C"        column="PRCH_REQ_NUM"         javaType="EZDCStringItem"/>
+        <result property="vndCpoOrdNum_C"      column="VND_CPO_ORD_NUM"      javaType="EZDCStringItem"/>
+        <result property="psdDt_C"             column="PSD_DT"               javaType="EZDCDateItem"/>
+        <result property="pddDt_C"             column="PDD_DT"               javaType="EZDCDateItem"/>
+        <result property="vndCpoLineStsCd_C"   column="VND_CPO_LINE_STS_CD"  javaType="EZDCStringItem"/>
+        <!-- 2017/07/31 S21_NA#18248 Add Start -->
+        <result property="vndPoAckLineStsTxt_C"   column="VND_PO_ACK_LINE_STS_TXT"  javaType="EZDCStringItem"/>
+        <!-- 2017/07/31 S21_NA#18248 Add End -->
+        <!-- 2017/07/31 S21_NA#18248 Mod Start -->
+        <!-- result property="vndWhNm_C"           column="VND_WH_NM"            javaType="EZDCStringItem"/ -->
+        <result property="vndNm_C"           column="VND_NM"            javaType="EZDCStringItem"/>
+        <!-- 2017/07/31 S21_NA#18248 Mod End -->
+        <result property="vndIssPoOrdNum_C"    column="VND_ISS_PO_ORD_NUM"   javaType="EZDCStringItem"/>
+        <result property="proNum_C"            column="PRO_NUM"              javaType="EZDCStringItem"/>
+        <!-- 2018/07/11 QC#19801 add start -->
+        <result property="mdseCd_C"             column="MDSE_CD"                javaType="EZDCStringItem"/>
+        <result property="mdseDescShortTxt_C"   column="MDSE_DESC_SHORT_TXT"    javaType="EZDCStringItem"/>
+        <result property="mnfItemCd_C"          column="MNF_ITEM_CD"            javaType="EZDCStringItem"/>
+        <result property="frtCondDescTxt_C"     column="FRT_COND_DESC_TXT"      javaType="EZDCStringItem"/>
+        <result property="shpgSvcLvlDescTxt_C"  column="SHPG_SVC_LVL_DESC_TXT"  javaType="EZDCStringItem"/>
+        <result property="carrNm_C"             column="CARR_NM"                javaType="EZDCStringItem"/>
+        <result property="carrTrkUrl_C"         column="CARR_TRK_URL"           javaType="EZDCStringItem"/>
+        <!-- 2018/07/11 QC#19801 add end -->
+    </resultMap>
+    
+    <statement id="getRwsInfo" parameterClass="Map" resultMap="result.NWAL1530_DCMsg">
+        SELECT
+            * 
+        FROM
+            (
+            SELECT
+                 DCRD.CPO_ORD_NUM
+                ,DCRD.DS_ORD_POSN_NUM
+                ,DCRD.DS_CPO_LINE_NUM
+                ,DCRD.DS_CPO_LINE_SUB_NUM
+                ,DCRD.ORD_QTY
+                <!-- 2019/03/14 QC#30700 Mod Start -->
+                <!-- ,DCRD.RTRN_QTY -->
+                ,RD.RWS_PUT_AWAY_QTY * -1 AS RTRN_QTY
+                <!-- 2019/03/14 QC#30700 Mod End -->
+                ,DCRD.RQST_PICK_UP_DT
+                ,RH.RWS_NUM
+                ,RH.FIRST_STK_IN_DT
+                ,DOSV.ORD_LINE_STS_NM
+                ,TO_CHAR (
+                     TO_TIMESTAMP (
+                        RPA.RWS_STK_DT_TM_TS,
+                        'YYYYMMDDHH24MISSFF3'
+                                  ),
+                     'MM/DD/YYYY HH24:MI:SS'
+                         ) AS RWS_STK_DT_TM_TS
+                ,RD.SCHD_PICK_UP_DT
+                <!-- 2018/07/11 QC#19801 add start -->
+                ,MV.MDSE_CD
+                ,MV.MDSE_DESC_SHORT_TXT
+                ,MV.MNF_ITEM_CD
+                <!-- 2018/07/11 QC#19801 add start -->
+            FROM
+                 DS_CPO_RTRN_DTL DCRD
+                ,RWS_HDR RH
+                ,RWS_DTL RD
+                ,DS_ORD_STS_V DOSV
+                ,RWS_PUT_AWAY RPA
+                <!-- 2018/07/11 QC#19801 add start -->
+                ,ALL_MDSE_V MV
+                <!-- 2018/07/11 QC#19801 add end -->
+            WHERE
+                DCRD.GLBL_CMPY_CD               = #glblCmpyCd#
+                <isNotNull property="msg.cpoOrdNum">
+                AND DCRD.CPO_ORD_NUM                = #msg.cpoOrdNum#
+                </isNotNull>
+                <isNotNull property="msgF">
+                <iterate property="msgF" var="f[]" open="AND (" close=")" conjunction="OR">
+                      (
+                       DCRD.DS_ORD_POSN_NUM       = #f[].dsOrdPosnNum_F#
+                   AND DCRD.DS_CPO_LINE_NUM      = #f[].dsCpoLineNum_F#
+                      )
+                </iterate>
+                </isNotNull>
+                AND DCRD.EZCANCELFLAG               = '0'
+                AND DCRD.GLBL_CMPY_CD               = RH.GLBL_CMPY_CD
+                AND DCRD.EZCANCELFLAG               = RH.EZCANCELFLAG
+                AND DCRD.CPO_ORD_NUM                = RH.TRX_ORD_NUM
+                AND RH.GLBL_CMPY_CD                 = RD.GLBL_CMPY_CD
+                AND RH.EZCANCELFLAG                 = RD.EZCANCELFLAG
+                AND RH.RWS_NUM                      = RD.RWS_NUM
+                AND DCRD.DS_CPO_RTRN_LINE_NUM       = RD.TRX_LINE_NUM
+                AND DCRD.DS_CPO_RTRN_LINE_SUB_NUM   = RD.TRX_LINE_SUB_NUM
+                AND DCRD.GLBL_CMPY_CD               = DOSV.GLBL_CMPY_CD
+                AND DCRD.EZCANCELFLAG               = DOSV.EZCANCELFLAG
+                AND DCRD.CPO_ORD_NUM                = DOSV.CPO_ORD_NUM
+                AND DCRD.DS_CPO_RTRN_LINE_NUM       = DOSV.DS_CPO_RTRN_LINE_NUM
+                AND DCRD.DS_CPO_RTRN_LINE_SUB_NUM   = DOSV.DS_CPO_RTRN_LINE_SUB_NUM
+                AND RD.GLBL_CMPY_CD                 = RPA.GLBL_CMPY_CD(+)
+                AND RD.EZCANCELFLAG                 = RPA.EZCANCELFLAG(+)
+                AND RD.RWS_NUM                      = RPA.RWS_NUM(+)
+                AND RD.RWS_DTL_LINE_NUM             = RPA.RWS_DTL_LINE_NUM(+)
+                <!-- 2018/07/11 QC#19801 add start -->
+                AND DCRD.GLBL_CMPY_CD               = MV.GLBL_CMPY_CD
+                AND DCRD.MDSE_CD                    = MV.MDSE_CD
+                AND DCRD.EZCANCELFLAG               = MV.EZCANCELFLAG
+                <!-- 2018/07/11 QC#19801 add end -->
+            ORDER BY
+                 DCRD.CPO_ORD_NUM
+                ,TO_NUMBER(DCRD.DS_ORD_POSN_NUM)
+                ,DCRD.DS_CPO_LINE_NUM
+                ,DCRD.DS_CPO_LINE_SUB_NUM NULLS FIRST
+            )
+        WHERE
+            ROWNUM &lt; #rowNum#
+    </statement>
+    <resultMap id="result.NWAL1530_DCMsg"      class="NWAL1530_DCMsg">
+        <result property="cpoOrdNum_D"         column="CPO_ORD_NUM"          javaType="EZDCStringItem"/>
+        <result property="dsOrdPosnNum_D"      column="DS_ORD_POSN_NUM"      javaType="EZDCStringItem"/>
+        <result property="dsCpoLineNum_D"      column="DS_CPO_LINE_NUM"      javaType="EZDCBigDecimalItem"/>
+        <result property="dsCpoLineSubNum_D"   column="DS_CPO_LINE_SUB_NUM"  javaType="EZDCBigDecimalItem"/>
+        <result property="ordQty_D"            column="ORD_QTY"              javaType="EZDCBigDecimalItem"/>
+        <result property="rtrnQty_D"           column="RTRN_QTY"             javaType="EZDCBigDecimalItem"/>
+        <result property="rwsNum_D"            column="RWS_NUM"              javaType="EZDCStringItem"/>
+        <result property="ordLineStsNm_D"      column="ORD_LINE_STS_NM"      javaType="EZDCStringItem"/>
+        <result property="rcvTsDplyTxt_D"      column="RWS_STK_DT_TM_TS"     javaType="EZDCStringItem"/>
+        <result property="rqstPickUpDt_D"      column="RQST_PICK_UP_DT"      javaType="EZDCDateItem"/>
+        <result property="schdPickUpDt_D"      column="SCHD_PICK_UP_DT"      javaType="EZDCDateItem"/>
+        <!-- 2018/07/11 QC#19801 add start -->
+        <result property="mdseCd_D"             column="MDSE_CD"                javaType="EZDCStringItem"/>
+        <result property="mdseDescShortTxt_D"   column="MDSE_DESC_SHORT_TXT"    javaType="EZDCStringItem"/>
+        <result property="mnfItemCd_D"          column="MNF_ITEM_CD"            javaType="EZDCStringItem"/>
+        <!-- 2018/07/11 QC#19801 add end -->
+    </resultMap>
+
+    <statement id="getInvoiceInfo" parameterClass="Map" resultMap="result.NWAL1530_ECMsg">
+        SELECT
+            * 
+        FROM
+            (
+            SELECT
+                 INV.CPO_ORD_NUM
+                ,INV.INV_NUM
+                ,CASE WHEN INV.INV_TP_CD = #invTpCreditMemo# THEN  INV.INV_TOT_FUNC_NET_AMT * -1
+                      ELSE INV.INV_TOT_FUNC_NET_AMT 
+                 END  AS INV_TOT_FUNC_NET_AMT
+                ,INV.INV_DT
+                <!-- START 2023/04/14 R.Takau [QC#61382,ADD] -->
+                ,NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0) AS DEAL_RMNG_BAL_GRS_AMT
+                <!-- END 2023/04/14 R.Takau [QC#61382,ADD] -->
+            FROM
+                INV INV
+                <!-- START 2023/04/14 R.Takau [QC#61382,ADD] -->
+                ,AR_TRX_BAL ATB
+                <!-- END 2023/04/14 R.Takau [QC#61382,ADD] -->
+            WHERE
+                INV.GLBL_CMPY_CD      = #glblCmpyCd#
+                <isNotNull property="msg.cpoOrdNum">
+                AND INV.CPO_ORD_NUM       = #msg.cpoOrdNum#
+                </isNotNull>
+                AND INV.EZCANCELFLAG      = '0'
+                <!-- START 2023/04/14 R.Takau [QC#61382,ADD] -->
+                AND INV.GLBL_CMPY_CD      = ATB.GLBL_CMPY_CD(+)
+                AND INV.INV_NUM           = ATB.AR_TRX_NUM(+)
+                AND ATB.EZCANCELFLAG(+)   = '0'
+                <!-- END 2023/04/14 R.Takau [QC#61382,ADD] -->
+            ORDER BY
+                INV.INV_NUM
+            )
+        WHERE
+            ROWNUM &lt; #rowNum#
+    </statement>
+    <resultMap id="result.NWAL1530_ECMsg"      class="NWAL1530_ECMsg">
+        <result property="cpoOrdNum_E"         column="CPO_ORD_NUM"           javaType="EZDCStringItem"/>
+        <result property="invNum_E"            column="INV_NUM"               javaType="EZDCStringItem"/>
+        <result property="invTotFuncNetAmt_E"  column="INV_TOT_FUNC_NET_AMT"  javaType="EZDCBigDecimalItem"/>
+        <result property="invDt_E"             column="INV_DT"                javaType="EZDCDateItem"/>
+        <!-- START 2023/04/14 R.Takau [QC#61382,ADD] -->
+        <result property="dealRmngBalGrsAmt_E" column="DEAL_RMNG_BAL_GRS_AMT" javaType="EZDCBigDecimalItem"/>
+        <!-- END 2023/04/14 R.Takau [QC#61382,ADD] -->
+    </resultMap>
+
+    <statement id="getSerialNumber" parameterClass="Map" resultClass="Map">
+        SELECT
+            SER.SER_NUM
+           ,SP.SHPG_STS_CD
+        FROM
+            CPO_DTL        DCD
+           ,SHPG_PLN       SP
+           ,SO_SER  SER
+        WHERE
+                DCD.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND DCD.CPO_ORD_NUM     = #cpoOrdNum#
+            AND DCD.CPO_DTL_LINE_NUM     = #cpoDtlLineNum#
+            AND DCD.CPO_DTL_LINE_SUB_NUM = #cpoDtlLineSubNum#
+            AND DCD.EZCANCELFLAG    = '0'
+            AND SP.GLBL_CMPY_CD     = DCD.GLBL_CMPY_CD
+            AND SP.TRX_HDR_NUM      = DCD.CPO_ORD_NUM
+            AND SP.TRX_LINE_NUM     = DCD.CPO_DTL_LINE_NUM
+            AND SP.TRX_LINE_SUB_NUM = DCD.CPO_DTL_LINE_SUB_NUM
+            AND SP.EZCANCELFLAG     = '0'
+            AND SP.SHPG_STS_CD      &lt; #shpgStsCd#
+            AND SER.GLBL_CMPY_CD    = SP.GLBL_CMPY_CD
+            AND SER.SO_NUM          = SP.SO_NUM
+            AND SER.SO_SLP_NUM      = SP.SO_SLP_NUM
+            AND SER.EZCANCELFLAG    = '0'
+         GROUP BY
+             SP.SHPG_STS_CD
+            ,SP.GLBL_CMPY_CD
+            ,SP.SO_NUM
+            ,SP.SO_SLP_NUM
+            ,SER.SER_NUM
+     UNION ALL
+        SELECT
+            SER.SER_NUM
+           ,SP.SHPG_STS_CD
+        FROM
+            CPO_DTL        DCD
+           ,SHPG_PLN       SP
+           ,SHIP_SER_NUM SER
+        WHERE
+                DCD.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND DCD.CPO_ORD_NUM     = #cpoOrdNum#
+            AND DCD.CPO_DTL_LINE_NUM     = #cpoDtlLineNum#
+            AND DCD.CPO_DTL_LINE_SUB_NUM = #cpoDtlLineSubNum#
+            AND DCD.EZCANCELFLAG    = '0'
+            AND SP.GLBL_CMPY_CD     = DCD.GLBL_CMPY_CD
+            AND SP.TRX_HDR_NUM      = DCD.CPO_ORD_NUM
+            AND SP.TRX_LINE_NUM     = DCD.CPO_DTL_LINE_NUM
+            AND SP.TRX_LINE_SUB_NUM = DCD.CPO_DTL_LINE_SUB_NUM
+            AND SP.EZCANCELFLAG     = '0'
+            AND SP.SHPG_STS_CD      &gt;= #shpgStsCd#
+            AND SER.GLBL_CMPY_CD    = SP.GLBL_CMPY_CD
+            AND SER.SO_NUM          = SP.SO_NUM
+            AND SER.SO_SLP_NUM      = SP.SO_SLP_NUM
+            AND SER.EZCANCELFLAG    = '0'
+        GROUP BY
+             SP.SHPG_STS_CD
+            ,SP.GLBL_CMPY_CD
+            ,SP.SO_NUM
+            ,SP.SO_SLP_NUM
+            ,SER.SER_NUM
+        ORDER BY
+            SHPG_STS_CD DESC
+    </statement>
+</sqlMap>

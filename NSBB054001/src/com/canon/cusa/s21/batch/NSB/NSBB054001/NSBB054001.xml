@@ -1,0 +1,344 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NSBB054001">
+    <statement id="getTargetFsrInfo" parameterClass="Map" resultClass="Map">
+        WITH METER_INFO AS (
+                            SELECT
+                                 FSR_NUM
+                                ,SVC_TASK_NUM
+                                ,SVC_MACH_MSTR_PK
+                                ,MDL_MTR_LB_CD AS MTR_LB_CD
+                                ,READ_MTR_CNT
+                                ,TOT_MTR_FLG
+                            FROM
+                               (
+                                SELECT
+                                     FSR.FSR_NUM
+                                    ,STK.SVC_TASK_NUM
+                                    ,STK.SVC_MACH_MSTR_PK
+                                    ,MTR.MDL_MTR_LB_CD
+                                    ,NVL(RED.READ_MTR_CNT, 0) AS READ_MTR_CNT
+                                    ,MLB.TOT_MTR_FLG
+                                    ,ROW_NUMBER() OVER (PARTITION BY MTR.SVC_PHYS_MTR_PK ORDER BY RED.MTR_READ_DT DESC, RED.SVC_PHYS_MTR_READ_GRP_SQ DESC) AS ROW_NUM 
+                                FROM
+                                     FSR                    FSR
+                                    ,SVC_TASK               STK
+                                    ,SVC_PHYS_MTR           MTR
+                                    ,SVC_PHYS_MTR_READ      RED
+                                    ,MTR_LB                 MLB
+                                WHERE
+                                      FSR.GLBL_CMPY_CD      = #glblCmpyCd#
+                                  AND FSR.FSR_STS_CD        = #fsrStsCd#
+                                  <isNotNull property       = "cloDt">
+                                  AND FSR.FSR_CLO_DT     &gt; #cloDt#
+                                  </isNotNull>
+                                  AND FSR.EZCANCELFLAG      = '0'
+
+                                  AND FSR.GLBL_CMPY_CD      = STK.GLBL_CMPY_CD
+                                  AND FSR.FSR_NUM           = STK.FSR_NUM
+                                  AND STK.EZCANCELFLAG      = '0'
+
+                                  AND STK.SVC_MACH_MSTR_PK  = MTR.SVC_MACH_MSTR_PK
+                                  AND STK.GLBL_CMPY_CD      = MTR.GLBL_CMPY_CD
+                                  AND MTR.EZCANCELFLAG      = '0'
+
+                                  AND STK.SVC_MACH_MSTR_PK  = RED.SVC_MACH_MSTR_PK(+)
+                                  AND STK.GLBL_CMPY_CD      = RED.GLBL_CMPY_CD(+)
+                                  AND RED.VLD_MTR_FLG(+)    = 'Y'
+                                  AND RED.EZCANCELFLAG(+)   = '0'
+
+                                  AND MTR.MDL_MTR_LB_CD     = MLB.MTR_LB_CD
+                                  AND MTR.GLBL_CMPY_CD      = MLB.GLBL_CMPY_CD
+                                  AND MLB.EZCANCELFLAG      = '0'
+                               ) METER_INFO_ALL
+                            WHERE
+                                METER_INFO_ALL.ROW_NUM = 1
+                           )
+             ,CHECK_MAX AS (
+                            SELECT
+                                 SVC_MACH_MSTR_PK
+                                ,SUM(CASE WHEN TOT_MTR_FLG = 'Y' THEN 1 ELSE 0 END) AS TOT_MTR_CNT
+                            FROM
+                                METER_INFO
+                            GROUP BY
+                                SVC_MACH_MSTR_PK
+                           )
+             ,PRE_READ AS (
+                            SELECT
+                                 INFO.FSR_NUM
+                                ,INFO.SVC_TASK_NUM
+                                ,INFO.SVC_MACH_MSTR_PK
+                                ,SUM(CASE WHEN CHMX.TOT_MTR_CNT > 0 AND INFO.TOT_MTR_FLG = 'N' THEN 0 ELSE INFO.READ_MTR_CNT END) AS PRE_READ_CNT
+                            FROM
+                                 METER_INFO INFO
+                                ,CHECK_MAX  CHMX
+                            WHERE
+                                INFO.SVC_MACH_MSTR_PK = CHMX.SVC_MACH_MSTR_PK(+)
+                            GROUP BY
+                                 INFO.FSR_NUM
+                                ,INFO.SVC_TASK_NUM
+                                ,INFO.SVC_MACH_MSTR_PK
+                          )
+                -- Parts Usage Info
+                SELECT
+                     USG.MDSE_CD                   AS PARTS_NUMBER
+                    ,MDS.MDSE_DESC_SHORT_TXT       AS PARTS_DESCRIPTION
+                    ,'+'                           AS ADD_SUB_INDICATIOR
+                    ,USG.SVC_PRT_QTY               AS USED_QTY
+                    ,STK.SVC_TASK_NUM              AS CALL_ID_NUM
+                    ,MMDS.MDSE_DESC_SHORT_TXT      AS MODEL_NUMBER
+                    ,FSR.SER_NUM                   AS SERIAL_NUMBER
+                    ,FSV.FSR_VISIT_ARV_DT          AS INSTALL_DATE
+                    ,PRE.PRE_READ_CNT              AS METER_READING
+                    ,MDS.THIS_MTH_TOT_STD_COST_AMT AS PARTS_COST
+                    ,SHP.LOC_NUM                   AS BRANCH_ID
+                    ,STK.FSR_NUM                   AS ORDER_FSR_NUM
+                    ,STK.SVC_TASK_NUM              AS ORDER_SVC_TASK_NUM
+                FROM
+                     FSR                        FSR
+                    ,SVC_TASK                   STK
+                    ,FSR_VISIT                  FSV
+                    ,S21_PSN                    PSN
+                    ,FSR_VISIT_TASK             FVT
+                    ,FSR_USG                    USG
+                    ,MDSE                       MDS
+                    ,SVC_MACH_MSTR              SMM
+                    ,MDSE                       MMDS
+                    ,SHIP_TO_CUST               SHP
+                    ,PRE_READ                   PRE
+                WHERE
+                        FSR.GLBL_CMPY_CD     = #glblCmpyCd#
+                    AND FSR.FSR_STS_CD       = #fsrStsCd#
+
+                    AND FSR.GLBL_CMPY_CD     = STK.GLBL_CMPY_CD
+                    AND FSR.FSR_NUM          = STK.FSR_NUM
+
+                    AND STK.GLBL_CMPY_CD     = FSV.GLBL_CMPY_CD
+                    AND STK.SVC_TASK_NUM     = FSV.SVC_TASK_NUM
+
+                    AND FSV.GLBL_CMPY_CD     = PSN.GLBL_CMPY_CD
+                    AND FSV.TECH_CD          = PSN.PSN_CD
+                    <isNotNull property="psnTpCdList">
+                    <iterate property ="psnTpCdList" var="psnTpCd[]" open=" AND PSN.PSN_TP_CD IN  (" close=")" conjunction=",">
+                    #psnTpCd[]#
+                    </iterate>
+                    </isNotNull>
+
+                    AND FSV.GLBL_CMPY_CD     = FVT.GLBL_CMPY_CD
+                    AND FSV.FSR_NUM          = FVT.FSR_NUM
+                    AND FSV.FSR_VISIT_NUM    = FVT.FSR_VISIT_NUM
+                    AND FSV.SVC_TASK_NUM     = FVT.SVC_TASK_NUM
+
+                    AND STK.GLBL_CMPY_CD     = USG.GLBL_CMPY_CD
+                    AND STK.SVC_TASK_NUM     = USG.SVC_TASK_NUM
+
+                    AND USG.GLBL_CMPY_CD     = MDS.GLBL_CMPY_CD(+)
+                    AND USG.MDSE_CD          = MDS.MDSE_CD(+)
+
+                    AND FSR.GLBL_CMPY_CD     = SMM.GLBL_CMPY_CD
+                    AND FSR.SER_NUM          = SMM.SER_NUM
+                    AND FSR.SVC_MACH_MSTR_PK = SMM.SVC_MACH_MSTR_PK
+
+                    AND SMM.GLBL_CMPY_CD     = MMDS.GLBL_CMPY_CD(+)
+                    AND SMM.MDSE_CD          = MMDS.MDSE_CD(+)
+
+                    AND SMM.GLBL_CMPY_CD     = SHP.GLBL_CMPY_CD(+)
+                    AND SMM.CUR_LOC_NUM      = SHP.SHIP_TO_CUST_CD(+)
+
+                    AND FSR.FSR_NUM          = PRE.FSR_NUM(+)
+                    AND STK.SVC_TASK_NUM     = PRE.SVC_TASK_NUM(+)
+                    AND SMM.SVC_MACH_MSTR_PK = PRE.SVC_MACH_MSTR_PK(+)
+
+                    AND FSR.EZCANCELFLAG     = '0'
+                    AND STK.EZCANCELFLAG     = '0'
+                    AND FSV.EZCANCELFLAG     = '0'
+                    AND PSN.EZCANCELFLAG     = '0'
+                    AND FVT.EZCANCELFLAG     = '0'
+                    AND USG.EZCANCELFLAG     = '0'
+                    AND MDS.EZCANCELFLAG(+)  = '0'
+                    AND SMM.EZCANCELFLAG     = '0'
+                    AND MMDS.EZCANCELFLAG(+) = '0'
+                    AND SHP.EZCANCELFLAG(+)  = '0'
+
+                -- Expense Info
+                UNION ALL
+                SELECT
+                     EXP.MDSE_CD                      AS PARTS_NUMBER
+                    ,MDS.MDSE_DESC_SHORT_TXT          AS PARTS_DESCRIPTION
+                    ,'+'                              AS ADD_SUB_INDICATIOR
+                    ,EXP.SVC_EXP_QTY                  AS USED_QTY
+                    ,STK.SVC_TASK_NUM                 AS CALL_ID_NUM
+                    ,MMDS.MDSE_DESC_SHORT_TXT         AS MODEL_NUMBER
+                    ,FSR.SER_NUM                      AS SERIAL_NUMBER
+                    ,FSV.FSR_VISIT_ARV_DT             AS INSTALL_DATE
+                    ,PRE.PRE_READ_CNT                 AS METER_READING
+                    ,MDS.THIS_MTH_TOT_STD_COST_AMT    AS PARTS_COST
+                    ,SHP.LOC_NUM                      AS BRANCH_ID
+                    ,STK.FSR_NUM                      AS ORDER_FSR_NUM
+                    ,STK.SVC_TASK_NUM                 AS ORDER_SVC_TASK_NUM
+                FROM
+                     FSR                    FSR
+                    ,SVC_TASK               STK
+                    ,FSR_VISIT              FSV
+                    ,S21_PSN                PSN
+                    ,FSR_VISIT_TASK         FVT
+                    ,FSR_EXP                EXP
+                    ,MDSE                   MDS
+                    ,SVC_MACH_MSTR          SMM
+                    ,MDSE                   MMDS
+                    ,SHIP_TO_CUST           SHP
+                    ,PRE_READ               PRE
+                WHERE
+                        FSR.GLBL_CMPY_CD     = #glblCmpyCd#
+                    AND FSR.FSR_STS_CD       = #fsrStsCd#
+                    <isNotNull property      = "cloDt">
+                    AND FSR.FSR_CLO_DT    &gt; #cloDt#
+                    </isNotNull>
+
+                    AND FSR.GLBL_CMPY_CD     = STK.GLBL_CMPY_CD
+                    AND FSR.FSR_NUM          = STK.FSR_NUM
+
+                    AND STK.GLBL_CMPY_CD     = FSV.GLBL_CMPY_CD
+                    AND STK.SVC_TASK_NUM     = FSV.SVC_TASK_NUM
+
+                    AND FSV.GLBL_CMPY_CD     = PSN.GLBL_CMPY_CD
+                    AND FSV.TECH_CD          = PSN.PSN_CD
+                    <isNotNull property="psnTpCdList">
+                    <iterate property ="psnTpCdList" var="psnTpCd[]" open=" AND PSN.PSN_TP_CD IN  (" close=")" conjunction=",">
+                    #psnTpCd[]#
+                    </iterate>
+                    </isNotNull>
+
+                    AND FSV.GLBL_CMPY_CD     = FVT.GLBL_CMPY_CD
+                    AND FSV.FSR_NUM          = FVT.FSR_NUM
+                    AND FSV.FSR_VISIT_NUM    = FVT.FSR_VISIT_NUM
+                    AND FSV.SVC_TASK_NUM     = FVT.SVC_TASK_NUM
+
+                    AND STK.GLBL_CMPY_CD     = EXP.GLBL_CMPY_CD
+                    AND STK.SVC_TASK_NUM     = EXP.SVC_TASK_NUM
+
+                    AND EXP.GLBL_CMPY_CD     = MDS.GLBL_CMPY_CD(+)
+                    AND EXP.MDSE_CD          = MDS.MDSE_CD(+)
+
+                    AND FSR.GLBL_CMPY_CD     = SMM.GLBL_CMPY_CD
+                    AND FSR.SER_NUM          = SMM.SER_NUM
+                    AND FSR.SVC_MACH_MSTR_PK = SMM.SVC_MACH_MSTR_PK
+
+                    AND SMM.GLBL_CMPY_CD     = MMDS.GLBL_CMPY_CD(+)
+                    AND SMM.MDSE_CD          = MMDS.MDSE_CD(+)
+
+                    AND SMM.GLBL_CMPY_CD     = SHP.GLBL_CMPY_CD(+)
+                    AND SMM.CUR_LOC_NUM      = SHP.SHIP_TO_CUST_CD(+)
+
+                    AND FSR.FSR_NUM          = PRE.FSR_NUM(+)
+                    AND STK.SVC_TASK_NUM     = PRE.SVC_TASK_NUM(+)
+                    AND SMM.SVC_MACH_MSTR_PK = PRE.SVC_MACH_MSTR_PK(+)
+
+
+                    AND FSR.EZCANCELFLAG     = '0'
+                    AND STK.EZCANCELFLAG     = '0'
+                    AND FSV.EZCANCELFLAG     = '0'
+                    AND PSN.EZCANCELFLAG     = '0'
+                    AND FVT.EZCANCELFLAG     = '0'
+                    AND EXP.EZCANCELFLAG     = '0'
+                    AND MDS.EZCANCELFLAG(+)  = '0'
+                    AND SMM.EZCANCELFLAG     = '0'
+                    AND MMDS.EZCANCELFLAG(+) = '0'
+                    AND SHP.EZCANCELFLAG(+)  = '0'
+
+                -- Labor/Travel Info
+                UNION ALL
+                SELECT
+                     EVN.MDSE_CD                                      AS PARTS_NUMBER
+                    ,MDS.MDSE_DESC_SHORT_TXT                          AS PARTS_DESCRIPTION
+                    ,'+'                                              AS ADD_SUB_INDICATIOR
+                    ,TRUNC(
+                        (TO_DATE(EVN.SVC_TM_EVENT_TO_DT || EVN.SVC_TM_EVENT_TO_TM, #dateFormat#) -
+                            TO_DATE(EVN.SVC_TM_EVENT_FROM_DT || EVN.SVC_TM_EVENT_FROM_TM, #dateFormat#)
+                        ) * 24, 2)
+                                                                      AS USED_QTY
+                    ,STK.SVC_TASK_NUM                                 AS CALL_ID_NUM
+                    ,MMDS.MDSE_DESC_SHORT_TXT                         AS MODEL_NUMBER
+                    ,FSR.SER_NUM                                      AS SERIAL_NUMBER
+                    ,FSV.FSR_VISIT_ARV_DT                             AS INSTALL_DATE
+                    ,PRE.PRE_READ_CNT                                 AS METER_READING
+                    ,MDS.THIS_MTH_TOT_STD_COST_AMT                    AS PARTS_COST
+                    ,SHP.LOC_NUM                                      AS BRANCH_ID
+                    ,STK.FSR_NUM                                      AS ORDER_FSR_NUM
+                    ,STK.SVC_TASK_NUM                                 AS ORDER_SVC_TASK_NUM
+                FROM
+                     FSR                     FSR
+                    ,SVC_TASK                STK
+                    ,FSR_VISIT               FSV
+                    ,S21_PSN                 PSN
+                    ,FSR_VISIT_TASK          FVT
+                    ,FSR_VISIT_TM_EVENT      EVN
+                    ,MDSE                    MDS
+                    ,SVC_MACH_MSTR           SMM
+                    ,MDSE                    MMDS
+                    ,SHIP_TO_CUST            SHP
+                    ,PRE_READ                PRE
+                WHERE
+                        FSR.GLBL_CMPY_CD     = #glblCmpyCd#
+                    AND FSR.FSR_STS_CD       = #fsrStsCd#
+                    <isNotNull property      = "cloDt">
+                    AND FSR.FSR_CLO_DT    &gt; #cloDt#
+                    </isNotNull>
+
+                    AND FSR.GLBL_CMPY_CD     = STK.GLBL_CMPY_CD
+                    AND FSR.FSR_NUM          = STK.FSR_NUM
+
+                    AND STK.GLBL_CMPY_CD     = FSV.GLBL_CMPY_CD
+                    AND STK.SVC_TASK_NUM     = FSV.SVC_TASK_NUM
+
+                    AND FSV.GLBL_CMPY_CD     = PSN.GLBL_CMPY_CD
+                    AND FSV.TECH_CD          = PSN.PSN_CD
+                    <isNotNull property="psnTpCdList">
+                    <iterate property ="psnTpCdList" var="psnTpCd[]" open=" AND PSN.PSN_TP_CD IN  (" close=")" conjunction=",">
+                    #psnTpCd[]#
+                    </iterate>
+                    </isNotNull>
+
+                    AND FSV.GLBL_CMPY_CD     = FVT.GLBL_CMPY_CD
+                    AND FSV.FSR_NUM          = FVT.FSR_NUM
+                    AND FSV.FSR_VISIT_NUM    = FVT.FSR_VISIT_NUM
+                    AND FSV.SVC_TASK_NUM     = FVT.SVC_TASK_NUM
+
+                    AND STK.GLBL_CMPY_CD     = EVN.GLBL_CMPY_CD
+                    AND STK.SVC_TASK_NUM     = EVN.SVC_TASK_NUM
+                    <iterate property="svcTmEventCd" var="svcTmEventCd[]" open=" AND EVN.SVC_TM_EVENT_CD  IN (" close=")" conjunction=",">
+                    #svcTmEventCd[]#
+                    </iterate>
+
+                    AND EVN.GLBL_CMPY_CD     = MDS.GLBL_CMPY_CD(+)
+                    AND EVN.MDSE_CD          = MDS.MDSE_CD(+)
+
+                    AND FSR.GLBL_CMPY_CD     = SMM.GLBL_CMPY_CD
+                    AND FSR.SER_NUM          = SMM.SER_NUM
+                    AND FSR.SVC_MACH_MSTR_PK = SMM.SVC_MACH_MSTR_PK
+
+                    AND SMM.GLBL_CMPY_CD     = MMDS.GLBL_CMPY_CD(+)
+                    AND SMM.MDSE_CD          = MMDS.MDSE_CD(+)
+
+                    AND SMM.GLBL_CMPY_CD     = SHP.GLBL_CMPY_CD(+)
+                    AND SMM.CUR_LOC_NUM      = SHP.SHIP_TO_CUST_CD(+)
+
+                    AND FSR.FSR_NUM          = PRE.FSR_NUM(+)
+                    AND STK.SVC_TASK_NUM     = PRE.SVC_TASK_NUM(+)
+                    AND SMM.SVC_MACH_MSTR_PK = PRE.SVC_MACH_MSTR_PK(+)
+
+                    AND FSR.EZCANCELFLAG     = '0'
+                    AND STK.EZCANCELFLAG     = '0'
+                    AND FSV.EZCANCELFLAG     = '0'
+                    AND PSN.EZCANCELFLAG     = '0'
+                    AND FVT.EZCANCELFLAG     = '0'
+                    AND EVN.EZCANCELFLAG     = '0'
+                    AND MDS.EZCANCELFLAG(+)  = '0'
+                    AND SMM.EZCANCELFLAG     = '0'
+                    AND MMDS.EZCANCELFLAG(+) = '0'
+                    AND SHP.EZCANCELFLAG(+)  = '0'
+                ORDER BY
+                    ORDER_FSR_NUM ASC
+                   ,ORDER_SVC_TASK_NUM ASC
+                   ,PARTS_NUMBER
+    </statement>
+</sqlMap>

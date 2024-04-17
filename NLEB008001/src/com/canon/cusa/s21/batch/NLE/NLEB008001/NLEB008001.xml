@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NLEB008001">
+
+    <statement id="getTargetDsAssetMstr" parameterClass="Map">
+        SELECT
+                DA.DS_ASSET_MSTR_PK         AS DS_ASSET_MSTR_PK
+               ,TO_NUMBER(DA.DEPC_MTH_NUM)  AS DEPC_MTH_NUM
+               ,NVL(DA.DEPC_CNT, 0)         AS DEPC_CNT
+               ,DA.CUR_VAL_AMT              AS CUR_VAL_AMT
+               ,DA.FIRST_DEPC_YR_MTH        AS FIRST_DEPC_YR_MTH
+               ,DA.LAST_DEPC_YR_MTH         AS LAST_DEPC_YR_MTH
+               ,NVL(DA.RSDL_VAL_AMT,0)      AS RSDL_VAL_AMT
+               ,DA.DEPC_RE_START_DT         AS DEPC_RE_START_DT
+               ,MONTHS_BETWEEN(
+                    TO_DATE(#batchYrMth#, 'YYYYMM')
+                   ,TO_DATE(DA.LAST_DEPC_YR_MTH, 'YYYYMM')
+                )                           AS LAST_BATCH_MTH
+               ,MONTHS_BETWEEN(
+                    TO_DATE(#batchYrMth#, 'YYYYMM')
+                   ,TO_DATE(DA.FIRST_DEPC_YR_MTH, 'YYYYMM')
+                )                           AS FIRST_BATCH_MTH
+               ,MONTHS_BETWEEN(
+                    TO_DATE(#batchYrMth#, 'YYYYMM')
+                   ,TO_DATE(TO_CHAR(TO_DATE(DA.DEPC_RE_START_DT, 'YYYYMMDD'), 'YYYYMM'), 'YYYYMM')
+                )                           AS RESTART_BATCH_MTH
+               ,DAS.DS_ASSET_DEPC_SMLTN_RQST_PK AS DS_ASSET_DEPC_SMLTN_RQST_PK
+               ,DAS.DEPC_SMLTN_RQST_DT_TM_TS    AS DEPC_SMLTN_RQST_DT_TM_TS
+               ,DAS.PRNT_DS_ASSET_MSTR_PK       AS PRNT_DS_ASSET_MSTR_PK
+               ,DA.MDSE_CD                      AS MDSE_CD
+               ,DA.SER_NUM                      AS SER_NUM
+               ,DA.ASSET_TP_CD                  AS ASSET_TP_CD
+               ,DA.INIT_BOOK_AMT                AS INIT_BOOK_AMT
+        FROM
+                DS_ASSET_DEPC_SMLTN_RQST DAS
+               ,DS_ASSET_MSTR            DA
+               ,ASSET_TP                 AT
+               ,(
+                    SELECT
+                             SMLTN.DS_ASSET_DEPC_SMLTN_RQST_PK
+                            ,ROW_NUMBER() OVER(PARTITION BY SMLTN.DS_ASSET_MSTR_PK ORDER BY SMLTN.DEPC_SMLTN_RQST_DT_TM_TS DESC) AS CNT
+                    FROM
+                             DS_ASSET_DEPC_SMLTN_RQST SMLTN
+                    WHERE
+                             SMLTN.GLBL_CMPY_CD = #glblCmpyCd#
+                     AND     SMLTN.EZCANCELFLAG = '0'
+                 ) SMLTN_LATST
+        WHERE
+                DAS.GLBL_CMPY_CD           = #glblCmpyCd#
+        AND     DAS.DEPC_SMLTN_RQST_STS_CD = #depcSmltnRqstStsCd#
+        AND     DAS.EZCANCELFLAG           = '0'
+        AND     DAS.DS_ASSET_DEPC_SMLTN_RQST_PK = SMLTN_LATST.DS_ASSET_DEPC_SMLTN_RQST_PK
+        AND     SMLTN_LATST.CNT            = 1
+        AND     DAS.GLBL_CMPY_CD           = DA.GLBL_CMPY_CD
+        AND     DAS.DS_ASSET_MSTR_PK       = DA.DS_ASSET_MSTR_PK
+        AND     DA.ACTV_ASSET_FLG = #actvAssetFlg#
+        AND     DA.CUR_VAL_AMT &gt; NVL(DA.RSDL_VAL_AMT,0)
+        AND     TO_DATE(DA.FIRST_DEPC_YR_MTH, 'YYYYMM') &lt;= TO_DATE(#batchYrMth#, 'YYYYMM')
+        AND     (
+                    DA.LAST_DEPC_YR_MTH IS NULL
+                 OR TO_DATE(DA.LAST_DEPC_YR_MTH, 'YYYYMM') &lt; TO_DATE(#batchYrMth#, 'YYYYMM')
+                )
+        AND     (
+                    DA.DEPC_RE_START_DT IS NULL
+                 OR TO_DATE(TO_CHAR(TO_DATE(DA.DEPC_RE_START_DT, 'YYYYMMDD'), 'YYYYMM'), 'YYYYMM') &lt;= TO_DATE(#batchYrMth#, 'YYYYMM')
+                )
+        AND     DA.EZCANCELFLAG   = '0'
+        AND     AT.GLBL_CMPY_CD   = DA.GLBL_CMPY_CD
+        AND     AT.ASSET_TP_CD    = DA.ASSET_TP_CD
+        AND     (   AT.DEPC_LOC_TP_CD = #depcLocTpBoth#
+                 OR (
+                         AT.DEPC_LOC_TP_CD = #depcLocTpCust#
+                     AND DA.SVC_MACH_MSTR_PK IS NOT NULL
+                    )
+                 OR (
+                         AT.DEPC_LOC_TP_CD = #depcLocTpWh#
+                     AND DA.SVC_MACH_MSTR_PK IS NULL
+                    )
+                )
+        AND     AT.EZCANCELFLAG   = '0'
+        AND     EXISTS(
+                    SELECT
+                        1
+                    FROM
+                        DS_ASSET_MSTR DAM
+                    WHERE
+                            DAM.GLBL_CMPY_CD       = DA.GLBL_CMPY_CD
+                        AND DAM.DS_ASSET_MSTR_PK   = DA.PRNT_DS_ASSET_MSTR_PK
+                        AND DAM.ASSET_STS_CD       = #assetStsCd#
+                        AND DAM.EZCANCELFLAG       = '0'
+                )
+        ORDER BY
+                DAS.DEPC_SMLTN_RQST_DT_TM_TS
+               ,DA.PRNT_DS_ASSET_MSTR_PK
+               ,DA.DS_ASSET_MSTR_PK
+    </statement>
+
+</sqlMap>

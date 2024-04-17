@@ -1,0 +1,974 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NFDL0010Query">
+
+    <!-- *********************************************************** -->
+    <!-- ********** Bean Definition ******************************** -->
+    <!-- *********************************************************** -->
+    <typeAlias alias="NFDL0010CMsg"     type="business.blap.NFDL0010.NFDL0010CMsg"/>
+    <typeAlias alias="NFDL0010_ASMsg"   type="business.blap.NFDL0010.NFDL0010_ASMsg"/>
+
+    <statement id="getCollectionSummaryList" parameterClass="Map" resultMap="result.getCollectionSummaryList">
+    WITH CP_TARGET AS (
+        SELECT
+        DISTINCT
+             CP_SUB.CLT_PTFO_PK
+            ,CP_SUB.CLT_PTFO_NM
+            ,CP_SUB.CLT_PSN_CD
+            ,CP_SUB.CLT_PSN_NM
+        FROM
+            (
+                SELECT
+                     CP.CLT_PTFO_PK
+                    ,CP.CLT_PTFO_NM
+                    ,CP.CLT_PSN_CD
+                    ,CP.CLT_PSN_NM
+                FROM
+                    CLT_PTFO CP
+                WHERE
+                        CP.EZCANCELFLAG = '0'
+                    AND CP.GLBL_CMPY_CD = #glblCmpyCd# 
+                    
+                    <isEqual property="cMsg.cltDispTpCd_H" compareValue="01">
+                    AND CP.CLT_PSN_CD   = #userId#
+                    </isEqual>
+                    <isNull property="cMsg.cltDispTpCd_H">
+                    <isNotNull property="cltPsnCdList">
+                        <iterate property="cltPsnCdList" var="cltPsnCd[]" open="AND CP.CLT_PSN_CD IN (" close=")" conjunction=",">
+                        #cltPsnCd[]#
+                        </iterate>
+                    </isNotNull>
+                    </isNull>
+                    <isNotNull property="cMsg.cltPtfoNm_H">
+                    AND UPPER(CP.CLT_PTFO_NM) LIKE #cMsg.cltPtfoNm_H#
+                    </isNotNull>
+                    <isNotNull property="cMsg.cltPsnNm_H1">
+                    AND UPPER(CP.CLT_PSN_NM)  LIKE #cMsg.cltPsnNm_H1#
+                    </isNotNull>
+                    <isEqual property="cMsg.cltDispTpCd_H" compareValue="02">
+                    <isNotNull property="cltPsnCdList">
+                        <iterate property="cltPsnCdList" var="cltPsnCd[]" open="START WITH CP.CLT_PSN_CD IN (" close=")" conjunction=",">
+                        #cltPsnCd[]#
+                        </iterate>
+                    </isNotNull>
+                    <isNull property="cltPsnCdList">
+                    START WITH CP.CLT_PSN_CD   = #userId#
+                    </isNull>
+                    </isEqual>
+                    CONNECT BY REL_CLT_PTFO_PK = PRIOR CLT_PTFO_PK
+            ) CP_SUB
+     ) 
+    ,STC_TARGET AS (
+        SELECT
+              STC.SELL_TO_CUST_CD AS DS_ACCT_NUM
+             ,STC.DS_ACCT_NM
+             ,CP_TARGET.CLT_PTFO_PK
+             ,CP_TARGET.CLT_PTFO_NM
+             ,CP_TARGET.CLT_PSN_CD
+             ,CP_TARGET.CLT_PSN_NM
+         FROM
+              SELL_TO_CUST STC
+             ,CP_TARGET
+             <isNotEqual property="cMsg.xxChkBox_H" compareValue="Y">
+             , (SELECT ATB.BILL_TO_CUST_ACCT_CD
+                      , COUNT(1) CNT
+                  FROM AR_TRX_BAL ATB
+                 WHERE
+                     ATB.EZCANCELFLAG = '0'
+                 AND ATB.GLBL_CMPY_CD = #glblCmpyCd#
+                 AND ATB.AR_CASH_APPLY_STS_CD IN (#applyStsU#, #applyStsP#)
+                 <isNotNull property="dsAcctNumList">
+                     <iterate property="dsAcctNumList" var="dsAcctNum[]" open="AND BILL_TO_CUST_ACCT_CD IN (" close=")" conjunction=",">
+                      #dsAcctNum[]#
+                     </iterate>
+                 </isNotNull>
+                 GROUP BY ATB.BILL_TO_CUST_ACCT_CD
+              ) ATB_CNT
+             </isNotEqual>
+         WHERE
+                 STC.EZCANCELFLAG = '0'
+             AND STC.GLBL_CMPY_CD = #glblCmpyCd#
+             AND CP_TARGET.CLT_PTFO_PK = STC.CLT_PTFO_PK
+             AND STC.RGTN_STS_CD IN ('P20', 'P99')
+             <isNotNull property="dsAcctNumList">
+             <iterate property="dsAcctNumList" var="dsAcctNum[]" open="AND STC.SELL_TO_CUST_CD IN (" close=")" conjunction=",">
+             #dsAcctNum[]#
+             </iterate>
+             </isNotNull>
+             <isNotNull property="cMsg.dsAcctNm_H">
+             AND UPPER(STC.DS_ACCT_NM) LIKE #cMsg.dsAcctNm_H#
+             </isNotNull>
+             <isNotEqual property="cMsg.xxChkBox_H" compareValue="Y">
+             AND ATB_CNT.CNT                      &gt; 0
+             AND ATB_CNT.BILL_TO_CUST_ACCT_CD    = STC.SELL_TO_CUST_CD
+             </isNotEqual>
+         GROUP BY
+              STC.SELL_TO_CUST_CD
+             ,STC.DS_ACCT_NM
+             ,CP_TARGET.CLT_PTFO_PK
+             ,CP_TARGET.CLT_PTFO_NM
+             ,CP_TARGET.CLT_PSN_CD
+             ,CP_TARGET.CLT_PSN_NM
+     ) 
+    ,TARGET AS (
+        SELECT
+             ATB_TARGET.DS_ACCT_NUM
+            ,ATB_TARGET.DS_ACCT_NM
+            ,ATB_TARGET.CLT_PSN_CD
+            ,ATB_TARGET.CLT_PSN_NM
+            ,ATB_TARGET.CLT_PTFO_NM
+            ,SUM(ATB_TARGET.DEAL_ORIG_GRS_AMT)                                                  AS DEAL_ORIG_GRS_AMT
+            ,SUM(ATB_TARGET.DEAL_NET_SLS_AMT)                                                   AS DEAL_NET_SLS_AMT
+            ,SUM(ATB_TARGET.DEAL_RMNG_BAL_GRS_AMT)                                              AS DEAL_RMNG_BAL_GRS_AMT
+            ,SUM(ATB_TARGET.AR_RMNG)                                                            AS AR_RMNG
+            ,SUM(ATB_TARGET.CURR_DUE) + SUM(ATB_TARGET.RCP_CURR_DUE)                            AS CURR_DUE
+            ,SUM(ATB_TARGET.DUR_DUE)  + SUM(ATB_TARGET.RCP_DUR_DUE)                             AS TIL90_DUE
+            ,SUM(ATB_TARGET.OVR_DUE)  + SUM(ATB_TARGET.RCP_OVR_DUE)                             AS OVR90_DUE
+            ,SUM(ATB_TARGET.CRM_AMT_OVRDUE)                                                     AS CRM_AMT_OVRDUE
+            ,SUM(ATB_TARGET.RCP_AMT)                                                            AS RCP_AMT
+            ,SUM(ATB_TARGET.DEAL_CLT_DSPT_AMT)                                                  AS DSPT_AMT
+            ,NVL(SUM(CASE WHEN OVER_FLG = 'Y' THEN ATB_TARGET.DEAL_CLT_DSPT_AMT ELSE 0 END), 0) AS DSPT_AMT_OVER
+            ,(
+                SELECT
+                    SUM(ATB_LAST_MTH.DEAL_ORIG_GRS_AMT)
+                FROM
+                    AR_TRX_BAL ATB_LAST_MTH
+                WHERE
+                        ATB_LAST_MTH.EZCANCELFLAG = '0'
+                    AND ATB_LAST_MTH.GLBL_CMPY_CD = #glblCmpyCd#
+                    <!-- START 2019/10/23 S.Takami [QC#53536,MOD] -->
+                    <!-- AND TO_CHAR(ADD_MONTHS(TO_DATE(TO_CHAR((TO_DATE(#salesDt#, 'YYYYMMDD')),'YYYYMM') || '01', 'YYYYMMDD'), -1), 'YYYYMMDD') &lt;= TO_CHAR(TO_DATE(ATB_LAST_MTH.GL_DT, 'YYYYMMDD'), 'YYYYMMDD') -->
+                    <!-- AND TO_CHAR(TO_DATE(ATB_LAST_MTH.GL_DT, 'YYYYMMDD'), 'YYYYMMDD') &lt;= TO_CHAR(ADD_MONTHS(LAST_DAY(TO_DATE(#salesDt#, 'YYYYMMDD')),-1), 'YYYYMMDD') -->
+                    AND ATB_LAST_MTH.GL_DT BETWEEN #firstDayOfLastMonth# AND #lastDayOfLastMonth#
+                    <!-- END 2019/10/23 S.Takami [QC#53536,MOD] -->
+                    AND ATB_LAST_MTH.AR_TRX_TP_CD IN ( #invTpCd#, #crmTpCd# )
+                    AND ATB_LAST_MTH.BILL_TO_CUST_ACCT_CD = ATB_TARGET.DS_ACCT_NUM
+             ) LAST_MTH_SLS
+            ,(
+                SELECT
+                    SUM(ATBUW.DEAL_RMNG_BAL_GRS_AMT)
+                FROM
+                    AR_TRX_BAL_UPD_WRK ATBUW
+                WHERE
+                        ATBUW.EZCANCELFLAG = '0'
+                    AND ATBUW.GLBL_CMPY_CD = #glblCmpyCd#
+                    AND ATBUW.AR_CASH_APPLY_STS_CD IN (#applyStsU#, #applyStsP#)
+                    AND ATBUW.BILL_TO_CUST_ACCT_CD = ATB_TARGET.DS_ACCT_NUM
+             ) BEGIN_RMNG
+        FROM
+            (
+                SELECT
+                     ATB.AR_TRX_TP_CD
+                    ,NVL(ATB.DEAL_ORIG_GRS_AMT,0) DEAL_ORIG_GRS_AMT
+                    ,NVL(ATB.DEAL_NET_SLS_AMT,0) DEAL_NET_SLS_AMT
+                    ,NVL(ATB.DEAL_RMNG_BAL_GRS_AMT,0) DEAL_RMNG_BAL_GRS_AMT
+                    ,CASE WHEN ATB.AR_TRX_TP_CD = #arTrxTpCdReceipt# THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0) * -1 ELSE NVL(ATB.DEAL_RMNG_BAL_GRS_AMT,0) END AS AR_RMNG
+                    ,CASE WHEN ATB.AR_TRX_TP_CD &lt;&gt; #arTrxTpCdReceipt# AND  TO_DATE(#salesDt#, 'YYYYMMDD')       &lt;= TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD') THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT,0) ELSE 0 END CURR_DUE
+                    ,CASE WHEN ATB.AR_TRX_TP_CD &lt;&gt; #arTrxTpCdReceipt# AND (TO_DATE(#salesDt#, 'YYYYMMDD') - 90) &lt;= TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD') AND TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD') &lt; TO_DATE(#salesDt#, 'YYYYMMDD') THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT,0) ELSE 0 END DUR_DUE
+                    ,CASE WHEN ATB.AR_TRX_TP_CD &lt;&gt; #arTrxTpCdReceipt# AND (TO_DATE(#salesDt#, 'YYYYMMDD') - 90) &gt;  TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD') THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT,0) ELSE 0 END OVR_DUE
+                    ,CASE WHEN ATB.AR_TRX_TP_CD = #arTrxTpCdReceipt# AND  TO_DATE(#salesDt#, 'YYYYMMDD')       &lt;= TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0) * -1 ELSE 0 END RCP_CURR_DUE
+                    ,CASE WHEN ATB.AR_TRX_TP_CD = #arTrxTpCdReceipt# AND (TO_DATE(#salesDt#, 'YYYYMMDD') - 90) &lt;= TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') AND TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') &lt; TO_DATE(#salesDt#, 'YYYYMMDD') THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0) * -1 ELSE 0 END RCP_DUR_DUE
+                    ,CASE WHEN ATB.AR_TRX_TP_CD = #arTrxTpCdReceipt# AND (TO_DATE(#salesDt#, 'YYYYMMDD') - 90) &gt;  TO_DATE(ATB.AR_TRX_DT, 'YYYYMMDD') THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0) * -1 ELSE 0 END RCP_OVR_DUE
+                    ,CASE WHEN ATB.AR_TRX_TP_CD = #rcpTpCd# THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0) ELSE 0 END RCP_AMT
+                    ,CASE WHEN ATB.AR_TRX_TP_CD = #crmTpCd# AND ATB.INV_DUE_DT &lt; TO_CHAR(TO_DATE(#salesDt#,'YYYYMMDD'),'YYYYMMDD') THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0) ELSE 0 END CRM_AMT_OVRDUE
+                    ,STC_TARGET.DS_ACCT_NUM
+                    ,STC_TARGET.DS_ACCT_NM
+                    ,STC_TARGET.CLT_PSN_CD
+                    ,STC_TARGET.CLT_PSN_NM
+                    ,STC_TARGET.CLT_PTFO_NM
+                    ,CASE WHEN TO_DATE(#salesDt#, 'YYYYMMDD') &lt;= TO_DATE(ATB.INV_DUE_DT, 'YYYYMMDD') THEN 'N' ELSE 'Y' END OVER_FLG
+                    ,(
+                        SELECT
+                            NVL(SUM(CDT.DEAL_CLT_DSPT_AMT), 0)
+                        FROM
+                            CLT_DSPT_TRX CDT
+                        WHERE
+                                CDT.GLBL_CMPY_CD    = ATB.GLBL_CMPY_CD
+                            AND CDT.AR_TRX_NUM      = ATB.AR_TRX_NUM
+                            AND CDT.CLT_DSPT_STS_CD = #cltDsptStsApproved#
+                            AND CDT.EZCANCELFLAG    = '0'
+                     ) AS DEAL_CLT_DSPT_AMT
+                FROM
+                <isEqual property="cMsg.xxChkBox_H" compareValue="Y">
+                     STC_TARGET
+                    ,AR_TRX_BAL ATB
+                WHERE
+                        STC_TARGET.DS_ACCT_NUM = ATB.BILL_TO_CUST_ACCT_CD(+)
+                    AND ATB.GLBL_CMPY_CD(+) = #glblCmpyCd#
+                    AND ATB.EZCANCELFLAG(+) = '0'
+                    AND ATB.AR_CASH_APPLY_STS_CD(+) IN (#applyStsU#,#applyStsP#)
+                </isEqual>
+                <isNotEqual property="cMsg.xxChkBox_H" compareValue="Y">
+                     AR_TRX_BAL ATB
+                    ,STC_TARGET
+                WHERE
+                        ATB.EZCANCELFLAG = '0'
+                    AND ATB.GLBL_CMPY_CD = #glblCmpyCd#
+                    AND ATB.AR_CASH_APPLY_STS_CD IN (#applyStsU#,#applyStsP#)
+                    AND ATB.BILL_TO_CUST_ACCT_CD = STC_TARGET.DS_ACCT_NUM
+                </isNotEqual>
+
+            ) ATB_TARGET
+        GROUP BY
+             ATB_TARGET.DS_ACCT_NUM
+            ,ATB_TARGET.DS_ACCT_NM
+            ,ATB_TARGET.CLT_PSN_CD
+            ,ATB_TARGET.CLT_PSN_NM
+            ,ATB_TARGET.CLT_PTFO_NM
+     )
+    <isNotEqual property="cMsg.xxModeCd_H" compareValue="01">
+    ,STRGY AS (
+        SELECT
+             CST.CLT_ACCT_CD
+            ,CST.CLT_STRGY_CD
+            ,CSWIT.CLT_WRK_ITEM_RWSD_DT
+            ,CSWIT.CLT_WRK_ITEM_NM
+            ,RANK() OVER (PARTITION BY CST.CLT_ACCT_CD ORDER BY CSWIT.CLT_WRK_ITEM_RWSD_DT, CSWIT.CLT_STRGY_TRX_PK, CSWIT.CLT_STRGY_WRK_ITEM_TRX_PK ) AS STR_RNK
+        FROM
+             CLT_STRGY_WRK_ITEM_TRX CSWIT
+            ,CLT_STRGY_TRX CST
+            <isNull property="dsAcctNumList">
+            ,STC_TARGET    ST
+            </isNull>
+        WHERE
+                CSWIT.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND CSWIT.GLBL_CMPY_CD     = CST.GLBL_CMPY_CD
+            AND CSWIT.CLT_STRGY_TRX_PK = CST.CLT_STRGY_TRX_PK
+            AND CST.CLT_STRGY_CUR_FLG  = 'Y'
+            AND CSWIT.EZCANCELFLAG     = '0'
+            AND CST.EZCANCELFLAG       = '0'
+            <isNotNull property="dsAcctNumList">
+            <iterate property="dsAcctNumList" var="dsAcctNum[]" open="AND CST.CLT_ACCT_CD IN (" close=")" conjunction=",">
+            #dsAcctNum[]#
+            </iterate>
+            </isNotNull>
+            <isNull property="dsAcctNumList">
+            AND CST.CLT_ACCT_CD        = ST.DS_ACCT_NUM
+            </isNull>
+     )
+    ,PFAC AS (
+        SELECT
+             CPD_SUB.CLT_ACCT_CD
+            ,CPD_SUB.CLT_PRMS_CRAT_DT PRMS_CRAT_DT
+            ,CPD_SUB.CLT_PRMS_DT PRMS_DT
+            ,(
+                SELECT
+                    SUM(CPD_1.DEAL_CLT_PRMS_AMT)
+                FROM
+                    CLT_PRMS_DTL CPD_1
+                WHERE
+                        CPD_1.EZCANCELFLAG = '0'
+                    AND CPD_1.GLBL_CMPY_CD = #glblCmpyCd#
+                    AND CPD_1.CLT_PRMS_STS_CD NOT IN ('02', '03')
+                    AND CPD_1.CLT_ACCT_CD = CPD_SUB.CLT_ACCT_CD
+             ) PRMS_AMT
+            ,(
+                SELECT
+                    COUNT(CASE WHEN CPD_2.CLT_PRMS_BRKN_FLG = 'Y' THEN 'Y' ELSE NULL END) CLT_PRMS_BRKN_FLG
+                FROM
+                    CLT_PRMS_DTL CPD_2
+                WHERE
+                        CPD_2.EZCANCELFLAG = '0'
+                    AND CPD_2.GLBL_CMPY_CD = #glblCmpyCd#
+                    AND CPD_2.CLT_PRMS_STS_CD NOT IN ('02', '03')
+                    AND CPD_2.CLT_ACCT_CD = CPD_SUB.CLT_ACCT_CD
+             ) CLT_PRMS_BRKN_FLG
+        FROM
+            (
+                SELECT
+                     CPD.CLT_ACCT_CD
+                    ,CPD.CLT_PRMS_CRAT_DT
+                    ,CPD.CLT_PRMS_DT
+                    <!-- START 2017/01/19 QC#16808 MOD -->
+                    ,ROW_NUMBER() OVER(PARTITION BY CPD.CLT_ACCT_CD ORDER BY CPD.CLT_PRMS_CRAT_DT, CPD.CLT_PRMS_DT) PRMS_ROW_NUMBER
+                    <!-- END 2017/01/19 QC#16808 MOD -->
+                FROM
+                    CLT_PRMS_DTL CPD
+                WHERE
+                        CPD.EZCANCELFLAG = '0'
+                    AND CPD.GLBL_CMPY_CD = #glblCmpyCd#
+                    AND CPD.CLT_PRMS_STS_CD NOT IN ('02', '03')
+                    <isNotNull property="dsAcctNumList">
+                    <iterate property="dsAcctNumList" var="dsAcctNum[]" open="AND CPD.CLT_ACCT_CD IN (" close=")" conjunction=",">
+                    #dsAcctNum[]#
+                    </iterate>
+                    </isNotNull>
+            ) CPD_SUB
+        WHERE
+            <!-- START 2017/01/19 QC#16808 MOD -->
+            CPD_SUB.PRMS_ROW_NUMBER = 1
+            <!-- END 2017/01/19 QC#16808 MOD -->
+     )
+<!-- START 2019/10/23 S.Takami [QC#53536,DEL] -->
+<!--     ,CTAC_INFO AS ( -->
+<!--         SELECT -->
+<!--              CTAC.SELL_TO_CUST_CD -->
+<!--             ,CTAC.CTAC_PSN_FIRST_NM -->
+<!--             ,CTAC.CTAC_PSN_LAST_NM -->
+<!--             ,CTAC.DS_CTAC_PNT_VAL_TXT_P -->
+<!--             ,CTAC.DS_CTAC_PNT_VAL_TXT_M -->
+<!--         FROM -->
+<!--             ( -->
+<!--                 SELECT -->
+<!--                      STC.SELL_TO_CUST_CD -->
+<!--                     ,CP.CTAC_PSN_FIRST_NM -->
+<!--                     ,CP.CTAC_PSN_LAST_NM -->
+<!--                     ,( -->
+<!--                         SELECT -->
+<!--                             DCP_1.DS_CTAC_PNT_VAL_TXT -->
+<!--                         FROM -->
+<!--                             DS_CTAC_PNT DCP_1 -->
+<!--                         WHERE -->
+<!--                                 DCP_1.EZCANCELFLAG = '0' -->
+<!--                             AND DCP_1.GLBL_CMPY_CD = #glblCmpyCd# -->
+<!--                             AND DCP_1.DS_CTAC_PNT_PK = ( -->
+<!--                                     SELECT -->
+<!--                                         MAX(DCP_MAX_1.DS_CTAC_PNT_PK) -->
+<!--                                     FROM -->
+<!--                                         DS_CTAC_PNT DCP_MAX_1 -->
+<!--                                     WHERE -->
+<!--                                             DCP_MAX_1.GLBL_CMPY_CD      = #glblCmpyCd# -->
+<!--                                         AND DCP_MAX_1.EZCANCELFLAG      = '0' -->
+<!--                                         AND DCP_MAX_1.CTAC_PSN_PK       = CP.CTAC_PSN_PK -->
+<!--                                         AND DCP_MAX_1.DS_CTAC_PNT_TP_CD = '02' -->
+<!--                                 ) -->
+<!--                      ) AS DS_CTAC_PNT_VAL_TXT_P -->
+<!--                     ,( -->
+<!--                         SELECT -->
+<!--                             DCP_2.DS_CTAC_PNT_VAL_TXT -->
+<!--                         FROM -->
+<!--                             DS_CTAC_PNT DCP_2 -->
+<!--                         WHERE -->
+<!--                                 DCP_2.EZCANCELFLAG = '0' -->
+<!--                             AND DCP_2.GLBL_CMPY_CD = #glblCmpyCd# -->
+<!--                             AND DCP_2.DS_CTAC_PNT_PK = ( -->
+<!--                                     SELECT -->
+<!--                                         MAX(DCP_MAX_2.DS_CTAC_PNT_PK) -->
+<!--                                     FROM -->
+<!--                                         DS_CTAC_PNT DCP_MAX_2 -->
+<!--                                     WHERE -->
+<!--                                             DCP_MAX_2.GLBL_CMPY_CD      = #glblCmpyCd# -->
+<!--                                         AND DCP_MAX_2.EZCANCELFLAG      = '0' -->
+<!--                                         AND DCP_MAX_2.CTAC_PSN_PK       = CP.CTAC_PSN_PK -->
+<!--                                         AND DCP_MAX_2.DS_CTAC_PNT_TP_CD = '04' -->
+<!--                                 ) -->
+<!--                          ) AS DS_CTAC_PNT_VAL_TXT_M -->
+<!--                     ,RANK() OVER(PARTITION BY STC.SELL_TO_CUST_CD ORDER BY DCPR.DS_PRIM_LOC_FLG DESC, CT.CTAC_TP_SORT_NUM, CP.CTAC_PSN_PK) AS RANK_SORT -->
+<!--                 FROM -->
+<!--                      SELL_TO_CUST     STC -->
+<!--                     ,DS_CTAC_PSN_RELN DCPR -->
+<!--                     ,CTAC_PSN         CP -->
+<!--                     ,CTAC_TP          CT -->
+<!--                     <isNull property="dsAcctNumList"> -->
+<!--                     ,STC_TARGET           TARGET -->
+<!--                     </isNull> -->
+<!--                 WHERE -->
+<!--                         STC.GLBL_CMPY_CD       = #glblCmpyCd# -->
+<!--                     AND STC.GLBL_CMPY_CD       = DCPR.GLBL_CMPY_CD -->
+<!--                     AND STC.SELL_TO_CUST_CD    = DCPR.DS_ACCT_NUM -->
+<!--                     AND DCPR.EFF_FROM_DT     &lt;= #salesDt# -->
+<!--                     AND NVL(DCPR.EFF_THRU_DT, #maxDt#) &gt;= #salesDt# -->
+<!--                     AND DCPR.GLBL_CMPY_CD      = CP.GLBL_CMPY_CD -->
+<!--                     AND DCPR.CTAC_PSN_PK       = CP.CTAC_PSN_PK -->
+<!--                     AND CP.CTAC_PSN_ACTV_FLG   = 'Y' -->
+<!--                     AND DCPR.CTAC_TP_CD          IN ('AP','CR_CLT') -->
+<!--                     AND DCPR.GLBL_CMPY_CD      = CT.GLBL_CMPY_CD -->
+<!--                     AND DCPR.CTAC_TP_CD        = CT.CTAC_TP_CD -->
+<!--                     AND STC.EZCANCELFLAG       = '0' -->
+<!--                     AND DCPR.EZCANCELFLAG      = '0' -->
+<!--                     AND CP.EZCANCELFLAG        = '0' -->
+<!--                     AND CT.EZCANCELFLAG        = '0' -->
+<!--                     <isNull property="dsAcctNumList"> -->
+<!--                     AND TARGET.DS_ACCT_NUM     = STC.SELL_TO_CUST_CD -->
+<!--                     </isNull> -->
+<!--                     <isNotNull property="dsAcctNumList"> -->
+<!--                     <iterate property="dsAcctNumList" var="dsAcctNum[]" open="AND STC.SELL_TO_CUST_CD IN (" close=")" conjunction=","> -->
+<!--                     #dsAcctNum[]# -->
+<!--                     </iterate> -->
+<!--                     </isNotNull> -->
+<!--                     <isNotNull property="cMsg.dsAcctNm_H"> -->
+<!--                     AND UPPER(STC.DS_ACCT_NM) LIKE #cMsg.dsAcctNm_H# -->
+<!--                     </isNotNull> -->
+<!--             ) CTAC -->
+<!--         WHERE -->
+<!--             CTAC.RANK_SORT = 1 -->
+<!--      ) -->
+<!-- END 2019/10/23 S.Takami [QC#53536,DEL] -->
+    ,NOTE AS (
+        SELECT
+             CND.CLT_ACCT_CD
+            ,CND.CLT_HDR_NOTE_TXT
+        FROM
+             CLT_NOTE_HDR CND
+            <isNull property="dsAcctNumList">
+            ,STC_TARGET       TARGET
+            </isNull>
+        WHERE
+                CND.GLBL_CMPY_CD   = #glblCmpyCd#
+            AND CND.CLT_ACCT_TP_CD = #cltAcctTpCd#
+            <isNotNull property="dsAcctNumList">
+            <iterate property="dsAcctNumList" var="dsAcctNum[]" open="AND CND.CLT_ACCT_CD IN (" close=")" conjunction=",">
+            #dsAcctNum[]#
+            </iterate>
+            </isNotNull>
+            <isNull property="dsAcctNumList">
+            AND TARGET.DS_ACCT_NUM = CND.CLT_ACCT_CD
+            </isNull>
+            AND CND.EZCANCELFLAG   = '0'
+    )
+    <!-- START 2019/10/23 S.Takami [QC#53536,ADD] -->
+    , CP_FOR_DSO AS (
+        SELECT
+             CP.CLT_PTFO_PK
+            ,CP.CLT_PTFO_NM
+            ,CP.CLT_PSN_CD
+            ,CP.CLT_PSN_NM
+        FROM
+            CLT_PTFO CP
+        WHERE
+                CP.GLBL_CMPY_CD = #glblCmpyCd# 
+            <isEqual property="cMsg.cltDispTpCd_H" compareValue="01">
+            AND CP.CLT_PSN_CD   = #userId#
+            </isEqual>
+            <isNotEqual property="cMsg.cltDispTpCd_H" compareValue="01">
+            <isNotNull property="cltPsnCdList">
+                <iterate property="cltPsnCdList" var="cltPsnCd[]" open="AND CP.CLT_PSN_CD IN (" close=")" conjunction=",">
+                #cltPsnCd[]#
+                </iterate>
+            </isNotNull>
+            </isNotEqual>
+            <isNotNull property="cMsg.cltPtfoNm_H">
+            AND UPPER(CP.CLT_PTFO_NM) LIKE #cMsg.cltPtfoNm_H#
+            </isNotNull>
+            <isNotNull property="cMsg.cltPsnNm_H1">
+            AND UPPER(CP.CLT_PSN_NM)  LIKE #cMsg.cltPsnNm_H1#
+            </isNotNull>
+            <isEqual property="useAcctForDso" compareValue="Y">
+            AND EXISTS (
+                SELECT
+                    1
+                FROM
+                    CLT_PTFO CP2
+                    ,SELL_TO_CUST STC
+                WHERE
+                    CP.GLBL_CMPY_CD = CP2.GLBL_CMPY_CD
+                    AND CP.CLT_PSN_CD = CP2.CLT_PSN_CD
+                    AND CP2.EZCANCELFLAG = '0'
+                    AND CP2.GLBL_CMPY_CD = STC.GLBL_CMPY_CD
+                    AND CP2.CLT_PTFO_PK = STC.CLT_PTFO_PK
+                    <isNotNull property="dsAcctNumList">
+                    <iterate property="dsAcctNumList" var="dsAcctNum[]" open="AND STC.SELL_TO_CUST_CD IN (" close=")" conjunction=",">
+                    #dsAcctNum[]#
+                    </iterate>
+                    </isNotNull>
+                    <isNotNull property="cMsg.dsAcctNm_H">
+                    AND UPPER(STC.DS_ACCT_NM) LIKE #cMsg.dsAcctNm_H#
+                    </isNotNull>
+                    AND STC.EZCANCELFLAG = '0'
+            )
+            </isEqual>
+            AND CP.EZCANCELFLAG = '0'
+     ) 
+    <!-- END 2019/10/23 S.Takami [QC#53536,ADD] -->
+    <!-- START 2019/10/23 S.Takami [QC#53536,DEL] -->
+<!--     ,CLT_DSO AS ( -->
+<!--                     SELECT -->
+<!--                          CLT_PSN_CD -->
+<!--                         ,CASE -->
+<!--                             WHEN NVL(DEAL_ORIG_GRS_AMT, 0) = 0 THEN 0 -->
+<!--                             ELSE ROUND((NVL(DEAL_RMNG_BAL_GRS_AMT, 0)) / (DEAL_ORIG_GRS_AMT * 6) * 182.5, 0) END AS DSO_AMT -->
+<!--                     FROM -->
+<!--                         ( -->
+<!--                             SELECT -->
+<!--                                  CLT_PSN_CD -->
+<!--                                 ,SUM(DEAL_RMNG_BAL_GRS_AMT)                                          AS DEAL_RMNG_BAL_GRS_AMT -->
+<!--                                 ,SUM(DEAL_ORIG_GRS_AMT)                                              AS DEAL_ORIG_GRS_AMT -->
+<!--                             FROM -->
+<!--                                 ( -->
+<!--                                     SELECT -->
+<!--                                          CASE WHEN BTC.CLT_PSN_CD IS NULL THEN STC.CLT_PSN_CD ELSE BTC.CLT_PSN_CD END AS CLT_PSN_CD -->
+<!--                                         ,CASE -->
+<!--                                             WHEN -->
+<!--                                                     ATB.AR_CASH_APPLY_STS_CD IN (#applyStsU#, #applyStsP#) -->
+<!--                                                 AND ATB.AR_TRX_TP_CD &lt;&gt; #arTrxTpCdReceipt# -->
+<!--                                             THEN NVL(ATB.DEAL_RMNG_BAL_GRS_AMT, 0) ELSE 0 END AS DEAL_RMNG_BAL_GRS_AMT -->
+<!--                                         ,CASE -->
+<!--                                             WHEN -->
+<!--                                                     TO_CHAR(ADD_MONTHS(TO_DATE(TO_CHAR((TO_DATE(#salesDt#,'YYYYMMDD')),'YYYYMM') || '01', 'YYYYMMDD'),-1), 'YYYYMMDD') &lt;= TO_CHAR(TO_DATE(ATB.GL_DT,'YYYYMMDD'), 'YYYYMMDD') -->
+<!--                                                 AND TO_CHAR(TO_DATE(ATB.GL_DT,'YYYYMMDD'), 'YYYYMMDD') &lt;= TO_CHAR(ADD_MONTHS(LAST_DAY(TO_DATE(#salesDt#,'YYYYMMDD')),-1), 'YYYYMMDD') -->
+<!--                                                 AND ATB.AR_TRX_TP_CD IN (#invTpCd#, #crmTpCd#) -->
+<!--                                             THEN NVL(ATB.DEAL_ORIG_GRS_AMT, 0) ELSE 0 END DEAL_ORIG_GRS_AMT -->
+<!--                                     FROM -->
+<!--                                          AR_TRX_BAL      ATB -->
+<!--                                         ,( -->
+<!--                                             SELECT -->
+<!--                                                   CP.CLT_PSN_CD -->
+<!--                                                  ,STC.SELL_TO_CUST_CD -->
+<!--                                             FROM -->
+<!--                                                  CLT_PTFO        CP -->
+<!--                                                 ,SELL_TO_CUST    STC -->
+<!--                                                 <isNull property="cltPsnCdList"> -->
+<!--                                                     <isNull property="cMsg.cltPsnNm_H1"> -->
+<!--                                                         <isNotEqual property="cMsg.cltDispTpCd_H" compareValue="01"> -->
+<!--                                                 ,CP_TARGET          TARGET -->
+<!--                                                         </isNotEqual> -->
+<!--                                                     </isNull> -->
+<!--                                                 </isNull> -->
+<!--                                             WHERE -->
+<!--                                                     CP.GLBL_CMPY_CD          = #glblCmpyCd# -->
+<!--                                                 AND CP.EZCANCELFLAG          = '0' -->
+<!--                                                 AND CP.GLBL_CMPY_CD          = STC.GLBL_CMPY_CD -->
+<!--                                                 AND CP.CLT_PTFO_PK           = STC.CLT_PTFO_PK -->
+<!--                                                 AND STC.EZCANCELFLAG         = '0' -->
+<!--                                                 <isNull property="cltPsnCdList"> -->
+<!--                                                     <isNull property="cMsg.cltPsnNm_H1"> -->
+<!--                                                         <isNotEqual property="cMsg.cltDispTpCd_H" compareValue="01"> -->
+<!--                                                 AND TARGET.CLT_PSN_CD        = CP.CLT_PSN_CD -->
+<!--                                                         </isNotEqual> -->
+<!--                                                     </isNull> -->
+<!--                                                 </isNull> -->
+<!--                                                 <isNotNull property="cMsg.cltPsnNm_H1"> -->
+<!--                                                 AND UPPER(CP.CLT_PSN_NM)  LIKE #cMsg.cltPsnNm_H1# -->
+<!--                                                 </isNotNull> -->
+<!--                                                 <isEqual property="cMsg.cltDispTpCd_H" compareValue="01"> -->
+<!--                                                 AND CP.CLT_PSN_CD   = #userId# -->
+<!--                                                 </isEqual> -->
+<!--                                                 <isNotEqual property="cMsg.cltDispTpCd_H" compareValue="01"> -->
+<!--                                                     <isNotNull property="cltPsnCdList"> -->
+<!--                                                     <iterate property="cltPsnCdList" var="cltPsnCd[]" open="AND CP.CLT_PSN_CD IN (" close=")" conjunction=","> -->
+<!--                                                     #cltPsnCd[]# -->
+<!--                                                     </iterate> -->
+<!--                                                     </isNotNull> -->
+<!--                                                 </isNotEqual> -->
+<!--                                                 <isNotNull property="cMsg.cltPtfoNm_H"> -->
+<!--                                                 AND UPPER(CP.CLT_PTFO_NM) LIKE #cMsg.cltPtfoNm_H# -->
+<!--                                                 </isNotNull> -->
+<!--                                          ) STC -->
+<!--                                         ,( -->
+<!--                                             SELECT -->
+<!--                                                   CP.CLT_PSN_CD -->
+<!--                                                  ,BTC.BILL_TO_CUST_CD -->
+<!--                                             FROM -->
+<!--                                                  CLT_PTFO        CP -->
+<!--                                                 ,BILL_TO_CUST    BTC -->
+<!--                                                 <isNull property="cltPsnCdList"> -->
+<!--                                                     <isNull property="cMsg.cltPsnNm_H1"> -->
+<!--                                                         <isNotEqual property="cMsg.cltDispTpCd_H" compareValue="01"> -->
+<!--                                                 ,CP_TARGET          TARGET -->
+<!--                                                         </isNotEqual> -->
+<!--                                                     </isNull> -->
+<!--                                                 </isNull> -->
+<!--                                             WHERE -->
+<!--                                                     CP.GLBL_CMPY_CD          = #glblCmpyCd# -->
+<!--                                                 AND CP.EZCANCELFLAG          = '0' -->
+<!--                                                 AND CP.GLBL_CMPY_CD          = BTC.GLBL_CMPY_CD -->
+<!--                                                 AND CP.CLT_PTFO_PK           = BTC.CLT_PTFO_PK -->
+<!--                                                 AND BTC.EZCANCELFLAG         = '0' -->
+<!--                                                 <isNull property="cltPsnCdList"> -->
+<!--                                                     <isNull property="cMsg.cltPsnNm_H1"> -->
+<!--                                                         <isNotEqual property="cMsg.cltDispTpCd_H" compareValue="01"> -->
+<!--                                                 AND TARGET.CLT_PSN_CD        = CP.CLT_PSN_CD -->
+<!--                                                         </isNotEqual> -->
+<!--                                                     </isNull> -->
+<!--                                                 </isNull> -->
+<!--                                                 <isNotNull property="cMsg.cltPsnNm_H1"> -->
+<!--                                                 AND UPPER(CP.CLT_PSN_NM)  LIKE #cMsg.cltPsnNm_H1# -->
+<!--                                                 </isNotNull> -->
+<!--                                                 <isEqual property="cMsg.cltDispTpCd_H" compareValue="01"> -->
+<!--                                                 AND CP.CLT_PSN_CD   = #userId# -->
+<!--                                                 </isEqual> -->
+<!--                                                 <isNotEqual property="cMsg.cltDispTpCd_H" compareValue="01"> -->
+<!--                                                     <isNotNull property="cltPsnCdList"> -->
+<!--                                                     <iterate property="cltPsnCdList" var="cltPsnCd[]" open="AND CP.CLT_PSN_CD IN (" close=")" conjunction=","> -->
+<!--                                                     #cltPsnCd[]# -->
+<!--                                                     </iterate> -->
+<!--                                                     </isNotNull> -->
+<!--                                                 </isNotEqual> -->
+<!--                                                 <isNotNull property="cMsg.cltPtfoNm_H"> -->
+<!--                                                 AND UPPER(CP.CLT_PTFO_NM) LIKE #cMsg.cltPtfoNm_H# -->
+<!--                                                 </isNotNull> -->
+<!--                                          ) BTC -->
+<!--                                     WHERE -->
+<!--                                             ATB.GLBL_CMPY_CD         = #glblCmpyCd# -->
+<!--                                         AND ATB.BILL_TO_CUST_ACCT_CD = STC.SELL_TO_CUST_CD -->
+<!--                                         AND ATB.BILL_TO_CUST_CD      = BTC.BILL_TO_CUST_CD(+) -->
+<!--                                         AND ATB.EZCANCELFLAG         = '0' -->
+<!--                                 ) -->
+<!--                                 GROUP BY CLT_PSN_CD -->
+<!--                         ) -->
+<!--     ) -->
+    <!-- END 2019/10/23 S.Takami [QC#53536,DEL] -->
+    ,NOTE_DTL AS (
+        SELECT
+             CND.CLT_ACCT_CD
+            ,TO_CHAR (TO_TIMESTAMP (MAX(CND.CRAT_TS), 'YYYYMMDDHH24MISSFF3'), 'MM/DD/YYYY HH24:MI:SS') AS CRAT_TS_DPLY_TXT
+        FROM
+             CLT_NOTE_DTL CND
+            <isNull property="dsAcctNumList">
+            ,STC_TARGET       TARGET
+            </isNull>
+        WHERE
+                CND.GLBL_CMPY_CD   = #glblCmpyCd#
+            AND CND.CLT_ACCT_TP_CD = #cltAcctTpCd#
+            <isNotNull property="dsAcctNumList">
+            <iterate property="dsAcctNumList" var="dsAcctNum[]" open="AND CND.CLT_ACCT_CD IN (" close=")" conjunction=",">
+            #dsAcctNum[]#
+            </iterate>
+            </isNotNull>
+            <isNull property="dsAcctNumList">
+            AND TARGET.DS_ACCT_NUM = CND.CLT_ACCT_CD
+            </isNull>
+            AND CND.EZCANCELFLAG   = '0'
+       GROUP BY CND.CLT_ACCT_CD
+    )
+    </isNotEqual>
+    SELECT
+         'N' XX_CHK_BOX_A1
+        ,DS_ACCT_NUM_A1
+        ,DS_ACCT_NM_A1
+        ,PMT_TERM_DESC_TXT_A1
+        ,DSO_AMT_A1
+        ,CLT_PSN_NM_A1
+        ,CLT_PTFO_NM_A1
+        ,DSO_AMT_A2
+        ,OVD_BAL_AMT_A1
+        ,NET_AMT_A1
+        ,DEAL_CLT_DSPT_AMT_A1
+        ,DEAL_CLT_PRMS_AMT_A1
+        ,CLT_PRMS_CRAT_DT_A1
+        ,CLT_PRMS_DT_A1
+        ,CLT_PRMS_BRKN_FLG_A1
+        ,XX_SCR_ITEM_30_TXT_A1
+        ,CLT_STRGY_NM_A1
+        ,CLT_WRK_ITEM_NM_A1
+        ,RCPT_DT_A1
+        ,DEAL_RCPT_AMT_A1
+        ,CTAC_NM
+        ,CTAC_TEL_NUM
+        ,CTAC_EML_ADDR
+        ,CLT_HDR_NOTE_TXT
+        ,CRAT_TS_DPLY_TXT
+    FROM
+        (
+            SELECT
+                 TARGET_DAC.DS_ACCT_NUM                                                                                        AS DS_ACCT_NUM_A1
+                ,TARGET_DAC.DS_ACCT_NM                                                                                         AS DS_ACCT_NM_A1
+                ,PTCD.PMT_TERM_CASH_DISC_DESC_TXT                                                                              AS PMT_TERM_DESC_TXT_A1
+                ,CASE
+                    WHEN NVL(TARGET_DAC.LAST_MTH_SLS, 0) = 0 THEN 0
+                    ELSE ROUND((NVL(TARGET_DAC.AR_RMNG, 0)) / (TARGET_DAC.LAST_MTH_SLS * 6) * 182.5, 0)
+                 END                                                                                                           AS DSO_AMT_A1
+                ,TARGET_DAC.CLT_PSN_NM                                                                                         AS CLT_PSN_NM_A1
+                ,TARGET_DAC.CLT_PTFO_NM                                                                                        AS CLT_PTFO_NM_A1
+                <isNotEqual property="cMsg.xxModeCd_H" compareValue="01">
+                ,CLT_DSO.DSO_AMT                                                                                               AS DSO_AMT_A2
+                </isNotEqual>
+                <isEqual property="cMsg.xxModeCd_H" compareValue="01">
+                ,NULL                                                                                                          AS DSO_AMT_A2
+                </isEqual>
+                ,TARGET_DAC.TIL90_DUE + TARGET_DAC.OVR90_DUE - TARGET_DAC.CRM_AMT_OVRDUE                                       AS OVD_BAL_AMT_A1
+                ,TARGET_DAC.CURR_DUE  + TARGET_DAC.TIL90_DUE + TARGET_DAC.OVR90_DUE                                            AS NET_AMT_A1
+                ,CASE WHEN TARGET_DAC.DSPT_AMT = 0 THEN NULL ELSE TARGET_DAC.DSPT_AMT END                                      AS DEAL_CLT_DSPT_AMT_A1
+                ,CASE WHEN (TARGET_DAC.TIL90_DUE + TARGET_DAC.OVR90_DUE - TARGET_DAC.CRM_AMT_OVRDUE) &gt; 0 THEN 'Past Due' ELSE 'Current' END             AS XX_SCR_ITEM_30_TXT_A1
+                <isNotEqual property="cMsg.xxModeCd_H" compareValue="01">
+                ,INLINE_PFAC.PRMS_AMT                                                                                          AS DEAL_CLT_PRMS_AMT_A1
+                ,INLINE_PFAC.PRMS_CRAT_DT                                                                                      AS CLT_PRMS_CRAT_DT_A1
+                ,INLINE_PFAC.PRMS_DT                                                                                           AS CLT_PRMS_DT_A1
+                ,CASE WHEN INLINE_PFAC.CLT_PRMS_BRKN_FLG > 0 THEN 'Y' ELSE 'N' END                                             AS CLT_PRMS_BRKN_FLG_A1
+                ,CS.CLT_STRGY_NM                                                                                               AS CLT_STRGY_NM_A1
+                ,INLINE_STRGY.CLT_WRK_ITEM_NM                                                                                  AS CLT_WRK_ITEM_NM_A1
+                </isNotEqual>
+                <isEqual property="cMsg.xxModeCd_H" compareValue="01">
+                ,NULL                                                                                                          AS DEAL_CLT_PRMS_AMT_A1
+                ,NULL                                                                                                          AS CLT_PRMS_CRAT_DT_A1
+                ,NULL                                                                                                          AS CLT_PRMS_DT_A1
+                ,NULL                                                                                                          AS CLT_PRMS_BRKN_FLG_A1
+                ,NULL                                                                                                          AS CLT_STRGY_NM_A1
+                ,NULL                                                                                                          AS CLT_WRK_ITEM_NM_A1
+                </isEqual>
+                ,(
+                    SELECT
+                        ATB.AR_TRX_DT
+                    FROM
+                        AR_TRX_BAL ATB
+                    WHERE
+                            ATB.EZCANCELFLAG = '0'
+                        AND ATB.GLBL_CMPY_CD = #glblCmpyCd#
+                        AND ATB.AR_TRX_BAL_PK = (
+                                SELECT
+                                    MAX(ATB_MAX.AR_TRX_BAL_PK)
+                                FROM
+                                    AR_TRX_BAL ATB_MAX
+                                WHERE
+                                        ATB_MAX.EZCANCELFLAG = '0'
+                                    AND ATB_MAX.GLBL_CMPY_CD = #glblCmpyCd#
+                                    AND ATB_MAX.AR_TRX_TP_CD = #arTrxTpCdReceipt#
+                                    AND ATB_MAX.DEAL_ORIG_GRS_AMT &lt;&gt; '0'
+                                    AND ATB_MAX.BILL_TO_CUST_ACCT_CD = TARGET_DAC.DS_ACCT_NUM
+                            )
+                 )                                                                                                             AS RCPT_DT_A1
+                ,(
+                    SELECT
+                        NVL(ATB.DEAL_ORIG_GRS_AMT,0)
+                    FROM
+                        AR_TRX_BAL ATB
+                    WHERE
+                            ATB.EZCANCELFLAG = '0'
+                        AND ATB.GLBL_CMPY_CD = #glblCmpyCd#
+                        AND ATB.AR_TRX_BAL_PK = (
+                                SELECT
+                                    MAX(ATB_MAX.AR_TRX_BAL_PK)
+                                FROM
+                                    AR_TRX_BAL ATB_MAX
+                                WHERE
+                                        ATB_MAX.EZCANCELFLAG = '0'
+                                    AND ATB_MAX.GLBL_CMPY_CD = #glblCmpyCd#
+                                    AND ATB_MAX.AR_TRX_TP_CD = #arTrxTpCdReceipt#
+                                    AND ATB_MAX.DEAL_ORIG_GRS_AMT &lt;&gt; '0'
+                                    AND ATB_MAX.BILL_TO_CUST_ACCT_CD = TARGET_DAC.DS_ACCT_NUM
+                            )
+                 )                                                                                                             AS DEAL_RCPT_AMT_A1
+                <isNotEqual property="cMsg.xxModeCd_H" compareValue="01">
+                ,CASE
+                    WHEN INLINE_CTAC.SELL_TO_CUST_CD IS NULL
+                    THEN ''
+                    ELSE INLINE_CTAC.CTAC_PSN_FIRST_NM || ',' || INLINE_CTAC.CTAC_PSN_LAST_NM END                              AS CTAC_NM
+                ,INLINE_CTAC.DS_CTAC_PNT_VAL_TXT_P                                                                             AS CTAC_TEL_NUM
+                ,INLINE_CTAC.DS_CTAC_PNT_VAL_TXT_M                                                                             AS CTAC_EML_ADDR
+                ,INLINE_NOTE.CLT_HDR_NOTE_TXT                                                                                  AS CLT_HDR_NOTE_TXT
+                ,INLINE_NOTE_DTL.CRAT_TS_DPLY_TXT                                                                              AS CRAT_TS_DPLY_TXT
+                </isNotEqual>
+                <isEqual property="cMsg.xxModeCd_H" compareValue="01">
+                ,NULL                                                                                                          AS CTAC_NM
+                ,NULL                                                                                                          AS CTAC_TEL_NUM
+                ,NULL                                                                                                          AS CTAC_EML_ADDR
+                ,NULL                                                                                                          AS CLT_HDR_NOTE_TXT
+                ,NULL                                                                                                          AS CRAT_TS_DPLY_TXT
+                </isEqual>
+            FROM
+                 TARGET             TARGET_DAC
+                ,DS_ACCT_CR_PRFL    DACP
+                ,PMT_TERM_CASH_DISC PTCD
+                <isNotEqual property="cMsg.xxModeCd_H" compareValue="01">
+                ,STRGY              INLINE_STRGY
+                ,PFAC               INLINE_PFAC
+                <!-- START 2019/10/23 S.Takami [QC#53536,MOD] -->
+                <!-- ,CTAC_INFO          INLINE_CTAC -->
+                ,(
+                    SELECT
+                         CTAC.SELL_TO_CUST_CD
+                        ,CTAC.CTAC_PSN_FIRST_NM
+                        ,CTAC.CTAC_PSN_LAST_NM
+                        ,CTAC.DS_CTAC_PNT_VAL_TXT_P
+                        ,CTAC.DS_CTAC_PNT_VAL_TXT_M
+                    FROM
+                        (
+                            SELECT
+                                 STC.DS_ACCT_NUM SELL_TO_CUST_CD
+                                ,CP.CTAC_PSN_FIRST_NM
+                                ,CP.CTAC_PSN_LAST_NM
+                                ,(
+                                    SELECT
+                                        DCP_1.DS_CTAC_PNT_VAL_TXT
+                                    FROM
+                                        DS_CTAC_PNT DCP_1
+                                    WHERE
+                                            DCP_1.EZCANCELFLAG = '0'
+                                        AND DCP_1.GLBL_CMPY_CD = #glblCmpyCd#
+                                        AND DCP_1.DS_CTAC_PNT_PK = (
+                                                SELECT
+                                                    MAX(DCP_MAX_1.DS_CTAC_PNT_PK)
+                                                FROM
+                                                    DS_CTAC_PNT DCP_MAX_1
+                                                WHERE
+                                                        DCP_MAX_1.GLBL_CMPY_CD      = #glblCmpyCd#
+                                                    AND DCP_MAX_1.EZCANCELFLAG      = '0'
+                                                    AND DCP_MAX_1.CTAC_PSN_PK       = CP.CTAC_PSN_PK
+                                                    AND DCP_MAX_1.DS_CTAC_PNT_TP_CD = '02'
+                                            )
+                                 ) AS DS_CTAC_PNT_VAL_TXT_P
+                                ,(
+                                    SELECT
+                                        DCP_2.DS_CTAC_PNT_VAL_TXT
+                                    FROM
+                                        DS_CTAC_PNT DCP_2
+                                    WHERE
+                                            DCP_2.EZCANCELFLAG = '0'
+                                        AND DCP_2.GLBL_CMPY_CD = #glblCmpyCd#
+                                        AND DCP_2.DS_CTAC_PNT_PK = (
+                                                SELECT
+                                                    MAX(DCP_MAX_2.DS_CTAC_PNT_PK)
+                                                FROM
+                                                    DS_CTAC_PNT DCP_MAX_2
+                                                WHERE
+                                                        DCP_MAX_2.GLBL_CMPY_CD      = #glblCmpyCd#
+                                                    AND DCP_MAX_2.EZCANCELFLAG      = '0'
+                                                    AND DCP_MAX_2.CTAC_PSN_PK       = CP.CTAC_PSN_PK
+                                                    AND DCP_MAX_2.DS_CTAC_PNT_TP_CD = '04'
+                                            )
+                                     ) AS DS_CTAC_PNT_VAL_TXT_M
+                                ,RANK() OVER(PARTITION BY STC.DS_ACCT_NUM ORDER BY DCPR.DS_PRIM_LOC_FLG DESC, CT.CTAC_TP_SORT_NUM, CP.CTAC_PSN_PK) AS RANK_SORT
+                            FROM
+                                 STC_TARGET       STC
+                                ,DS_CTAC_PSN_RELN DCPR
+                                ,CTAC_PSN         CP
+                                ,CTAC_TP          CT
+                            WHERE
+                                    STC.DS_ACCT_NUM        = DCPR.DS_ACCT_NUM
+                                AND DCPR.GLBL_CMPY_CD       = #glblCmpyCd#
+                                AND DCPR.EFF_FROM_DT     &lt;= #salesDt#
+                                AND NVL(DCPR.EFF_THRU_DT, #maxDt#) &gt;= #salesDt#
+                                AND DCPR.GLBL_CMPY_CD      = CP.GLBL_CMPY_CD
+                                AND DCPR.CTAC_PSN_PK       = CP.CTAC_PSN_PK
+                                AND CP.CTAC_PSN_ACTV_FLG   = 'Y'
+                                AND DCPR.CTAC_TP_CD          IN ('AP','CR_CLT')
+                                AND DCPR.GLBL_CMPY_CD      = CT.GLBL_CMPY_CD
+                                AND DCPR.CTAC_TP_CD        = CT.CTAC_TP_CD
+                                AND DCPR.EZCANCELFLAG      = '0'
+                                AND CP.EZCANCELFLAG        = '0'
+                                AND CT.EZCANCELFLAG        = '0'
+                        ) CTAC
+                    WHERE
+                        CTAC.RANK_SORT = 1
+                ) INLINE_CTAC
+                <!-- END 2019/10/23 S.Takami [QC#53536,MOD] -->
+                ,NOTE               INLINE_NOTE
+                ,NOTE_DTL           INLINE_NOTE_DTL
+                <!-- START 2019/10/23 S.Takami [QC#53536,MOD] -->
+                <!-- ,CLT_DSO            CLT_DSO -->
+                <!-- START 2019/10/25 S.Takami [QC#53536-2,MOD, without any comments] -->
+                ,(
+                    SELECT
+                        CLT_PSN_CD
+                        , CASE
+                            WHEN DEAL_ORIG_GRS_AMT = 0
+                                THEN 0
+                            ELSE ROUND(
+                                DEAL_RMNG_BAL_GRS_AMT / (DEAL_ORIG_GRS_AMT * 6) * 182.5
+                                , 0
+                            )
+                            END AS DSO_AMT
+                    FROM
+                        (
+                            SELECT
+                                CLT_PSN_CD
+                                , SUM(DEAL_RMNG_BAL_GRS_AMT) AS DEAL_RMNG_BAL_GRS_AMT
+                                , SUM(DEAL_ORIG_GRS_AMT) AS DEAL_ORIG_GRS_AMT
+                            FROM
+                                (
+                                    SELECT
+                                        CP.CLT_PSN_CD
+                                        , CASE
+                                            WHEN ATB.AR_CASH_APPLY_STS_CD IN (#applyStsU#, #applyStsP#)
+                                            AND ATB.AR_TRX_TP_CD &lt;&gt; #arTrxTpCdReceipt#
+                                                THEN ATB.DEAL_RMNG_BAL_GRS_AMT
+                                            ELSE 0
+                                            END AS DEAL_RMNG_BAL_GRS_AMT
+                                        , CASE
+                                            WHEN ATB.GL_DT BETWEEN #firstDayOfLastMonth# AND #lastDayOfLastMonth#
+                                            AND ATB.AR_TRX_TP_CD IN (#invTpCd#, #crmTpCd#)
+                                                THEN ATB.DEAL_ORIG_GRS_AMT
+                                            ELSE 0
+                                            END AS DEAL_ORIG_GRS_AMT
+                                    FROM
+                                        AR_TRX_BAL ATB
+                                        , BILL_TO_CUST BTC
+                                        , CP_FOR_DSO CP_B
+                                        , SELL_TO_CUST STC
+                                        , CP_FOR_DSO CP_S
+                                        , (SELECT DISTINCT CLT_PSN_CD FROM CP_FOR_DSO) CP 
+                                    WHERE
+                                        ATB.GLBL_CMPY_CD = #glblCmpyCd#
+                                        AND (
+                                            (
+                                                ATB.AR_CASH_APPLY_STS_CD IN (#applyStsU#, #applyStsP#)
+                                                AND ATB.AR_TRX_TP_CD &lt;&gt; #arTrxTpCdReceipt#
+                                            )
+                                            OR (
+                                                ATB.GL_DT BETWEEN #firstDayOfLastMonth# AND #lastDayOfLastMonth#
+                                                AND ATB.AR_TRX_TP_CD IN (#invTpCd#, #crmTpCd#)
+                                            )
+                                        )
+                                        AND ATB.EZCANCELFLAG = '0'
+                                        AND ATB.GLBL_CMPY_CD = BTC.GLBL_CMPY_CD(+)
+                                        AND ATB.BILL_TO_CUST_CD = BTC.BILL_TO_CUST_CD(+)
+                                        AND BTC.EZCANCELFLAG(+) = '0'
+                                        AND BTC.CLT_PTFO_PK = CP_B.CLT_PTFO_PK(+)
+                                        AND ATB.GLBL_CMPY_CD = STC.GLBL_CMPY_CD(+)
+                                        AND ATB.BILL_TO_CUST_ACCT_CD = STC.SELL_TO_CUST_CD(+)
+                                        AND STC.EZCANCELFLAG = '0'
+                                        AND STC.CLT_PTFO_PK = CP_S.CLT_PTFO_PK(+)
+                                        AND ( 
+                                            CP.CLT_PSN_CD = CP_B.CLT_PSN_CD 
+                                            OR CP.CLT_PSN_CD = CP_S.CLT_PSN_CD
+                                        )
+                                )
+                            GROUP BY
+                                CLT_PSN_CD
+                        )
+                ) CLT_DSO
+                <!-- END 2019/10/25 S.Takami [QC#53536-2,MOD, without any comments] -->
+                <!-- END 2019/10/23 S.Takami [QC#53536,MOD] -->
+                ,CLT_STRGY          CS
+                </isNotEqual>
+            WHERE
+                    DACP.GLBL_CMPY_CD(+)       = #glblCmpyCd#
+                AND DACP.EZCANCELFLAG(+)       = '0'
+                AND PTCD.GLBL_CMPY_CD(+)       = #glblCmpyCd#
+                AND PTCD.EZCANCELFLAG(+)       = '0'
+                AND TARGET_DAC.DS_ACCT_NUM     = DACP.DS_ACCT_NUM(+)
+                AND DACP.PMT_TERM_CASH_DISC_CD = PTCD.PMT_TERM_CASH_DISC_CD(+)
+                <isNotEqual property="cMsg.xxModeCd_H" compareValue="01">
+                AND TARGET_DAC.DS_ACCT_NUM     = INLINE_STRGY.CLT_ACCT_CD(+)
+                AND INLINE_STRGY.STR_RNK(+)    = 1
+                AND TARGET_DAC.DS_ACCT_NUM     = INLINE_PFAC.CLT_ACCT_CD(+)
+                </isNotEqual>
+                <isNotEqual property="cMsg.xxChkBox_H" compareValue="Y">
+                AND (TARGET_DAC.TIL90_DUE &lt;&gt; 0 OR TARGET_DAC.OVR90_DUE &lt;&gt; 0)
+                </isNotEqual>
+                <isNotEqual property="cMsg.xxModeCd_H" compareValue="01">
+                AND TARGET_DAC.DS_ACCT_NUM     = INLINE_CTAC.SELL_TO_CUST_CD(+)
+                AND TARGET_DAC.DS_ACCT_NUM     = INLINE_NOTE.CLT_ACCT_CD(+)
+                AND TARGET_DAC.DS_ACCT_NUM     = INLINE_NOTE_DTL.CLT_ACCT_CD(+)
+                AND TARGET_DAC.CLT_PSN_CD      = CLT_DSO.CLT_PSN_CD(+)
+                AND CS.GLBL_CMPY_CD(+)         = #glblCmpyCd#
+                AND INLINE_STRGY.CLT_STRGY_CD  = CS.CLT_STRGY_CD(+)
+                AND CS.EZCANCELFLAG(+)         = '0'
+                </isNotEqual>
+        ORDER BY
+             TARGET_DAC.DS_ACCT_NUM
+        )
+    <isNotNull property="rowNum">
+    WHERE
+        ROWNUM &lt;= $rowNum$
+    </isNotNull>
+    </statement>
+
+    <resultMap id="result.getCollectionSummaryList" class="NFDL0010_ASMsg">
+        <result property="xxChkBox_A1"         column="XX_CHK_BOX_A1"         javaType="EZDSStringItem"/>
+        <result property="dsAcctNum_A1"        column="DS_ACCT_NUM_A1"        javaType="EZDSStringItem"/>
+        <result property="dsAcctNm_A1"         column="DS_ACCT_NM_A1"         javaType="EZDSStringItem"/>
+        <result property="pmtTermDescTxt_A1"   column="PMT_TERM_DESC_TXT_A1"  javaType="EZDSStringItem"/>
+        <result property="dsoAmt_A1"           column="DSO_AMT_A1"            javaType="EZDSBigDecimalItem"/>
+        <result property="cltPsnNm_A1"         column="CLT_PSN_NM_A1"         javaType="EZDSStringItem"/>
+        <result property="cltPtfoNm_A1"        column="CLT_PTFO_NM_A1"        javaType="EZDSStringItem"/>
+        <result property="dsoAmt_A2"           column="DSO_AMT_A2"            javaType="EZDSBigDecimalItem"/>
+        <result property="totBalAmt_A1"        column="OVD_BAL_AMT_A1"        javaType="EZDSBigDecimalItem"/>
+        <result property="netAmt_A1"           column="NET_AMT_A1"            javaType="EZDSBigDecimalItem"/>
+        <result property="dealCltDsptAmt_A1"   column="DEAL_CLT_DSPT_AMT_A1"  javaType="EZDSBigDecimalItem"/>
+        <result property="dealCltPrmsAmt_A1"   column="DEAL_CLT_PRMS_AMT_A1"  javaType="EZDSBigDecimalItem"/>
+        <result property="cltPrmsCratDt_A1"    column="CLT_PRMS_CRAT_DT_A1"   javaType="EZDSDateItem"/>
+        <result property="cltPrmsDt_A1"        column="CLT_PRMS_DT_A1"        javaType="EZDSDateItem"/>
+        <result property="cltPrmsBrknFlg_A1"   column="CLT_PRMS_BRKN_FLG_A1"  javaType="EZDSStringItem"/>
+        <result property="xxFullNm_A1"         column="CTAC_NM"               javaType="EZDSStringItem"/>
+        <result property="dsCtacPntValTxt_AT"  column="CTAC_TEL_NUM"          javaType="EZDSStringItem"/>
+        <result property="dsCtacPntValTxt_AE"  column="CTAC_EML_ADDR"         javaType="EZDSStringItem"/>
+        <result property="cratTsDplyTxt_A1"    column="CRAT_TS_DPLY_TXT"      javaType="EZDSStringItem"/>
+        <result property="cltHdrNoteTxt_A1"    column="CLT_HDR_NOTE_TXT"      javaType="EZDSStringItem"/>
+        <result property="xxScrItem30Txt_A1"   column="XX_SCR_ITEM_30_TXT_A1" javaType="EZDSStringItem"/>
+        <result property="cltStrgyNm_A1"       column="CLT_STRGY_NM_A1"       javaType="EZDSStringItem"/>
+        <result property="cltWrkItemNm_A1"     column="CLT_WRK_ITEM_NM_A1"    javaType="EZDSStringItem"/>
+        <result property="rcptDt_A1"           column="RCPT_DT_A1"            javaType="EZDSDateItem"/>
+        <result property="dealRcptAmt_A1"      column="DEAL_RCPT_AMT_A1"      javaType="EZDSBigDecimalItem"/>
+    </resultMap>
+</sqlMap>

@@ -1,0 +1,410 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<sqlMap namespace="NFDL0080Query">
+
+    <!-- *********************************************************** -->
+    <!-- ********** Bean Definition ******************************** -->
+    <!-- *********************************************************** -->
+    <typeAlias alias="NFDL0080_ASMsg"    type="business.blap.NFDL0080.NFDL0080_ASMsg"/>
+
+    <statement id="findHeaderInfo" parameterClass="Map" resultClass="Map">
+    SELECT STC.DS_ACCT_NM
+    <!-- , DACP.CR_MGR_PSN_CD DEL 2017/01/04 [QC#16867]  -->
+         , ATB.BILL_TO_CUST_ACCT_CD
+         , ATB.BILL_TO_CUST_CD
+         , ATB.AR_TRX_NUM
+         , ATB.AR_TRX_DT
+         , ATB.AR_TRX_TP_CD
+         , ATB.CPO_ORD_NUM
+         , ATB.CUST_ISS_PO_NUM
+         , ATB.AR_TRX_BILL_FROM_DT
+         , ATB.AR_TRX_BILL_THRU_DT
+         , ATB.DEAL_ORIG_GRS_AMT
+         , ATB.DEAL_RMNG_BAL_GRS_AMT
+         , ATB.INV_DUE_DT
+         , TO_DATE(#salesDt#, 'YYYY/MM/DD') - TO_DATE(ATB.INV_DUE_DT, 'YYYY/MM/DD') AS PAST_DT_AOT
+         , ATB.AR_TRX_BAL_PK
+         , ATB.EZUPTIME
+         , ATB.EZUPTIMEZONE
+         , ATB.TOC_CD
+         , ATB.COA_PROD_CD
+         , ATB.ATT_ADJ_NUM
+         , NVL(ATB.AR_CUST_REF_NUM, ATB.AR_TRX_NUM) AS AR_CUST_REF_NUM
+         , ATB.CASH_DISC_PCT
+         , ATB.DEAL_APPLY_CASH_DISC_AMT
+      FROM AR_TRX_BAL      ATB
+         , SELL_TO_CUST    STC
+         , DS_ACCT_CR_PRFL DACP
+     WHERE ATB.GLBL_CMPY_CD         = STC.GLBL_CMPY_CD
+       AND ATB.BILL_TO_CUST_ACCT_CD = STC.SELL_TO_CUST_CD
+       AND STC.GLBL_CMPY_CD         = DACP.GLBL_CMPY_CD
+       AND STC.SELL_TO_CUST_CD      = DACP.DS_ACCT_NUM
+       AND ATB.EZCANCELFLAG         = '0'
+       AND STC.EZCANCELFLAG         = '0'
+       AND DACP.EZCANCELFLAG        = '0'
+       AND ATB.GLBL_CMPY_CD         = #glblCmpyCd#
+       AND ATB.AR_TRX_BAL_PK        = #arTrxBalPk#
+    </statement>
+
+    <statement id="findDetailData" parameterClass="Map" resultMap="result.findDetailData">
+    SELECT *
+    FROM (
+    SELECT ATB.BILL_TO_CUST_ACCT_CD
+         , ATB.BILL_TO_CUST_CD
+         , ATB.AR_TRX_NUM
+         , ATB.AR_TRX_DT
+         , ATB.AR_TRX_TP_CD
+         , ATT.AR_TRX_TP_NM
+         , ATB.CPO_ORD_NUM
+         , ATB.GRP_INV_NUM
+         , ATB.CUST_ISS_PO_NUM
+         , ATB.AR_TRX_BILL_FROM_DT
+         , ATB.AR_TRX_BILL_THRU_DT
+         , ATB.DEAL_ORIG_GRS_AMT
+         , ATB.DEAL_RMNG_BAL_GRS_AMT
+         , ATB.DEAL_APPLY_ADJ_RSVD_AMT
+         , ATB.INV_DUE_DT
+         , TO_DATE(#salesDt#, 'YYYY/MM/DD') - TO_DATE(ATB.INV_DUE_DT, 'YYYY/MM/DD') AS PAST_DT_AOT
+         , ATB.AR_TRX_BAL_PK
+         , ATB.EZUPTIME
+         , ATB.EZUPTIMEZONE
+         , ATB.TOC_CD
+         , ATB.COA_PROD_CD
+         , ATB.ATT_ADJ_NUM
+         , NVL(ATB.AR_CUST_REF_NUM, ATB.AR_TRX_NUM) AS AR_CUST_REF_NUM
+         , ATB.CASH_DISC_PCT
+         , ATB.DEAL_APPLY_CASH_DISC_AMT
+         , SIL.BLLG_PER_FROM_DT
+         , SIL.BLLG_PER_TO_DT
+
+      FROM AR_TRX_BAL ATB
+        , AR_TRX_TP ATT
+        , ( SELECT
+                SIL.SVC_INV_NUM
+              , MIN(SIL.BLLG_PER_FROM_DT) AS BLLG_PER_FROM_DT
+              , MAX(BLLG_PER_THRU_DT)     AS BLLG_PER_TO_DT
+            FROM SVC_INV_LINE SIL
+            WHERE
+                  SIL.GLBL_CMPY_CD   = #glblCmpyCd#
+              AND SIL.EZCANCELFLAG   = '0' 
+            GROUP BY SIL.SVC_INV_NUM
+           ) SIL
+     WHERE ATB.GLBL_CMPY_CD = #glblCmpyCd#
+       AND ATB.EZCANCELFLAG = '0'
+       AND ATB.GLBL_CMPY_CD = ATT.GLBL_CMPY_CD
+       AND ATB.AR_TRX_TP_CD = ATT.AR_TRX_TP_CD
+       AND ATT.EZCANCELFLAG = '0'
+       AND ATB.AR_TRX_NUM   = SIL.SVC_INV_NUM(+)
+       AND ATB.AR_TRX_TP_CD IN (#arTrxTpInv#, #arTrxTpDed#, #arTrxTpDem#)
+       AND ATB.AR_CASH_APPLY_STS_CD IN (#unApply#, #partial#)
+       AND ATB.BILL_TO_CUST_ACCT_CD = #accountNum#
+       <isNotNull property="custIssPoNum">
+       AND UPPER(ATB.CUST_ISS_PO_NUM) LIKE UPPER(#custIssPoNum#) <!-- 2019/03/25 QC#30758 Add 'UPPER' Function -->
+       </isNotNull>
+        <isNotNull property="invoices">
+            <!-- 2019/07/31 QC#52217 Mod Start -->
+<!--           AND NVL(ATB.AR_CUST_REF_NUM, ATB.AR_TRX_NUM) IN-->
+<!--            <iterate property="invoices" var="invoices[]" open="(" close=")" conjunction=",">-->
+<!--                #invoices[]#-->
+<!--            </iterate>-->
+            <iterate property="invoices" var="invoices[]" open="AND(" close=")" conjunction=" OR ">
+                NVL(ATB.AR_CUST_REF_NUM, ATB.AR_TRX_NUM) = #invoices[]#
+            </iterate>
+            <!-- 2019/07/31 QC#52217 Mod End -->
+        </isNotNull>
+        <!-- START 2022/08/10 S.Naya [QC#56154,ADD] -->
+        <isNotNull property="grpInvNum">
+            <iterate property="grpInvNum" var="grpInvNum[]" open="AND(" close=")" conjunction=" OR ">
+                ATB.GRP_INV_NUM LIKE #grpInvNum[]#
+            </iterate>
+        </isNotNull>
+        <!-- END   2022/08/10 S.Naya [QC#56154,ADD] -->
+        <isNotNull property="related">
+     UNION
+    SELECT ATB.BILL_TO_CUST_ACCT_CD
+         , ATB.BILL_TO_CUST_CD
+         , ATB.AR_TRX_NUM
+         , ATB.AR_TRX_DT
+         , ATB.AR_TRX_TP_CD
+         , ATT.AR_TRX_TP_NM
+         , ATB.CPO_ORD_NUM
+         , ATB.GRP_INV_NUM
+         , ATB.CUST_ISS_PO_NUM
+         , ATB.AR_TRX_BILL_FROM_DT
+         , ATB.AR_TRX_BILL_THRU_DT
+         , ATB.DEAL_ORIG_GRS_AMT
+         , ATB.DEAL_RMNG_BAL_GRS_AMT
+         , ATB.DEAL_APPLY_ADJ_RSVD_AMT
+         , ATB.INV_DUE_DT
+         , TO_DATE(#salesDt#, 'YYYY/MM/DD') - TO_DATE(ATB.INV_DUE_DT, 'YYYY/MM/DD') AS PAST_DT_AOT
+         , ATB.AR_TRX_BAL_PK
+         , ATB.EZUPTIME
+         , ATB.EZUPTIMEZONE
+         , ATB.TOC_CD
+         , ATB.COA_PROD_CD
+         , ATB.ATT_ADJ_NUM
+         , NVL(ATB.AR_CUST_REF_NUM, ATB.AR_TRX_NUM) AS AR_CUST_REF_NUM
+         , ATB.CASH_DISC_PCT
+         , ATB.DEAL_APPLY_CASH_DISC_AMT
+         , SIL.BLLG_PER_FROM_DT
+         , SIL.BLLG_PER_TO_DT
+      FROM AR_TRX_BAL ATB
+         , DS_ACCT_RELN DAR
+         , AR_TRX_TP ATT
+         , (
+             SELECT
+                 SIL.SVC_INV_NUM
+               , MIN(SIL.BLLG_PER_FROM_DT) AS BLLG_PER_FROM_DT
+               , MAX(BLLG_PER_THRU_DT)     AS BLLG_PER_TO_DT 
+             FROM
+                SVC_INV_LINE SIL
+             WHERE
+                   SIL.GLBL_CMPY_CD        = #glblCmpyCd#
+               AND SIL.EZCANCELFLAG        = '0' 
+             GROUP BY SIL.SVC_INV_NUM
+           ) SIL
+     WHERE ATB.GLBL_CMPY_CD = #glblCmpyCd#
+       AND ATB.EZCANCELFLAG = '0'
+       AND ATB.GLBL_CMPY_CD = ATT.GLBL_CMPY_CD
+       AND ATB.AR_TRX_TP_CD = ATT.AR_TRX_TP_CD
+       AND ATT.EZCANCELFLAG = '0'
+       AND ATB.AR_TRX_NUM   = SIL.SVC_INV_NUM(+)
+       AND ATB.AR_TRX_TP_CD IN (#arTrxTpInv#, #arTrxTpDed#, #arTrxTpDem#)
+       AND ATB.AR_CASH_APPLY_STS_CD IN (#unApply#, #partial#)
+       AND ATB.GLBL_CMPY_CD = DAR.GLBL_CMPY_CD
+       AND ATB.BILL_TO_CUST_ACCT_CD = DAR.RELN_DS_ACCT_NUM
+       AND DAR.EZCANCELFLAG = '0'
+       AND DAR.DS_ACCT_NUM = #accountNum#
+       <isNotNull property="custIssPoNum">
+       AND UPPER(ATB.CUST_ISS_PO_NUM) LIKE UPPER(#custIssPoNum#) <!-- 2019/03/25 QC#30758 Add 'UPPER' Function -->
+       </isNotNull>
+        <isNotNull property="relnAcct">
+           AND DAR.RELN_DS_ACCT_NUM = #relnAcct#
+        </isNotNull>
+       AND DAR.DS_ACCT_RELN_TP_CD = #tpRelnAcct#
+        <isNotNull property="invoices">
+           AND NVL(ATB.AR_CUST_REF_NUM, ATB.AR_TRX_NUM) IN
+            <iterate property="invoices" var="invoices[]" open="(" close=")" conjunction=",">
+                #invoices[]#
+            </iterate>
+        </isNotNull>
+        <!-- START 2022/08/10 S.Naya [QC#56154,ADD] -->
+        <isNotNull property="grpInvNum">
+            <iterate property="grpInvNum" var="grpInvNum[]" open="AND(" close=")" conjunction=" OR ">
+                ATB.GRP_INV_NUM LIKE #grpInvNum[]#
+            </iterate>
+        </isNotNull>
+        <!-- END   2022/08/10 S.Naya [QC#56154,ADD] -->
+        </isNotNull>
+      ) TRX
+     ORDER BY TRX.BILL_TO_CUST_CD
+            , TRX.AR_TRX_DT
+            , TRX.AR_TRX_NUM
+    </statement>
+
+    <resultMap id="result.findDetailData" class="NFDL0080_ASMsg">
+		<result property="billToCustAcctCd_A1"     column="BILL_TO_CUST_ACCT_CD"      javaType="EZDSStringItem"/>
+        <result property="billToCustCd_A1"         column="BILL_TO_CUST_CD"           javaType="EZDSStringItem"/>
+        <result property="arTrxNum_A1"             column="AR_TRX_NUM"                javaType="EZDSStringItem"/>
+        <result property="arTrxDt_A1"              column="AR_TRX_DT"                 javaType="EZDSStringItem"/>
+        <result property="arTrxTpCd_A1"            column="AR_TRX_TP_CD"              javaType="EZDSStringItem"/>
+        <result property="arTrxTpNm_A1"            column="AR_TRX_TP_NM"              javaType="EZDSStringItem"/>
+        <result property="cpoOrdNum_A1"            column="CPO_ORD_NUM"               javaType="EZDSStringItem"/>
+        <result property="grpInvNum_A1"            column="GRP_INV_NUM"               javaType="EZDSStringItem"/>
+        <result property="custIssPoNum_A1"         column="CUST_ISS_PO_NUM"           javaType="EZDSStringItem"/>
+        <result property="arTrxBillFromDt_A1"      column="AR_TRX_BILL_FROM_DT"       javaType="EZDSStringItem"/>
+        <result property="arTrxBillThruDt_A1"      column="AR_TRX_BILL_THRU_DT"       javaType="EZDSStringItem"/>
+        <result property="dealOrigGrsAmt_A1"       column="DEAL_ORIG_GRS_AMT"         javaType="EZDSBigDecimalItem"/>
+        <result property="dealRmngBalGrsAmt_A1"    column="DEAL_RMNG_BAL_GRS_AMT"     javaType="EZDSBigDecimalItem"/>
+        <result property="dealApplyAdjRsvdAmt_A1"  column="DEAL_APPLY_ADJ_RSVD_AMT"   javaType="EZDSBigDecimalItem"/>
+        <result property="invDueDt_A1"             column="INV_DUE_DT"                javaType="EZDSStringItem"/>
+        <result property="pastDtAot_A1"            column="PAST_DT_AOT"               javaType="EZDSBigDecimalItem"/>
+        <result property="xxDealApplyAmtNum_A1"    column="DEAL_RMNG_BAL_GRS_AMT"     javaType="EZDSBigDecimalItem"/>
+        <result property="arTrxBalPk_A1"           column="AR_TRX_BAL_PK"             javaType="EZDSBigDecimalItem"/>
+        <result property="ezUpTime_A1"             column="EZUPTIME"                  javaType="EZDSStringItem"/>
+        <result property="ezUpTimeZone_A1"         column="EZUPTIMEZONE"              javaType="EZDSStringItem"/>
+        <result property="tocCd_A1"                column="TOC_CD"                    javaType="EZDSStringItem"/>
+        <result property="coaProdCd_A1"            column="COA_PROD_CD"               javaType="EZDSStringItem"/>
+        <result property="arAdjNum_A1"             column="ATT_ADJ_NUM"               javaType="EZDSStringItem"/>
+        <result property="arCustRefNum_A1"         column="AR_CUST_REF_NUM"           javaType="EZDSStringItem"/>
+        <result property="cashDiscPct_A1"          column="CASH_DISC_PCT"             javaType="EZDSBigDecimalItem"/>
+        <result property="dealCashDiscAmt_A1"      column="DEAL_APPLY_CASH_DISC_AMT"  javaType="EZDSBigDecimalItem"/>
+        <result property="bllgPerFromDt_A1"        column="BLLG_PER_FROM_DT"          javaType="EZDSStringItem"/>
+        <result property="bllgPerToDt_A1"          column="BLLG_PER_TO_DT"            javaType="EZDSStringItem"/>
+        <result property="invTrxBalPk_A1"          column="AR_TRX_BAL_PK"             javaType="EZDSBigDecimalItem"/>
+        <result property="invTrxBalLastUpdTs_A1"   column="EZUPTIME"                  javaType="EZDSStringItem"/>
+        <result property="invTrxBalTz_A1"          column="EZUPTIMEZONE"              javaType="EZDSStringItem"/>
+    </resultMap>
+
+    <statement id="findDetailDataReln" parameterClass="Map" resultMap="result.findDetailData">
+    SELECT ATB.BILL_TO_CUST_ACCT_CD
+         , ATB.BILL_TO_CUST_CD
+         , ATB.AR_TRX_NUM
+         , ATB.AR_TRX_DT
+         , ATB.AR_TRX_TP_CD
+         , ATT.AR_TRX_TP_NM
+         , ATB.CPO_ORD_NUM
+         , ATB.GRP_INV_NUM
+         , ATB.CUST_ISS_PO_NUM
+         , ATB.AR_TRX_BILL_FROM_DT
+         , ATB.AR_TRX_BILL_THRU_DT
+         , ATB.DEAL_ORIG_GRS_AMT
+         , ATB.DEAL_RMNG_BAL_GRS_AMT
+         , ATB.DEAL_APPLY_ADJ_RSVD_AMT
+         , ATB.INV_DUE_DT
+         , TO_DATE(#salesDt#, 'YYYY/MM/DD') - TO_DATE(ATB.INV_DUE_DT, 'YYYY/MM/DD') AS PAST_DT_AOT
+         , ATB.AR_TRX_BAL_PK
+         , ATB.EZUPTIME
+         , ATB.EZUPTIMEZONE
+         , ATB.TOC_CD
+         , ATB.COA_PROD_CD
+         , ATB.ATT_ADJ_NUM
+         , NVL(ATB.AR_CUST_REF_NUM, ATB.AR_TRX_NUM) AS AR_CUST_REF_NUM
+         , ATB.CASH_DISC_PCT
+         , ATB.DEAL_APPLY_CASH_DISC_AMT
+         , SI.BLLG_PER_FROM_DT
+         , SI.BLLG_PER_TO_DT
+      FROM AR_TRX_BAL ATB
+         , AR_TRX_TP ATT
+         , SVC_INV SI
+     WHERE ATB.GLBL_CMPY_CD = #glblCmpyCd#
+       AND ATB.EZCANCELFLAG = '0'
+       AND ATB.GLBL_CMPY_CD = ATT.GLBL_CMPY_CD
+       AND ATB.AR_TRX_TP_CD = ATT.AR_TRX_TP_CD
+       AND ATT.EZCANCELFLAG = '0'
+       AND ATB.GLBL_CMPY_CD = SI.GLBL_CMPY_CD(+)
+       AND ATB.SVC_INV_PK = SI.SVC_INV_PK(+)
+       AND SI.EZCANCELFLAG(+) = '0'
+       AND ATB.AR_TRX_TP_CD IN (#arTrxTpInv#, #arTrxTpDed#, #arTrxTpDem#)
+       AND ATB.AR_CASH_APPLY_STS_CD IN (#unApply#, #partial#)
+       AND ATB.BILL_TO_CUST_ACCT_CD = #relnAcct#
+       <isNotNull property="custIssPoNum">
+       AND UPPER(ATB.CUST_ISS_PO_NUM) LIKE UPPER(#custIssPoNum#) <!-- 2019/03/25 QC#30758 Add 'UPPER' Function -->
+       </isNotNull>
+       AND EXISTS (
+               SELECT 1
+                   FROM DS_ACCT_RELN DAR
+               WHERE
+                   DAR.GLBL_CMPY_CD = #glblCmpyCd#
+               AND DAR.DS_ACCT_NUM = #accountNum#
+               AND DAR.RELN_DS_ACCT_NUM = #relnAcct#
+               AND DAR.DS_ACCT_RELN_TP_CD IN
+               <iterate property="acctRelnTps" var="acctRelnTps[]" open="(" close=")" conjunction=",">
+                   #acctRelnTps[]#
+               </iterate>
+               AND DAR.EZCANCELFLAG  =  '0'
+           )
+        <isNotNull property="invoices">
+           AND NVL(ATB.AR_CUST_REF_NUM, ATB.AR_TRX_NUM) IN
+            <iterate property="invoices" var="invoices[]" open="(" close=")" conjunction=",">
+                #invoices[]#
+            </iterate>
+        </isNotNull>
+     ORDER BY ATB.BILL_TO_CUST_CD
+            , ATB.AR_TRX_DT
+            , ATB.AR_TRX_NUM
+    </statement>
+
+    <statement id="findRcptInfo" parameterClass="Map" resultClass="Map">
+     SELECT RCPT.EZUPTIME                RCPTHDRLASTUPDTS_H1
+          , RCPT.EZUPTIMEZONE            RCPT_HD_TM_ZN_H1
+          , ATB.AR_TRX_NUM
+          , ATB.AR_TRX_BAL_PK            RCPTTRXBALPK_H1
+          , ATB.EZUPTIME                 RCPTTRXBALLASTUPDTS_H1
+          , ATB.EZUPTIMEZONE             RCPT_TRX_BAL_TM_ZN_H1
+          , ATB.GL_DT
+       FROM AR_RCPT     RCPT
+          , AR_TRX_BAL  ATB
+      WHERE RCPT.GLBL_CMPY_CD =  #glblCmpyCd#
+        AND RCPT.GLBL_CMPY_CD =  ATB.GLBL_CMPY_CD
+        AND RCPT.RCPT_NUM     =  ATB.AR_TRX_NUM
+        AND RCPT.EZCANCELFLAG =  '0'
+        AND ATB.AR_TRX_BAL_PK =  #arTrxBalPk#
+        AND ATB.EZCANCELFLAG  =  '0'
+    </statement>
+
+    <statement id="findDsAcctReln" parameterClass="Map" resultClass="Map">
+    SELECT DAR.DS_ACCT_RELN_PK
+      FROM DS_ACCT_RELN DAR
+     WHERE DAR.GLBL_CMPY_CD = #glblCmpyCd#
+       AND DAR.DS_ACCT_RELN_TP_CD IN
+            <iterate property="acctRelnTps" var="acctRelnTps[]" open="(" close=")" conjunction=",">
+                #acctRelnTps[]#
+            </iterate>
+       AND DAR.DS_ACCT_NUM = #accountNum#
+       AND DAR.RELN_DS_ACCT_NUM = #relnAcct#
+       AND DAR.EZCANCELFLAG  =  '0'
+    </statement>
+
+    <!-- 2019/12/25 QC#54619 ADD START-->
+    <statement id="findCanselCashApp" parameterClass="Map" resultClass="Map">
+    SELECT ACA.RCPT_NUM
+         , ACA.AR_CASH_APP_PK
+         , ACA.AR_CASH_APP_SQ_NUM
+      FROM AR_CASH_APP ACA
+         , AR_TRX_BAL  ATB
+     WHERE ATB.GLBL_CMPY_CD    = #glblCmpyCd#
+       AND ATB.EZCANCELFLAG    = '0'
+       AND ATB.AR_TRX_BAL_PK   = #arTrxBalPk#
+       AND ACA.GLBL_CMPY_CD    = ATB.GLBL_CMPY_CD
+       AND ACA.EZCANCELFLAG    = '0'
+       AND ACA.AR_SCR_CANC_FLG = #flgN#
+       AND ACA.AR_APPLY_TP_CD  = #arApplyTpCdAdj#
+       AND ACA.AR_ADJ_NUM      = ATB.ATT_ADJ_NUM
+    </statement>
+
+    <statement id="findCanselArApplyIntfcWrk" parameterClass="Map" resultClass="Map">
+    SELECT AAIW.APPLY_GRP_KEY
+         , AAIW.APPLY_GRP_SUB_PK
+      FROM AR_APPLY_INTFC_WRK AAIW
+     WHERE AAIW.GLBL_CMPY_CD     = #glblCmpyCd#
+       AND AAIW.EZCANCELFLAG     = '0'
+       AND AAIW.RCPT_NUM         = #rcptNum#
+       AND AAIW.INV_NUM          = #invNum#
+       AND AAIW.AR_ADJ_NUM       = #arAdjNum#
+       AND AAIW.AR_ADJ_TRX_TP_CD = #arAdjTrxTpCdAcc#
+    </statement>
+    <!-- 2019/12/25 QC#54619 ADD END-->
+
+    <!-- START 2021/04/16 R.Azucena[QC#58672,ADD] -->
+    <statement id="findArDsWfStsCd" parameterClass="Map" resultClass="String">
+    SELECT SORTED_STS_CD_LIST.AR_DS_WF_STS_CD
+    FROM (
+      SELECT STS_CD_LIST.AR_DS_WF_STS_CD
+      FROM (
+        SELECT ARR.AR_DS_WF_STS_CD
+             , ARR.EZINTIME
+          FROM AR_TRX_BAL ATB
+             , AR_RF_RQST_DTL ARRD
+             , AR_RF_RQST ARR
+         WHERE ATB.GLBL_CMPY_CD      = #glblCmpyCd#
+           AND ATB.EZCANCELFLAG      = '0'
+           AND ATB.AR_TRX_NUM        = #arTrxNum#
+           AND ATB.AR_TRX_NUM        = ARRD.AR_TRX_NUM
+           AND ATB.GLBL_CMPY_CD      = ARRD.GLBL_CMPY_CD
+           AND ARRD.AR_RF_RQST_PK    = ARR.AR_RF_RQST_PK
+           AND ARRD.GLBL_CMPY_CD     = ARR.GLBL_CMPY_CD
+           AND ARRD.EZCANCELFLAG     = '0'
+           AND ARR.EZCANCELFLAG      = '0'
+        UNION ALL
+        SELECT ARR.AR_DS_WF_STS_CD
+             , ARR.EZINTIME
+          FROM AR_TRX_BAL ATB
+             , AR_RF_RQST_DTL ARRD
+             , AR_RF_RQST ARR
+         WHERE ATB.GLBL_CMPY_CD      = #glblCmpyCd#
+           AND ATB.EZCANCELFLAG      = '0'
+           AND ATB.AR_CUST_REF_NUM   = #arTrxNum#
+           AND ATB.AR_CUST_REF_NUM   = ARRD.AR_ORIG_RCPT_NUM
+           AND ATB.GLBL_CMPY_CD      = ARRD.GLBL_CMPY_CD
+           AND ARRD.AR_RF_RQST_PK    = ARR.AR_RF_RQST_PK
+           AND ARRD.GLBL_CMPY_CD     = ARR.GLBL_CMPY_CD
+           AND ARRD.EZCANCELFLAG     = '0'
+           AND ARR.EZCANCELFLAG      = '0'
+      ) STS_CD_LIST
+      ORDER BY STS_CD_LIST.EZINTIME DESC
+    ) SORTED_STS_CD_LIST
+    WHERE ROWNUM &lt;= 1
+    </statement>
+    <!-- END 2021/04/16 R.Azucena[QC#58672,ADD] -->
+</sqlMap>

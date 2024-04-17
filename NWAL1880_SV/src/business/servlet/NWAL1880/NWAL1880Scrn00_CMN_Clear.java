@@ -1,0 +1,51 @@
+/*
+ * <pre>Copyright (c) 2013 Canon USA Inc. All rights reserved.</pre>
+ */
+package business.servlet.NWAL1880;
+
+import parts.common.EZDBMsg;
+import parts.common.EZDCMsg;
+//import parts.common.EZDMsg;
+import parts.servletcommon.EZDApplicationContext;
+//import business.blap.NWAL1880.NWAL1880CMsg;
+//import business.servlet.NWAL1880.constant.NWAL1880Constant;
+
+import business.servlet.NWAL1880.common.NWAL1880CommonLogic;
+
+import com.canon.cusa.s21.framework.online.servlet.S21CommonHandler;
+
+/** 
+ *<pre>
+ * Date         Company         Name            Create/Update   Defect No
+ * ----------------------------------------------------------------------
+ * 2013/03/26   CUSA            Fujitsu         Create          N/A
+ *</pre>
+ */
+public class NWAL1880Scrn00_CMN_Clear extends S21CommonHandler {
+
+    @Override
+    protected void checkInput(EZDApplicationContext ctx, EZDBMsg bMsg) {
+
+        //NWAL1880BMsg scrnMsg = (NWAL1880BMsg) bMsg;
+
+    }
+
+    @Override
+    protected EZDCMsg setRequestData(EZDApplicationContext ctx, EZDBMsg bMsg) {
+
+        return null;
+    }
+
+    @Override
+    protected void doProcess(EZDApplicationContext ctx, EZDBMsg bMsg, EZDCMsg cMsg) {
+
+        NWAL1880BMsg scrnMsg = (NWAL1880BMsg) bMsg;
+
+        // 1. initialize GUI value.
+        NWAL1880CommonLogic.initGuiValueScrn00(scrnMsg);
+
+        // 2. set focus.
+        scrnMsg.setFocusItem(scrnMsg.xxOrdTeamSrchTxt);
+
+    }
+}

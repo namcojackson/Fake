@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NMAB250001">
+ 
+    <statement id="getTargetTrtyResrc" parameterClass="Map" resultClass="Map">
+        SELECT
+            DORR.ORG_CD AS TRTY_ORG_CD
+            ,DORR.ORG_STRU_TP_CD
+            ,DORR.PSN_CD
+            ,DORR.ORG_FUNC_ROLE_TP_CD
+            ,DORR.EFF_FROM_DT
+            ,TOSR.ORG_CD AS ORG_ORG_CD
+        FROM
+            DS_ORG_UNIT DOU
+            ,DS_ORG_RESRC_RELN DORR
+            ,S21_PSN SP
+            ,ORG_FUNC_ASG OFA
+            ,TOC TOC
+            ,ORG_FUNC_ROLE_TP OFRT
+            ,TOC_ORG_STRU_RELN TOSR
+        WHERE
+                DOU.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND DOU.GNRN_TP_CD       = #gnrnTpCurrent#
+            AND DOU.EZCANCELFLAG     = '0'
+
+            AND DOU.GLBL_CMPY_CD     = DORR.GLBL_CMPY_CD
+            AND DOU.ORG_CD           = DORR.ORG_CD
+            AND DORR.GNRN_TP_CD      IN (#gnrnTpTerminate#, #gnrnTpPast#)
+            AND DORR.NON_SLS_REP_FLG = 'N'
+            AND DOU.EZCANCELFLAG     = DORR.EZCANCELFLAG
+            AND NOT EXISTS (
+                            SELECT
+                                1
+                            FROM
+                                DS_ORG_RESRC_RELN DORR2
+                            WHERE
+                                    DORR.GLBL_CMPY_CD     = DORR2.GLBL_CMPY_CD
+                                AND DORR.ORG_CD           = DORR2.ORG_CD
+                                AND DORR2.NON_SLS_REP_FLG = 'N'
+                                AND DORR2.GNRN_TP_CD      = #gnrnTpCurrent#
+                                AND DORR.EZCANCELFLAG     = DORR2.EZCANCELFLAG
+                            )
+            AND DORR.EFF_THRU_DT     = ( SELECT
+                                            MAX(DORR3.EFF_THRU_DT)
+                                         FROM
+                                            DS_ORG_RESRC_RELN DORR3
+                                         WHERE
+                                                DORR.GLBL_CMPY_CD      = DORR3.GLBL_CMPY_CD
+                                            AND DORR.ORG_CD            = DORR3.ORG_CD
+                                            AND DORR3.GNRN_TP_CD       IN (#gnrnTpTerminate#, #gnrnTpPast#)
+                                            AND DORR3.NON_SLS_REP_FLG = 'N'
+                                            AND DORR.EZCANCELFLAG      = DORR3.EZCANCELFLAG
+                                        )
+        
+            AND DORR.GLBL_CMPY_CD = SP.GLBL_CMPY_CD
+            AND DORR.PSN_CD       = SP.PSN_CD
+            AND (
+                    (SP.EFF_FROM_DT &gt; #procDt#
+                  OR SP.EFF_THRU_DT &lt; #procDt#)
+                OR SP.DEL_FLG = 'Y'
+                )
+            AND DORR.EZCANCELFLAG = SP.EZCANCELFLAG
+
+            AND SP.GLBL_CMPY_CD = OFA.GLBL_CMPY_CD
+            AND SP.PSN_CD       = OFA.PSN_CD
+            AND OFA.GNRN_TP_CD  IN (#gnrnTpTerminate#, #gnrnTpPast#)
+            AND OFA.EFF_THRU_DT = ( SELECT 
+                                        MAX(OFA2.EFF_THRU_DT)
+                                    FROM 
+                                        ORG_FUNC_ASG OFA2
+                                        ,TOC TOC2
+                                        ,ORG_FUNC_ROLE_TP OFRT2
+                                    WHERE
+                                            SP.GLBL_CMPY_CD = OFA2.GLBL_CMPY_CD
+                                        AND SP.PSN_CD       = OFA2.PSN_CD
+                                        AND OFA2.GNRN_TP_CD IN (#gnrnTpTerminate#, #gnrnTpPast#)
+                                        AND SP.EZCANCELFLAG = OFA2.EZCANCELFLAG
+
+                                        AND OFA2.GLBL_CMPY_CD = TOC2.GLBL_CMPY_CD
+                                        AND OFA2.TOC_CD       = TOC2.TOC_CD
+                                        AND OFA2.EZCANCELFLAG = TOC2.EZCANCELFLAG
+
+                                        AND TOC2.GLBL_CMPY_CD        = OFRT2.GLBL_CMPY_CD
+                                        AND TOC2.ORG_FUNC_ROLE_TP_CD = OFRT2.ORG_FUNC_ROLE_TP_CD
+                                        AND OFRT2.SLS_REP_FLG        = 'Y'
+                                        AND TOC2.EZCANCELFLAG        = OFRT2.EZCANCELFLAG
+                                    )
+            AND SP.EZCANCELFLAG = OFA.EZCANCELFLAG
+
+            AND OFA.GLBL_CMPY_CD = TOC.GLBL_CMPY_CD
+            AND OFA.TOC_CD       = TOC.TOC_CD
+            AND OFA.EZCANCELFLAG = TOC.EZCANCELFLAG
+
+            AND TOC.GLBL_CMPY_CD        = OFRT.GLBL_CMPY_CD
+            AND TOC.ORG_FUNC_ROLE_TP_CD = OFRT.ORG_FUNC_ROLE_TP_CD
+            AND OFRT.SLS_REP_FLG        = 'Y'
+            AND TOC.EZCANCELFLAG        = OFRT.EZCANCELFLAG
+
+            AND OFA.GLBL_CMPY_CD = TOSR.GLBL_CMPY_CD
+            AND OFA.TOC_CD       = TOSR.TOC_CD
+            AND OFA.EZCANCELFLAG = TOSR.EZCANCELFLAG
+
+            ORDER BY
+                DORR.ORG_CD
+    </statement>
+    <statement id="getAdjustmentRep" parameterClass="Map" resultClass="Map">
+        SELECT
+            SP.PSN_CD
+            ,TOC.ORG_FUNC_ROLE_TP_CD
+        FROM
+            TOC_ORG_STRU_RELN TOSR
+            ,TOC TOC
+            ,ORG_FUNC_ROLE_TP OFRT
+            ,ORG_FUNC_ASG OFA
+            ,S21_PSN SP
+        WHERE
+                TOSR.GLBL_CMPY_CD = #glblCmpyCd#
+            AND TOSR.ORG_CD       = #orgCd#
+            AND TOSR.EZCANCELFLAG = '0'
+        
+            AND TOSR.GLBL_CMPY_CD  = TOC.GLBL_CMPY_CD
+            AND TOSR.TOC_CD        = TOC.TOC_CD
+            AND TOSR.EZCANCELFLAG  = TOC.EZCANCELFLAG
+
+            AND TOC.GLBL_CMPY_CD        = OFRT.GLBL_CMPY_CD
+            AND TOC.ORG_FUNC_ROLE_TP_CD = OFRT.ORG_FUNC_ROLE_TP_CD
+            AND OFRT.SLS_REP_FLG         = 'Y'
+            AND OFRT.ORG_FUNC_ROLE_TP_DESC_TXT LIKE #adjustmentText#
+            AND TOC.EZCANCELFLAG        = OFRT.EZCANCELFLAG
+        
+            AND TOC.GLBL_CMPY_CD = OFA.GLBL_CMPY_CD
+            AND TOC.TOC_CD       = OFA.TOC_CD
+            AND OFA.GNRN_TP_CD    = #gnrnTpCurrent#
+            AND TOC.EZCANCELFLAG = OFA.EZCANCELFLAG
+        
+            AND OFA.GLBL_CMPY_CD = SP.GLBL_CMPY_CD
+            AND OFA.PSN_CD = SP.PSN_CD
+            AND SP.DEL_FLG = 'N'
+            AND OFA.EZCANCELFLAG = SP.EZCANCELFLAG
+    </statement>
+
+</sqlMap>

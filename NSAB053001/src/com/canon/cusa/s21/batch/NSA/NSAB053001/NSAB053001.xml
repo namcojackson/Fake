@@ -1,0 +1,278 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NSAB053001">
+    <statement id="getContractForMachineLevel" getContractForMachineLevel="Map" resultClass="Map">
+    WITH
+    TARGET_DTL AS (
+                    SELECT
+                         GLBL_CMPY_CD
+                        ,DS_CONTR_PK
+                        ,DS_CONTR_DTL_PK
+                        ,EFF_FROM_DT
+                        ,TERM_COND_OPT_VAL_TXT
+                        ,DS_CONTR_CATG_CD
+                        <!-- START 2018/06/05 K.Kim [QC#25993, ADD] -->
+                        ,TERM_COND_OPT_TP_CD
+                        <!-- END 2018/06/05 K.Kim [QC#25993, ADD] -->
+                    FROM
+                        (SELECT
+                             GLBL_CMPY_CD
+                            ,DS_CONTR_PK
+                            ,DS_CONTR_DTL_PK
+                            ,EFF_FROM_DT
+                            ,TERM_COND_OPT_VAL_TXT
+                            ,DS_CONTR_CATG_CD
+                            ,DS_CONTR_DTL_TP_CD
+                            <!-- START 2018/06/05 K.Kim [QC#25993, MOD] -->
+                            <!-- ,ROW_NUMBER() OVER (PARTITION BY DS_CONTR_DTL_PK ORDER BY TO_NUMBER(TERM_COND_OPT_VAL_TXT) ASC, EFF_FROM_DT ASC) AS ROW_NUM -->
+                            ,TERM_COND_OPT_TP_CD
+                            <!-- END 2018/06/05 K.Kim [QC#25993, MOD] -->
+                        FROM
+                            (SELECT
+                                 DTL.GLBL_CMPY_CD
+                                ,DTL.DS_CONTR_PK
+                                ,DTL.DS_CONTR_DTL_PK
+                                ,DAC.EFF_FROM_DT
+                                ,MTC.TERM_COND_OPT_VAL_TXT
+                                ,CON.DS_CONTR_CATG_CD
+                                ,DTL.DS_CONTR_DTL_TP_CD
+                                <!-- START 2018/06/05 K.Kim [QC#25993, ADD] -->
+                                ,MTC.TERM_COND_OPT_TP_CD
+                                <!-- END 2018/06/05 K.Kim [QC#25993, ADD] -->
+                            FROM
+                                 DS_CONTR_DTL_STS_V     DCD
+                                ,DS_CONTR               CON
+                                ,DS_CONTR_DTL           DTL
+                                ,DS_CONTR_ADDL_CHRG     DAC
+                                ,ADDL_CHRG_TP_V         ADT
+                                ,MDSE_TERM_COND_OPT     MTC
+                                <!-- START 2018/06/05 K.Kim [QC#25993, DEL] -->
+                                <!-- ,TERM_COND_OPT_TP       TCO -->
+                                <!-- END 2018/06/05 K.Kim [QC#25993, DEL] -->
+                            WHERE
+                                    DTL.GLBL_CMPY_CD        = #glblCmpyCd#
+                            <isNotNull property="divisionNum">
+                                <isNotNull property="residue">
+                                    AND MOD(DTL.DS_CONTR_DTL_PK , #divisionNum# ) = #residue#
+                                </isNotNull>
+                            </isNotNull>
+                                AND DTL.GLBL_CMPY_CD        = CON.GLBL_CMPY_CD
+                                AND DTL.DS_CONTR_PK         = CON.DS_CONTR_PK
+                                AND DTL.GLBL_CMPY_CD        = DCD.GLBL_CMPY_CD
+                                AND DTL.DS_CONTR_PK         = DCD.DS_CONTR_PK
+                                AND DTL.DS_CONTR_DTL_PK     = DCD.DS_CONTR_DTL_PK
+                                AND DCD.ETTL_AVAL_FLG       = 'Y'
+                                AND DTL.GLBL_CMPY_CD        = DAC.GLBL_CMPY_CD
+                                AND DTL.DS_CONTR_DTL_PK     = DAC.DS_CONTR_DTL_PK
+                                AND DAC.EFF_FROM_DT              &lt;= #slsDt#
+                                AND NVL(DAC.EFF_THRU_DT,#slsDt#) &gt;= #slsDt#
+                                AND DAC.GLBL_CMPY_CD        = ADT.GLBL_CMPY_CD
+                                AND DAC.ADDL_CHRG_TP_CD     = ADT.ADDL_CHRG_TP_CD
+                                AND ADT.GLBL_CMPY_CD        = MTC.GLBL_CMPY_CD
+                                AND ADT.INTG_MDSE_CD        = MTC.MDSE_CD
+                                <!-- START 2018/06/05 K.Kim [QC#25993, MOD] -->
+                                <!-- AND MTC.GLBL_CMPY_CD        = TCO.GLBL_CMPY_CD -->
+                                <!-- AND MTC.TERM_COND_OPT_TP_CD = TCO.TERM_COND_OPT_TP_CD -->
+                                <!-- AND TCO.RSP_TM_TP_FLG       = 'Y' -->
+                                AND EXISTS (
+                                    SELECT
+                                          1
+                                    FROM
+                                          TERM_COND_OPT_ATTRB_MAP MAP
+                                    WHERE   MAP.EZCANCELFLAG        = '0'
+                                        AND MAP.GLBL_CMPY_CD        = MTC.GLBL_CMPY_CD
+                                        AND MAP.TERM_COND_OPT_TP_CD = MTC.TERM_COND_OPT_TP_CD
+                                        AND MAP.ENBL_FLG            = 'Y'
+                                    )
+                                <!-- END 2018/06/05 K.Kim [QC#25993, MOD] -->
+                                AND DCD.EZCANCELFLAG        = '0'
+                                AND CON.EZCANCELFLAG        = '0'
+                                AND DTL.EZCANCELFLAG        = '0'
+                                AND DAC.EZCANCELFLAG        = '0'
+                                AND ADT.EZCANCELFLAG        = '0'
+                                AND MTC.EZCANCELFLAG        = '0'
+                                <!-- START 2018/06/05 K.Kim [QC#25993, DEL] -->
+                                <!-- AND TCO.EZCANCELFLAG        = '0' -->
+                                <!-- END 2018/06/05 K.Kim [QC#25993, DEL] -->
+                            UNION ALL
+                            SELECT
+                                 DCD.GLBL_CMPY_CD
+                                ,DCD.DS_CONTR_PK
+                                ,DCD.DS_CONTR_DTL_PK
+                                ,DAC.EFF_FROM_DT
+                                ,MTC.TERM_COND_OPT_VAL_TXT
+                                ,CON.DS_CONTR_CATG_CD
+                                ,DTL.DS_CONTR_DTL_TP_CD
+                                <!-- START 2018/06/05 K.Kim [QC#25993, ADD] -->
+                                ,MTC.TERM_COND_OPT_TP_CD
+                                <!-- END 2018/06/05 K.Kim [QC#25993, ADD] -->
+                            FROM
+                                 DS_CONTR_DTL_STS_V     DCD
+                                ,DS_CONTR               CON
+                                ,DS_CONTR_DTL           DTL
+                                ,DS_CONTR_ADDL_CHRG     DAC
+                                ,ADDL_CHRG_TP_V         ADT
+                                ,MDSE_TERM_COND_OPT     MTC
+                                <!-- START 2018/06/05 K.Kim [QC#25993, DEL] -->
+                                <!-- ,TERM_COND_OPT_TP       TCO -->
+                                <!-- END 2018/06/05 K.Kim [QC#25993, DEL] -->
+                            WHERE
+                                    DTL.GLBL_CMPY_CD        = #glblCmpyCd#
+                            <isNotNull property="divisionNum">
+                                <isNotNull property="residue">
+                                    AND MOD(DTL.DS_CONTR_DTL_PK , #divisionNum# ) = #residue#
+                                </isNotNull>
+                            </isNotNull>
+                                AND DTL.GLBL_CMPY_CD        = CON.GLBL_CMPY_CD
+                                AND DTL.DS_CONTR_PK         = CON.DS_CONTR_PK
+                                AND DTL.GLBL_CMPY_CD        = DCD.GLBL_CMPY_CD
+                                AND DTL.DS_CONTR_PK         = DCD.DS_CONTR_PK
+                                AND DTL.DS_CONTR_DTL_PK     = DCD.DS_CONTR_DTL_PK
+                                AND DCD.ETTL_AVAL_FLG       = 'Y'
+                                AND DTL.GLBL_CMPY_CD        = DAC.GLBL_CMPY_CD
+                                AND DTL.DS_CONTR_PK         = DAC.DS_CONTR_PK
+                                AND DAC.DS_CONTR_DTL_PK     IS NULL
+                                AND DAC.EFF_FROM_DT              &lt;= #slsDt#
+                                AND NVL(DAC.EFF_THRU_DT,#slsDt#) &gt;= #slsDt#
+                                AND DAC.GLBL_CMPY_CD        = ADT.GLBL_CMPY_CD
+                                AND DAC.ADDL_CHRG_TP_CD     = ADT.ADDL_CHRG_TP_CD
+                                AND ADT.GLBL_CMPY_CD        = MTC.GLBL_CMPY_CD
+                                AND ADT.INTG_MDSE_CD        = MTC.MDSE_CD
+                                <!-- START 2018/06/05 K.Kim [QC#25993, MOD] -->
+                                <!-- AND MTC.GLBL_CMPY_CD        = TCO.GLBL_CMPY_CD -->
+                                <!-- AND MTC.TERM_COND_OPT_TP_CD = TCO.TERM_COND_OPT_TP_CD -->
+                                <!-- AND TCO.RSP_TM_TP_FLG       = 'Y' -->
+                                AND EXISTS (
+                                    SELECT
+                                          1
+                                    FROM
+                                          TERM_COND_OPT_ATTRB_MAP MAP
+                                    WHERE   MAP.EZCANCELFLAG        = '0'
+                                        AND MAP.GLBL_CMPY_CD        = MTC.GLBL_CMPY_CD
+                                        AND MAP.TERM_COND_OPT_TP_CD = MTC.TERM_COND_OPT_TP_CD
+                                        AND MAP.ENBL_FLG            = 'Y'
+                                    )
+                                <!-- END 2018/06/05 K.Kim [QC#25993, MOD] -->
+                                AND DCD.EZCANCELFLAG        = '0'
+                                AND CON.EZCANCELFLAG        = '0'
+                                AND DTL.EZCANCELFLAG        = '0'
+                                AND DAC.EZCANCELFLAG        = '0'
+                                AND ADT.EZCANCELFLAG        = '0'
+                                AND MTC.EZCANCELFLAG        = '0'
+                                <!-- START 2018/06/05 K.Kim [QC#25993, DEL] -->
+                                <!-- AND TCO.EZCANCELFLAG        = '0' -->
+                                <!-- END 2018/06/05 K.Kim [QC#25993, DEL] -->
+                            )
+                        )
+                    WHERE 
+                        <!-- START 2018/06/05 K.Kim [QC#25993, MOD] -->
+                        <!--     ROW_NUM = 1 -->
+                        <!-- AND -->
+                        NOT(DS_CONTR_CATG_CD = #flt#  AND DS_CONTR_DTL_TP_CD &lt;&gt; #fleet#) AND DS_CONTR_DTL_TP_CD &lt;&gt; #aggregate#
+                        <!-- END 2018/06/05 K.Kim [QC#25993, MOD] -->
+                )
+    
+    SELECT
+         GLBL_CMPY_CD
+        ,DS_CONTR_PK
+        ,DS_CONTR_DTL_PK
+        ,SVC_TERM_COND_ATTRB_PK
+        ,SVC_TERM_COND_PK
+        ,TERM_COND_OPT_VAL_TXT
+        ,SVC_TERM_ATTRB_MAP_VAL_CD
+    FROM
+        (SELECT
+             TRG.GLBL_CMPY_CD
+            ,TRG.DS_CONTR_PK
+            ,TRG.DS_CONTR_DTL_PK
+            ,ATR.SVC_TERM_COND_ATTRB_PK
+            ,TCD.SVC_TERM_COND_PK
+            ,TRG.TERM_COND_OPT_VAL_TXT
+            ,TCD.SVC_TERM_ATTRB_MAP_VAL_CD
+        FROM
+             TARGET_DTL             TRG
+            ,SVC_TERM_COND_ATTRB    ATR
+            ,SVC_TERM_COND          TCD
+            <!-- START 2018/06/05 K.Kim [QC#25993, ADD] -->
+            ,TERM_COND_OPT_ATTRB_MAP MAP
+            <!-- END 2018/06/05 K.Kim [QC#25993, ADD] -->
+        WHERE
+                TRG.GLBL_CMPY_CD            = ATR.GLBL_CMPY_CD
+            <!-- START 2018/06/05 K.Kim [QC#25993, DEL] -->
+            <!-- AND ATR.SVC_TERM_COND_ATTRB_NM IN (#rspMeasPer#, #rspRmd1#, #rspRmd2#, #slaRmd#, #rspTmComit#) -->
+            <!-- END 2018/06/05 K.Kim [QC#25993, DEL] -->
+            AND TRG.GLBL_CMPY_CD            = TCD.GLBL_CMPY_CD(+)
+            AND TRG.DS_CONTR_DTL_PK         = TCD.DS_CONTR_DTL_PK(+)
+            AND ATR.SVC_TERM_COND_ATTRB_PK  = TCD.SVC_TERM_COND_ATTRB_PK(+)
+            AND TRG.DS_CONTR_CATG_CD       &lt;&gt; #flt#
+            AND ATR.EZCANCELFLAG            = '0'
+            AND TCD.EZCANCELFLAG(+)         = '0'
+            <!-- START 2018/06/05 K.Kim [QC#25993, ADD] -->
+            AND ATR.SVC_TERM_COND_ATTRB_PK  = MAP.SVC_TERM_COND_ATTRB_PK
+            AND TRG.GLBL_CMPY_CD            = MAP.GLBL_CMPY_CD(+)
+            AND TRG.TERM_COND_OPT_TP_CD     = MAP.TERM_COND_OPT_TP_CD(+)
+            AND MAP.EZCANCELFLAG(+)         = '0'
+            <!-- END 2018/06/05 K.Kim [QC#25993, ADD] -->
+        UNION ALL
+        SELECT
+             TRG.GLBL_CMPY_CD
+            ,TRG.DS_CONTR_PK
+            ,DTL.DS_CONTR_DTL_PK
+            ,ATR.SVC_TERM_COND_ATTRB_PK
+            ,TCD.SVC_TERM_COND_PK
+            ,TRG.TERM_COND_OPT_VAL_TXT
+            ,TCD.SVC_TERM_ATTRB_MAP_VAL_CD
+        FROM
+             TARGET_DTL             TRG
+            ,SVC_TERM_COND_ATTRB    ATR
+            ,SVC_TERM_COND          TCD
+            ,DS_CONTR_DTL           DTL
+            <!-- START 2018/06/05 K.Kim [QC#25993, ADD] -->
+            ,TERM_COND_OPT_ATTRB_MAP MAP
+            <!-- END 2018/06/05 K.Kim [QC#25993, ADD] -->
+        WHERE
+                TRG.GLBL_CMPY_CD            = ATR.GLBL_CMPY_CD
+            <!-- START 2018/06/05 K.Kim [QC#25993, DEL] -->
+            <!-- AND ATR.SVC_TERM_COND_ATTRB_NM IN (#rspMeasPer#, #rspRmd1#, #rspRmd2#, #slaRmd#, #rspTmComit#) -->
+            <!-- END 2018/06/05 K.Kim [QC#25993, DEL] -->
+            AND TRG.GLBL_CMPY_CD            = TCD.GLBL_CMPY_CD(+)
+            AND TRG.DS_CONTR_DTL_PK         = TCD.DS_CONTR_DTL_PK(+)
+            AND ATR.SVC_TERM_COND_ATTRB_PK  = TCD.SVC_TERM_COND_ATTRB_PK(+)
+    
+            AND TRG.DS_CONTR_CATG_CD        = #flt#
+            AND TRG.GLBL_CMPY_CD            = DTL.GLBL_CMPY_CD
+            AND TRG.DS_CONTR_PK             = DTL.DS_CONTR_PK
+            AND DTL.DS_CONTR_DTL_TP_CD     &lt;&gt; #fleet#
+            AND ATR.EZCANCELFLAG            = '0'
+            AND TCD.EZCANCELFLAG(+)         = '0'
+            AND DTL.EZCANCELFLAG            = '0'
+            AND EXISTS(SELECT 1 FROM 
+                            DS_CONTR_DTL_STS_V STV
+                        WHERE
+                                STV.GLBL_CMPY_CD        = DTL.GLBL_CMPY_CD
+                            AND STV.DS_CONTR_DTL_PK     = DTL.DS_CONTR_DTL_PK
+                            AND STV.ETTL_AVAL_FLG       = 'Y'
+                            AND STV.EZCANCELFLAG        = '0')
+            <!-- START 2018/06/05 K.Kim [QC#25993, ADD] -->
+            AND ATR.SVC_TERM_COND_ATTRB_PK  = MAP.SVC_TERM_COND_ATTRB_PK
+            AND TRG.GLBL_CMPY_CD            = MAP.GLBL_CMPY_CD(+)
+            AND TRG.TERM_COND_OPT_TP_CD     = MAP.TERM_COND_OPT_TP_CD(+)
+            AND MAP.EZCANCELFLAG(+)         = '0'
+            <!-- END 2018/06/05 K.Kim [QC#25993, ADD] -->
+        )
+    WHERE
+        SVC_TERM_COND_PK IS NULL
+          OR NVL(TERM_COND_OPT_VAL_TXT,#space#) &lt;&gt; NVL(SVC_TERM_ATTRB_MAP_VAL_CD,#space#)
+    GROUP BY
+         GLBL_CMPY_CD
+        ,DS_CONTR_PK
+        ,DS_CONTR_DTL_PK
+        ,SVC_TERM_COND_ATTRB_PK
+        ,SVC_TERM_COND_PK
+        ,TERM_COND_OPT_VAL_TXT
+        ,SVC_TERM_ATTRB_MAP_VAL_CD
+    ORDER BY
+         DS_CONTR_PK
+        ,DS_CONTR_DTL_PK
+        ,SVC_TERM_COND_ATTRB_PK
+    </statement>
+</sqlMap>

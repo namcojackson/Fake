@@ -1,0 +1,1504 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<sqlMap namespace="NMAB560001">
+
+     <statement id="checkAccountNumber" parameterClass="Map" resultClass="Map">
+<!-- 2019/12/13 QC#54882 Mod Start -->
+<!--        SELECT -->
+<!--            STC.SELL_TO_CUST_CD -->
+<!--        FROM -->
+<!--            SELL_TO_CUST STC -->
+<!--        WHERE -->
+<!--            STC.GLBL_CMPY_CD     = #glblCmpyCd# -->
+<!--            AND STC.RGTN_STS_CD  = #rgtnStsCd# -->
+<!--            AND STC.EZCANCELFLAG = '0' -->
+        SELECT STC.SELL_TO_CUST_CD
+        FROM (
+            SELECT
+                SELL.SELL_TO_CUST_CD
+            FROM
+                SELL_TO_CUST SELL
+            WHERE
+                SELL.GLBL_CMPY_CD     = #glblCmpyCd#
+                AND SELL.RGTN_STS_CD  = #rgtnStsCd#
+                AND SELL.EZCANCELFLAG = '0'
+                AND NOT EXISTS (SELECT 1
+                                  FROM DS_ACCT_TRX_INFO DATI
+                                 WHERE DATI.GLBL_CMPY_CD = SELL.GLBL_CMPY_CD
+                                   AND DATI.DS_ACCT_NUM = SELL.SELL_TO_CUST_CD
+                               )
+            UNION ALL
+            SELECT
+                SL.SELL_TO_CUST_CD
+            FROM
+                SELL_TO_CUST SL
+            WHERE
+                SL.GLBL_CMPY_CD     = #glblCmpyCd#
+                AND SL.RGTN_STS_CD  = #rgtnStsCd#
+                AND SL.EZCANCELFLAG = '0'
+                AND EXISTS (SELECT 1
+                              FROM DS_ACCT_TRX_INFO DATI
+                             WHERE DATI.GLBL_CMPY_CD = SL.GLBL_CMPY_CD
+                               AND DATI.DS_ACCT_NUM = SL.SELL_TO_CUST_CD
+                               AND DATI.ACCT_TRX_EXST_FLG = #flgY#
+                           )
+        ) STC
+<!-- 2019/12/13 QC#54882 Mod End -->
+       ORDER BY
+           STC.SELL_TO_CUST_CD
+    </statement>
+
+    <statement id="checkMachineTransaction" parameterClass="Map" resultClass="Map">
+<!-- 2019/12/13 QC#54882 Mod Start -->
+<!--     SELECT -->
+<!--         STC.SELL_TO_CUST_CD  SELL_TO_CUST_CD -->
+<!--       , SMM.SVC_MACH_MSTR_PK SVC_MACH_MSTR_PK -->
+<!--       , MAX(NVL(SMM.EFF_THRU_DT, '99991231')) KEEP (DENSE_RANK FIRST ORDER BY SMM.EFF_THRU_DT DESC NULLS FIRST) EFF_THRU_DT -->
+<!--     FROM -->
+<!--         SELL_TO_CUST  STC -->
+<!--       , SVC_MACH_MSTR SMM -->
+<!--     WHERE -->
+<!--         STC.GLBL_CMPY_CD = #glblCmpyCd# -->
+<!--     AND STC.RGTN_STS_CD  = #rgtnStsCd# -->
+<!--     AND STC.EZCANCELFLAG = '0' -->
+<!--     AND STC.GLBL_CMPY_CD     = SMM.GLBL_CMPY_CD -->
+<!--     AND ( -->
+<!--          STC.SELL_TO_CUST_CD = SMM.OWNR_ACCT_NUM -->
+<!--       OR STC.SELL_TO_CUST_CD = SMM.BILL_TO_ACCT_NUM -->
+<!--       OR STC.SELL_TO_CUST_CD = SMM.CUR_LOC_ACCT_NUM -->
+<!--         ) -->
+    <!-- QC#16723 Mod Start -->
+    <!-- AND SMM.SVC_MACH_MSTR_STS_CD NOT IN (#trmn#, #dup#) -->
+<!--     AND SMM.SVC_MACH_MSTR_STS_CD IN (#w4i#, #instl#, #w4r#, #dlrsv#) -->
+    <!-- QC#16723 Mod End -->
+<!--     AND SMM.EZCANCELFLAG     = '0' --> 
+<!--     GROUP BY -->
+<!--         STC.SELL_TO_CUST_CD -->
+<!--       , SMM.SVC_MACH_MSTR_PK -->
+    <!-- 2021/07/19 QC#58743-2 Mod Start -->
+    <!-- WITH CUST_INFO AS ( -->
+    WITH CUST_INFO_SELF AS (
+        SELECT SL.GLBL_CMPY_CD
+             , SL.SELL_TO_CUST_CD
+             , BL.BILL_TO_CUST_CD
+             , SP.SHIP_TO_CUST_CD <!-- 2020/01/07 QC#54882-1 Add -->
+         FROM SELL_TO_CUST SL
+            , ACCT_LOC     AL
+            , PTY_LOC_WRK  PLW
+            , BILL_TO_CUST BL
+            <!-- 2020/01/07 QC#54882-1 Add Start -->
+            , (SELECT SH.GLBL_CMPY_CD
+                    , SH.SHIP_TO_CUST_CD
+                    , SH.LOC_NUM
+                 FROM SHIP_TO_CUST SH
+                WHERE SH.GLBL_CMPY_CD = #glblCmpyCd#
+                  AND SH.EZCANCELFLAG = '0'
+                  AND SH.RGTN_STS_CD = #rgtnStsCd#
+                  AND SH.LOC_ROLE_TP_CD = #locRoleTpShip#
+              ) SP
+             <!-- 2020/01/07 QC#54882-1 Add End -->
+        WHERE SL.GLBL_CMPY_CD = #glblCmpyCd#
+          AND SL.EZCANCELFLAG = '0'
+          AND SL.RGTN_STS_CD = #rgtnStsCd#
+          AND SL.GLBL_CMPY_CD = AL.GLBL_CMPY_CD
+          AND SL.SELL_TO_CUST_CD = AL.DS_ACCT_NUM
+          AND AL.EZCANCELFLAG = '0'
+          AND AL.RGTN_STS_CD = #rgtnStsCd#
+          AND AL.GLBL_CMPY_CD = PLW.GLBL_CMPY_CD
+          AND AL.LOC_NUM = PLW.LOC_NUM
+          AND PLW.EZCANCELFLAG = '0'
+          AND PLW.RGTN_STS_CD = #rgtnStsCd#
+          <!-- 2020/01/07 QC#54882-1 Mod Start -->
+          <!-- AND PLW.GLBL_CMPY_CD = BL.GLBL_CMPY_CD -->
+          <!-- AND PLW.LOC_NUM = BL.LOC_NUM -->
+          <!-- AND BL.EZCANCELFLAG = '0' -->
+          <!-- AND BL.RGTN_STS_CD = #rgtnStsCd# -->
+          AND PLW.GLBL_CMPY_CD = BL.GLBL_CMPY_CD(+)
+          AND PLW.LOC_NUM = BL.LOC_NUM(+)
+          AND BL.EZCANCELFLAG(+) = '0'
+          AND BL.RGTN_STS_CD(+) = #rgtnStsCd#
+          AND PLW.GLBL_CMPY_CD = SP.GLBL_CMPY_CD(+)
+          AND PLW.LOC_NUM = SP.LOC_NUM(+)
+          <!-- 2020/01/07 QC#54882-1 Mod End -->
+    )
+    , RELN_ACCT AS (
+        SELECT RELN.GLBL_CMPY_CD
+             , RELN.RELN_DS_ACCT_NUM
+             , CIS.BILL_TO_CUST_CD
+             , CIS.SHIP_TO_CUST_CD
+         FROM DS_ACCT_RELN RELN
+            , SELL_TO_CUST ACCT
+            , DS_ACCT_RELN_TP DART
+            , CUST_INFO_SELF CIS
+        WHERE RELN.GLBL_CMPY_CD = #glblCmpyCd#
+          AND RELN.EZCANCELFLAG = '0'
+          AND RELN.GLBL_CMPY_CD = CIS.GLBL_CMPY_CD
+          AND RELN.DS_ACCT_NUM = CIS.SELL_TO_CUST_CD
+          AND RELN.RGTN_STS_CD = #rgtnStsCd#
+          AND RELN.GLBL_CMPY_CD = ACCT.GLBL_CMPY_CD
+          AND RELN.RELN_DS_ACCT_NUM = ACCT.SELL_TO_CUST_CD
+          AND ACCT.EZCANCELFLAG = '0'
+          AND RELN.GLBL_CMPY_CD = DART.GLBL_CMPY_CD
+          AND RELN.DS_ACCT_RELN_TP_CD = DART.DS_ACCT_RELN_TP_CD
+          AND DART.EZCANCELFLAG = '0'
+        UNION ALL
+        SELECT RELN.GLBL_CMPY_CD
+             , RELN.RELN_DS_ACCT_NUM
+             , CIS.BILL_TO_CUST_CD
+             , CIS.SHIP_TO_CUST_CD
+         FROM DS_ACCT_RELN RELN
+            , DS_ACCT_PROS PROS
+            , DS_ACCT_RELN_TP DART
+            , CUST_INFO_SELF CIS
+        WHERE RELN.GLBL_CMPY_CD = #glblCmpyCd#
+          AND RELN.EZCANCELFLAG = '0'
+          AND RELN.GLBL_CMPY_CD = CIS.GLBL_CMPY_CD
+          AND RELN.DS_ACCT_NUM = CIS.SELL_TO_CUST_CD
+          AND RELN.RGTN_STS_CD = #rgtnStsCd#
+          AND RELN.GLBL_CMPY_CD = PROS.GLBL_CMPY_CD
+          AND RELN.RELN_DS_ACCT_NUM = PROS.DS_ACCT_NUM
+          AND PROS.EZCANCELFLAG = '0'
+          AND RELN.GLBL_CMPY_CD = DART.GLBL_CMPY_CD
+          AND RELN.DS_ACCT_RELN_TP_CD = DART.DS_ACCT_RELN_TP_CD
+          AND DART.EZCANCELFLAG = '0'
+    )
+    , CUST_INFO AS (
+        SELECT *
+         FROM CUST_INFO_SELF
+        UNION ALL
+        SELECT *
+         FROM RELN_ACCT
+    )
+    <!-- 2021/07/19 QC#58743-2 Mod End -->
+    SELECT T.SELL_TO_CUST_CD
+         , MIN(T.SVC_MACH_MSTR_PK) SVC_MACH_MSTR_PK
+         , MAX(EFF_THRU_DT) EFF_THRU_DT
+    FROM (
+        SELECT DISTINCT CI.SELL_TO_CUST_CD
+             , SMM.SVC_MACH_MSTR_PK
+             , NVL(SMM.EFF_THRU_DT, #maxEffThruDt#) EFF_THRU_DT
+          FROM SVC_MACH_MSTR SMM
+             , CUST_INFO CI
+         WHERE SMM.GLBL_CMPY_CD = #glblCmpyCd#
+           AND SMM.EZCANCELFLAG = '0'
+           AND SMM.SVC_MACH_TP_CD = #svcMachTpMachine#
+           AND SMM.SVC_MACH_MSTR_STS_CD IN (#w4i#, #instl#, #w4r#, #dlrsv#)
+           AND SMM.GLBL_CMPY_CD = CI.GLBL_CMPY_CD
+           AND SMM.OWNR_ACCT_NUM = CI.SELL_TO_CUST_CD
+           <!-- START 01/12/2023 A.Cullano [QC#60972, DEL] -->
+           <!-- AND SMM.OWNR_LOC_NUM = CI.BILL_TO_CUST_CD -->
+           <!-- END 01/12/2023 A.Cullano [QC#60972, DEL] -->
+     UNION ALL
+        SELECT DISTINCT CI.SELL_TO_CUST_CD
+             , SMM.SVC_MACH_MSTR_PK
+             , NVL(SMM.EFF_THRU_DT, #maxEffThruDt#) EFF_THRU_DT
+          FROM SVC_MACH_MSTR SMM
+             , CUST_INFO CI
+         WHERE SMM.GLBL_CMPY_CD = #glblCmpyCd#
+           AND SMM.EZCANCELFLAG   = '0'
+           AND SMM.SVC_MACH_TP_CD = #svcMachTpMachine#
+           AND SMM.SVC_MACH_MSTR_STS_CD IN (#w4i#, #instl#, #w4r#, #dlrsv#)
+           AND SMM.GLBL_CMPY_CD = CI.GLBL_CMPY_CD
+           AND SMM.BILL_TO_ACCT_NUM = CI.SELL_TO_CUST_CD
+           AND SMM.BILL_TO_LOC_NUM = CI.BILL_TO_CUST_CD
+     <!-- 2020/01/07 QC#54882-1 Add Start -->
+     UNION ALL
+        SELECT DISTINCT CI.SELL_TO_CUST_CD
+             , SMM.SVC_MACH_MSTR_PK
+             , NVL(SMM.EFF_THRU_DT, #maxEffThruDt#) EFF_THRU_DT
+          FROM SVC_MACH_MSTR SMM
+             , CUST_INFO CI
+         WHERE SMM.GLBL_CMPY_CD = #glblCmpyCd#
+           AND SMM.EZCANCELFLAG   = '0'
+           AND SMM.SVC_MACH_TP_CD = #svcMachTpMachine#
+           AND SMM.SVC_MACH_MSTR_STS_CD IN (#w4i#, #instl#, #w4r#, #dlrsv#)
+           AND SMM.GLBL_CMPY_CD = CI.GLBL_CMPY_CD
+           AND SMM.CUR_LOC_ACCT_NUM = CI.SELL_TO_CUST_CD
+           AND SMM.CUR_LOC_NUM = CI.SHIP_TO_CUST_CD
+     <!-- 2020/01/07 QC#54882-1 Add End -->
+    ) T
+    GROUP BY T.SELL_TO_CUST_CD
+    ORDER BY T.SELL_TO_CUST_CD
+<!-- 2019/12/13 QC#54882 Mod End -->
+    </statement>
+
+    <statement id="checkContract" parameterClass="Map" resultClass="Map">
+<!-- 2019/12/13 QC#54882 Mod Start -->
+<!--      SELECT -->
+<!--          STC.SELL_TO_CUST_CD -->
+<!--        , DCD.DS_CONTR_PK -->
+<!--        , MAX(NVL(DCD.CONTR_EFF_THRU_DT, '99991231')) KEEP (DENSE_RANK FIRST ORDER BY DCD.CONTR_EFF_THRU_DT DESC NULLS FIRST) CONTR_EFF_THRU_DT -->
+<!--      FROM -->
+<!--          DS_CONTR_STS_V DCSV -->
+<!--        , DS_CONTR       DC -->
+<!--        , DS_CONTR_DTL   DCD -->
+<!--        , SELL_TO_CUST   STC -->
+<!--      WHERE -->
+<!--          DCSV.GLBL_CMPY_CD  = #glblCmpyCd# -->
+<!--      AND DCSV.ETTL_AVAL_FLG = #avalFlg# -->
+<!--      <iterate property="dsContrCtrlSts" var="elem[]" open="AND DCSV.DS_CONTR_CTRL_STS_CD NOT IN (" close=")" conjunction=","> -->
+<!--          #elem[]# -->
+<!--      </iterate> -->
+<!--      AND DCSV.EZCANCELFLAG  = '0' -->
+
+<!--      AND DCSV.GLBL_CMPY_CD = DC.GLBL_CMPY_CD -->
+<!--      AND DCSV.DS_CONTR_PK  = DC.DS_CONTR_PK -->
+<!--      AND DC.EZCANCELFLAG   = '0' -->
+
+<!--      AND DC.GLBL_CMPY_CD  = DCD.GLBL_CMPY_CD -->
+<!--      AND DC.DS_CONTR_PK   = DCD.DS_CONTR_PK -->
+<!--      AND DCD.EZCANCELFLAG = '0' -->
+
+<!--      AND DC.GLBL_CMPY_CD  = STC.GLBL_CMPY_CD -->
+<!--      AND DC.DS_ACCT_NUM   = STC.SELL_TO_CUST_CD -->
+<!--      AND STC.RGTN_STS_CD  = #rgtnStsCd# -->
+<!--      AND STC.EZCANCELFLAG = '0' -->
+<!--      GROUP BY -->
+<!--          STC.SELL_TO_CUST_CD -->
+<!--        , DCD.DS_CONTR_PK -->
+    <!-- 2021/07/19 QC#58743-2 Mod Start -->
+    <!-- WITH CUST_INFO AS ( -->
+    WITH CUST_INFO_SELF AS (
+        SELECT SL.GLBL_CMPY_CD
+             , SL.SELL_TO_CUST_CD
+             , BL.BILL_TO_CUST_CD
+             , SP.SHIP_TO_CUST_CD
+         FROM SELL_TO_CUST SL
+            , ACCT_LOC     AL
+            , PTY_LOC_WRK  PLW
+            , BILL_TO_CUST BL
+            , (SELECT SH.GLBL_CMPY_CD
+                    , SH.SHIP_TO_CUST_CD
+                    , SH.LOC_NUM
+                 FROM SHIP_TO_CUST SH
+                WHERE SH.GLBL_CMPY_CD = #glblCmpyCd#
+                  AND SH.EZCANCELFLAG = '0'
+                  AND SH.RGTN_STS_CD = #rgtnStsCd#
+                  AND SH.LOC_ROLE_TP_CD = #locRoleTpShip#
+              ) SP
+        WHERE SL.GLBL_CMPY_CD = #glblCmpyCd#
+          AND SL.EZCANCELFLAG = '0'
+          AND SL.RGTN_STS_CD = #rgtnStsCd#
+          AND SL.GLBL_CMPY_CD = AL.GLBL_CMPY_CD
+          AND SL.SELL_TO_CUST_CD = AL.DS_ACCT_NUM
+          AND AL.EZCANCELFLAG = '0'
+          AND AL.RGTN_STS_CD = #rgtnStsCd#
+          AND AL.GLBL_CMPY_CD = PLW.GLBL_CMPY_CD
+          AND AL.LOC_NUM = PLW.LOC_NUM
+          AND PLW.EZCANCELFLAG = '0'
+          AND PLW.RGTN_STS_CD = #rgtnStsCd#
+          AND PLW.GLBL_CMPY_CD = BL.GLBL_CMPY_CD(+)
+          AND PLW.LOC_NUM = BL.LOC_NUM(+)
+          AND BL.EZCANCELFLAG(+) = '0'
+          AND BL.RGTN_STS_CD(+) = #rgtnStsCd#
+          AND PLW.GLBL_CMPY_CD = SP.GLBL_CMPY_CD(+)
+          AND PLW.LOC_NUM = SP.LOC_NUM(+)
+    )
+    , RELN_ACCT AS (
+        SELECT RELN.GLBL_CMPY_CD
+             , RELN.RELN_DS_ACCT_NUM
+             , CIS.BILL_TO_CUST_CD
+             , CIS.SHIP_TO_CUST_CD
+         FROM DS_ACCT_RELN RELN
+            , SELL_TO_CUST ACCT
+            , DS_ACCT_RELN_TP DART
+            , CUST_INFO_SELF CIS
+        WHERE RELN.GLBL_CMPY_CD = #glblCmpyCd#
+          AND RELN.EZCANCELFLAG = '0'
+          AND RELN.GLBL_CMPY_CD = CIS.GLBL_CMPY_CD
+          AND RELN.DS_ACCT_NUM = CIS.SELL_TO_CUST_CD
+          AND RELN.RGTN_STS_CD = #rgtnStsCd#
+          AND RELN.GLBL_CMPY_CD = ACCT.GLBL_CMPY_CD
+          AND RELN.RELN_DS_ACCT_NUM = ACCT.SELL_TO_CUST_CD
+          AND ACCT.EZCANCELFLAG = '0'
+          AND RELN.GLBL_CMPY_CD = DART.GLBL_CMPY_CD
+          AND RELN.DS_ACCT_RELN_TP_CD = DART.DS_ACCT_RELN_TP_CD
+          AND DART.EZCANCELFLAG = '0'
+        UNION ALL
+        SELECT RELN.GLBL_CMPY_CD
+             , RELN.RELN_DS_ACCT_NUM
+             , CIS.BILL_TO_CUST_CD
+             , CIS.SHIP_TO_CUST_CD
+         FROM DS_ACCT_RELN RELN
+            , DS_ACCT_PROS PROS
+            , DS_ACCT_RELN_TP DART
+            , CUST_INFO_SELF CIS
+        WHERE RELN.GLBL_CMPY_CD = #glblCmpyCd#
+          AND RELN.EZCANCELFLAG = '0'
+          AND RELN.GLBL_CMPY_CD = CIS.GLBL_CMPY_CD
+          AND RELN.DS_ACCT_NUM = CIS.SELL_TO_CUST_CD
+          AND RELN.RGTN_STS_CD = #rgtnStsCd#
+          AND RELN.GLBL_CMPY_CD = PROS.GLBL_CMPY_CD
+          AND RELN.RELN_DS_ACCT_NUM = PROS.DS_ACCT_NUM
+          AND PROS.EZCANCELFLAG = '0'
+          AND RELN.GLBL_CMPY_CD = DART.GLBL_CMPY_CD
+          AND RELN.DS_ACCT_RELN_TP_CD = DART.DS_ACCT_RELN_TP_CD
+          AND DART.EZCANCELFLAG = '0'
+    )
+    , CUST_INFO AS (
+        SELECT *
+         FROM CUST_INFO_SELF
+        UNION ALL
+        SELECT *
+         FROM RELN_ACCT
+    )
+    <!-- 2021/07/19 QC#58743-2 Mod End -->
+    SELECT T.DS_ACCT_NUM       SELL_TO_CUST_CD
+         , MIN(T.DS_CONTR_PK)  DS_CONTR_PK
+         , MAX(T.CONTR_EFF_THRU_DT) CONTR_EFF_THRU_DT
+    FROM (
+    SELECT DISTINCT DCR.DS_ACCT_NUM
+         , DCD.DS_CONTR_PK
+         , NVL(DCD.CONTR_EFF_THRU_DT, #maxEffThruDt#) CONTR_EFF_THRU_DT
+      FROM DS_CONTR       DCR
+         , DS_CONTR_STS_V DCSV 
+         , DS_CONTR_DTL   DCD
+         , DS_CONTR_BLLG_SCHD DCBS
+         , CUST_INFO CI
+     WHERE DCR.GLBL_CMPY_CD = #glblCmpyCd#
+       AND DCR.EZCANCELFLAG  = '0'
+       AND DCR.GLBL_CMPY_CD = DCSV.GLBL_CMPY_CD
+       AND DCR.DS_CONTR_PK  = DCSV.DS_CONTR_PK
+       AND DCSV.EZCANCELFLAG = '0'
+       AND DCSV.ETTL_AVAL_FLG = #flgY#
+       AND DCSV.DS_CONTR_CTRL_STS_CD NOT IN (#dsContrCtrlStsCancelled#, #dsContrCtrlStsDraft#)
+       AND DCR.GLBL_CMPY_CD = DCD.GLBL_CMPY_CD
+       AND DCR.DS_CONTR_PK  = DCD.DS_CONTR_PK
+       AND DCD.EZCANCELFLAG = '0'
+       AND DCD.GLBL_CMPY_CD = DCBS.GLBL_CMPY_CD
+       AND DCD.DS_CONTR_DTL_PK = DCBS.DS_CONTR_DTL_PK
+       AND DCBS.EZCANCELFLAG = '0'
+       AND DCBS.INV_FLG  = #flgN#
+       AND DCR.GLBL_CMPY_CD = CI.GLBL_CMPY_CD
+       AND DCR.DS_ACCT_NUM = CI.SELL_TO_CUST_CD 
+       AND DCR.ALT_PAYER_CUST_CD = CI.BILL_TO_CUST_CD
+    UNION ALL
+    SELECT DISTINCT SMM.CUR_LOC_ACCT_NUM AS DS_ACCT_NUM
+         , DCD.DS_CONTR_PK
+         , NVL(DCD.CONTR_EFF_THRU_DT, #maxEffThruDt#) CONTR_EFF_THRU_DT
+      FROM DS_CONTR_DTL   DCD
+         , DS_CONTR_STS_V DCSV
+         , DS_CONTR_BLLG_SCHD DCBS
+         , (
+            <!-- 2020/10/09 QC#57751 Add Start -->
+            SELECT * FROM (
+            <!-- 2020/10/09 QC#57751 Add End -->
+                SELECT H.GLBL_CMPY_CD
+                     , H.SVC_MACH_MSTR_PK
+                     , H.CUR_LOC_ACCT_NUM
+                     , H.CUR_LOC_NUM
+                     <!-- 2020/10/09 QC#57751 Add Start -->
+                     , ROW_NUMBER() OVER (
+                         PARTITION BY H.SVC_MACH_MSTR_PK
+                         ORDER BY H.SVC_MACH_MSTR_PK
+                                , H.HIST_CRAT_TS DESC
+                     ) RANK_NUM
+                     <!-- 2020/10/09 QC#57751 End Start -->
+                  FROM SVC_MACH_MSTR_HIST H
+                 WHERE H.GLBL_CMPY_CD = #glblCmpyCd#
+                   AND H.SVC_MACH_MSTR_STS_CD IN (#svcMachStsW4I#, #svcMachStsInstl#, #svcMachStsW4R#)
+                   AND H.EZCANCELFLAG = '0'
+                <!-- 2020/10/09 QC#57751 Add Start -->
+                ) LH
+                WHERE LH.RANK_NUM= 1
+                <!-- 2020/10/09 QC#57751 Add End -->
+           ) SMM
+         , CUST_INFO CI
+     WHERE DCD.GLBL_CMPY_CD = #glblCmpyCd#
+       AND DCD.EZCANCELFLAG = '0'
+       AND DCD.GLBL_CMPY_CD = DCSV.GLBL_CMPY_CD
+       AND DCD.DS_CONTR_PK  = DCSV.DS_CONTR_PK
+       AND DCSV.EZCANCELFLAG = '0'
+       AND DCSV.ETTL_AVAL_FLG = #flgY#
+       AND DCSV.DS_CONTR_CTRL_STS_CD NOT IN (#dsContrCtrlStsCancelled#, #dsContrCtrlStsDraft#)
+       AND DCD.GLBL_CMPY_CD = DCBS.GLBL_CMPY_CD
+       AND DCD.DS_CONTR_DTL_PK = DCBS.DS_CONTR_DTL_PK
+       AND DCBS.EZCANCELFLAG = '0'
+       AND DCBS.INV_FLG = #flgN#
+       AND DCD.GLBL_CMPY_CD = SMM.GLBL_CMPY_CD
+       AND DCD.SVC_MACH_MSTR_PK = SMM.SVC_MACH_MSTR_PK
+       AND SMM.GLBL_CMPY_CD = CI.GLBL_CMPY_CD
+       AND SMM.CUR_LOC_ACCT_NUM = CI.SELL_TO_CUST_CD 
+       AND SMM.CUR_LOC_NUM = CI.SHIP_TO_CUST_CD
+    UNION ALL
+    SELECT DISTINCT DCR.DS_ACCT_NUM
+         , DCD.DS_CONTR_PK
+         , NVL(DCD.CONTR_EFF_THRU_DT, #maxEffThruDt#) CONTR_EFF_THRU_DT
+      FROM DS_CONTR       DCR
+         , DS_CONTR_STS_V DCSV
+         , DS_CONTR_DTL   DCD
+         , DS_CONTR_BLLG_SCHD DCBS
+         , CUST_INFO CI
+     WHERE DCR.GLBL_CMPY_CD = #glblCmpyCd#
+       AND DCR.EZCANCELFLAG  = '0'
+       AND DCR.GLBL_CMPY_CD = CI.GLBL_CMPY_CD
+       AND DCR.DS_ACCT_NUM = CI.SELL_TO_CUST_CD 
+       AND DCR.GLBL_CMPY_CD = DCSV.GLBL_CMPY_CD
+       AND DCR.DS_CONTR_PK  = DCSV.DS_CONTR_PK
+       AND DCSV.EZCANCELFLAG = '0'
+       AND DCSV.ETTL_AVAL_FLG = #flgY#
+       AND DCSV.DS_CONTR_CTRL_STS_CD NOT IN (#dsContrCtrlStsCancelled#, #dsContrCtrlStsDraft#)
+       AND DCR.GLBL_CMPY_CD = DCD.GLBL_CMPY_CD
+       AND DCR.DS_CONTR_PK = DCD.DS_CONTR_PK
+       AND DCD.EZCANCELFLAG = '0'
+       AND DCD.GLBL_CMPY_CD = DCBS.GLBL_CMPY_CD
+       AND DCD.DS_CONTR_DTL_PK = DCBS.DS_CONTR_DTL_PK
+       AND DCBS.EZCANCELFLAG = '0'
+       AND DCBS.INV_FLG  = #flgN#
+       AND DCD.GLBL_CMPY_CD = CI.GLBL_CMPY_CD
+       AND DCD.BASE_BILL_TO_CUST_CD = CI.BILL_TO_CUST_CD
+    <!-- 2021/05/20 QC#58743 Add Start -->
+    UNION ALL
+    SELECT DISTINCT DCR.DS_ACCT_NUM
+         , DCD.DS_CONTR_PK
+         , NVL(DCD.CONTR_EFF_THRU_DT, '99991231') CONTR_EFF_THRU_DT
+      FROM DS_CONTR       DCR
+         , DS_CONTR_STS_V DCSV 
+         , DS_CONTR_DTL   DCD
+         , DS_CONTR_BLLG_SCHD DCBS
+         , DS_CONTR_BLLG_MTR DCBM
+         , CUST_INFO CI
+     WHERE DCR.GLBL_CMPY_CD = #glblCmpyCd#
+       AND DCR.EZCANCELFLAG  = '0'
+       AND DCR.GLBL_CMPY_CD = DCSV.GLBL_CMPY_CD
+       AND DCR.DS_CONTR_PK  = DCSV.DS_CONTR_PK
+       AND DCSV.EZCANCELFLAG = '0'
+       AND DCSV.ETTL_AVAL_FLG = #flgY#
+       AND DCSV.DS_CONTR_CTRL_STS_CD NOT IN (#dsContrCtrlStsCancelled#, #dsContrCtrlStsDraft#)
+       AND DCR.GLBL_CMPY_CD = DCD.GLBL_CMPY_CD
+       AND DCR.DS_CONTR_PK  = DCD.DS_CONTR_PK
+       AND DCD.EZCANCELFLAG = '0'
+       AND DCD.GLBL_CMPY_CD = DCBS.GLBL_CMPY_CD
+       AND DCD.DS_CONTR_DTL_PK = DCBS.DS_CONTR_DTL_PK
+       AND DCBS.EZCANCELFLAG = '0'
+       AND DCBS.INV_FLG  = #flgN#
+       AND DCR.GLBL_CMPY_CD = CI.GLBL_CMPY_CD
+       AND DCR.DS_ACCT_NUM = CI.SELL_TO_CUST_CD 
+       AND DCD.GLBL_CMPY_CD = DCBM.GLBL_CMPY_CD
+       AND DCD.DS_CONTR_DTL_PK = DCBM.DS_CONTR_DTL_PK
+       AND DCBM.EZCANCELFLAG = '0'
+       AND DCBM.GLBL_CMPY_CD = CI.GLBL_CMPY_CD
+       AND DCBM.BLLG_MTR_BILL_TO_CUST_CD = CI.BILL_TO_CUST_CD
+    UNION ALL
+    SELECT DISTINCT DCR.DS_ACCT_NUM
+         , DCD.DS_CONTR_PK
+         , NVL(DCD.CONTR_EFF_THRU_DT, #maxEffThruDt#) CONTR_EFF_THRU_DT
+      FROM DS_CONTR       DCR
+         , DS_CONTR_STS_V DCSV 
+         , DS_CONTR_DTL   DCD
+         , DS_CONTR_BLLG_SCHD DCBS
+         , CUST_INFO CI
+     WHERE DCR.GLBL_CMPY_CD = #glblCmpyCd#
+       AND DCR.EZCANCELFLAG  = '0'
+       AND DCR.GLBL_CMPY_CD = DCSV.GLBL_CMPY_CD
+       AND DCR.DS_CONTR_PK  = DCSV.DS_CONTR_PK
+       AND DCSV.EZCANCELFLAG = '0'
+       AND DCSV.ETTL_AVAL_FLG = #flgN#
+       AND DCSV.DS_CONTR_CTRL_STS_CD = #dsContrCtrlStsTerminated#
+       AND DCR.GLBL_CMPY_CD = DCD.GLBL_CMPY_CD
+       AND DCR.DS_CONTR_PK  = DCD.DS_CONTR_PK
+       AND DCD.EZCANCELFLAG = '0'
+       AND DCD.GLBL_CMPY_CD = DCBS.GLBL_CMPY_CD
+       AND DCD.DS_CONTR_DTL_PK = DCBS.DS_CONTR_DTL_PK
+       AND DCBS.EZCANCELFLAG = '0'
+       AND DCBS.INV_FLG  = #flgN#
+       <!-- START 2022/07/28 A.Cullano [QC#60173, ADD] -->
+       AND DCBS.SKIP_RECOV_TP_CD != #skipRecovTpSkip#
+       <!-- END 2022/07/28 A.Cullano [QC#60173, ADD] -->
+       AND DCR.GLBL_CMPY_CD = CI.GLBL_CMPY_CD
+       AND DCR.DS_ACCT_NUM = CI.SELL_TO_CUST_CD 
+       AND DCR.ALT_PAYER_CUST_CD = CI.BILL_TO_CUST_CD
+    UNION ALL
+    SELECT DISTINCT SMM.CUR_LOC_ACCT_NUM AS DS_ACCT_NUM
+         , DCD.DS_CONTR_PK
+         , NVL(DCD.CONTR_EFF_THRU_DT, #maxEffThruDt#) CONTR_EFF_THRU_DT
+      FROM DS_CONTR_DTL   DCD
+         , DS_CONTR_STS_V DCSV
+         , DS_CONTR_BLLG_SCHD DCBS
+         , (
+            SELECT * FROM (
+                SELECT H.GLBL_CMPY_CD
+                     , H.SVC_MACH_MSTR_PK
+                     , H.CUR_LOC_ACCT_NUM
+                     , H.CUR_LOC_NUM
+                     , ROW_NUMBER() OVER (
+                         PARTITION BY H.SVC_MACH_MSTR_PK
+                         ORDER BY H.SVC_MACH_MSTR_PK
+                                , H.HIST_CRAT_TS DESC
+                     ) RANK_NUM
+                  FROM SVC_MACH_MSTR_HIST H
+                 WHERE H.GLBL_CMPY_CD = #glblCmpyCd#
+                   AND H.SVC_MACH_MSTR_STS_CD IN (#svcMachStsW4I#, #svcMachStsInstl#, #svcMachStsW4R#)
+                   AND H.EZCANCELFLAG = '0'
+                ) LH
+                WHERE LH.RANK_NUM= 1
+           ) SMM
+         , CUST_INFO CI
+     WHERE DCD.GLBL_CMPY_CD = #glblCmpyCd#
+       AND DCD.EZCANCELFLAG = '0'
+       AND DCD.GLBL_CMPY_CD = DCSV.GLBL_CMPY_CD
+       AND DCD.DS_CONTR_PK  = DCSV.DS_CONTR_PK
+       AND DCSV.EZCANCELFLAG = '0'
+       AND DCSV.ETTL_AVAL_FLG = #flgN#
+       AND DCSV.DS_CONTR_CTRL_STS_CD = #dsContrCtrlStsTerminated#
+       AND DCD.GLBL_CMPY_CD = DCBS.GLBL_CMPY_CD
+       AND DCD.DS_CONTR_DTL_PK = DCBS.DS_CONTR_DTL_PK
+       AND DCBS.EZCANCELFLAG = '0'
+       AND DCBS.INV_FLG = #flgN#
+       <!-- START 2022/07/28 A.Cullano [QC#60173, ADD] -->
+       AND DCBS.SKIP_RECOV_TP_CD != #skipRecovTpSkip#
+       <!-- END 2022/07/28 A.Cullano [QC#60173, ADD] -->
+       AND DCD.GLBL_CMPY_CD = SMM.GLBL_CMPY_CD
+       AND DCD.SVC_MACH_MSTR_PK = SMM.SVC_MACH_MSTR_PK
+       AND SMM.GLBL_CMPY_CD = CI.GLBL_CMPY_CD
+       AND SMM.CUR_LOC_ACCT_NUM = CI.SELL_TO_CUST_CD 
+       AND SMM.CUR_LOC_NUM = CI.SHIP_TO_CUST_CD
+    UNION ALL
+    SELECT DISTINCT DCR.DS_ACCT_NUM
+         , DCD.DS_CONTR_PK
+         , NVL(DCD.CONTR_EFF_THRU_DT, #maxEffThruDt#) CONTR_EFF_THRU_DT
+      FROM DS_CONTR       DCR
+         , DS_CONTR_STS_V DCSV
+         , DS_CONTR_DTL   DCD
+         , DS_CONTR_BLLG_SCHD DCBS
+         , CUST_INFO CI
+     WHERE DCR.GLBL_CMPY_CD = #glblCmpyCd#
+       AND DCR.EZCANCELFLAG  = '0'
+       AND DCR.GLBL_CMPY_CD = CI.GLBL_CMPY_CD
+       AND DCR.DS_ACCT_NUM = CI.SELL_TO_CUST_CD 
+       AND DCR.GLBL_CMPY_CD = DCSV.GLBL_CMPY_CD
+       AND DCR.DS_CONTR_PK  = DCSV.DS_CONTR_PK
+       AND DCSV.EZCANCELFLAG = '0'
+       AND DCSV.ETTL_AVAL_FLG = #flgN#
+       AND DCSV.DS_CONTR_CTRL_STS_CD = #dsContrCtrlStsTerminated#
+       AND DCR.GLBL_CMPY_CD = DCD.GLBL_CMPY_CD
+       AND DCR.DS_CONTR_PK = DCD.DS_CONTR_PK
+       AND DCD.EZCANCELFLAG = '0'
+       AND DCD.GLBL_CMPY_CD = DCBS.GLBL_CMPY_CD
+       AND DCD.DS_CONTR_DTL_PK = DCBS.DS_CONTR_DTL_PK
+       AND DCBS.EZCANCELFLAG = '0'
+       AND DCBS.INV_FLG  = #flgN#
+       <!-- START 2022/07/28 A.Cullano [QC#60173, ADD] -->
+       AND DCBS.SKIP_RECOV_TP_CD != #skipRecovTpSkip#
+       <!-- END 2022/07/28 A.Cullano [QC#60173, ADD] -->
+       AND DCD.GLBL_CMPY_CD = CI.GLBL_CMPY_CD
+       AND DCD.BASE_BILL_TO_CUST_CD = CI.BILL_TO_CUST_CD
+    UNION ALL
+    SELECT DISTINCT DCR.DS_ACCT_NUM
+         , DCD.DS_CONTR_PK
+         , NVL(DCD.CONTR_EFF_THRU_DT, '99991231') CONTR_EFF_THRU_DT
+      FROM DS_CONTR       DCR
+         , DS_CONTR_STS_V DCSV 
+         , DS_CONTR_DTL   DCD
+         , DS_CONTR_BLLG_SCHD DCBS
+         , DS_CONTR_BLLG_MTR DCBM
+         , CUST_INFO CI
+     WHERE DCR.GLBL_CMPY_CD = #glblCmpyCd#
+       AND DCR.EZCANCELFLAG  = '0'
+       AND DCR.GLBL_CMPY_CD = DCSV.GLBL_CMPY_CD
+       AND DCR.DS_CONTR_PK  = DCSV.DS_CONTR_PK
+       AND DCSV.EZCANCELFLAG = '0'
+       AND DCSV.ETTL_AVAL_FLG = #flgN#
+       AND DCSV.DS_CONTR_CTRL_STS_CD = #dsContrCtrlStsTerminated#
+       AND DCR.GLBL_CMPY_CD = DCD.GLBL_CMPY_CD
+       AND DCR.DS_CONTR_PK  = DCD.DS_CONTR_PK
+       AND DCD.EZCANCELFLAG = '0'
+       AND DCD.GLBL_CMPY_CD = DCBS.GLBL_CMPY_CD
+       AND DCD.DS_CONTR_DTL_PK = DCBS.DS_CONTR_DTL_PK
+       AND DCBS.EZCANCELFLAG = '0'
+       AND DCBS.INV_FLG  = #flgN#
+       <!-- START 2022/07/28 A.Cullano [QC#60173, ADD] -->
+       AND DCBS.SKIP_RECOV_TP_CD != #skipRecovTpSkip#
+       <!-- END 2022/07/28 A.Cullano [QC#60173, ADD] -->
+       AND DCR.GLBL_CMPY_CD = CI.GLBL_CMPY_CD
+       AND DCR.DS_ACCT_NUM = CI.SELL_TO_CUST_CD 
+       AND DCD.GLBL_CMPY_CD = DCBM.GLBL_CMPY_CD
+       AND DCD.DS_CONTR_DTL_PK = DCBM.DS_CONTR_DTL_PK
+       AND DCBM.EZCANCELFLAG = '0'
+       AND DCBM.GLBL_CMPY_CD = CI.GLBL_CMPY_CD
+       AND DCBM.BLLG_MTR_BILL_TO_CUST_CD = CI.BILL_TO_CUST_CD
+    <!-- 2021/05/20 QC#58743 Add End -->
+    ) T
+    GROUP BY T.DS_ACCT_NUM
+    ORDER BY T.DS_ACCT_NUM
+<!-- 2019/12/13 QC#54882 Mod End -->
+    </statement>
+    
+    <statement id="checkServiceCallTransaction" parameterClass="Map" resultClass="Map">
+<!-- 2019/12/13 QC#54882 Mod Start -->
+<!--      SELECT -->
+<!--          STC.SELL_TO_CUST_CD SELL_TO_CUST_CD -->
+<!--        , ST.SVC_TASK_NUM     SVC_TASK_NUM -->
+<!--        , NVL(ST.SVC_TASK_RCV_DT, '99991231')  SVC_TASK_RCV_DT -->
+<!--      FROM -->
+<!--          SVC_TASK      ST -->
+<!--        , FSR           F -->
+<!--        , SELL_TO_CUST  STC -->
+<!--      WHERE -->
+<!--          ST.GLBL_CMPY_CD     = #glblCmpyCd# -->
+<!--      AND (ST.SVC_TASK_RCV_DT IS NULL -->
+<!--       OR  ST.SVC_TASK_RCV_DT &gt;= #slsDtPast#) -->
+<!--      <iterate property="svcTaskSts" var="elem[]" open="AND ST.SVC_TASK_STS_CD NOT IN (" close=")" conjunction=","> -->
+<!--          #elem[]# -->
+<!--      </iterate> -->
+<!--      AND ST.EZCANCELFLAG     = '0' -->
+
+<!--      AND ST.GLBL_CMPY_CD     = F.GLBL_CMPY_CD -->
+<!--      AND ST.FSR_NUM          = F.FSR_NUM -->
+<!--      AND F.EZCANCELFLAG      = '0' -->
+
+<!--      AND F.GLBL_CMPY_CD      = STC.GLBL_CMPY_CD -->
+<!--      AND  -->
+<!--          ( -->
+<!--           F.SELL_TO_CUST_CD      = STC.SELL_TO_CUST_CD -->
+<!--        OR F.BILL_TO_CUST_ACCT_CD = STC.SELL_TO_CUST_CD -->
+<!--        OR F.SHIP_TO_CUST_ACCT_CD = STC.SELL_TO_CUST_CD -->
+<!--          ) -->
+<!--      AND STC.RGTN_STS_CD     = #rgtnStsCd# -->
+<!--      AND STC.EZCANCELFLAG    =  '0' -->
+    <!-- 2021/07/19 QC#58743-2 Mod Start -->
+    <!-- WITH CUST_INFO AS ( -->
+    WITH CUST_INFO_SELF AS (
+        SELECT SL.GLBL_CMPY_CD
+             , SL.SELL_TO_CUST_CD
+             , BL.BILL_TO_CUST_CD
+             , SP.SHIP_TO_CUST_CD
+         FROM SELL_TO_CUST SL
+            , ACCT_LOC     AL
+            , PTY_LOC_WRK  PLW
+            , BILL_TO_CUST BL
+            , (SELECT SH.GLBL_CMPY_CD
+                    , SH.SHIP_TO_CUST_CD
+                    , SH.LOC_NUM
+                 FROM SHIP_TO_CUST SH
+                WHERE SH.GLBL_CMPY_CD = #glblCmpyCd#
+                  AND SH.EZCANCELFLAG = '0'
+                  AND SH.RGTN_STS_CD = #rgtnStsCd#
+                  AND SH.LOC_ROLE_TP_CD = #locRoleTpShip#
+              ) SP
+        WHERE SL.GLBL_CMPY_CD = #glblCmpyCd#
+          AND SL.EZCANCELFLAG = '0'
+          AND SL.RGTN_STS_CD = #rgtnStsCd#
+          AND SL.GLBL_CMPY_CD = AL.GLBL_CMPY_CD
+          AND SL.SELL_TO_CUST_CD = AL.DS_ACCT_NUM
+          AND AL.EZCANCELFLAG = '0'
+          AND AL.RGTN_STS_CD = #rgtnStsCd#
+          AND AL.GLBL_CMPY_CD = PLW.GLBL_CMPY_CD
+          AND AL.LOC_NUM = PLW.LOC_NUM
+          AND PLW.EZCANCELFLAG = '0'
+          AND PLW.RGTN_STS_CD = #rgtnStsCd#
+          AND PLW.GLBL_CMPY_CD = BL.GLBL_CMPY_CD(+)
+          AND PLW.LOC_NUM = BL.LOC_NUM(+)
+          AND BL.EZCANCELFLAG(+) = '0'
+          AND BL.RGTN_STS_CD(+) = #rgtnStsCd#
+          AND PLW.GLBL_CMPY_CD = SP.GLBL_CMPY_CD(+)
+          AND PLW.LOC_NUM = SP.LOC_NUM(+)
+    )
+    , RELN_ACCT AS (
+        SELECT RELN.GLBL_CMPY_CD
+             , RELN.RELN_DS_ACCT_NUM
+             , CIS.BILL_TO_CUST_CD
+             , CIS.SHIP_TO_CUST_CD
+         FROM DS_ACCT_RELN RELN
+            , SELL_TO_CUST ACCT
+            , DS_ACCT_RELN_TP DART
+            , CUST_INFO_SELF CIS
+        WHERE RELN.GLBL_CMPY_CD = #glblCmpyCd#
+          AND RELN.EZCANCELFLAG = '0'
+          AND RELN.GLBL_CMPY_CD = CIS.GLBL_CMPY_CD
+          AND RELN.DS_ACCT_NUM = CIS.SELL_TO_CUST_CD
+          AND RELN.RGTN_STS_CD = #rgtnStsCd#
+          AND RELN.GLBL_CMPY_CD = ACCT.GLBL_CMPY_CD
+          AND RELN.RELN_DS_ACCT_NUM = ACCT.SELL_TO_CUST_CD
+          AND ACCT.EZCANCELFLAG = '0'
+          AND RELN.GLBL_CMPY_CD = DART.GLBL_CMPY_CD
+          AND RELN.DS_ACCT_RELN_TP_CD = DART.DS_ACCT_RELN_TP_CD
+          AND DART.EZCANCELFLAG = '0'
+        UNION ALL
+        SELECT RELN.GLBL_CMPY_CD
+             , RELN.RELN_DS_ACCT_NUM
+             , CIS.BILL_TO_CUST_CD
+             , CIS.SHIP_TO_CUST_CD
+         FROM DS_ACCT_RELN RELN
+            , DS_ACCT_PROS PROS
+            , DS_ACCT_RELN_TP DART
+            , CUST_INFO_SELF CIS
+        WHERE RELN.GLBL_CMPY_CD = #glblCmpyCd#
+          AND RELN.EZCANCELFLAG = '0'
+          AND RELN.GLBL_CMPY_CD = CIS.GLBL_CMPY_CD
+          AND RELN.DS_ACCT_NUM = CIS.SELL_TO_CUST_CD
+          AND RELN.RGTN_STS_CD = #rgtnStsCd#
+          AND RELN.GLBL_CMPY_CD = PROS.GLBL_CMPY_CD
+          AND RELN.RELN_DS_ACCT_NUM = PROS.DS_ACCT_NUM
+          AND PROS.EZCANCELFLAG = '0'
+          AND RELN.GLBL_CMPY_CD = DART.GLBL_CMPY_CD
+          AND RELN.DS_ACCT_RELN_TP_CD = DART.DS_ACCT_RELN_TP_CD
+          AND DART.EZCANCELFLAG = '0'
+    )
+    , CUST_INFO AS (
+        SELECT *
+         FROM CUST_INFO_SELF
+        UNION ALL
+        SELECT *
+         FROM RELN_ACCT
+    )
+    <!-- 2021/07/19 QC#58743-2 Mod End -->
+    SELECT T.SHIP_TO_CUST_ACCT_CD       SELL_TO_CUST_CD
+         , MIN(T.SVC_TASK_NUM)  SVC_TASK_NUM
+         , MAX(T.SVC_TASK_RCV_DT) SVC_TASK_RCV_DT
+    FROM (
+    SELECT DISTINCT F.SHIP_TO_CUST_ACCT_CD
+         , ST.SVC_TASK_NUM
+         , NVL(ST.SVC_TASK_RCV_DT, #maxEffThruDt#) SVC_TASK_RCV_DT
+      FROM SVC_TASK ST
+         , FSR      F
+         , CUST_INFO CI
+     WHERE ST.GLBL_CMPY_CD = #glblCmpyCd#
+       AND ST.EZCANCELFLAG = '0'
+       AND ST.SVC_TASK_STS_CD NOT IN (#svcTaskStsClosed#, #svcTaskStsCancelled#)
+       AND ST.GLBL_CMPY_CD = F.GLBL_CMPY_CD
+       AND ST.FSR_NUM = F.FSR_NUM
+       AND F.EZCANCELFLAG  = '0'
+       AND F.GLBL_CMPY_CD = CI.GLBL_CMPY_CD
+       AND F.BILL_TO_CUST_ACCT_CD = CI.SELL_TO_CUST_CD 
+       AND F.BILL_TO_CUST_CD = CI.BILL_TO_CUST_CD
+    UNION ALL
+    SELECT DISTINCT F.SHIP_TO_CUST_ACCT_CD
+         , ST.SVC_TASK_NUM
+         , NVL(ST.SVC_TASK_RCV_DT, #maxEffThruDt#) SVC_TASK_RCV_DT
+      FROM SVC_TASK ST
+         , FSR      F
+         , CUST_INFO CI
+     WHERE ST.GLBL_CMPY_CD = #glblCmpyCd#
+       AND ST.EZCANCELFLAG    = '0'
+       AND ST.SVC_TASK_STS_CD NOT IN (#svcTaskStsClosed#, #svcTaskStsCancelled#)
+       AND ST.GLBL_CMPY_CD = F.GLBL_CMPY_CD
+       AND ST.FSR_NUM = F.FSR_NUM
+       AND F.EZCANCELFLAG  = '0'
+       AND F.GLBL_CMPY_CD = CI.GLBL_CMPY_CD
+       AND F.SHIP_TO_CUST_ACCT_CD = CI.SELL_TO_CUST_CD 
+       AND F.SHIP_TO_CUST_CD = CI.SHIP_TO_CUST_CD
+    ) T
+    GROUP BY T.SHIP_TO_CUST_ACCT_CD
+    ORDER BY T.SHIP_TO_CUST_ACCT_CD
+<!-- 2019/12/13 QC#54882 Mod End -->
+    </statement>
+
+    <statement id="checkOrderTransaction" parameterClass="Map" resultClass="Map">
+<!-- 2019/12/13 QC#54882 Mod Start -->
+<!--      SELECT -->
+<!--         SELL_TO_CUST_CD -->
+<!--        ,MAX(CPO_ORD_NUM) CPO_ORD_NUM -->
+       <!-- START 2018/01/29 Hd.Sugawara [QC#22780,MOD] -->
+       <!-- ,MAX(NVL(CPO_ORD_TS, '99991231')) CPO_ORD_TS -->
+<!--        ,MAX(CPO_ORD_TS) CPO_ORD_TS -->
+       <!-- END 2018/01/29 Hd.Sugawara [QC#22780,MOD] -->
+<!--      FROM -->
+<!--          ( -->
+<!--           SELECT -->
+<!--              STC.SELL_TO_CUST_CD -->
+<!--             ,C.CPO_ORD_NUM -->
+<!--             ,C.CPO_ORD_TS -->
+<!--           FROM -->
+<!--               CPO                C -->
+<!--             , DS_CPO_CONFIG      DCC -->
+<!--             , CPO_DTL            CD -->
+<!--             , SELL_TO_CUST       STC -->
+<!--           WHERE -->
+<!--               C.GLBL_CMPY_CD              =  #glblCmpyCd# -->
+<!--           AND C.EZCANCELFLAG              =  '0' -->
+<!--           AND C.CPO_ORD_TS            &gt;=  #slsDtPast# -->
+<!--           AND C.OPEN_FLG                  =  'Y' -->
+
+<!--           AND C.GLBL_CMPY_CD              =  DCC.GLBL_CMPY_CD -->
+<!--           AND C.CPO_ORD_NUM               =  DCC.CPO_ORD_NUM -->
+<!--           AND DCC.EZCANCELFLAG            =  '0' -->
+
+<!--           AND DCC.GLBL_CMPY_CD            =  CD.GLBL_CMPY_CD -->
+<!--           AND DCC.CPO_ORD_NUM             =  CD.CPO_ORD_NUM -->
+<!--           AND DCC.DS_CPO_CONFIG_PK        =  CD.DS_CPO_CONFIG_PK -->
+<!--           AND CD.OPEN_FLG                 =  'Y' -->
+<!--           AND CD.EZCANCELFLAG             =  '0' -->
+
+          <!-- START 2018/01/29 Hd.Sugawara [QC#22780,MOD] -->
+          <!-- AND C.GLBL_CMPY_CD              =  STC.GLBL_CMPY_CD -->
+          <!-- AND C.SELL_TO_CUST_CD           =  STC.SELL_TO_CUST_CD -->
+<!--           AND ( -->
+<!--                   (       C.GLBL_CMPY_CD            =  STC.GLBL_CMPY_CD -->
+<!--                       AND C.SELL_TO_CUST_CD         =  STC.SELL_TO_CUST_CD -->
+<!--                   ) OR (  DCC.GLBL_CMPY_CD          =  STC.GLBL_CMPY_CD -->
+<!--                       AND DCC.BILL_TO_CUST_ACCT_CD  =  STC.SELL_TO_CUST_CD -->
+<!--                   ) OR (  DCC.GLBL_CMPY_CD          =  STC.GLBL_CMPY_CD -->
+<!--                       AND DCC.SHIP_TO_CUST_ACCT_CD  =  STC.SELL_TO_CUST_CD -->
+<!--                   ) -->
+<!--               ) -->
+          <!-- END 2018/01/29 Hd.Sugawara [QC#22780,MOD] -->
+
+<!--           AND STC.RGTN_STS_CD             =  #rgtnStsCd# -->
+<!--           AND STC.EZCANCELFLAG            =  '0' -->
+
+          <!-- START 2018/01/29 Hd.Sugawara [QC#22780,DEL] -->
+          <!-- UNION ALL -->
+
+          <!-- SELECT -->
+          <!--    STC.SELL_TO_CUST_CD -->
+          <!--   ,C.CPO_ORD_NUM -->
+          <!--   ,C.CPO_ORD_TS -->
+          <!-- FROM -->
+          <!--     CPO                C -->
+          <!--   , DS_CPO_CONFIG      DCC -->
+          <!--   , CPO_DTL            CD -->
+          <!--   , SELL_TO_CUST       STC -->
+          <!-- WHERE -->
+          <!--     C.GLBL_CMPY_CD              =  #glblCmpyCd# -->
+          <!-- AND C.EZCANCELFLAG              =  '0' -->
+          <!-- AND C.CPO_ORD_TS            &gt;=  #slsDtPast# -->
+          <!-- AND C.OPEN_FLG                  =  'Y' -->
+
+          <!-- AND C.GLBL_CMPY_CD              =  DCC.GLBL_CMPY_CD -->
+          <!-- AND C.CPO_ORD_NUM               =  DCC.CPO_ORD_NUM -->
+          <!-- AND DCC.EZCANCELFLAG            =  '0' -->
+
+          <!-- AND DCC.GLBL_CMPY_CD            =  CD.GLBL_CMPY_CD -->
+          <!-- AND DCC.CPO_ORD_NUM             =  CD.CPO_ORD_NUM -->
+          <!-- AND DCC.DS_CPO_CONFIG_PK        =  CD.DS_CPO_CONFIG_PK -->
+          <!-- AND CD.OPEN_FLG                 =  'Y' -->
+          <!-- AND CD.EZCANCELFLAG             =  '0' -->
+
+          <!-- AND DCC.GLBL_CMPY_CD            =  STC.GLBL_CMPY_CD -->
+          <!-- AND DCC.BILL_TO_CUST_ACCT_CD    =  STC.SELL_TO_CUST_CD -->
+          <!-- AND STC.RGTN_STS_CD             =  #rgtnStsCd# -->
+          <!-- AND STC.EZCANCELFLAG            =  '0' -->
+
+          <!-- UNION ALL -->
+
+          <!-- SELECT -->
+          <!--    STC.SELL_TO_CUST_CD -->
+          <!--   ,C.CPO_ORD_NUM -->
+          <!--   ,C.CPO_ORD_TS -->
+          <!-- FROM -->
+          <!--     CPO                C -->
+          <!--   , DS_CPO_CONFIG      DCC -->
+          <!--   , CPO_DTL            CD -->
+          <!--   , SELL_TO_CUST       STC -->
+          <!-- WHERE -->
+          <!--     C.GLBL_CMPY_CD              =  #glblCmpyCd# -->
+          <!-- AND C.EZCANCELFLAG              =  '0' -->
+          <!-- AND C.CPO_ORD_TS            &gt;=  #slsDtPast# -->
+          <!-- AND C.OPEN_FLG                  =  'Y' -->
+
+          <!-- AND C.GLBL_CMPY_CD              =  DCC.GLBL_CMPY_CD -->
+          <!-- AND C.CPO_ORD_NUM               =  DCC.CPO_ORD_NUM -->
+          <!-- AND DCC.EZCANCELFLAG            =  '0' -->
+
+          <!-- AND DCC.GLBL_CMPY_CD            =  CD.GLBL_CMPY_CD -->
+          <!-- AND DCC.CPO_ORD_NUM             =  CD.CPO_ORD_NUM -->
+          <!-- AND DCC.DS_CPO_CONFIG_PK        =  CD.DS_CPO_CONFIG_PK -->
+          <!-- AND CD.OPEN_FLG                 =  'Y' -->
+          <!-- AND CD.EZCANCELFLAG             =  '0' -->
+
+          <!-- AND DCC.GLBL_CMPY_CD            =  STC.GLBL_CMPY_CD -->
+          <!-- AND DCC.SHIP_TO_CUST_ACCT_CD    =  STC.SELL_TO_CUST_CD -->
+          <!-- AND STC.RGTN_STS_CD             =  #rgtnStsCd# -->
+          <!-- AND STC.EZCANCELFLAG            =  '0' -->
+          <!-- END 2018/01/29 Hd.Sugawara [QC#22780,DEL] -->
+<!--          ) -->
+<!--      GROUP BY -->
+<!--          SELL_TO_CUST_CD -->
+<!--        , CPO_ORD_NUM -->
+    <!-- 2021/07/19 QC#58743-2 Mod Start -->
+    <!-- WITH CUST_INFO AS ( -->
+    WITH CUST_INFO_SELF AS (
+        SELECT SL.GLBL_CMPY_CD
+             , SL.SELL_TO_CUST_CD
+             , BL.BILL_TO_CUST_CD
+             , SP.SHIP_TO_CUST_CD
+         FROM SELL_TO_CUST SL
+            , ACCT_LOC     AL
+            , PTY_LOC_WRK  PLW
+            , BILL_TO_CUST BL
+            , (SELECT SH.GLBL_CMPY_CD
+                    , SH.SHIP_TO_CUST_CD
+                    , SH.LOC_NUM
+                 FROM SHIP_TO_CUST SH
+                WHERE SH.GLBL_CMPY_CD = #glblCmpyCd#
+                  AND SH.EZCANCELFLAG = '0'
+                  AND SH.RGTN_STS_CD = #rgtnStsCd#
+                  AND SH.LOC_ROLE_TP_CD = #locRoleTpShip#
+              ) SP
+        WHERE SL.GLBL_CMPY_CD = #glblCmpyCd#
+          AND SL.EZCANCELFLAG = '0'
+          AND SL.RGTN_STS_CD = #rgtnStsCd#
+          AND SL.GLBL_CMPY_CD = AL.GLBL_CMPY_CD
+          AND SL.SELL_TO_CUST_CD = AL.DS_ACCT_NUM
+          AND AL.EZCANCELFLAG = '0'
+          AND AL.RGTN_STS_CD = #rgtnStsCd#
+          AND AL.GLBL_CMPY_CD = PLW.GLBL_CMPY_CD
+          AND AL.LOC_NUM = PLW.LOC_NUM
+          AND PLW.EZCANCELFLAG = '0'
+          AND PLW.RGTN_STS_CD = #rgtnStsCd#
+          AND PLW.GLBL_CMPY_CD = BL.GLBL_CMPY_CD(+)
+          AND PLW.LOC_NUM = BL.LOC_NUM(+)
+          AND BL.EZCANCELFLAG(+) = '0'
+          AND BL.RGTN_STS_CD(+) = #rgtnStsCd#
+          AND PLW.GLBL_CMPY_CD = SP.GLBL_CMPY_CD(+)
+          AND PLW.LOC_NUM = SP.LOC_NUM(+)
+    )
+    , RELN_ACCT AS (
+        SELECT RELN.GLBL_CMPY_CD
+             , RELN.RELN_DS_ACCT_NUM
+             , CIS.BILL_TO_CUST_CD
+             , CIS.SHIP_TO_CUST_CD
+         FROM DS_ACCT_RELN RELN
+            , SELL_TO_CUST ACCT
+            , DS_ACCT_RELN_TP DART
+            , CUST_INFO_SELF CIS
+        WHERE RELN.GLBL_CMPY_CD = #glblCmpyCd#
+          AND RELN.EZCANCELFLAG = '0'
+          AND RELN.GLBL_CMPY_CD = CIS.GLBL_CMPY_CD
+          AND RELN.DS_ACCT_NUM = CIS.SELL_TO_CUST_CD
+          AND RELN.RGTN_STS_CD = #rgtnStsCd#
+          AND RELN.GLBL_CMPY_CD = ACCT.GLBL_CMPY_CD
+          AND RELN.RELN_DS_ACCT_NUM = ACCT.SELL_TO_CUST_CD
+          AND ACCT.EZCANCELFLAG = '0'
+          AND RELN.GLBL_CMPY_CD = DART.GLBL_CMPY_CD
+          AND RELN.DS_ACCT_RELN_TP_CD = DART.DS_ACCT_RELN_TP_CD
+          AND DART.EZCANCELFLAG = '0'
+        UNION ALL
+        SELECT RELN.GLBL_CMPY_CD
+             , RELN.RELN_DS_ACCT_NUM
+             , CIS.BILL_TO_CUST_CD
+             , CIS.SHIP_TO_CUST_CD
+         FROM DS_ACCT_RELN RELN
+            , DS_ACCT_PROS PROS
+            , DS_ACCT_RELN_TP DART
+            , CUST_INFO_SELF CIS
+        WHERE RELN.GLBL_CMPY_CD = #glblCmpyCd#
+          AND RELN.EZCANCELFLAG = '0'
+          AND RELN.GLBL_CMPY_CD = CIS.GLBL_CMPY_CD
+          AND RELN.DS_ACCT_NUM = CIS.SELL_TO_CUST_CD
+          AND RELN.RGTN_STS_CD = #rgtnStsCd#
+          AND RELN.GLBL_CMPY_CD = PROS.GLBL_CMPY_CD
+          AND RELN.RELN_DS_ACCT_NUM = PROS.DS_ACCT_NUM
+          AND PROS.EZCANCELFLAG = '0'
+          AND RELN.GLBL_CMPY_CD = DART.GLBL_CMPY_CD
+          AND RELN.DS_ACCT_RELN_TP_CD = DART.DS_ACCT_RELN_TP_CD
+          AND DART.EZCANCELFLAG = '0'
+    )
+    , CUST_INFO AS (
+        SELECT *
+         FROM CUST_INFO_SELF
+        UNION ALL
+        SELECT *
+         FROM RELN_ACCT
+    )
+    <!-- 2021/07/19 QC#58743-2 Mod End -->
+    SELECT T.SELL_TO_CUST_CD
+         , MIN(T.CPO_ORD_NUM) CPO_ORD_NUM
+         , MAX(T.CPO_ORD_TS) CPO_ORD_TS
+    FROM (
+    SELECT DISTINCT C.BILL_TO_CUST_ACCT_CD AS SELL_TO_CUST_CD
+         , C.CPO_ORD_NUM
+         , C.CPO_ORD_TS
+      FROM CPO C
+         , CUST_INFO CI
+     WHERE C.GLBL_CMPY_CD = #glblCmpyCd#
+       AND C.EZCANCELFLAG = '0'
+       AND C.OPEN_FLG = #flgY#
+       AND C.GLBL_CMPY_CD = CI.GLBL_CMPY_CD
+       AND C.BILL_TO_CUST_ACCT_CD = CI.SELL_TO_CUST_CD
+       AND C.BILL_TO_CUST_CD = CI.BILL_TO_CUST_CD
+    UNION ALL
+    SELECT DISTINCT C.SHIP_TO_CUST_ACCT_CD AS SELL_TO_CUST_CD
+         , C.CPO_ORD_NUM
+         , C.CPO_ORD_TS
+      FROM CPO C
+         , CUST_INFO CI
+     WHERE C.GLBL_CMPY_CD = #glblCmpyCd#
+       AND C.EZCANCELFLAG = '0'
+       AND C.OPEN_FLG = #flgY#
+       AND C.GLBL_CMPY_CD = CI.GLBL_CMPY_CD
+       AND C.SHIP_TO_CUST_ACCT_CD = CI.SELL_TO_CUST_CD
+       AND C.ADD_SHIP_TO_CUST_CD = CI.SHIP_TO_CUST_CD
+    UNION ALL
+    SELECT DISTINCT C.SELL_TO_CUST_CD
+         , C.CPO_ORD_NUM
+         , C.CPO_ORD_TS
+      FROM CPO C
+         , CUST_INFO CI
+     WHERE C.GLBL_CMPY_CD = #glblCmpyCd#
+       AND C.EZCANCELFLAG = '0'
+       AND C.OPEN_FLG = #flgY#
+       AND C.GLBL_CMPY_CD = CI.GLBL_CMPY_CD
+       AND C.SOLD_TO_CUST_LOC_CD = CI.BILL_TO_CUST_CD
+       AND C.SELL_TO_CUST_CD = CI.SELL_TO_CUST_CD
+    UNION ALL
+    SELECT DCC.BILL_TO_CUST_ACCT_CD AS SELL_TO_CUST_CD
+         , C.CPO_ORD_NUM
+         , C.CPO_ORD_TS
+      FROM CPO C
+         , DS_CPO_CONFIG DCC
+         , CPO_DTL       CD
+         , CUST_INFO CI
+     WHERE C.GLBL_CMPY_CD = #glblCmpyCd#
+       AND C.EZCANCELFLAG = '0'
+       AND C.OPEN_FLG = #flgY#
+       AND C.GLBL_CMPY_CD = DCC.GLBL_CMPY_CD
+       AND C.CPO_ORD_NUM = DCC.CPO_ORD_NUM
+       AND DCC.EZCANCELFLAG = '0'
+       AND DCC.GLBL_CMPY_CD = CD.GLBL_CMPY_CD
+       AND DCC.CPO_ORD_NUM = CD.CPO_ORD_NUM
+       AND DCC.DS_CPO_CONFIG_PK = CD.DS_CPO_CONFIG_PK
+       AND CD.EZCANCELFLAG = '0'
+       AND CD.OPEN_FLG = #flgY#
+       AND DCC.GLBL_CMPY_CD = CI.GLBL_CMPY_CD
+       AND DCC.BILL_TO_CUST_ACCT_CD = CI.SELL_TO_CUST_CD
+       AND DCC.BILL_TO_CUST_LOC_CD = CI.BILL_TO_CUST_CD
+    UNION ALL
+    SELECT DCC.SHIP_TO_CUST_ACCT_CD AS SELL_TO_CUST_CD
+         , C.CPO_ORD_NUM
+         , C.CPO_ORD_TS
+      FROM CPO C
+         , DS_CPO_CONFIG DCC
+         , CPO_DTL       CD
+         , CUST_INFO CI
+     WHERE C.GLBL_CMPY_CD = #glblCmpyCd#
+       AND C.EZCANCELFLAG = '0'
+       AND C.OPEN_FLG = #flgY#
+       AND C.GLBL_CMPY_CD = DCC.GLBL_CMPY_CD
+       AND C.CPO_ORD_NUM = DCC.CPO_ORD_NUM
+       AND DCC.EZCANCELFLAG = '0'
+       AND DCC.GLBL_CMPY_CD = CD.GLBL_CMPY_CD
+       AND DCC.CPO_ORD_NUM = CD.CPO_ORD_NUM
+       AND DCC.DS_CPO_CONFIG_PK = CD.DS_CPO_CONFIG_PK
+       AND CD.EZCANCELFLAG = '0'
+       AND CD.OPEN_FLG = #flgY#
+       AND DCC.GLBL_CMPY_CD = CI.GLBL_CMPY_CD
+       AND DCC.SHIP_TO_CUST_ACCT_CD = CI.SELL_TO_CUST_CD
+       AND DCC.SHIP_TO_CUST_LOC_CD = CI.SHIP_TO_CUST_CD
+    ) T
+    GROUP BY T.SELL_TO_CUST_CD
+    ORDER BY T.SELL_TO_CUST_CD
+<!-- 2019/12/13 QC#54882 Mod End -->
+    </statement>
+
+    <statement id="checkOrderReturnTransaction" parameterClass="Map" resultClass="Map">
+<!-- 2019/12/13 QC#54882 Mod Start -->
+<!--      SELECT -->
+<!--         SELL_TO_CUST_CD -->
+<!--        ,MAX(CPO_ORD_NUM) CPO_ORD_NUM -->
+       <!-- START 2018/01/29 Hd.Sugawara [QC#22780,MOD] -->
+       <!-- ,MAX(NVL(CPO_ORD_TS, '99991231')) CPO_ORD_TS -->
+<!--        ,MAX(CPO_ORD_TS)  CPO_ORD_TS -->
+       <!-- END 2018/01/29 Hd.Sugawara [QC#22780,MOD] -->
+<!--      FROM -->
+<!--          ( -->
+<!--           SELECT -->
+<!--              STC.SELL_TO_CUST_CD -->
+<!--             ,C.CPO_ORD_NUM -->
+<!--             ,C.CPO_ORD_TS -->
+<!--           FROM -->
+<!--               CPO                C -->
+<!--             , DS_CPO_CONFIG      DCC -->
+<!--             , DS_CPO_RTRN_DTL    DCRD -->
+<!--             , SELL_TO_CUST       STC -->
+<!--           WHERE -->
+<!--               C.GLBL_CMPY_CD         =  #glblCmpyCd# -->
+<!--           AND C.CPO_ORD_TS       &gt;=  #slsDtPast# -->
+<!--           AND C.OPEN_FLG             =  'Y' -->
+<!--           AND C.EZCANCELFLAG         =  '0' -->
+
+<!--           AND C.GLBL_CMPY_CD         =  DCC.GLBL_CMPY_CD -->
+<!--           AND C.CPO_ORD_NUM          =  DCC.CPO_ORD_NUM -->
+<!--           AND DCC.EZCANCELFLAG       =  '0' -->
+
+<!--           AND DCC.GLBL_CMPY_CD       =  DCRD.GLBL_CMPY_CD -->
+<!--           AND DCC.CPO_ORD_NUM        =  DCRD.CPO_ORD_NUM -->
+<!--           AND DCC.DS_CPO_CONFIG_PK   =  DCRD.DS_CPO_CONFIG_PK -->
+<!--           AND DCRD.OPEN_FLG          =  'Y' -->
+<!--           AND DCRD.EZCANCELFLAG      =  '0' -->
+
+          <!-- START 2018/01/29 Hd.Sugawara [QC#22780,MOD] -->
+          <!-- AND C.GLBL_CMPY_CD         =  STC.GLBL_CMPY_CD -->
+          <!-- AND C.SELL_TO_CUST_CD      =  STC.SELL_TO_CUST_CD -->
+<!--           AND ( -->
+<!--                   (       C.GLBL_CMPY_CD            =  STC.GLBL_CMPY_CD -->
+<!--                       AND C.SELL_TO_CUST_CD         =  STC.SELL_TO_CUST_CD -->
+<!--                   ) OR (  DCC.GLBL_CMPY_CD          =  STC.GLBL_CMPY_CD -->
+<!--                       AND DCC.BILL_TO_CUST_ACCT_CD  =  STC.SELL_TO_CUST_CD -->
+<!--                   ) OR (  DCC.GLBL_CMPY_CD          =  STC.GLBL_CMPY_CD -->
+<!--                       AND DCC.SHIP_TO_CUST_ACCT_CD  =  STC.SELL_TO_CUST_CD -->
+<!--                   ) -->
+<!--               ) -->
+          <!-- END 2018/01/29 Hd.Sugawara [QC#22780,MOD] -->
+
+<!--           AND STC.RGTN_STS_CD        =  #rgtnStsCd# -->
+<!--           AND STC.EZCANCELFLAG       =  '0' -->
+
+          <!-- START 2018/01/29 Hd.Sugawara [QC#22780,DEL] -->
+          <!-- UNION ALL -->
+
+          <!-- SELECT -->
+          <!--    STC.SELL_TO_CUST_CD -->
+          <!--   ,C.CPO_ORD_NUM -->
+          <!--   ,C.CPO_ORD_TS -->
+          <!-- FROM -->
+          <!--     CPO                C -->
+          <!--   , DS_CPO_CONFIG      DCC -->
+          <!--   , DS_CPO_RTRN_DTL    DCRD -->
+          <!--   , SELL_TO_CUST       STC -->
+          <!-- WHERE -->
+          <!--     C.GLBL_CMPY_CD         =  #glblCmpyCd# -->
+          <!-- AND C.CPO_ORD_TS       &gt;=  #slsDtPast# -->
+          <!-- AND C.OPEN_FLG             =  'Y' -->
+          <!-- AND C.EZCANCELFLAG         =  '0' -->
+
+          <!-- AND C.GLBL_CMPY_CD         =  DCC.GLBL_CMPY_CD -->
+          <!-- AND C.CPO_ORD_NUM          =  DCC.CPO_ORD_NUM -->
+          <!-- AND DCC.EZCANCELFLAG       =  '0' -->
+
+          <!-- AND DCC.GLBL_CMPY_CD       =  DCRD.GLBL_CMPY_CD -->
+          <!-- AND DCC.CPO_ORD_NUM        =  DCRD.CPO_ORD_NUM -->
+          <!-- AND DCC.DS_CPO_CONFIG_PK   =  DCRD.DS_CPO_CONFIG_PK -->
+          <!-- AND DCRD.OPEN_FLG          =  'Y' -->
+          <!-- AND DCRD.EZCANCELFLAG      =  '0' -->
+
+          <!-- AND DCC.GLBL_CMPY_CD         =  STC.GLBL_CMPY_CD -->
+          <!-- AND DCC.BILL_TO_CUST_ACCT_CD =  STC.SELL_TO_CUST_CD -->
+          <!-- AND STC.RGTN_STS_CD          =  #rgtnStsCd# -->
+          <!-- AND STC.EZCANCELFLAG         =  '0' -->
+
+          <!-- UNION ALL -->
+
+          <!-- SELECT -->
+          <!--    STC.SELL_TO_CUST_CD -->
+          <!--   ,C.CPO_ORD_NUM -->
+          <!--   ,C.CPO_ORD_TS -->
+          <!-- FROM -->
+          <!--     CPO                C -->
+          <!--   , DS_CPO_CONFIG      DCC -->
+          <!--   , DS_CPO_RTRN_DTL    DCRD -->
+          <!--   , SELL_TO_CUST       STC -->
+          <!-- WHERE -->
+          <!--     C.GLBL_CMPY_CD         =  #glblCmpyCd# -->
+          <!-- AND C.CPO_ORD_TS       &gt;=  #slsDtPast# -->
+          <!-- AND C.OPEN_FLG             =  'Y' -->
+          <!-- AND C.EZCANCELFLAG         =  '0' -->
+
+          <!-- AND C.GLBL_CMPY_CD         =  DCC.GLBL_CMPY_CD -->
+          <!-- AND C.CPO_ORD_NUM          =  DCC.CPO_ORD_NUM -->
+          <!-- AND DCC.EZCANCELFLAG       =  '0' -->
+
+          <!-- AND DCC.GLBL_CMPY_CD       =  DCRD.GLBL_CMPY_CD -->
+          <!-- AND DCC.CPO_ORD_NUM        =  DCRD.CPO_ORD_NUM -->
+          <!-- AND DCC.DS_CPO_CONFIG_PK   =  DCRD.DS_CPO_CONFIG_PK -->
+          <!-- AND DCRD.OPEN_FLG          =  'Y' -->
+          <!-- AND DCRD.EZCANCELFLAG      =  '0' -->
+
+          <!-- AND DCC.GLBL_CMPY_CD         =  STC.GLBL_CMPY_CD -->
+          <!-- AND DCC.SHIP_TO_CUST_ACCT_CD =  STC.SELL_TO_CUST_CD -->
+          <!-- AND STC.RGTN_STS_CD          =  #rgtnStsCd# -->
+          <!-- AND STC.EZCANCELFLAG         =  '0' -->
+          <!-- END 2018/01/29 Hd.Sugawara [QC#22780,DEL] -->
+<!--          ) -->
+<!--      GROUP BY -->
+<!--          SELL_TO_CUST_CD -->
+<!--        , CPO_ORD_NUM -->
+    <!-- 2021/07/19 QC#58743-2 Mod Start -->
+    <!-- WITH CUST_INFO AS ( -->
+    WITH CUST_INFO_SELF AS (
+        SELECT SL.GLBL_CMPY_CD
+             , SL.SELL_TO_CUST_CD
+             , BL.BILL_TO_CUST_CD
+             , SP.SHIP_TO_CUST_CD
+         FROM SELL_TO_CUST SL
+            , ACCT_LOC     AL
+            , PTY_LOC_WRK  PLW
+            , BILL_TO_CUST BL
+            , (SELECT SH.GLBL_CMPY_CD
+                    , SH.SHIP_TO_CUST_CD
+                    , SH.LOC_NUM
+                 FROM SHIP_TO_CUST SH
+                WHERE SH.GLBL_CMPY_CD = #glblCmpyCd#
+                  AND SH.EZCANCELFLAG = '0'
+                  AND SH.RGTN_STS_CD = #rgtnStsCd#
+                  AND SH.LOC_ROLE_TP_CD = #locRoleTpShip#
+              ) SP
+        WHERE SL.GLBL_CMPY_CD = #glblCmpyCd#
+          AND SL.EZCANCELFLAG = '0'
+          AND SL.RGTN_STS_CD = #rgtnStsCd#
+          AND SL.GLBL_CMPY_CD = AL.GLBL_CMPY_CD
+          AND SL.SELL_TO_CUST_CD = AL.DS_ACCT_NUM
+          AND AL.EZCANCELFLAG = '0'
+          AND AL.RGTN_STS_CD = #rgtnStsCd#
+          AND AL.GLBL_CMPY_CD = PLW.GLBL_CMPY_CD
+          AND AL.LOC_NUM = PLW.LOC_NUM
+          AND PLW.EZCANCELFLAG = '0'
+          AND PLW.RGTN_STS_CD = #rgtnStsCd#
+          AND PLW.GLBL_CMPY_CD = BL.GLBL_CMPY_CD(+)
+          AND PLW.LOC_NUM = BL.LOC_NUM(+)
+          AND BL.EZCANCELFLAG(+) = '0'
+          AND BL.RGTN_STS_CD(+) = #rgtnStsCd#
+          AND PLW.GLBL_CMPY_CD = SP.GLBL_CMPY_CD(+)
+          AND PLW.LOC_NUM = SP.LOC_NUM(+)
+    )
+    , RELN_ACCT AS (
+        SELECT RELN.GLBL_CMPY_CD
+             , RELN.RELN_DS_ACCT_NUM
+             , CIS.BILL_TO_CUST_CD
+             , CIS.SHIP_TO_CUST_CD
+         FROM DS_ACCT_RELN RELN
+            , SELL_TO_CUST ACCT
+            , DS_ACCT_RELN_TP DART
+            , CUST_INFO_SELF CIS
+        WHERE RELN.GLBL_CMPY_CD = #glblCmpyCd#
+          AND RELN.EZCANCELFLAG = '0'
+          AND RELN.GLBL_CMPY_CD = CIS.GLBL_CMPY_CD
+          AND RELN.DS_ACCT_NUM = CIS.SELL_TO_CUST_CD
+          AND RELN.RGTN_STS_CD = #rgtnStsCd#
+          AND RELN.GLBL_CMPY_CD = ACCT.GLBL_CMPY_CD
+          AND RELN.RELN_DS_ACCT_NUM = ACCT.SELL_TO_CUST_CD
+          AND ACCT.EZCANCELFLAG = '0'
+          AND RELN.GLBL_CMPY_CD = DART.GLBL_CMPY_CD
+          AND RELN.DS_ACCT_RELN_TP_CD = DART.DS_ACCT_RELN_TP_CD
+          AND DART.EZCANCELFLAG = '0'
+        UNION ALL
+        SELECT RELN.GLBL_CMPY_CD
+             , RELN.RELN_DS_ACCT_NUM
+             , CIS.BILL_TO_CUST_CD
+             , CIS.SHIP_TO_CUST_CD
+         FROM DS_ACCT_RELN RELN
+            , DS_ACCT_PROS PROS
+            , DS_ACCT_RELN_TP DART
+            , CUST_INFO_SELF CIS
+        WHERE RELN.GLBL_CMPY_CD = #glblCmpyCd#
+          AND RELN.EZCANCELFLAG = '0'
+          AND RELN.GLBL_CMPY_CD = CIS.GLBL_CMPY_CD
+          AND RELN.DS_ACCT_NUM = CIS.SELL_TO_CUST_CD
+          AND RELN.RGTN_STS_CD = #rgtnStsCd#
+          AND RELN.GLBL_CMPY_CD = PROS.GLBL_CMPY_CD
+          AND RELN.RELN_DS_ACCT_NUM = PROS.DS_ACCT_NUM
+          AND PROS.EZCANCELFLAG = '0'
+          AND RELN.GLBL_CMPY_CD = DART.GLBL_CMPY_CD
+          AND RELN.DS_ACCT_RELN_TP_CD = DART.DS_ACCT_RELN_TP_CD
+          AND DART.EZCANCELFLAG = '0'
+    )
+    , CUST_INFO AS (
+        SELECT *
+         FROM CUST_INFO_SELF
+        UNION ALL
+        SELECT *
+         FROM RELN_ACCT
+    )
+    <!-- 2021/07/19 QC#58743-2 Mod End -->
+    SELECT T.SELL_TO_CUST_CD
+         , MIN(T.CPO_ORD_NUM) CPO_ORD_NUM
+         , MAX(T.CPO_ORD_TS) CPO_ORD_TS
+    FROM (
+    SELECT DISTINCT DCC.BILL_TO_CUST_ACCT_CD AS SELL_TO_CUST_CD
+         , C.CPO_ORD_NUM
+         , C.CPO_ORD_TS
+      FROM CPO C
+         , DS_CPO_CONFIG   DCC
+         , DS_CPO_RTRN_DTL DCRD
+         , CUST_INFO CI
+     WHERE C.GLBL_CMPY_CD = #glblCmpyCd#
+       AND C.EZCANCELFLAG = '0'
+       AND C.OPEN_FLG = #flgY#
+       AND C.GLBL_CMPY_CD = DCC.GLBL_CMPY_CD
+       AND C.CPO_ORD_NUM = DCC.CPO_ORD_NUM
+       AND DCC.EZCANCELFLAG = '0'
+       AND DCC.GLBL_CMPY_CD = DCRD.GLBL_CMPY_CD
+       AND DCC.CPO_ORD_NUM = DCRD.CPO_ORD_NUM
+       AND DCC.DS_CPO_CONFIG_PK = DCRD.DS_CPO_CONFIG_PK
+       AND DCRD.EZCANCELFLAG = '0'
+       AND DCRD.OPEN_FLG = #flgY#
+       AND DCC.GLBL_CMPY_CD = CI.GLBL_CMPY_CD
+       AND DCC.BILL_TO_CUST_ACCT_CD = CI.SELL_TO_CUST_CD
+       AND DCC.BILL_TO_CUST_LOC_CD = CI.BILL_TO_CUST_CD
+    UNION ALL
+    SELECT DISTINCT DCC.SHIP_TO_CUST_ACCT_CD AS SELL_TO_CUST_CD
+         , C.CPO_ORD_NUM
+         , C.CPO_ORD_TS
+      FROM CPO C
+         , DS_CPO_CONFIG   DCC
+         , DS_CPO_RTRN_DTL DCRD
+         , CUST_INFO CI
+     WHERE C.GLBL_CMPY_CD = #glblCmpyCd#
+       AND C.EZCANCELFLAG = '0'
+       AND C.OPEN_FLG = #flgY#
+       AND C.GLBL_CMPY_CD = DCC.GLBL_CMPY_CD
+       AND C.CPO_ORD_NUM = DCC.CPO_ORD_NUM
+       AND DCC.EZCANCELFLAG = '0'
+       AND DCC.GLBL_CMPY_CD = DCRD.GLBL_CMPY_CD
+       AND DCC.CPO_ORD_NUM = DCRD.CPO_ORD_NUM
+       AND DCC.DS_CPO_CONFIG_PK = DCRD.DS_CPO_CONFIG_PK
+       AND DCRD.EZCANCELFLAG = '0'
+       AND DCRD.OPEN_FLG = #flgY#
+       AND DCC.GLBL_CMPY_CD = CI.GLBL_CMPY_CD
+       AND DCC.SHIP_TO_CUST_ACCT_CD = CI.SELL_TO_CUST_CD
+       AND DCC.SHIP_TO_CUST_LOC_CD = CI.SHIP_TO_CUST_CD
+    ) T
+    GROUP BY T.SELL_TO_CUST_CD
+    ORDER BY T.SELL_TO_CUST_CD
+<!-- 2019/12/13 QC#54882 Mod End -->
+    </statement>
+<!-- 2019/12/13 QC#54882 Add Start -->
+    <statement id="checkScheduleAgreementTransaction" parameterClass="Map" resultClass="Map">
+    <!-- 2021/07/19 QC#58743-2 Mod Start -->
+    <!-- WITH CUST_INFO AS ( -->
+    WITH CUST_INFO_SELF AS (
+        SELECT SL.GLBL_CMPY_CD
+             , SL.SELL_TO_CUST_CD
+             , BL.BILL_TO_CUST_CD
+             , SP.SHIP_TO_CUST_CD
+         FROM SELL_TO_CUST SL
+            , ACCT_LOC     AL
+            , PTY_LOC_WRK  PLW
+            , BILL_TO_CUST BL
+            , (SELECT SH.GLBL_CMPY_CD
+                    , SH.SHIP_TO_CUST_CD
+                    , SH.LOC_NUM
+                 FROM SHIP_TO_CUST SH
+                WHERE SH.GLBL_CMPY_CD = #glblCmpyCd#
+                  AND SH.EZCANCELFLAG = '0'
+                  AND SH.RGTN_STS_CD = #rgtnStsCd#
+                  AND SH.LOC_ROLE_TP_CD = #locRoleTpShip#
+              ) SP
+        WHERE SL.GLBL_CMPY_CD = #glblCmpyCd#
+          AND SL.EZCANCELFLAG = '0'
+          AND SL.RGTN_STS_CD = #rgtnStsCd#
+          AND SL.GLBL_CMPY_CD = AL.GLBL_CMPY_CD
+          AND SL.SELL_TO_CUST_CD = AL.DS_ACCT_NUM
+          AND AL.EZCANCELFLAG = '0'
+          AND AL.RGTN_STS_CD = #rgtnStsCd#
+          AND AL.GLBL_CMPY_CD = PLW.GLBL_CMPY_CD
+          AND AL.LOC_NUM = PLW.LOC_NUM
+          AND PLW.EZCANCELFLAG = '0'
+          AND PLW.RGTN_STS_CD = #rgtnStsCd#
+          AND PLW.GLBL_CMPY_CD = BL.GLBL_CMPY_CD(+)
+          AND PLW.LOC_NUM = BL.LOC_NUM(+)
+          AND BL.EZCANCELFLAG(+) = '0'
+          AND BL.RGTN_STS_CD(+) = #rgtnStsCd#
+          AND PLW.GLBL_CMPY_CD = SP.GLBL_CMPY_CD(+)
+          AND PLW.LOC_NUM = SP.LOC_NUM(+)
+    )
+    , RELN_ACCT AS (
+        SELECT RELN.GLBL_CMPY_CD
+             , RELN.RELN_DS_ACCT_NUM
+             , CIS.BILL_TO_CUST_CD
+             , CIS.SHIP_TO_CUST_CD
+         FROM DS_ACCT_RELN RELN
+            , SELL_TO_CUST ACCT
+            , DS_ACCT_RELN_TP DART
+            , CUST_INFO_SELF CIS
+        WHERE RELN.GLBL_CMPY_CD = #glblCmpyCd#
+          AND RELN.EZCANCELFLAG = '0'
+          AND RELN.GLBL_CMPY_CD = CIS.GLBL_CMPY_CD
+          AND RELN.DS_ACCT_NUM = CIS.SELL_TO_CUST_CD
+          AND RELN.RGTN_STS_CD = #rgtnStsCd#
+          AND RELN.GLBL_CMPY_CD = ACCT.GLBL_CMPY_CD
+          AND RELN.RELN_DS_ACCT_NUM = ACCT.SELL_TO_CUST_CD
+          AND ACCT.EZCANCELFLAG = '0'
+          AND RELN.GLBL_CMPY_CD = DART.GLBL_CMPY_CD
+          AND RELN.DS_ACCT_RELN_TP_CD = DART.DS_ACCT_RELN_TP_CD
+          AND DART.EZCANCELFLAG = '0'
+        UNION ALL
+        SELECT RELN.GLBL_CMPY_CD
+             , RELN.RELN_DS_ACCT_NUM
+             , CIS.BILL_TO_CUST_CD
+             , CIS.SHIP_TO_CUST_CD
+         FROM DS_ACCT_RELN RELN
+            , DS_ACCT_PROS PROS
+            , DS_ACCT_RELN_TP DART
+            , CUST_INFO_SELF CIS
+        WHERE RELN.GLBL_CMPY_CD = #glblCmpyCd#
+          AND RELN.EZCANCELFLAG = '0'
+          AND RELN.GLBL_CMPY_CD = CIS.GLBL_CMPY_CD
+          AND RELN.DS_ACCT_NUM = CIS.SELL_TO_CUST_CD
+          AND RELN.RGTN_STS_CD = #rgtnStsCd#
+          AND RELN.GLBL_CMPY_CD = PROS.GLBL_CMPY_CD
+          AND RELN.RELN_DS_ACCT_NUM = PROS.DS_ACCT_NUM
+          AND PROS.EZCANCELFLAG = '0'
+          AND RELN.GLBL_CMPY_CD = DART.GLBL_CMPY_CD
+          AND RELN.DS_ACCT_RELN_TP_CD = DART.DS_ACCT_RELN_TP_CD
+          AND DART.EZCANCELFLAG = '0'
+    )
+    , CUST_INFO AS (
+        SELECT *
+         FROM CUST_INFO_SELF
+        UNION ALL
+        SELECT *
+         FROM RELN_ACCT
+    )
+    <!-- 2021/07/19 QC#58743-2 Mod End -->
+    SELECT T.SELL_TO_CUST_CD
+         , MIN(T.SCHD_AGMT_NUM) SCHD_AGMT_NUM
+         , MAX(T.SCHD_AGMT_CRAT_DT)  SCHD_AGMT_CRAT_DT
+    FROM (
+    SELECT DISTINCT SA.BILL_TO_CUST_ACCT_CD AS SELL_TO_CUST_CD
+         , SA.SCHD_AGMT_NUM
+         , SA.SCHD_AGMT_CRAT_DT
+      FROM SCHD_AGMT SA
+         , CUST_INFO CI
+     WHERE SA.GLBL_CMPY_CD = #glblCmpyCd#
+       AND SA.EZCANCELFLAG = '0'
+       AND SA.SCHD_AGMT_VLD_FROM_DT &lt;= #slsDt#
+       AND NVL(SA.SCHD_AGMT_VLD_THRU_DT, #maxEffThruDt#) &gt;= #slsDt#
+       AND EXISTS (SELECT 1
+                     FROM SCHD_AGMT_PLN SAP
+                    WHERE SAP.GLBL_CMPY_CD = SA.GLBL_CMPY_CD
+                      AND SAP.SCHD_AGMT_NUM = SA.SCHD_AGMT_NUM
+                      AND SAP.SCHD_AGMT_PLN_CANC_FLG = #flgN#
+                      AND SAP.ORD_CRAT_TS IS NULL
+                  )
+       AND SA.GLBL_CMPY_CD = CI.GLBL_CMPY_CD
+       AND SA.BILL_TO_CUST_ACCT_CD = CI.SELL_TO_CUST_CD
+       AND SA.BILL_TO_CUST_LOC_CD = CI.BILL_TO_CUST_CD
+    UNION ALL
+    SELECT DISTINCT SA.SHIP_TO_CUST_ACCT_CD AS SELL_TO_CUST_CD
+         , SA.SCHD_AGMT_NUM
+         , SA.SCHD_AGMT_CRAT_DT
+      FROM SCHD_AGMT SA
+         , CUST_INFO CI
+     WHERE SA.GLBL_CMPY_CD = #glblCmpyCd#
+       AND SA.EZCANCELFLAG = '0'
+       AND SA.SCHD_AGMT_VLD_FROM_DT &lt;= #slsDt#
+       AND NVL(SA.SCHD_AGMT_VLD_THRU_DT, #maxEffThruDt#) &gt;= #slsDt#
+       AND EXISTS (SELECT 1
+                     FROM SCHD_AGMT_PLN SAP
+                    WHERE SAP.GLBL_CMPY_CD = SA.GLBL_CMPY_CD
+                      AND SAP.SCHD_AGMT_NUM = SA.SCHD_AGMT_NUM
+                      AND SAP.SCHD_AGMT_PLN_CANC_FLG = #flgN#
+                      AND SAP.ORD_CRAT_TS IS NULL
+                  )
+       AND SA.GLBL_CMPY_CD = CI.GLBL_CMPY_CD
+       AND SA.SHIP_TO_CUST_ACCT_CD = CI.SELL_TO_CUST_CD
+       AND SA.SHIP_TO_CUST_LOC_CD = CI.SHIP_TO_CUST_CD
+    UNION ALL
+    SELECT DISTINCT SA.SELL_TO_CUST_CD AS SELL_TO_CUST_CD
+         , SA.SCHD_AGMT_NUM
+         , SA.SCHD_AGMT_CRAT_DT
+      FROM SCHD_AGMT SA
+         , CUST_INFO CI
+     WHERE SA.GLBL_CMPY_CD = #glblCmpyCd#
+       AND SA.EZCANCELFLAG = '0'
+       AND SA.SCHD_AGMT_VLD_FROM_DT &lt;= #slsDt#
+       AND NVL(SA.SCHD_AGMT_VLD_THRU_DT, #maxEffThruDt#) &gt;= #slsDt#
+       AND EXISTS (SELECT 1
+                     FROM SCHD_AGMT_PLN SAP
+                    WHERE SAP.GLBL_CMPY_CD = SA.GLBL_CMPY_CD
+                      AND SAP.SCHD_AGMT_NUM = SA.SCHD_AGMT_NUM
+                      AND SAP.SCHD_AGMT_PLN_CANC_FLG = #flgN#
+                      AND SAP.ORD_CRAT_TS IS NULL
+                  )
+       AND SA.GLBL_CMPY_CD = CI.GLBL_CMPY_CD
+       AND SA.SELL_TO_CUST_CD = CI.SELL_TO_CUST_CD
+       AND SA.SOLD_TO_CUST_LOC_CD = CI.BILL_TO_CUST_CD
+    ) T
+    GROUP BY T.SELL_TO_CUST_CD
+    ORDER BY T.SELL_TO_CUST_CD
+    </statement>
+<!-- 2019/12/13 QC#54882 Add End -->
+
+</sqlMap>     

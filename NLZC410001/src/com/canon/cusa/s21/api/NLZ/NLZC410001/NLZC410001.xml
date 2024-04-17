@@ -1,0 +1,821 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+
+<sqlMap namespace="NLZC410001">
+    <statement id="getMaxSnapShotDt" parameterClass="Map" resultClass="String">
+        SELECT
+            MAX(SNAP.INVTY_DTL_SNAP_SHOT_DT) AS INVTY_DTL_SNAP_SHOT_DT
+        FROM
+            INVTY_DTL_SNAP_SHOT SNAP
+        WHERE
+                SNAP.GLBL_CMPY_CD = #glblCmpyCd#
+            AND SNAP.EZCANCELFLAG = '0'
+    </statement>
+    <statement id="getSendData" parameterClass="Map" resultClass="Map">
+        WITH TARGET_INVTY AS (
+            SELECT
+                 INV.GLBL_CMPY_CD
+                ,INV.INVTY_LOC_CD
+                ,INV.MDSE_CD
+                ,SUM(INV.INVTY_QTY) AS INVTY_QTY
+            FROM
+                INVTY INV
+            WHERE
+                    INV.GLBL_CMPY_CD     = #glblCmpyCd#
+                AND INV.LOC_STS_CD       = #locStsCd#
+                AND INV.LOC_TP_CD        = #locTpCd#
+                <isNotNull property="xxUpdTs">
+                AND INV.EZUPTIME     &gt;= #xxUpdTs#
+                </isNotNull>
+                <isNotNull property="invtyLocCd">
+                AND INV.INVTY_LOC_CD     = #invtyLocCd#
+                </isNotNull>
+                <isNotNull property="mdseCd">
+                AND INV.MDSE_CD          = #mdseCd#
+                </isNotNull>
+                <!-- START 2020/02/13 K.Kitachi [QC#55717, ADD] -->
+                <isNotNull property="invtyLocCdList">
+                <iterate property="invtyLocCdList" var="invtyLocCd[]" open="AND INV.INVTY_LOC_CD IN (" close=")" conjunction=",">
+                    #invtyLocCd[]#
+                </iterate>
+                </isNotNull>
+                <!-- END 2020/02/13 K.Kitachi [QC#55717, ADD] -->
+                AND INV.EZCANCELFLAG     = '0' 
+            GROUP BY 
+                 INV.GLBL_CMPY_CD
+                ,INV.INVTY_LOC_CD
+                ,INV.MDSE_CD
+         )
+        ,TARGET_INVTY_SNAP AS (
+            SELECT
+                 SNAP.GLBL_CMPY_CD
+                ,SNAP.INVTY_LOC_CD
+                ,SNAP.MDSE_CD
+                ,SNAP.SER_NUM
+                ,SUM(SNAP.INVTY_QTY) AS SNAP_INVTY_QTY
+                ,SUM(CASE WHEN SNAP.STK_IN_DT &lt;= #procDt#                                                    AND SNAP.STK_IN_DT &gt;= TO_CHAR(TO_DATE(#procDt#, #dateFormat#) -29 ,#dateFormat#) THEN SNAP.INVTY_QTY ELSE 0 END) AS FIRST_MTH_INVTY_QTY
+                ,SUM(CASE WHEN SNAP.STK_IN_DT &lt;= TO_CHAR(TO_DATE(#procDt# , #dateFormat#) -30 ,#dateFormat#) AND SNAP.STK_IN_DT &gt;= TO_CHAR(TO_DATE(#procDt#, #dateFormat#) -59 ,#dateFormat#) THEN SNAP.INVTY_QTY ELSE 0 END) AS SCD_MTH_INVTY_QTY
+                ,SUM(CASE WHEN SNAP.STK_IN_DT &lt;= TO_CHAR(TO_DATE(#procDt# , #dateFormat#) -60 ,#dateFormat#) AND SNAP.STK_IN_DT &gt;= TO_CHAR(TO_DATE(#procDt#, #dateFormat#) -89 ,#dateFormat#) THEN SNAP.INVTY_QTY ELSE 0 END) AS THIRD_MTH_INVTY_QTY
+                ,SUM(CASE WHEN SNAP.STK_IN_DT &lt;= TO_CHAR(TO_DATE(#procDt# , #dateFormat#) -90 ,#dateFormat#)                                                                                     THEN SNAP.INVTY_QTY ELSE 0 END) AS OVER_FRTH_MTH_INVTY_QTY
+            FROM
+                INVTY_DTL_SNAP_SHOT SNAP
+            WHERE
+                    SNAP.GLBL_CMPY_CD           = #glblCmpyCd#
+                <isNotNull property="maxSnapShotDt">
+                AND SNAP.INVTY_DTL_SNAP_SHOT_DT = #maxSnapShotDt#
+                </isNotNull>
+                AND SNAP.LOC_STS_CD             = #locStsCd#
+                AND SNAP.EZCANCELFLAG           = '0' 
+            GROUP BY 
+                 SNAP.GLBL_CMPY_CD
+                ,SNAP.INVTY_LOC_CD
+                ,SNAP.MDSE_CD
+                ,SNAP.SER_NUM
+         )
+        SELECT
+             TL.TECH_TOC_CD
+             <!-- START ADD QC#52406 2019/08/14 k.Fujimoto -->
+             ,TL.TECH_TOC_CD                                      AS TECH_TOC_CD_BEF
+             <!-- START ADD QC#52406 2019/08/14 k.Fujimoto -->
+            ,INV.MDSE_CD
+            ,INV.INVTY_LOC_CD
+            ,RSW.RTL_WH_CD
+            ,RSW.RTL_SWH_CD
+            ,SNAP.SER_NUM
+            ,MD.MDSE_NM
+            ,INV.INVTY_QTY                                        AS INVTY_QTY
+            ,SNAP.SNAP_INVTY_QTY                                  AS SNAP_INVTY_QTY
+            ,DECODE(MD.RTRN_CTRL_TP_CD ,NULL ,'N' ,'Y')           AS RTRN_CTRL_FLG
+            ,MD.THIS_MTH_TOT_STD_COST_AMT
+            ,SNAP.FIRST_MTH_INVTY_QTY
+            ,SNAP.SCD_MTH_INVTY_QTY
+            ,SNAP.THIRD_MTH_INVTY_QTY
+            ,SNAP.OVER_FRTH_MTH_INVTY_QTY
+            ,RW.TECH_TOC_CD                                       AS WH_MGR_PSN_CD
+            <!-- START MOD QC#52406 2019/08/14 k.Fujimoto -->
+            ,RW.TECH_TOC_CD                                       AS WH_MGR_PSN_CD_BEF
+            <!-- END   MOD QC#52406 2019/08/14 k.Fujimoto -->
+            <!-- START MOD QC#53380 2019/09/12 K.Fujimoto -->
+            ,RW.RTL_WH_CATG_CD
+            <!-- END   MOD QC#53380 2019/09/12 K.Fujimoto -->
+            ,RW.RTL_WH_NM                                         AS WH_NM
+            ,MD.PRT_SRVY_REQ_FLG
+            ,TIAW.TECH_INVTY_AGING_WRK_PK
+            <!-- START 2018/02/07 U.Kim [QC#17647, ADD] -->
+            <!-- START 2019/11/25 H.Umeda [QC#53679, MOD] -->
+            <!-- ,MI.ROP_QTY                                           AS MIN_INVTY_QTY -->
+            <!-- ,MI.MAX_INVTY_QTY                                     AS MAX_INVTY_QTY -->
+            ,NVL(MI.ROP_QTY,MI2.ROP_QTY)                          AS MIN_INVTY_QTY
+            ,NVL(MI.MAX_INVTY_QTY,MI2.MAX_INVTY_QTY)              AS MAX_INVTY_QTY
+            <!-- END   2019/11/25 H.Umeda [QC#53679, MOD] -->
+            ,NVL (
+                    (
+                        SELECT
+                             PRC_LIST_EQUIP_PRC_AMT
+                        FROM
+                        (
+                            SELECT
+                                 PLE.PRC_LIST_EQUIP_PRC_AMT
+                            FROM
+                                 PRC_CATG            DCP
+                                ,PRC_LIST_EQUIP      PLE
+                            WHERE
+                                DCP.GLBL_CMPY_CD            = #glblCmpyCd#
+                            AND PLE.PRC_QLFY_VAL_TXT       = INV.MDSE_CD  
+                            AND DCP.PRC_LIST_TP_CD          = #prcListTpCd#
+                            AND DCP.ACTV_FLG                = #onFlg#
+                            AND DCP.DEL_FLG                 = #offFlg#
+                            AND DCP.EFF_FROM_DT         &lt;= #procDt#
+                            AND
+                                (
+                                DCP.EFF_THRU_DT         &gt;= #procDt#
+                                OR DCP.EFF_THRU_DT         IS NULL
+                                )
+                            AND DCP.EZCANCELFLAG            = '0'
+                            AND DCP.GLBL_CMPY_CD            = PLE.GLBL_CMPY_CD(+)
+                            AND DCP.PRC_CATG_CD             = PLE.PRC_CATG_CD(+)
+                            AND PLE.PRC_QLFY_TP_CD(+)       = #prcQlfyTpCd#
+                            AND PLE.EFF_FROM_DT         &lt;= #procDt#
+                            AND
+                                (
+                                PLE.EFF_THRU_DT         &gt;= #procDt#
+                                OR PLE.EFF_THRU_DT         IS NULL
+                                )
+                            AND PLE.DEL_FLG(+)              = #offFlg#
+                            AND PLE.EZCANCELFLAG(+)         = '0'
+                            ORDER BY
+                                 DCP.PRC_CATG_SORT_NUM
+                                ,DCP.PRC_CATG_CD
+                            ) PRC
+                        WHERE
+                            ROWNUM = '1'
+                    ), 0) AS PRC_LIST_EQUIP_PRC_AMT
+            <!-- END 2018/02/07 U.Kim [QC#17647, ADD] -->
+        FROM
+             TARGET_INVTY         INV
+            ,TARGET_INVTY_SNAP    SNAP
+            ,TECH_LOC             TL
+            ,RTL_SWH              RSW
+            ,RTL_WH               RW
+            ,MDSE                 MD
+            ,TECH_INVTY_AGING_WRK TIAW
+            <!-- START 2018/02/07 U.Kim [QC#17647, ADD] -->
+            ,MRP_INFO             MI
+            <!-- END 2018/02/07 U.Kim [QC#17647, ADD] -->
+            <!-- START 2019/11/25 H.Umeda [QC#53679, ADD] -->
+            ,MRP_INFO             MI2
+            <!-- END   2018/02/07 H.Umeda [QC#53679, ADD] -->
+        WHERE
+                INV.GLBL_CMPY_CD                  = SNAP.GLBL_CMPY_CD(+)
+            AND INV.INVTY_LOC_CD                  = SNAP.INVTY_LOC_CD(+)
+            AND INV.MDSE_CD                       = SNAP.MDSE_CD(+)
+            AND INV.GLBL_CMPY_CD                  = TL.GLBL_CMPY_CD
+            AND INV.INVTY_LOC_CD                  = TL.TECH_LOC_CD
+            AND TL.EFF_FROM_DT                &lt;= #procDt#
+            AND NVL(TL.EFF_THRU_DT, #procDt#) &gt;= #procDt#
+            AND TL.GLBL_CMPY_CD                   = RSW.GLBL_CMPY_CD
+            AND TL.TECH_LOC_CD                    = RSW.INVTY_LOC_CD
+            AND RSW.GLBL_CMPY_CD                  = RW.GLBL_CMPY_CD
+            AND RSW.RTL_WH_CD                     = RW.RTL_WH_CD
+            AND INV.GLBL_CMPY_CD                  = MD.GLBL_CMPY_CD(+)
+            AND INV.MDSE_CD                       = MD.MDSE_CD(+)
+            AND INV.GLBL_CMPY_CD                  = TIAW.GLBL_CMPY_CD(+)
+            AND INV.MDSE_CD                       = TIAW.MDSE_CD(+)
+            AND INV.INVTY_LOC_CD                  = TIAW.INVTY_LOC_CD(+)
+            AND NVL(SNAP.SER_NUM,' ')             = NVL(TIAW.SER_NUM(+), ' ')
+            <!-- START 2018/02/07 U.Kim [QC#17647, ADD] -->
+            AND INV.GLBL_CMPY_CD                  = MI.GLBL_CMPY_CD(+)
+            AND INV.MDSE_CD                       = MI.MDSE_CD(+)
+            AND INV.INVTY_LOC_CD                  = MI.INVTY_LOC_CD(+)
+            AND TL.RGTN_STS_CD                    = MI.MRP_INFO_RGTN_STS_CD(+)
+            <!-- END 2018/02/07 U.Kim [QC#17647, ADD] -->
+            <!-- START 2019/11/25 H.Umeda [QC#53679, ADD] -->
+            AND INV.GLBL_CMPY_CD                  = MI2.GLBL_CMPY_CD(+)
+            AND SUBSTR(INV.MDSE_CD,0,8)           = MI2.MDSE_CD(+)
+            AND INV.INVTY_LOC_CD                  = MI2.INVTY_LOC_CD(+)
+            AND TL.RGTN_STS_CD                    = MI2.MRP_INFO_RGTN_STS_CD(+)
+            <!-- END   2018/02/07 H.Umeda [QC#53679, ADD] -->
+            AND TL.EZCANCELFLAG                   = '0'
+            AND RSW.EZCANCELFLAG                  = '0'
+            AND RW.EZCANCELFLAG                   = '0'
+            AND MD.EZCANCELFLAG(+)                = '0'
+            AND TIAW.EZCANCELFLAG(+)              = '0'
+            <!-- START 2018/02/07 U.Kim [QC#17647, ADD] -->
+            AND MI.EZCANCELFLAG(+)                = '0'
+            <!-- END 2018/02/07 U.Kim [QC#17647, ADD] -->
+            <!-- START 2019/11/25 H.Umeda [QC#53679, ADD] -->
+            AND MI2.EZCANCELFLAG(+)               = '0'
+            <!-- END   2019/11/25 H.Umeda [QC#53679, ADD] -->
+<!-- QC#55791 Add Start -->
+            AND TIAW.DEL_FLG(+)                   = #offFlg#
+<!-- QC#55791 Add End -->
+        ORDER BY
+             TL.TECH_TOC_CD
+            ,INV.MDSE_CD
+            ,INV.INVTY_LOC_CD
+            ,RSW.RTL_WH_CD
+            ,RSW.RTL_SWH_CD
+            ,SNAP.SER_NUM
+    </statement>
+    <statement id="getSendDataForNightly" parameterClass="Map" resultClass="Map">
+        WITH IV_BEF AS(
+            SELECT
+                 WRK.TECH_TOC_CD
+                <!-- START ADD QC#52406 2019/08/14 k.Fujimoto -->
+                ,WRK.TECH_TOC_CD               AS TECH_TOC_CD_BEF
+                <!-- START ADD QC#52406 2019/08/14 k.Fujimoto -->
+                ,WRK.MDSE_CD
+                ,WRK.INVTY_LOC_CD
+                ,WRK.RTL_WH_CD
+                ,WRK.RTL_SWH_CD
+                ,WRK.SER_NUM
+                ,WRK.MDSE_NM
+                ,WRK.INVTY_QTY
+                ,WRK.RTRN_CTRL_FLG
+                ,WRK.THIS_MTH_TOT_STD_COST_AMT
+                ,WRK.FIRST_MTH_INVTY_QTY
+                ,WRK.SCD_MTH_INVTY_QTY
+                ,WRK.THIRD_MTH_INVTY_QTY
+                ,WRK.OVER_FRTH_MTH_INVTY_QTY
+                <!-- START MOD QC#52406 2019/08/14 k.Fujimoto -->
+                ,WRK.WH_MGR_PSN_CD             AS WH_MGR_PSN_CD
+                ,WRK.WH_MGR_PSN_CD             AS WH_MGR_PSN_CD_BEF
+                <!-- END   MOD QC#52406 2019/08/14 k.Fujimoto -->
+                ,WRK.WH_NM
+                <!-- START MOD QC#53380 2019/09/12 K.Fujimoto -->
+                ,RW.RTL_WH_CATG_CD
+                <!-- END   MOD QC#53380 2019/09/12 K.Fujimoto -->
+                ,WRK.SITE_SRVY_REQ_FLG         AS PRT_SRVY_REQ_FLG
+                ,WRK.TECH_INVTY_AGING_WRK_PK
+                <!-- START 2018/02/07 U.Kim [QC#17647, ADD] -->
+                ,WRK.MIN_INVTY_QTY
+                ,WRK.MAX_INVTY_QTY
+                ,WRK.PRC_LIST_EQUIP_PRC_AMT
+                <!-- END 2018/02/07 U.Kim [QC#17647, ADD] -->
+            FROM
+                TECH_INVTY_AGING_WRK WRK
+                <!-- START MOD QC#53380 2019/09/12 K.Fujimoto -->
+                ,RTL_WH RW
+                <!-- END   MOD QC#53380 2019/09/12 K.Fujimoto -->
+            WHERE
+                WRK.GLBL_CMPY_CD = #glblCmpyCd#
+            <!-- START 2018/03/22 K.Fujimoto [QC#30405, ADD] -->
+            <!-- START 2017/07/31 K.Kojima [QC#20212,ADD] -->
+            <isNotNull property="techTocCdRegexpLineString">
+            <!-- AND WRK.TECH_TOC_CD LIKE #techTocCdRegexpLineString# -->
+            AND WRK.RTL_WH_CD LIKE #techTocCdRegexpLineString#
+            </isNotNull>
+            <!-- END 2017/07/31 K.Kojima [QC#20212,ADD] -->
+            <!-- END 2018/03/22 K.Fujimoto [QC#30405, ADD] -->
+            AND WRK.EZCANCELFLAG = '0'
+            <!-- START MOD QC#53380 2019/09/12 K.Fujimoto -->
+            AND RW.EZCANCELFLAG  = '0'
+            AND WRK.GLBL_CMPY_CD = RW.GLBL_CMPY_CD
+            AND WRK.RTL_WH_CD    = RW.RTL_WH_CD
+            <!-- END   MOD QC#53380 2019/09/12 K.Fujimoto -->
+            <!-- QC#55791 Add Start -->
+            AND WRK.DEL_FLG(+)                   = #offFlg#
+            <!-- QC#55791 Add End -->
+            )
+        ,IV_THIS AS (
+            SELECT
+                 TL.TECH_TOC_CD
+                <!-- START ADD QC#52406 2019/08/14 k.Fujimoto -->
+                ,NVL(TIAW.TECH_TOC_CD, TL.TECH_TOC_CD)     AS TECH_TOC_CD_BEF
+                <!-- END   ADD QC#52406 2019/08/14 k.Fujimoto -->
+                ,SNAP.MDSE_CD
+                ,SNAP.INVTY_LOC_CD
+                ,RSW.RTL_WH_CD
+                ,RSW.RTL_SWH_CD
+                ,SNAP.SER_NUM
+                ,TRIM(MD.MDSE_NM)                            AS MDSE_NM
+                ,SNAP.INVTY_QTY
+                ,DECODE(MD.RTRN_CTRL_TP_CD ,NULL ,'N' ,'Y')  AS RTRN_CTRL_FLG
+                ,MD.THIS_MTH_TOT_STD_COST_AMT
+                ,SNAP.FIRST_MTH_INVTY_QTY
+                ,SNAP.SCD_MTH_INVTY_QTY
+                ,SNAP.THIRD_MTH_INVTY_QTY
+                ,SNAP.OVER_FRTH_MTH_INVTY_QTY
+                ,RW.TECH_TOC_CD                              AS WH_MGR_PSN_CD
+                <!-- START ADD QC#52406 2019/08/14 k.Fujimoto -->
+                ,NVL(TIAW.WH_MGR_PSN_CD, RW.TECH_TOC_CD)     AS WH_MGR_PSN_CD_BEF
+                <!-- END   ADD QC#52406 2019/08/14 k.Fujimoto -->
+                ,RW.RTL_WH_NM                                AS WH_NM
+                <!-- START MOD QC#53380 2019/09/12 K.Fujimoto -->
+                ,RW.RTL_WH_CATG_CD
+                <!-- END   MOD QC#53380 2019/09/12 K.Fujimoto -->
+                ,MD.PRT_SRVY_REQ_FLG
+                ,TIAW.TECH_INVTY_AGING_WRK_PK
+                <!-- START 2018/02/07 U.Kim [QC#17647, ADD] -->
+                <!-- START 2019/11/25 H.Umeda [QC#53679, MOD] -->
+                <!-- ,MI.ROP_QTY                                  AS MIN_INVTY_QTY -->
+                <!-- ,MI.MAX_INVTY_QTY                            AS MAX_INVTY_QTY -->
+                <!-- START 2020/11/07 T.Wada [QC#57428, MOD START] -->
+                <!--,NVL(MI.ROP_QTY,MI2.ROP_QTY)                 AS MIN_INVTY_QTY-->
+                <!--,NVL(MI.MAX_INVTY_QTY,MI2.MAX_INVTY_QTY)     AS MAX_INVTY_QTY-->
+                ,NVL(NVL(MI.ROP_QTY,MI2.ROP_QTY),0)                 AS MIN_INVTY_QTY
+                ,NVL(NVL(MI.MAX_INVTY_QTY,MI2.MAX_INVTY_QTY),0)     AS MAX_INVTY_QTY
+                <!-- START 2020/11/07 T.Wada [QC#57428, MOD END] -->
+                <!-- END   2019/11/25 H.Umeda [QC#53679, MOD] -->
+                ,NVL (
+                        (
+                            SELECT
+                                 PRC_LIST_EQUIP_PRC_AMT
+                            FROM
+                            (
+                                SELECT
+                                     PLE.PRC_LIST_EQUIP_PRC_AMT
+                                FROM
+                                     PRC_CATG            DCP
+                                    ,PRC_LIST_EQUIP      PLE
+                                WHERE
+                                    DCP.GLBL_CMPY_CD            = #glblCmpyCd#
+                                AND PLE.PRC_QLFY_VAL_TXT        = SNAP.MDSE_CD  
+                                AND DCP.PRC_LIST_TP_CD          = #prcListTpCd#
+                                AND DCP.ACTV_FLG                = #onFlg#
+                                AND DCP.DEL_FLG                 = #offFlg#
+                                AND DCP.EFF_FROM_DT         &lt;= #procDt#
+                                AND
+                                    (
+                                    DCP.EFF_THRU_DT         &gt;= #procDt#
+                                    OR DCP.EFF_THRU_DT         IS NULL
+                                    )
+                                AND DCP.EZCANCELFLAG            = '0'
+                                AND DCP.GLBL_CMPY_CD            = PLE.GLBL_CMPY_CD(+)
+                                AND DCP.PRC_CATG_CD             = PLE.PRC_CATG_CD(+)
+                                AND PLE.PRC_QLFY_TP_CD(+)       = #prcQlfyTpCd#
+                                AND PLE.EFF_FROM_DT         &lt;= #procDt#
+                                AND
+                                    (
+                                    PLE.EFF_THRU_DT         &gt;= #procDt#
+                                    OR PLE.EFF_THRU_DT         IS NULL
+                                    )
+                                AND PLE.DEL_FLG(+)              = #offFlg#
+                                AND PLE.EZCANCELFLAG(+)         = '0'
+                                ORDER BY
+                                     DCP.PRC_CATG_SORT_NUM
+                                    ,DCP.PRC_CATG_CD
+                                ) PRC
+                            WHERE
+                                ROWNUM = '1'
+                        ), 0) AS PRC_LIST_EQUIP_PRC_AMT
+                <!-- END 2018/02/07 U.Kim [QC#17647, ADD] -->
+            FROM
+                (
+                    SELECT
+                         SHOT.GLBL_CMPY_CD
+                        ,SHOT.MDSE_CD
+                        ,SHOT.INVTY_LOC_CD
+                        ,SHOT.SER_NUM
+                        ,SUM(SHOT.INVTY_QTY) AS INVTY_QTY
+                        ,SUM(CASE WHEN SHOT.STK_IN_DT &lt;= #procDt#                                                    AND SHOT.STK_IN_DT &gt;= TO_CHAR(TO_DATE(#procDt#, #dateFormat#) -29 ,#dateFormat#) THEN SHOT.INVTY_QTY ELSE 0 END) AS FIRST_MTH_INVTY_QTY
+                        ,SUM(CASE WHEN SHOT.STK_IN_DT &lt;= TO_CHAR(TO_DATE(#procDt# , #dateFormat#) -30 ,#dateFormat#) AND SHOT.STK_IN_DT &gt;= TO_CHAR(TO_DATE(#procDt#, #dateFormat#) -59 ,#dateFormat#) THEN SHOT.INVTY_QTY ELSE 0 END) AS SCD_MTH_INVTY_QTY
+                        ,SUM(CASE WHEN SHOT.STK_IN_DT &lt;= TO_CHAR(TO_DATE(#procDt# , #dateFormat#) -60 ,#dateFormat#) AND SHOT.STK_IN_DT &gt;= TO_CHAR(TO_DATE(#procDt#, #dateFormat#) -89 ,#dateFormat#) THEN SHOT.INVTY_QTY ELSE 0 END) AS THIRD_MTH_INVTY_QTY
+                        ,SUM(CASE WHEN SHOT.STK_IN_DT &lt;= TO_CHAR(TO_DATE(#procDt# , #dateFormat#) -90 ,#dateFormat#)                                                                                     THEN SHOT.INVTY_QTY ELSE 0 END) AS OVER_FRTH_MTH_INVTY_QTY
+                    FROM
+                        INVTY_DTL_SNAP_SHOT SHOT
+                    WHERE
+                            SHOT.GLBL_CMPY_CD           = #glblCmpyCd#
+                        <isNotNull property="maxSnapShotDt">
+                        AND SHOT.INVTY_DTL_SNAP_SHOT_DT = #maxSnapShotDt#
+                        </isNotNull>
+                        AND SHOT.LOC_STS_CD             = #locStsCd#
+                        AND SHOT.EZCANCELFLAG           = '0'
+                        AND EXISTS(
+                            SELECT
+                                1
+                            FROM
+                                INVTY INV
+                            WHERE
+                                    INV.GLBL_CMPY_CD = SHOT.GLBL_CMPY_CD
+                                AND INV.MDSE_CD      = SHOT.MDSE_CD
+                                AND INV.INVTY_LOC_CD = SHOT.INVTY_LOC_CD
+                                AND INV.LOC_STS_CD   = #locStsCd#
+                                AND INV.LOC_TP_CD    = #locTpCd#
+                                AND INV.EZCANCELFLAG = '0'
+                        )
+                    GROUP BY 
+                         SHOT.GLBL_CMPY_CD
+                        ,SHOT.INVTY_LOC_CD
+                        ,SHOT.MDSE_CD
+                        ,SHOT.SER_NUM
+                ) SNAP
+                ,TECH_LOC             TL
+                ,RTL_SWH              RSW
+                ,RTL_WH               RW
+                ,MDSE                 MD
+                ,TECH_INVTY_AGING_WRK TIAW
+                <!-- START 2018/02/07 U.Kim [QC#17647, ADD] -->
+                ,MRP_INFO             MI
+                <!-- END 2018/02/07 U.Kim [QC#17647, ADD] -->
+                <!-- START 2019/11/25 H.Umeda [QC#53679, ADD] -->
+                ,MRP_INFO             MI2
+                <!-- END   2019/11/25 H.Umeda [QC#53679, ADD] -->
+            WHERE
+                    SNAP.GLBL_CMPY_CD                 = TL.GLBL_CMPY_CD
+                AND SNAP.INVTY_LOC_CD                 = TL.TECH_LOC_CD
+                AND TL.EFF_FROM_DT                &lt;= #procDt#
+                AND NVL(TL.EFF_THRU_DT, #procDt#) &gt;= #procDt#
+                <!-- START 2018/03/22 K.Fujimoto [QC#30405, MOD] -->
+                <!-- START 2017/07/31 K.Kojima [QC#20212,MOD] -->
+                <isNotNull property="techTocCdRegexpLineString">
+                <!-- AND TL.TECH_TOC_CD LIKE #techTocCdRegexpLineString# -->
+                AND RSW.RTL_WH_CD LIKE #techTocCdRegexpLineString#
+                </isNotNull>
+                <!-- END 2017/07/31 K.Kojima [QC#20212,MOD] -->
+                <!-- END 2018/03/22 K.Fujimoto [QC#30405, MOD] -->
+                AND TL.GLBL_CMPY_CD                   = RSW.GLBL_CMPY_CD
+                AND TL.TECH_LOC_CD                    = RSW.INVTY_LOC_CD
+                AND RSW.GLBL_CMPY_CD                  = RW.GLBL_CMPY_CD
+                AND RSW.RTL_WH_CD                     = RW.RTL_WH_CD
+                AND SNAP.GLBL_CMPY_CD                 = MD.GLBL_CMPY_CD(+)
+                AND SNAP.MDSE_CD                      = MD.MDSE_CD(+)
+                AND SNAP.GLBL_CMPY_CD                 = TIAW.GLBL_CMPY_CD(+)
+                AND SNAP.MDSE_CD                      = TIAW.MDSE_CD(+)
+                AND SNAP.INVTY_LOC_CD                 = TIAW.INVTY_LOC_CD(+)
+                AND NVL(SNAP.SER_NUM,' ')             = NVL(TIAW.SER_NUM(+), ' ')
+                <!-- START 2018/02/07 U.Kim [QC#17647, ADD] -->
+                AND SNAP.GLBL_CMPY_CD                 = MI.GLBL_CMPY_CD(+)
+                AND SNAP.MDSE_CD                      = MI.MDSE_CD(+)
+                AND SNAP.INVTY_LOC_CD                 = MI.INVTY_LOC_CD(+)
+                AND TL.RGTN_STS_CD                    = MI.MRP_INFO_RGTN_STS_CD(+)
+                <!-- END 2018/02/07 U.Kim [QC#17647, ADD] -->
+                <!-- START 2019/11/25 H.Umeda [QC#53679, ADD] -->
+                AND SNAP.GLBL_CMPY_CD                 = MI2.GLBL_CMPY_CD(+)
+                AND SUBSTR(SNAP.MDSE_CD,0,8)          = MI2.MDSE_CD(+)
+                AND SNAP.INVTY_LOC_CD                 = MI2.INVTY_LOC_CD(+)
+                AND TL.RGTN_STS_CD                    = MI2.MRP_INFO_RGTN_STS_CD(+)
+                <!-- END   2019/11/25 H.Umeda [QC#53679, ADD] -->
+                AND TL.EZCANCELFLAG                   = '0'
+                AND RSW.EZCANCELFLAG                  = '0'
+                AND RW.EZCANCELFLAG                   = '0'
+                AND MD.EZCANCELFLAG(+)                = '0'
+                AND TIAW.EZCANCELFLAG(+)              = '0'
+                <!-- START 2018/02/07 U.Kim [QC#17647, ADD] -->
+                AND MI.EZCANCELFLAG(+)                = '0'
+                <!-- END 2018/02/07 U.Kim [QC#17647, ADD] -->
+                <!-- START 2019/11/25 H.Umeda [QC#53679, ADD] -->
+                AND MI2.EZCANCELFLAG(+)               = '0'
+                <!-- END   2019/11/25 H.Umeda [QC#53679, ADD] -->
+<!-- QC#55791 Add Start -->
+                AND TIAW.DEL_FLG(+)                   = #offFlg#
+<!-- QC#55791 Add End -->
+            )
+        SELECT
+             MAIN_1.TECH_TOC_CD
+            <!-- START ADD QC#52406 2019/08/14 k.Fujimoto -->
+            ,MAIN_1.TECH_TOC_CD_BEF
+            <!-- END   ADD QC#52406 2019/08/14 k.Fujimoto -->
+            ,MAIN_1.MDSE_CD
+            ,MAIN_1.INVTY_LOC_CD
+            ,MAIN_1.RTL_WH_CD
+            ,MAIN_1.RTL_SWH_CD
+            ,MAIN_1.SER_NUM
+            ,MAIN_1.MDSE_NM
+            ,MAIN_1.INVTY_QTY
+            ,MAIN_1.INVTY_QTY                 AS SNAP_INVTY_QTY
+            ,MAIN_1.RTRN_CTRL_FLG
+            ,MAIN_1.THIS_MTH_TOT_STD_COST_AMT
+            ,MAIN_1.FIRST_MTH_INVTY_QTY
+            ,MAIN_1.SCD_MTH_INVTY_QTY
+            ,MAIN_1.THIRD_MTH_INVTY_QTY
+            ,MAIN_1.OVER_FRTH_MTH_INVTY_QTY
+            ,MAIN_1.WH_MGR_PSN_CD
+            <!-- START ADD QC#52406 2019/08/14 k.Fujimoto -->
+            ,MAIN_1.WH_MGR_PSN_CD_BEF
+            <!-- END   ADD QC#52406 2019/08/14 k.Fujimoto -->
+            ,MAIN_1.WH_NM
+            <!-- START MOD QC#53380 2019/09/12 K.Fujimoto -->
+            ,MAIN_1.RTL_WH_CATG_CD
+            <!-- END   MOD QC#53380 2019/09/12 K.Fujimoto -->
+            ,MAIN_1.PRT_SRVY_REQ_FLG
+            ,MAIN_1.TECH_INVTY_AGING_WRK_PK
+            <!-- START 2018/02/07 U.Kim [QC#17647, ADD] -->
+            ,MAIN_1.MIN_INVTY_QTY
+            ,MAIN_1.MAX_INVTY_QTY
+            ,MAIN_1.PRC_LIST_EQUIP_PRC_AMT
+            <!-- END 2018/02/07 U.Kim [QC#17647, ADD] -->
+        FROM
+            (
+                SELECT * FROM IV_THIS
+                MINUS
+                SELECT * FROM IV_BEF
+            ) MAIN_1
+        UNION ALL
+        SELECT
+             MAIN_2.TECH_TOC_CD
+            <!-- START ADD QC#52406 2019/08/14 k.Fujimoto -->
+            ,MAIN_2.TECH_TOC_CD_BEF
+            <!-- END   ADD QC#52406 2019/08/14 k.Fujimoto -->
+            ,MAIN_2.MDSE_CD
+            ,MAIN_2.INVTY_LOC_CD
+            ,MAIN_2.RTL_WH_CD
+            ,MAIN_2.RTL_SWH_CD
+            ,MAIN_2.SER_NUM
+            ,MAIN_2.MDSE_NM
+            ,0                                AS INVTY_QTY
+            ,0                                AS SNAP_INVTY_QTY
+            ,MAIN_2.RTRN_CTRL_FLG
+            ,MAIN_2.THIS_MTH_TOT_STD_COST_AMT AS THIS_MTH_TOT_STD_COST_AMT
+            ,0                                AS FIRST_MTH_INVTY_QTY
+            ,0                                AS SCD_MTH_INVTY_QTY
+            ,0                                AS THIRD_MTH_INVTY_QTY
+            ,0                                AS OVER_FRTH_MTH_INVTY_QTY
+            ,MAIN_2.WH_MGR_PSN_CD
+            <!-- START ADD QC#52406 2019/08/14 k.Fujimoto -->
+            ,MAIN_2.WH_MGR_PSN_CD_BEF
+            <!-- END   ADD QC#52406 2019/08/14 k.Fujimoto -->
+            ,MAIN_2.WH_NM
+            <!-- START MOD QC#53380 2019/09/12 K.Fujimoto -->
+            ,MAIN_2.RTL_WH_CATG_CD
+            <!-- END   MOD QC#53380 2019/09/12 K.Fujimoto -->
+            ,MAIN_2.PRT_SRVY_REQ_FLG
+            ,MAIN_2.TECH_INVTY_AGING_WRK_PK
+            <!-- START 2018/02/07 U.Kim [QC#17647, ADD] -->
+            ,MAIN_2.MIN_INVTY_QTY             AS MAX_INVTY_QTY
+            ,MAIN_2.MAX_INVTY_QTY             AS MIN_INVTY_QTY
+            ,MAIN_2.PRC_LIST_EQUIP_PRC_AMT    AS PRC_LIST_EQUIP_PRC_AMT
+            <!-- END 2018/02/07 U.Kim [QC#17647, ADD] -->
+        FROM
+            (
+                SELECT * FROM IV_BEF
+                MINUS
+                SELECT * FROM IV_THIS
+            ) MAIN_2
+        WHERE  
+                MAIN_2.INVTY_QTY &lt;&gt; 0
+            AND NOT EXISTS(
+                SELECT
+                    1
+                FROM
+                    (
+                        SELECT * FROM IV_THIS
+                        MINUS
+                        SELECT * FROM IV_BEF
+                    ) IV_DIFF
+                WHERE
+                        IV_DIFF.MDSE_CD           = MAIN_2.MDSE_CD
+                    AND IV_DIFF.INVTY_LOC_CD      = MAIN_2.INVTY_LOC_CD
+                    AND NVL(IV_DIFF.SER_NUM, ' ') = NVL(MAIN_2.SER_NUM, ' ')
+            )
+        ORDER BY
+             TECH_TOC_CD
+            ,MDSE_CD
+            ,INVTY_LOC_CD
+            ,RTL_WH_CD
+            ,RTL_SWH_CD
+            ,SER_NUM
+    </statement>
+    <statement id="getDailySerialRecord" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            WRK.TECH_INVTY_AGING_WRK_PK
+        FROM
+            TECH_INVTY_AGING_WRK WRK
+        WHERE
+                WRK.GLBL_CMPY_CD  = #glblCmpyCd#
+            AND WRK.MDSE_CD       = #mdseCd#
+            AND WRK.INVTY_LOC_CD  = #invtyLocCd#
+            AND WRK.SER_NUM       IS NULL
+            AND WRK.EZCANCELFLAG  = '0'
+    </statement>
+    <!-- START 2020/02/13 K.Kitachi [QC#55717, ADD] -->
+    <statement id="getOwnerChangeInfo" parameterClass="Map" resultClass="Map">
+        WITH TRGT_RTL_WH AS (
+            SELECT
+                 A.RTL_WH_CD
+                ,A.TECH_TOC_CD
+            FROM
+                RTL_WH A
+            WHERE
+                    A.GLBL_CMPY_CD = #glblCmpyCd#
+                AND A.EZCANCELFLAG = '0'
+                AND A.EZUPTIME     &gt; #lastUpdTs#
+        )
+        ,TRGT_AGING_WRK AS (
+            SELECT
+                 A.RTL_WH_CD
+                ,A.TECH_TOC_CD
+                ,A.INVTY_LOC_CD
+                ,ROW_NUMBER() OVER(PARTITION BY A.RTL_WH_CD ORDER BY A.EZUPTIME DESC) RNUM
+<!-- QC#55791 Add Start -->
+                ,A.TECH_INVTY_AGING_WRK_PK
+                ,A.SEND_CLICK_PROC_STS_CD
+                ,A.DEL_FLG
+<!-- QC#55791 Add End -->
+            FROM
+                TECH_INVTY_AGING_WRK A
+            WHERE
+                    A.GLBL_CMPY_CD = #glblCmpyCd#
+                AND A.EZCANCELFLAG = '0'
+                AND EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        TRGT_RTL_WH X
+                    WHERE
+                        A.RTL_WH_CD = X.RTL_WH_CD
+                )
+        )
+        SELECT
+             A.RTL_WH_CD
+            ,B.TECH_TOC_CD  TECH_TOC_CD_BEF
+            ,B.INVTY_LOC_CD
+<!-- QC#55791 Add Start -->
+            ,B.TECH_INVTY_AGING_WRK_PK
+            ,B.SEND_CLICK_PROC_STS_CD
+            ,B.DEL_FLG
+<!-- QC#55791 Add End -->
+        FROM
+             TRGT_RTL_WH    A
+            ,TRGT_AGING_WRK B
+        WHERE
+                A.RTL_WH_CD   = B.RTL_WH_CD
+            AND A.TECH_TOC_CD &lt;&gt; B.TECH_TOC_CD
+            AND B.RNUM        = 1
+        ORDER BY
+            A.RTL_WH_CD
+    </statement>
+    <statement id="getInventoryDeleteInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+             A.TECH_TOC_CD                  TECH_TOC_CD_BEF
+            ,A.MDSE_CD
+            ,A.RTL_SWH_CD
+            ,A.SER_NUM
+            ,A.INVTY_QTY
+            ,A.INVTY_QTY                    SNAP_INVTY_QTY
+            ,A.FIRST_MTH_INVTY_QTY
+            ,A.SCD_MTH_INVTY_QTY
+            ,A.THIRD_MTH_INVTY_QTY
+            ,A.OVER_FRTH_MTH_INVTY_QTY
+            ,A.MDSE_NM
+            ,A.RTRN_CTRL_FLG
+            ,A.PRC_LIST_EQUIP_PRC_AMT
+            ,A.MAX_INVTY_QTY
+            ,A.MIN_INVTY_QTY
+            ,A.THIS_MTH_TOT_STD_COST_AMT
+            ,A.WH_MGR_PSN_CD                WH_MGR_PSN_CD_BEF
+            ,A.RTL_WH_CD
+            ,A.WH_NM
+            ,A.SITE_SRVY_REQ_FLG            PRT_SRVY_REQ_FLG
+            ,B.RTL_WH_CATG_CD
+        FROM
+             TECH_INVTY_AGING_WRK A
+            ,RTL_WH               B
+        WHERE
+                A.GLBL_CMPY_CD = #glblCmpyCd#
+            AND A.RTL_WH_CD    = #rtlWhCd#
+            AND A.TECH_TOC_CD  = #techTocCd#
+            AND A.EZCANCELFLAG = '0'
+            AND A.GLBL_CMPY_CD = B.GLBL_CMPY_CD
+            AND A.RTL_WH_CD    = B.RTL_WH_CD
+            AND B.EZCANCELFLAG = '0'
+        ORDER BY
+            A.MDSE_CD
+    </statement>
+    <!-- END 2020/02/13 K.Kitachi [QC#55717, ADD] -->
+
+    <!-- QC#55791 Add Start -->
+    <statement id="getInventoryInfoForDeleteError" parameterClass="Map" resultClass="Map">
+        SELECT 
+             A.TECH_TOC_CD                  TECH_TOC_CD_BEF
+            ,A.MDSE_CD
+            ,A.RTL_SWH_CD
+            ,A.SER_NUM
+            ,A.INVTY_QTY
+            ,A.INVTY_QTY                    SNAP_INVTY_QTY
+            ,A.FIRST_MTH_INVTY_QTY
+            ,A.SCD_MTH_INVTY_QTY
+            ,A.THIRD_MTH_INVTY_QTY
+            ,A.OVER_FRTH_MTH_INVTY_QTY
+            ,A.MDSE_NM
+            ,A.RTRN_CTRL_FLG
+            ,A.PRC_LIST_EQUIP_PRC_AMT
+            ,A.MAX_INVTY_QTY
+            ,A.MIN_INVTY_QTY
+            ,A.THIS_MTH_TOT_STD_COST_AMT
+            ,A.WH_MGR_PSN_CD                WH_MGR_PSN_CD_BEF
+            ,A.RTL_WH_CD
+            ,A.WH_NM
+            ,A.SITE_SRVY_REQ_FLG            PRT_SRVY_REQ_FLG
+            ,A.TECH_INVTY_AGING_WRK_PK
+            ,A.SEND_CLICK_PROC_STS_CD
+            ,A.DEL_FLG
+            ,B.RTL_WH_CATG_CD
+        FROM
+            TECH_INVTY_AGING_WRK  A 
+            ,RTL_WH               B
+        WHERE
+                A.GLBL_CMPY_CD           = #glblCmpyCd#
+            AND A.SEND_CLICK_PROC_STS_CD = #error# 
+            AND A.DEL_FLG                = #flgY# 
+            AND A.EZCANCELFLAG           = '0'
+            AND A.GLBL_CMPY_CD           = B.GLBL_CMPY_CD
+            AND A.RTL_WH_CD              = B.RTL_WH_CD
+            AND B.EZCANCELFLAG           = '0'
+            <!-- QC#56895 Add Start -->
+            AND TO_CHAR(SYSDATE,'yyyymmddhh24miss')  &lt; TO_CHAR(TO_DATE(SUBSTR(A.EZINTIME,1,14),'yyyymmddhh24miss') + #intvlMins#/1440, 'yyyymmddhh24miss')
+            <!-- QC#56895 Add End -->
+    </statement>
+
+    <statement id="getInventoryInfoForReProcDaily" parameterClass="Map" resultClass="Map">
+        SELECT 
+             A.TECH_TOC_CD                  TECH_TOC_CD
+            ,A.MDSE_CD
+            ,A.RTL_SWH_CD
+            ,A.SER_NUM
+            ,A.INVTY_QTY
+            ,A.INVTY_QTY                    SNAP_INVTY_QTY
+            ,A.FIRST_MTH_INVTY_QTY
+            ,A.SCD_MTH_INVTY_QTY
+            ,A.THIRD_MTH_INVTY_QTY
+            ,A.OVER_FRTH_MTH_INVTY_QTY
+            ,A.MDSE_NM
+            ,A.RTRN_CTRL_FLG
+            ,A.PRC_LIST_EQUIP_PRC_AMT
+            ,A.MAX_INVTY_QTY
+            ,A.MIN_INVTY_QTY
+            ,A.THIS_MTH_TOT_STD_COST_AMT
+            ,A.WH_MGR_PSN_CD                WH_MGR_PSN_CD
+            ,A.RTL_WH_CD
+            ,A.WH_NM
+            ,A.SITE_SRVY_REQ_FLG            PRT_SRVY_REQ_FLG
+            ,A.TECH_INVTY_AGING_WRK_PK
+            ,A.SEND_CLICK_PROC_STS_CD
+            ,A.DEL_FLG
+            ,B.RTL_WH_CATG_CD
+        FROM
+            TECH_INVTY_AGING_WRK  A 
+            ,RTL_WH               B
+        WHERE
+                A.GLBL_CMPY_CD = #glblCmpyCd#
+            AND A.SEND_CLICK_PROC_STS_CD = #error#
+            AND A.DEL_FLG      = #flgN#
+            AND A.EZCANCELFLAG = '0'
+            AND A.GLBL_CMPY_CD = B.GLBL_CMPY_CD
+            AND A.RTL_WH_CD    = B.RTL_WH_CD
+            AND B.EZCANCELFLAG = '0'
+    </statement>
+    <statement id="getInventoryInfoForReProcNightly" parameterClass="Map" resultClass="Map">
+         SELECT
+             A.TECH_TOC_CD
+            ,A.TECH_TOC_CD               AS TECH_TOC_CD
+            ,A.MDSE_CD
+            ,A.INVTY_LOC_CD
+            ,A.RTL_WH_CD
+            ,A.RTL_SWH_CD
+            ,A.SER_NUM
+            ,A.MDSE_NM
+            ,A.INVTY_QTY
+            ,A.RTRN_CTRL_FLG
+            ,A.THIS_MTH_TOT_STD_COST_AMT
+            ,A.FIRST_MTH_INVTY_QTY
+            ,A.SCD_MTH_INVTY_QTY
+            ,A.THIRD_MTH_INVTY_QTY
+            ,A.OVER_FRTH_MTH_INVTY_QTY
+            ,A.WH_MGR_PSN_CD             AS WH_MGR_PSN_CD
+            ,A.WH_MGR_PSN_CD             AS WH_MGR_PSN_CD
+            ,A.WH_NM
+            ,RW.RTL_WH_CATG_CD
+            ,A.SITE_SRVY_REQ_FLG         AS PRT_SRVY_REQ_FLG
+            ,A.TECH_INVTY_AGING_WRK_PK
+            ,A.MIN_INVTY_QTY
+            ,A.MAX_INVTY_QTY
+            ,A.PRC_LIST_EQUIP_PRC_AMT
+            ,A.PRC_LIST_EQUIP_PRC_AMT
+            ,A.SEND_CLICK_PROC_STS_CD
+        FROM
+            TECH_INVTY_AGING_WRK A
+            ,RTL_WH RW
+        WHERE
+            A.GLBL_CMPY_CD = #glblCmpyCd#
+        <isNotNull property="techTocCdRegexpLineString">
+        AND A.RTL_WH_CD LIKE #techTocCdRegexpLineString#
+        </isNotNull>
+        AND A.SEND_CLICK_LAST_PROC_TS IS NOT NULL
+        AND A.SEND_CLICK_LAST_PROC_TS  &gt; #xxUpdTs#
+        AND A.DEL_FLG = #flgN#
+        AND A.EZCANCELFLAG = '0'
+        AND RW.EZCANCELFLAG  = '0'
+        AND A.GLBL_CMPY_CD = RW.GLBL_CMPY_CD
+        AND A.RTL_WH_CD    = RW.RTL_WH_CD
+        ORDER BY A.SEND_CLICK_LAST_PROC_TS
+    </statement>
+    <!-- QC#55791 Add End -->
+
+    <!-- QC#56895 Add Start -->
+    <statement id="getInvtyLocCdList" parameterClass="Map" resultClass="Map">
+        SELECT
+             DISTINCT A.INVTY_LOC_CD
+        FROM
+             TECH_INVTY_AGING_WRK A
+            ,RTL_WH               B
+        WHERE
+                A.GLBL_CMPY_CD = #glblCmpyCd#
+            AND A.RTL_WH_CD    = #rtlWhCd#
+            AND A.TECH_TOC_CD  = #techTocCd#
+            AND A.EZCANCELFLAG = '0'
+            AND A.GLBL_CMPY_CD = B.GLBL_CMPY_CD
+            AND A.RTL_WH_CD    = B.RTL_WH_CD
+            AND B.EZCANCELFLAG = '0'
+    </statement>
+    <!-- QC#56895 Add End -->
+</sqlMap>

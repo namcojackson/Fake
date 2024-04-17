@@ -1,0 +1,287 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NWCL0120Query">
+
+    <typeAlias alias="NWCL0120SMsg"    type="business.blap.NWCL0120.NWCL0120SMsg"/>
+    <typeAlias alias="NWCL0120_ASMsg"  type="business.blap.NWCL0120.NWCL0120_ASMsg"/>
+    
+    <statement id ="getEasyPacInvoiceList" parameterClass="Map"  resultMap="result.getEasyPacInvoiceList">
+        WITH
+            EP_V AS (
+            SELECT
+                 '2'                        AS DPLY_SORT_NUM
+                ,INV.SELL_TO_CUST_CD        AS SELL_TO_CUST_CD
+                ,INV.BILL_TO_CUST_CD        AS BILL_TO_CUST_CD
+                ,INV.INV_DT                 AS INV_DT
+                ,INV.INV_NUM                AS INV_NUM
+                ,INV.CPO_ORD_NUM            AS CPO_ORD_NUM
+                ,CASE INV.INV_TP_CD
+                    WHEN '2' THEN INV.INV_TOT_DEAL_NET_AMT * -1
+                    ELSE INV.INV_TOT_DEAL_NET_AMT
+                    END                     AS TOT_DEAL_NET_AMT
+                ,CATG.DS_ORD_CATG_DESC_TXT  AS DS_ORD_CATG_DESC_TXT
+                ,DOT.DS_ORD_TP_DESC_TXT     AS DS_ORD_TP_DESC_TXT
+                ,ACCT.DS_ACCT_NM            AS ACCT_NM
+                ,DECODE(( 
+                    SELECT DISTINCT
+                        '1' 
+                    FROM
+                        INV_LINE LINE 
+                    WHERE
+                            LINE.GLBL_CMPY_CD = INV.GLBL_CMPY_CD 
+                        AND LINE.INV_NUM      = INV.INV_NUM 
+                        AND LINE.MDSE_CD      = #mdseCd#
+                        AND LINE.EZCANCELFLAG = '0' 
+                        AND ROWNUM            = #rowNumOne#
+                        ) 
+                        ,'1'
+                        ,'Y'
+                        ,'N'
+                    )                       AS SHORT_FALL
+                ,DECODE(( 
+                    SELECT DISTINCT
+                        '1' 
+                    FROM
+                        AJE_INV_ACCT_DIST_ERR ERR 
+                    WHERE
+                            ERR.GLBL_CMPY_CD = INV.GLBL_CMPY_CD 
+                        AND ERR.INV_NUM      = INV.INV_NUM 
+                        AND ERR.EZCANCELFLAG = '0'
+                        ) 
+                        ,'1'
+                        ,'Y'
+                        ,'N'
+                    )                       AS ERR_FLG 
+            FROM
+                 INV               INV
+                ,ORD_CATG_BIZ_CTX  CTX
+                ,BILL_TO_CUST      BILL
+                ,SELL_TO_CUST      ACCT
+                ,DS_ORD_CATG       CATG
+                ,DS_ORD_TP         DOT 
+            WHERE
+                    INV.GLBL_CMPY_CD       = #glblCmpyCd#
+                AND INV.INV_DT             &gt;= #invDtFrom# 
+                AND INV.INV_DT             &lt;= #invDtTo#
+                AND INV.EZCANCELFLAG       = '0' 
+                
+                AND CTX.GLBL_CMPY_CD       = INV.GLBL_CMPY_CD 
+                AND CTX.DS_ORD_CATG_CD     = INV.DS_ORD_CATG_CD 
+                AND (CTX.DS_ORD_TP_CD      = INV.DS_ORD_TP_CD OR CTX.DS_ORD_TP_CD IS NULL)
+                AND CTX.ORD_CATG_CTX_TP_CD = #ordCatgCtxTpCd#
+                AND CTX.EZCANCELFLAG       = '0' 
+                
+                AND EXISTS ( 
+                    SELECT
+                        '1' 
+                    FROM
+                        SPLY_PGM_CONTR SCP 
+                    WHERE
+                            SCP.GLBL_CMPY_CD                 = INV.GLBL_CMPY_CD 
+                        AND SCP.BILL_TO_CUST_ACCT_CD         = INV.BILL_TO_CUST_ACCT_CD 
+                        AND SCP.EFF_FROM_DT                  &lt;= NVL(INV.ORD_DT, INV.INV_DT) 
+                        AND NVL(SCP.EFF_THRU_DT, '99991231') &gt;= NVL(INV.ORD_DT, INV.INV_DT) 
+                        AND SCP.EZCANCELFLAG                 = '0'
+                    )
+                
+                AND ((
+                    EXISTS ( 
+                    SELECT
+                        '1' 
+                    FROM
+                        INV_PRT_CTRL CTRL 
+                    WHERE
+                            CTRL.GLBL_CMPY_CD         = INV.GLBL_CMPY_CD 
+                        AND CTRL.INV_NUM              = INV.INV_NUM 
+                        AND CTRL.SPLY_PGM_INV_RVW_FLG = #splyPgmInvRvwFlg#
+                        AND CTRL.EZCANCELFLAG         = '0'
+                        AND INV.FNLZ_INV_FLG          = #fnlzInvFlgOn# ) 
+                    ) OR (
+                            INV.ITRL_INV_ERR_FLG     = #itrlInvErrFlg#
+                        AND INV.FNLZ_INV_FLG          = #fnlzInvFlgOff# )
+                    )
+                    
+                AND BILL.GLBL_CMPY_CD      = INV.GLBL_CMPY_CD 
+                AND BILL.BILL_TO_CUST_CD   = INV.BILL_TO_CUST_CD 
+                AND BILL.EZCANCELFLAG      = '0' 
+                
+                AND ACCT.GLBL_CMPY_CD      = BILL.GLBL_CMPY_CD 
+                AND ACCT.SELL_TO_CUST_CD   = BILL.SELL_TO_CUST_CD 
+                AND ACCT.EZCANCELFLAG      = '0' 
+                
+                AND CATG.GLBL_CMPY_CD(+)   = INV.GLBL_CMPY_CD 
+                AND CATG.DS_ORD_CATG_CD(+) = INV.DS_ORD_CATG_CD 
+                AND CATG.EZCANCELFLAG(+)   = '0' 
+                
+                AND DOT.GLBL_CMPY_CD(+)    = INV.GLBL_CMPY_CD 
+                AND DOT.DS_ORD_TP_CD(+)    = INV.DS_ORD_TP_CD 
+                AND DOT.EZCANCELFLAG(+)    = '0' 
+                
+            UNION ALL
+            
+            SELECT
+                 '1'                        AS DPLY_SORT_NUM
+                ,CPO.SELL_TO_CUST_CD        AS SELL_TO_CUST_CD
+                ,CPO.BILL_TO_CUST_CD        AS BILL_TO_CUST_CD
+                ,NULL                       AS INV_DT
+                ,NULL                       AS INV_NUM
+                ,CPO.CPO_ORD_NUM            AS CPO_ORD_NUM
+                ,CPO.CPO_TOT_DEAL_NET_AMT   AS TOT_DEAL_NET_AMT
+                ,CATG.DS_ORD_CATG_DESC_TXT  AS DS_ORD_CATG_DESC_TXT
+                ,DOT.DS_ORD_TP_DESC_TXT     AS DS_ORD_TP_DESC_TXT
+                ,ACCT.DS_ACCT_NM            AS ACCT_NM
+                ,'N'                        AS SHORT_FALL
+                ,'Y'                        AS ERR_FLG 
+            FROM
+                 CPO               CPO
+                ,ORD_CATG_BIZ_CTX  CTX
+                ,BILL_TO_CUST      BILL
+                ,SELL_TO_CUST      ACCT
+                ,DS_ORD_CATG       CATG
+                ,DS_ORD_TP         DOT 
+            WHERE
+                    CPO.GLBL_CMPY_CD       = #glblCmpyCd#
+                AND CPO.CPO_HLD_FLG        = #cpoHldFlg#
+                AND CPO.OPEN_FLG           = #openFlg#
+                AND CPO.EZCANCELFLAG       = '0' 
+                
+                AND CTX.GLBL_CMPY_CD       = CPO.GLBL_CMPY_CD 
+                AND CTX.DS_ORD_CATG_CD     = CPO.DS_ORD_CATG_CD 
+                AND (CTX.DS_ORD_TP_CD      = CPO.DS_ORD_TP_CD OR CTX.DS_ORD_TP_CD IS NULL)
+                AND CTX.ORD_CATG_CTX_TP_CD = #ordCatgCtxTpCd#
+                AND CTX.EZCANCELFLAG       = '0' 
+                
+                AND EXISTS ( 
+                    SELECT
+                        '1' 
+                    FROM
+                        HLD HLD 
+                    WHERE
+                            HLD.GLBL_CMPY_CD = CPO.GLBL_CMPY_CD 
+                        AND HLD.CPO_ORD_NUM  = CPO.CPO_ORD_NUM 
+                        AND HLD.EZCANCELFLAG = '0'
+                    )
+                AND EXISTS ( 
+                    SELECT
+                        '1' 
+                    FROM
+                        SHPG_PLN SHPLN 
+                    WHERE
+                            SHPLN.GLBL_CMPY_CD = CPO.GLBL_CMPY_CD 
+                        AND SHPLN.TRX_HDR_NUM  = CPO.CPO_ORD_NUM 
+                        AND SHPLN.SHPG_STS_CD  IN 
+                        <iterate property="shpgStsCdList" var="shpgStsCd[]" open="(" close=")" conjunction=",">
+                            #shpgStsCd[]#
+                        </iterate>
+                        AND SHPLN.EZCANCELFLAG = '0'
+                    ) 
+                AND EXISTS ( 
+                    SELECT
+                        '1' 
+                    FROM
+                        SPLY_PGM_CONTR SCP 
+                    WHERE
+                        ( 
+                            SCP.GLBL_CMPY_CD                 = CPO.GLBL_CMPY_CD 
+                        AND SCP.BILL_TO_CUST_ACCT_CD         = CPO.BILL_TO_CUST_ACCT_CD 
+                        AND SCP.EFF_FROM_DT                  &lt;= CPO.CPO_ORD_TS 
+                        AND NVL(SCP.EFF_THRU_DT, '99991231') &gt;= CPO.CPO_ORD_TS 
+                        AND SCP.EZCANCELFLAG                 = '0'
+                        )
+                    ) 
+                AND BILL.GLBL_CMPY_CD      = CPO.GLBL_CMPY_CD 
+                AND BILL.BILL_TO_CUST_CD   = CPO.BILL_TO_CUST_CD 
+                AND BILL.EZCANCELFLAG      = '0' 
+                
+                AND ACCT.GLBL_CMPY_CD      = BILL.GLBL_CMPY_CD 
+                AND ACCT.SELL_TO_CUST_CD   = BILL.SELL_TO_CUST_CD 
+                AND ACCT.EZCANCELFLAG      = '0' 
+                
+                AND CATG.GLBL_CMPY_CD(+)   = CPO.GLBL_CMPY_CD 
+                AND CATG.DS_ORD_CATG_CD(+) = CPO.DS_ORD_CATG_CD 
+                AND CATG.EZCANCELFLAG(+)   = '0' 
+                
+                AND DOT.GLBL_CMPY_CD(+)    = CPO.GLBL_CMPY_CD 
+                AND DOT.DS_ORD_TP_CD(+)    = CPO.DS_ORD_TP_CD 
+                AND DOT.EZCANCELFLAG(+)    = '0' 
+                
+                AND NOT EXISTS ( 
+                    SELECT
+                        '1' 
+                    FROM
+                        INV INV 
+                    WHERE
+                            INV.GLBL_CMPY_CD = CPO.GLBL_CMPY_CD 
+                        AND INV.CPO_ORD_NUM  = CPO.CPO_ORD_NUM 
+                        AND INV.EZCANCELFLAG = '0'
+                    ) 
+            ORDER BY
+                 DPLY_SORT_NUM
+                ,ERR_FLG DESC
+                ,BILL_TO_CUST_CD
+                ,INV_NUM
+                ,CPO_ORD_NUM
+            )
+        SELECT
+                *
+            FROM
+                EP_V
+            WHERE
+                ROWNUM <![CDATA[<=]]> #rowNum#
+    </statement>
+    <resultMap id="result.getEasyPacInvoiceList"   class="NWCL0120_ASMsg">
+        <result property="sellToCustCd_A0"       column="SELL_TO_CUST_CD"       javaType="EZDSStringItem"/>
+        <result property="billToCustCd_A0"       column="BILL_TO_CUST_CD"       javaType="EZDSStringItem"/>
+        <result property="dsAcctNm_A0"           column="ACCT_NM"               javaType="EZDSStringItem"/>
+        <result property="invDt_A0"              column="INV_DT"                javaType="EZDSStringItem"/>
+        <result property="invNum_A0"             column="INV_NUM"               javaType="EZDSStringItem"/>
+        <result property="cpoOrdNum_A0"          column="CPO_ORD_NUM"           javaType="EZDSStringItem"/>
+        <result property="dsOrdCatgDescTxt_A0"   column="DS_ORD_CATG_DESC_TXT"  javaType="EZDSStringItem"/>
+        <result property="dsOrdTpDescTxt_A0"     column="DS_ORD_TP_DESC_TXT"    javaType="EZDSStringItem"/>
+        <result property="xxFlgNm_A0"            column="SHORT_FALL"            javaType="EZDSStringItem"/>
+        <result property="invTotDealNetAmt_A0"   column="TOT_DEAL_NET_AMT"      javaType="EZDSStringItem"/>
+        <result property="ezUpTime_A0"           column="EZUPTIME"              javaType="EZDSStringItem"/>
+        <result property="ezUpTimeZone_A0"       column="EZUPTIMEZONE"          javaType="EZDSStringItem"/>
+    </resultMap>
+    
+    <statement id ="getInvoiceErr" parameterClass="Map"  resultClass="String">
+        SELECT
+            ERR.INV_ERR_MSG_TXT
+        FROM
+            AJE_INV_ACCT_DIST_ERR ERR
+        WHERE
+            ERR.GLBL_CMPY_CD  = #glblCmpyCd#
+        AND ERR.INV_NUM       = #invNum#
+        AND ERR.EZCANCELFLAG  = '0'
+    </statement>
+    
+    <statement id ="getHldRsnTxt" parameterClass="Map"  resultClass="String">
+        SELECT
+            RSN.HLD_RSN_DESC_TXT
+        FROM
+             HLD      HLD
+            ,HLD_RSN  RSN
+        WHERE
+                HLD.GLBL_CMPY_CD  = #glblCmpyCd#
+            AND HLD.CPO_ORD_NUM   = #cpoOrdNum#
+            AND HLD.REL_FLG       = #relFlg#
+            AND HLD.EZCANCELFLAG  = '0'
+
+            AND RSN.GLBL_CMPY_CD  = HLD.GLBL_CMPY_CD
+            AND RSN.HLD_RSN_CD    = HLD.HLD_RSN_CD
+            AND RSN.EZCANCELFLAG  = '0'
+    </statement>
+
+    <statement id ="getInvPrtCtrlPk" parameterClass="Map"  resultClass="Map">
+        SELECT
+             INV_NUM
+            ,INV_PRT_CTRL_PK
+            ,EZUPTIME
+            ,EZUPTIMEZONE
+        FROM
+            INV_PRT_CTRL CTRL
+        WHERE
+                CTRL.GLBL_CMPY_CD  = #glblCmpyCd#
+            AND CTRL.INV_NUM       = #invNum#
+            AND CTRL.EZCANCELFLAG  = '0'
+    </statement>
+</sqlMap>

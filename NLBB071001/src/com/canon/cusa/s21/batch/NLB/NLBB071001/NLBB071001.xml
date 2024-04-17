@@ -1,0 +1,729 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NLBB071001">
+    <statement id="getWmsSoHeader" parameterClass="Map" resultClass="Map">
+    <![CDATA[
+        SELECT
+             I01.INTERFACE_ID
+            ,I01.TRANSACTION_ID
+            ,I01.SEGMENT_ID
+            ,I01.UNIT_ID
+            ,I01.SEQ_NUMBER
+            ,I01.WMS_REC_ID
+            ,I01.EZINTIME
+            ,I01.OTBD_ORD_NUM
+            ,I01.WMS_TRX_DT_TM_TS
+            ,I01.BOL_NUM
+            ,SO.WH_CD
+            ,SO.CARR_CD
+            ,SO.SHPG_SVC_LVL_CD
+            ,SOT.S80_ORD_TP_CD
+            ,RW.INVTY_OWNR_CD
+            ,RW.WH_OWNR_CD
+            ,(SELECT WMS_TSK.INTFC_TP_ID FROM WMS_TASK WMS_TSK WHERE WMS_TSK.GLBL_CMPY_CD = #GLBL_CMPY_CD# AND WMS_TSK.WMS_TASK_CD = #WMS_TASK_CD_SHIP#) INTFC_TP_ID
+            ,TO_CHAR(SYSDATE,'yyyyMMddHHmmss') DATE_TIME
+        FROM
+             NLBI1220_01        I01
+            ,SHPG_ORD           SO
+            ,SCE_ORD_TP         SOT
+            ,RTL_WH             RW
+        WHERE
+            I01.INTERFACE_ID      = #INTERFACE_ID#
+        AND I01.TRANSACTION_ID    = #TRANSACTION_ID#
+        AND I01.WMS_TASK_NM       = #WMS_TASK_NM# /* PGI */
+        AND I01.WMS_TASK_CD       = #WMS_TASK_CD# /* LF */
+        AND I01.EZCANCELFLAG      = '0'
+        AND I01.OTBD_ORD_NUM      = SO.SO_NUM
+        AND SO.GLBL_CMPY_CD       = #GLBL_CMPY_CD#
+        AND SO.EZCANCELFLAG       = '0'
+        AND SO.GLBL_CMPY_CD       = SOT.GLBL_CMPY_CD(+)
+        AND SO.SCE_ORD_TP_CD      = SOT.SCE_ORD_TP_CD(+)
+        AND SOT.INBD_OTBD_CD(+)   = #INBD_OTBD_CD# /* OTBD:2 */
+        AND SOT.EZCANCELFLAG(+)   = '0'
+        AND SO.GLBL_CMPY_CD       = RW.GLBL_CMPY_CD(+)
+        AND SO.WH_CD              = RW.RTL_WH_CD(+)
+        AND RW.WH_OWNR_CD(+)      = #WH_OWNR_CD# /* APX */
+        AND RW.EZCANCELFLAG(+)    = '0'
+        ORDER BY
+             I01.INTERFACE_ID
+            ,I01.TRANSACTION_ID
+            ,I01.SEGMENT_ID
+            ,I01.UNIT_ID
+            ,I01.SEQ_NUMBER
+    ]]>
+    </statement>
+
+    <statement id="getWmsSoDetail" parameterClass="Map" resultClass="Map">
+    <![CDATA[
+        SELECT
+             I02.WMS_MDSE_CD
+            ,I02.WMS_PROC_QTY
+            ,I02.OTBD_ORD_LINE_NUM
+            ,SOD.RTL_SWH_CD
+            ,SOD.FROM_STK_STS_CD
+            ,SOD.INVTY_LOC_CD
+            ,SOD.SO_SLP_NUM
+            ,CASE
+                 WHEN M.RCV_SER_TAKE_FLG = #flgN# AND M.SHPG_SER_TAKE_FLG = #flgN#
+                 THEN #flgN#
+                 ELSE #flgY#
+             END AS SER_ITEM_FLG
+            ,SOD.MDSE_CD
+            ,SOD.PICK_SVC_CONFIG_MSTR_PK
+        FROM
+             NLBI1220_01        I01
+            ,NLBI1220_02        I02
+            ,SHPG_ORD_DTL       SOD
+            ,MDSE               M
+        WHERE
+            I01.INTERFACE_ID                  = #INTERFACE_ID#
+        AND I01.TRANSACTION_ID                = #TRANSACTION_ID#
+        AND I01.SEGMENT_ID                    = #SEGMENT_ID#
+        AND I01.UNIT_ID                       = #UNIT_ID#
+        AND I01.EZCANCELFLAG                  = '0'
+        AND I01.INTERFACE_ID                  = I02.INTERFACE_ID
+        AND I01.TRANSACTION_ID                = I02.TRANSACTION_ID
+        AND I01.SEGMENT_ID                    = I02.SEGMENT_ID
+        AND I01.UNIT_ID                       = I02.UNIT_ID
+        AND I02.EZCANCELFLAG                  = '0'
+        AND I01.OTBD_ORD_NUM                  = SOD.SO_NUM(+)
+        AND LPAD(I02.OTBD_ORD_LINE_NUM,3,'0') = SOD.SO_SLP_NUM(+)
+        AND SOD.GLBL_CMPY_CD(+)               = #GLBL_CMPY_CD#
+        AND SOD.EZCANCELFLAG(+)               = '0'
+        AND I02.WMS_MDSE_CD                   = M.MDSE_CD
+        ORDER BY
+             I01.INTERFACE_ID
+            ,I01.TRANSACTION_ID
+            ,I01.SEGMENT_ID
+            ,I01.UNIT_ID
+            ,I01.SEQ_NUMBER
+    ]]>
+    </statement>
+
+    <statement id="getWmsSoSerial" parameterClass="Map" resultClass="Map">
+    <![CDATA[
+        SELECT
+            MAIN.WMS_MDSE_CD
+           ,MAIN.WMS_PROC_QTY
+           ,MAIN.OTBD_ORD_LINE_NUM
+           ,MAIN.INTFC_TP_ID
+           ,MAIN.RTL_SWH_CD
+           ,MAIN.FROM_STK_STS_CD
+           ,NVL(SS.SER_NUM, MAIN.SER_NUM) AS SER_NUM
+           ,MAIN.MDSE_CD
+           ,MAIN.PICK_SVC_CONFIG_MSTR_PK
+        FROM (
+            SELECT
+                 I02.WMS_MDSE_CD
+                ,I02.WMS_PROC_QTY
+                ,I03.OTBD_ORD_LINE_NUM
+                ,(SELECT WMS_TSK.INTFC_TP_ID FROM WMS_TASK WMS_TSK WHERE WMS_TSK.GLBL_CMPY_CD = #GLBL_CMPY_CD# AND WMS_TSK.WMS_TASK_CD = #WMS_TASK_CD_SERL#) INTFC_TP_ID
+                ,SOD.RTL_SWH_CD
+                ,SOD.FROM_STK_STS_CD
+                ,I03.SER_NUM
+                ,SOD.GLBL_CMPY_CD
+                ,SOD.SO_NUM
+                ,SOD.SO_SLP_NUM
+                ,SOD.MDSE_CD
+                ,SOD.PICK_SVC_CONFIG_MSTR_PK
+            FROM
+                 NLBI1220_03        I03
+                ,NLBI1220_02        I02
+                ,NLBI1220_01        I01
+                ,SHPG_ORD_DTL       SOD
+            WHERE
+                I03.INTERFACE_ID                  = #INTERFACE_ID#
+            AND I03.TRANSACTION_ID                = #TRANSACTION_ID#
+            AND I03.SEGMENT_ID                    = #SEGMENT_ID#
+            AND I03.UNIT_ID                       = #UNIT_ID#
+            AND I03.INTERFACE_ID                  = I02.INTERFACE_ID(+)
+            AND I03.TRANSACTION_ID                = I02.TRANSACTION_ID(+)
+            AND I03.SEGMENT_ID                    = I02.SEGMENT_ID(+)
+            AND I03.UNIT_ID                       = I02.UNIT_ID(+)
+            AND I03.OTBD_ORD_LINE_NUM             = I02.OTBD_ORD_LINE_NUM(+)
+            AND I03.INTERFACE_ID                  = I01.INTERFACE_ID(+)
+            AND I03.TRANSACTION_ID                = I01.TRANSACTION_ID(+)
+            AND I03.SEGMENT_ID                    = I01.SEGMENT_ID(+)
+            AND I03.UNIT_ID                       = I01.UNIT_ID(+)
+            AND I01.OTBD_ORD_NUM                  = SOD.SO_NUM(+)
+            AND I03.OTBD_ORD_LINE_NUM             = SOD.SO_SLP_NUM(+)
+            AND SOD.GLBL_CMPY_CD(+)               = #GLBL_CMPY_CD#
+            AND I03.EZCANCELFLAG                  = '0'
+            AND I02.EZCANCELFLAG(+)               = '0'
+            AND I01.EZCANCELFLAG(+)               = '0'
+            AND SOD.EZCANCELFLAG(+)               = '0'
+            ) MAIN
+           ,(
+            SELECT
+                SS.GLBL_CMPY_CD
+               ,SS.SO_NUM
+               ,SS.SO_SLP_NUM
+               ,SS.SER_NUM
+               ,SS.WH_PICK_FLG
+               ,SS.ORD_ASG_FLG
+               ,SO_SER_PK
+            FROM
+                SO_SER SS
+            WHERE
+                SS.GLBL_CMPY_CD  = #GLBL_CMPY_CD#
+            AND SS.WH_PICK_FLG   = #flgY#
+            AND SS.EZCANCELFLAG  = '0'
+            UNION ALL
+            SELECT
+                SS.GLBL_CMPY_CD
+               ,SS.SO_NUM
+               ,SS.SO_SLP_NUM
+               ,SS.SER_NUM
+               ,SS.WH_PICK_FLG
+               ,SS.ORD_ASG_FLG
+               ,SS.SO_SER_PK
+            FROM
+                SO_SER SS
+            WHERE
+                SS.GLBL_CMPY_CD  = #GLBL_CMPY_CD#
+            AND SS.ORD_ASG_FLG  = #flgY#
+            AND SS.WH_PICK_FLG  = #flgN#
+            AND SS.EZCANCELFLAG = '0'
+            ORDER BY
+                WH_PICK_FLG DESC
+               ,ORD_ASG_FLG DESC
+               ,SO_SER_PK   DESC
+            ) SS
+        WHERE
+            MAIN.GLBL_CMPY_CD = SS.GLBL_CMPY_CD(+)
+        AND MAIN.SO_NUM       = SS.SO_NUM(+)
+        AND MAIN.SO_SLP_NUM   = SS.SO_SLP_NUM(+)
+        AND SS.SER_NUM(+)  LIKE '%' || MAIN.SER_NUM
+        ORDER BY
+            MAIN.OTBD_ORD_LINE_NUM
+    ]]>
+    </statement>
+
+    <!-- Add Start 2020/02/12 QC#55733 -->
+    <statement id="getWmsSoSerialOriginal" parameterClass="Map" resultClass="Map">
+        SELECT
+            MAIN.WMS_MDSE_CD
+           ,MAIN.WMS_PROC_QTY
+           ,MAIN.OTBD_ORD_LINE_NUM
+           ,MAIN.INTFC_TP_ID
+           ,MAIN.RTL_SWH_CD
+           ,MAIN.FROM_STK_STS_CD
+           ,MAIN.SER_NUM
+        FROM (
+            SELECT
+                TBL.WMS_MDSE_CD
+               ,TBL.WMS_PROC_QTY
+               ,TBL.OTBD_ORD_LINE_NUM
+               ,TBL.INTFC_TP_ID
+               ,TBL.RTL_SWH_CD
+               ,TBL.FROM_STK_STS_CD
+               ,TBL.SER_NUM
+               ,TBL.SORT_NUM
+            FROM (
+                SELECT
+                     ITFC1.WMS_MDSE_CD
+                    ,ITFC1.WMS_PROC_QTY
+                    ,ITFC1.OTBD_ORD_LINE_NUM
+                    ,ITFC1.INTFC_TP_ID
+                    ,ITFC1.RTL_SWH_CD
+                    ,ITFC1.FROM_STK_STS_CD
+                    ,ITFC1.SER_NUM
+                    ,ITFC1.GLBL_CMPY_CD
+                    ,ITFC1.SO_NUM
+                    ,ITFC1.SO_SLP_NUM
+                    ,ITFC1.SORT_NUM
+                FROM (
+                    SELECT
+                         I02.WMS_MDSE_CD
+                        ,I02.WMS_PROC_QTY
+                        ,I02.OTBD_ORD_LINE_NUM
+                        ,(SELECT WMS_TSK.INTFC_TP_ID FROM WMS_TASK WMS_TSK WHERE WMS_TSK.GLBL_CMPY_CD = #GLBL_CMPY_CD# AND WMS_TSK.WMS_TASK_CD = #WMS_TASK_CD_SERL#) INTFC_TP_ID
+                        ,SOD.RTL_SWH_CD
+                        ,SOD.FROM_STK_STS_CD
+                        ,SS.SER_NUM
+                        ,SOD.GLBL_CMPY_CD
+                        ,SOD.SO_NUM
+                        ,SOD.SO_SLP_NUM
+                        ,1 SORT_NUM
+                    FROM
+                         NLBI1220_02        I02
+                        ,NLBI1220_01        I01
+                        ,SHPG_ORD_DTL       SOD
+                        ,SO_SER             SS
+                    WHERE
+                        I02.INTERFACE_ID                  = #INTERFACE_ID#
+                    AND I02.TRANSACTION_ID                = #TRANSACTION_ID#
+                    AND I02.SEGMENT_ID                    = #SEGMENT_ID#
+                    AND I02.UNIT_ID                       = #UNIT_ID#
+                    AND I02.INTERFACE_ID                  = I01.INTERFACE_ID
+                    AND I02.TRANSACTION_ID                = I01.TRANSACTION_ID
+                    AND I02.SEGMENT_ID                    = I01.SEGMENT_ID
+                    AND I02.UNIT_ID                       = I01.UNIT_ID
+                    AND I01.OTBD_ORD_NUM                  = SOD.SO_NUM
+                    AND I02.OTBD_ORD_LINE_NUM             = SOD.SO_SLP_NUM
+                    AND SOD.GLBL_CMPY_CD                  = #GLBL_CMPY_CD#
+                    AND SOD.GLBL_CMPY_CD                  = SS.GLBL_CMPY_CD
+                    AND SOD.SO_NUM                        = SS.SO_NUM
+                    AND SOD.SO_SLP_NUM                    = SS.SO_SLP_NUM
+                    AND SS.SO_NUM                         = #OTBD_ORD_NUM#
+                    AND SS.SO_SLP_NUM                     = #SO_SLP_NUM#
+                    AND SS.WH_PICK_FLG                    = #flgY#
+                    AND I02.EZCANCELFLAG                  = '0'
+                    AND I01.EZCANCELFLAG                  = '0'
+                    AND SOD.EZCANCELFLAG                  = '0'
+                    AND SS.EZCANCELFLAG                   = '0'
+                    ORDER BY
+                        SS.SO_SER_PK DESC
+                    ) ITFC1
+                UNION
+                SELECT
+                     ITFC2.WMS_MDSE_CD
+                    ,ITFC2.WMS_PROC_QTY
+                    ,ITFC2.OTBD_ORD_LINE_NUM
+                    ,ITFC2.INTFC_TP_ID
+                    ,ITFC2.RTL_SWH_CD
+                    ,ITFC2.FROM_STK_STS_CD
+                    ,ITFC2.SER_NUM
+                    ,ITFC2.GLBL_CMPY_CD
+                    ,ITFC2.SO_NUM
+                    ,ITFC2.SO_SLP_NUM
+                    ,ITFC2.SORT_NUM
+                FROM (
+                    SELECT
+                         I02.WMS_MDSE_CD
+                        ,I02.WMS_PROC_QTY
+                        ,I02.OTBD_ORD_LINE_NUM
+                        ,(SELECT WMS_TSK.INTFC_TP_ID FROM WMS_TASK WMS_TSK WHERE WMS_TSK.GLBL_CMPY_CD = #GLBL_CMPY_CD# AND WMS_TSK.WMS_TASK_CD = #WMS_TASK_CD_SERL#) INTFC_TP_ID
+                        ,SOD.RTL_SWH_CD
+                        ,SOD.FROM_STK_STS_CD
+                        ,SS.SER_NUM
+                        ,SOD.GLBL_CMPY_CD
+                        ,SOD.SO_NUM
+                        ,SOD.SO_SLP_NUM
+                        ,2 SORT_NUM
+                    FROM
+                         NLBI1220_02        I02
+                        ,NLBI1220_01        I01
+                        ,SHPG_ORD_DTL       SOD
+                        ,SO_SER             SS
+                    WHERE
+                        I02.INTERFACE_ID                  = #INTERFACE_ID#
+                    AND I02.TRANSACTION_ID                = #TRANSACTION_ID#
+                    AND I02.SEGMENT_ID                    = #SEGMENT_ID#
+                    AND I02.UNIT_ID                       = #UNIT_ID#
+                    AND I02.INTERFACE_ID                  = I01.INTERFACE_ID
+                    AND I02.TRANSACTION_ID                = I01.TRANSACTION_ID
+                    AND I02.SEGMENT_ID                    = I01.SEGMENT_ID
+                    AND I02.UNIT_ID                       = I01.UNIT_ID
+                    AND I01.OTBD_ORD_NUM                  = SOD.SO_NUM
+                    AND I02.OTBD_ORD_LINE_NUM             = SOD.SO_SLP_NUM
+                    AND SOD.GLBL_CMPY_CD                  = #GLBL_CMPY_CD#
+                    AND SOD.GLBL_CMPY_CD                  = SS.GLBL_CMPY_CD
+                    AND SOD.SO_NUM                        = SS.SO_NUM
+                    AND SOD.SO_SLP_NUM                    = SS.SO_SLP_NUM
+                    AND SS.SO_NUM                         = #OTBD_ORD_NUM#
+                    AND SS.SO_SLP_NUM                     = #SO_SLP_NUM#
+                    AND SS.WH_PICK_FLG                    = #flgN#
+                    AND SS.ORD_ASG_FLG                    = #flgY#
+                    AND I02.EZCANCELFLAG                  = '0'
+                    AND I01.EZCANCELFLAG                  = '0'
+                    AND SOD.EZCANCELFLAG                  = '0'
+                    AND SS.EZCANCELFLAG                   = '0'
+                    ORDER BY
+                        SS.SO_SER_PK DESC
+                    ) ITFC2
+                UNION
+                SELECT
+                     I02.WMS_MDSE_CD
+                    ,I02.WMS_PROC_QTY
+                    ,I02.OTBD_ORD_LINE_NUM
+                    ,(SELECT WMS_TSK.INTFC_TP_ID FROM WMS_TASK WMS_TSK WHERE WMS_TSK.GLBL_CMPY_CD = #GLBL_CMPY_CD# AND WMS_TSK.WMS_TASK_CD = #WMS_TASK_CD_SERL#) INTFC_TP_ID
+                    ,SOD.RTL_SWH_CD
+                    ,SOD.FROM_STK_STS_CD
+                    ,SMM.SER_NUM
+                    ,SOD.GLBL_CMPY_CD
+                    ,SOD.SO_NUM
+                    ,SOD.SO_SLP_NUM
+                    ,3 SORT_NUM
+                FROM
+                     NLBI1220_02        I02
+                    ,NLBI1220_01        I01
+                    ,SHPG_ORD_DTL       SOD
+                    ,SVC_MACH_MSTR      SMM
+                WHERE
+                    I02.INTERFACE_ID                  = #INTERFACE_ID#
+                AND I02.TRANSACTION_ID                = #TRANSACTION_ID#
+                AND I02.SEGMENT_ID                    = #SEGMENT_ID#
+                AND I02.UNIT_ID                       = #UNIT_ID#
+                AND I02.INTERFACE_ID                  = I01.INTERFACE_ID
+                AND I02.TRANSACTION_ID                = I01.TRANSACTION_ID
+                AND I02.SEGMENT_ID                    = I01.SEGMENT_ID
+                AND I02.UNIT_ID                       = I01.UNIT_ID
+                AND I01.OTBD_ORD_NUM                  = SOD.SO_NUM
+                AND I02.OTBD_ORD_LINE_NUM             = SOD.SO_SLP_NUM
+                AND SOD.GLBL_CMPY_CD                  = #GLBL_CMPY_CD#
+                AND SOD.SO_NUM                        = #OTBD_ORD_NUM#
+                AND SOD.SO_SLP_NUM                    = #SO_SLP_NUM#
+                AND SOD.GLBL_CMPY_CD                  = SMM.GLBL_CMPY_CD
+                AND SOD.MDSE_CD                       = SMM.MDSE_CD
+                AND SOD.INVTY_LOC_CD                  = SMM.CUR_LOC_NUM
+                AND SMM.SVC_MACH_MSTR_STS_CD          IN 
+                <iterate property="SVC_MACH_MSTR_STS_CD" var="elem[]" open="(" close=")" conjunction=",">
+                    #elem[]#
+                </iterate>
+                AND SMM.SVC_MACH_USG_STS_CD           = #SVC_MACH_USG_STS_CD_IN_INVTY#
+                AND SMM.SVC_MACH_MSTR_LOC_STS_CD      = #LOC_STS_CD_DC_STOC#
+                AND I02.EZCANCELFLAG                  = '0'
+                AND I01.EZCANCELFLAG                  = '0'
+                AND SOD.EZCANCELFLAG                  = '0'
+                AND SMM.EZCANCELFLAG                  = '0'
+                ) TBL
+            ORDER BY
+                TBL.SORT_NUM
+            ) MAIN
+        WHERE
+            ROWNUM                                    &lt;= #ROW_NUM#
+    </statement>
+    <!-- Add End 2020/02/12 QC#55733 -->
+
+    <statement id="getWmsPodData" parameterClass="Map" >
+        SELECT
+             I01.TRANSACTION_ID
+            ,I01.BOL_NUM
+            ,I01.WMS_TASK_CD
+            ,I01.WMS_TASK_NM
+            ,I01.WMS_TRX_DT_TM_TS
+            ,I01.OTBD_ORD_NUM
+            ,I02.OTBD_ORD_LINE_NUM
+        FROM
+             NLBI1220_01    I01
+            ,NLBI1220_02    I02
+        WHERE
+            I01.INTERFACE_ID    = #INTERFACE_ID#
+        AND I01.TRANSACTION_ID  = #TRANSACTION_ID#
+        AND I01.WMS_TASK_NM     IN /* (ORI) */
+        <iterate property="WMS_TASK_NM_ARY" var="elem[]" open="(" close=")" conjunction=",">
+            #elem[]#
+        </iterate>
+        AND I01.INTERFACE_ID    = I02.INTERFACE_ID
+        AND I01.TRANSACTION_ID  = I02.TRANSACTION_ID
+        AND I01.SEGMENT_ID      = I02.SEGMENT_ID
+        AND I01.UNIT_ID         = I02.UNIT_ID
+        AND I01.EZCANCELFLAG    = '0'
+        AND I02.EZCANCELFLAG    = '0'
+        ORDER BY
+             I01.TRANSACTION_ID
+            ,I01.BOL_NUM
+            ,I01.OTBD_ORD_NUM
+            ,I02.OTBD_ORD_LINE_NUM
+            ,I01.WMS_TASK_CD
+            ,I01.WMS_TASK_NM
+            ,I01.WMS_TRX_DT_TM_TS
+    </statement>
+
+    <statement id="getWmsPodWrkData" parameterClass="Map" >
+        SELECT
+             I01.TRANSACTION_ID
+            ,I01.BOL_NUM
+            ,I01.WMS_TASK_CD
+            ,I01.WMS_TASK_NM
+            ,I01.WMS_TRX_DT_TM_TS
+            ,SUM(I02.WMS_PROC_QTY) WMS_SUM_PROC_QTY
+        FROM
+             NLBI1220_01    I01
+            ,NLBI1220_02    I02
+        WHERE
+            I01.INTERFACE_ID    = #INTERFACE_ID#
+        AND I01.TRANSACTION_ID  = #TRANSACTION_ID#
+        AND I01.WMS_TASK_NM     = #WMS_TASK_NM# /* (PIC) */
+        AND I01.WMS_TASK_CD     = #WMS_TASK_CD# /* (LF) */
+        AND I01.INTERFACE_ID    = I02.INTERFACE_ID
+        AND I01.TRANSACTION_ID  = I02.TRANSACTION_ID
+        AND I01.SEGMENT_ID      = I02.SEGMENT_ID
+        AND I01.UNIT_ID         = I02.UNIT_ID
+        AND I01.EZCANCELFLAG    = '0'
+        AND I02.EZCANCELFLAG    = '0'
+        GROUP BY
+             I01.TRANSACTION_ID
+            ,I01.BOL_NUM
+            ,I01.WMS_TASK_CD
+            ,I01.WMS_TASK_NM
+            ,I01.WMS_TRX_DT_TM_TS
+        ORDER BY
+             I01.TRANSACTION_ID
+            ,I01.BOL_NUM
+            ,I01.WMS_TASK_CD
+            ,I01.WMS_TASK_NM
+            ,I01.WMS_TRX_DT_TM_TS
+    </statement>
+
+    <statement id="getWmsRwsHeader" parameterClass="Map">
+    <![CDATA[
+        SELECT
+             I01.INTERFACE_ID
+            ,I01.TRANSACTION_ID
+            ,I01.SEGMENT_ID
+            ,I01.UNIT_ID
+            ,I01.SEQ_NUMBER
+            ,I01.WMS_REC_ID
+            ,I01.BOL_NUM
+            ,I01.WMS_TASK_CD
+            ,I01.WMS_TASK_NM
+            ,I01.OTBD_ORD_NUM
+            ,I01.SHPG_PNT_CD
+            ,I01.RCV_PNT_CD
+            ,I01.WMS_TRX_DT_TM_TS
+            ,I01.EZINTIME
+            ,RH.WH_CD
+            ,RH.RWS_NUM
+            ,RH.RWS_REF_NUM
+            ,RW.INVTY_OWNR_CD
+            ,SOT.S80_ORD_TP_CD
+            ,WMS_TSK.INTFC_TP_ID
+            ,TO_CHAR(SYSDATE,'yyyyMMddHHmmss') DATE_TIME
+        FROM
+             NLBI1220_01    I01
+            ,RWS_HDR        RH
+            ,RTL_WH         RW
+            ,SCE_ORD_TP     SOT
+            ,(
+                 SELECT
+                     WMS_TSK_S.GLBL_CMPY_CD
+                    ,WMS_TSK_S.INTFC_TP_ID
+                 FROM
+                     WMS_TASK  WMS_TSK_S
+                 WHERE
+                     WMS_TSK_S.GLBL_CMPY_CD = #GLBL_CMPY_CD#
+                 AND WMS_TSK_S.WMS_TASK_CD = #WMS_TASK_CD# /* RCVD */
+              ) WMS_TSK
+        WHERE
+            I01.INTERFACE_ID    = #INTERFACE_ID#
+        AND I01.TRANSACTION_ID  = #TRANSACTION_ID#
+        AND I01.WMS_TASK_NM     = #TASK_PIC#
+        AND I01.WMS_TASK_CD     = #TASK_LR#
+        AND I01.EZCANCELFLAG    = '0'
+        AND I01.OTBD_ORD_NUM    = RH.RWS_NUM
+        AND RH.GLBL_CMPY_CD     = #GLBL_CMPY_CD#
+        AND RH.EZCANCELFLAG     = '0'
+        AND RH.GLBL_CMPY_CD     = RW.GLBL_CMPY_CD(+)
+        AND RH.WH_CD            = RW.RTL_WH_CD(+)
+        AND RW.WH_OWNR_CD(+)    = #WH_OWNR_CD# /* APEX:APX */
+        AND RW.EZCANCELFLAG(+)  = '0'
+        AND RH.GLBL_CMPY_CD     = SOT.GLBL_CMPY_CD(+)
+        AND RH.SCE_ORD_TP_CD    = SOT.SCE_ORD_TP_CD(+)
+        AND SOT.INBD_OTBD_CD(+) = #INBD_OTBD_CD# /* Inbound:1 */
+        AND SOT.EZCANCELFLAG(+) = '0'
+        AND RH.GLBL_CMPY_CD     = WMS_TSK.GLBL_CMPY_CD(+)
+        ORDER BY
+             I01.INTERFACE_ID
+            ,I01.TRANSACTION_ID
+            ,I01.SEGMENT_ID
+            ,I01.UNIT_ID
+            ,I01.SEQ_NUMBER
+    ]]>
+    </statement>
+
+    <statement id="getWmsRwsDetail" parameterClass="Map" resultClass="Map">
+    <![CDATA[
+        SELECT
+             I02.WMS_REC_ID
+            ,I02.WMS_MDSE_CD
+            ,I02.TPL_LOC_TXT
+            ,I02.TPL_SWH_CD
+            ,I02.WMS_REF_NM
+            ,I02.WMS_UOM_CD
+            ,I02.WMS_PROC_QTY
+            ,I02.OTBD_ORD_LINE_NUM
+            ,NVL(RS.SER_NUM, I03.SER_NUM) AS SER_NUM
+            ,DRD.RTL_SWH_CD
+            ,DRD.INVTY_STK_STS_CD
+            ,DRD.INVTY_LOC_CD
+            ,COUNT(*)     OVER(PARTITION BY I03.INTERFACE_ID,I03.TRANSACTION_ID,I03.SEGMENT_ID,I03.UNIT_ID,I03.OTBD_ORD_LINE_NUM)                      SER_CHK_CNT
+            ,ROW_NUMBER() OVER(PARTITION BY I03.INTERFACE_ID,I03.TRANSACTION_ID,I03.SEGMENT_ID,I03.UNIT_ID,I03.OTBD_ORD_LINE_NUM ORDER BY I03.SER_NUM) SER_CHK_ROWNUM 
+        FROM
+             NLBI1220_01    I01
+            ,NLBI1220_02    I02
+            ,NLBI1220_03    I03
+            ,RWS_DTL        DRD
+            ,RWS_HDR        RWS
+            ,RWS_SER        RS
+        WHERE
+            I02.INTERFACE_ID        = #INTERFACE_ID#
+        AND I02.TRANSACTION_ID      = #TRANSACTION_ID#
+        AND I02.SEGMENT_ID          = #SEGMENT_ID#
+        AND I02.UNIT_ID             = #UNIT_ID#
+        AND I02.INTERFACE_ID        = I01.INTERFACE_ID
+        AND I02.TRANSACTION_ID      = I01.TRANSACTION_ID
+        AND I02.SEGMENT_ID          = I01.SEGMENT_ID
+        AND I02.UNIT_ID             = I01.UNIT_ID
+        AND I03.INTERFACE_ID(+)     = I02.INTERFACE_ID
+        AND I03.TRANSACTION_ID(+)   = I02.TRANSACTION_ID
+        AND I03.SEGMENT_ID(+)       = I02.SEGMENT_ID
+        AND I03.UNIT_ID(+)          = I02.UNIT_ID
+        AND I03.OTBD_ORD_LINE_NUM(+)= I02.OTBD_ORD_LINE_NUM
+        AND I01.EZCANCELFLAG        = '0'
+        AND I02.EZCANCELFLAG        = '0'
+        AND I03.EZCANCELFLAG(+)     = '0'
+        AND I01.OTBD_ORD_NUM        = RWS.RWS_NUM(+)
+        AND RWS.RWS_NUM             = DRD.RWS_NUM(+)
+        AND LPAD(I02.OTBD_ORD_LINE_NUM, 3, '0') = DRD.RWS_DTL_LINE_NUM(+)
+        AND DRD.RWS_NUM             = RS.RWS_NUM(+)
+        AND DRD.RWS_DTL_LINE_NUM    = RS.RWS_LINE_NUM(+)
+        AND RS.SER_NUM(+)        LIKE '%' || I03.SER_NUM
+        AND RWS.GLBL_CMPY_CD(+)     = #GLBL_CMPY_CD#
+        AND DRD.GLBL_CMPY_CD(+)     = #GLBL_CMPY_CD#
+        AND RS.GLBL_CMPY_CD(+)      = #GLBL_CMPY_CD#
+        AND RWS.EZCANCELFLAG(+)     = '0'
+        AND DRD.EZCANCELFLAG(+)     = '0'
+        AND RS.EZCANCELFLAG(+)      = '0'
+        ORDER BY
+            I02.OTBD_ORD_LINE_NUM
+           ,I03.SER_NUM
+    ]]>
+    </statement>
+    <statement id="getTplCarrSvcLvl" parameterClass="Map" resultClass="Map">
+        SELECT
+            *
+        FROM (
+            SELECT
+                 TC.TPL_CARR_CD
+                ,TC.TPL_SVC_LVL_CD
+                ,TC.TPL_CARR_SVC_LVL_CD
+                ,TC.CARR_CD
+            FROM
+                TPL_CARR_SVC_LVL TC
+            WHERE
+                TC.GLBL_CMPY_CD         = #GLBL_CMPY_CD#
+            AND TC.WH_OWNR_CD           = #WH_OWNR_CD#
+        <isNotNull property="CARR_CD">
+            AND TC.CARR_CD              = #CARR_CD#
+        </isNotNull>
+        <isNull property="CARR_CD">
+            AND TC.CARR_CD              IS NULL
+        </isNull>
+        <isNotNull property="SHPG_SVC_LVL_CD">
+            AND TC.SHPG_SVC_LVL_CD      = #SHPG_SVC_LVL_CD#
+        </isNotNull>
+        <isNull property="SHPG_SVC_LVL_CD">
+            AND TC.SHPG_SVC_LVL_CD      IS NULL
+        </isNull>
+            AND TC.EZCANCELFLAG         = '0'
+            ORDER BY
+                TC.TPL_CARR_SVC_LVL_SORT_NUM
+        )
+        WHERE
+            ROWNUM&lt;=1
+    </statement>
+
+    <statement id="getConfigSoDtl" parameterClass="Map" resultClass="Map">
+        SELECT
+            #INTERFACE_ID#            AS INTERFACE_ID
+           ,#TRANSACTION_ID#          AS TRANSACTION_ID
+           ,#SEGMENT_ID#              AS SEGMENT_ID
+           ,#UNIT_ID#                 AS UNIT_ID
+           ,SOD.MDSE_CD               AS WMS_MDSE_CD
+           ,SOD.RQST_ORD_QTY          AS WMS_PROC_QTY
+           ,TO_NUMBER(SOD.SO_SLP_NUM) AS OTBD_ORD_LINE_NUM
+           ,SOD.RTL_WH_CD
+           ,SOD.RTL_SWH_CD
+           ,SOD.FROM_STK_STS_CD
+           ,SOD.INVTY_LOC_CD
+           ,RWH.INVTY_OWNR_CD
+        FROM
+            SHPG_ORD_DTL SOD
+           ,RTL_WH       RWH
+        WHERE
+            SOD.GLBL_CMPY_CD            = #GLBL_CMPY_CD#
+        AND SOD.SO_NUM                  = #SO_NUM#
+        AND SOD.PICK_SVC_CONFIG_MSTR_PK IS NOT NULL
+        <iterate property="soSlpNumList" var="elem[]" open="AND TO_NUMBER(SOD.SO_SLP_NUM) NOT IN(" close=")" conjunction=",">
+            #elem[]#
+        </iterate>
+        AND SOD.GLBL_CMPY_CD            = RWH.GLBL_CMPY_CD(+)
+        AND SOD.RTL_WH_CD               = RWH.RTL_WH_CD(+)
+        AND SOD.EZCANCELFLAG            = '0'
+        AND RWH.EZCANCELFLAG(+)         = '0'
+        ORDER BY
+                 INTERFACE_ID
+                ,TRANSACTION_ID
+                ,SEGMENT_ID
+                ,UNIT_ID
+                ,OTBD_ORD_LINE_NUM
+    </statement>
+
+    <statement id="getConfigSoSerial" parameterClass="Map" resultClass="Map">
+        SELECT
+             #INTERFACE_ID#   AS INTERFACE_ID
+            ,#TRANSACTION_ID# AS TRANSACTION_ID
+            ,#SEGMENT_ID#     AS SEGMENT_ID
+            ,#UNIT_ID#        AS UNIT_ID
+            ,SOD.MDSE_CD      AS WMS_MDSE_CD
+            ,SS.SER_NUM
+            ,SOD.RQST_ORD_QTY AS WMS_PROC_QTY
+            ,TO_NUMBER(SOD.SO_SLP_NUM) AS OTBD_ORD_LINE_NUM
+            ,SOD.RTL_WH_CD
+            ,SOD.RTL_SWH_CD
+            ,SOD.FROM_STK_STS_CD
+            ,SOD.INVTY_LOC_CD
+            ,RWH.INVTY_OWNR_CD
+            ,WT.INTFC_TP_ID
+        FROM
+             SHPG_ORD_DTL SOD
+            ,(SELECT
+                SS.GLBL_CMPY_CD
+               ,SS.SO_NUM
+               ,SS.SO_SLP_NUM
+               ,SS.SER_NUM
+               ,SS.WH_PICK_FLG
+               ,SS.ORD_ASG_FLG
+               ,SO_SER_PK
+            FROM
+                SO_SER SS
+            WHERE
+                SS.GLBL_CMPY_CD  = #GLBL_CMPY_CD#
+            AND SS.SO_NUM        = #SO_NUM#
+            AND SS.WH_PICK_FLG   = #flgY#
+            AND SS.EZCANCELFLAG  = '0'
+            UNION ALL
+            SELECT
+                SS.GLBL_CMPY_CD
+               ,SS.SO_NUM
+               ,SS.SO_SLP_NUM
+               ,SS.SER_NUM
+               ,SS.WH_PICK_FLG
+               ,SS.ORD_ASG_FLG
+               ,SS.SO_SER_PK
+            FROM
+                SO_SER SS
+            WHERE
+                SS.GLBL_CMPY_CD = #GLBL_CMPY_CD#
+            AND SS.SO_NUM       = #SO_NUM#
+            AND SS.ORD_ASG_FLG  = #flgY#
+            AND SS.WH_PICK_FLG  = #flgN#
+            AND SS.EZCANCELFLAG = '0'
+            ORDER BY
+                WH_PICK_FLG DESC
+               ,ORD_ASG_FLG DESC
+               ,SO_SER_PK   DESC
+            )             SS
+            ,RTL_WH       RWH
+            ,WMS_TASK     WT
+        WHERE
+            SOD.GLBL_CMPY_CD            = #GLBL_CMPY_CD#
+        AND SOD.SO_NUM                  = #SO_NUM#
+        <iterate property="soSlpNumList" var="elem[]" open="AND TO_NUMBER(SOD.SO_SLP_NUM) NOT IN(" close=")" conjunction=",">
+            #elem[]#
+        </iterate>
+        AND SOD.PICK_SVC_CONFIG_MSTR_PK IS NOT NULL
+        AND SOD.SO_NUM                  = SS.SO_NUM
+        AND SOD.SO_SLP_NUM              = SS.SO_SLP_NUM
+        AND SOD.GLBL_CMPY_CD            = RWH.GLBL_CMPY_CD(+)
+        AND SOD.RTL_WH_CD               = RWH.RTL_WH_CD(+)
+        AND SOD.GLBL_CMPY_CD            = WT.GLBL_CMPY_CD(+)
+        AND WT.WMS_TASK_CD(+)           = #SERL#
+        AND SOD.EZCANCELFLAG            = '0'
+        AND RWH.EZCANCELFLAG(+)         = '0'
+        AND WT.EZCANCELFLAG(+)          = '0'
+        ORDER BY
+             OTBD_ORD_LINE_NUM
+    </statement>
+</sqlMap>

@@ -1,0 +1,229 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NMAL2530Query">
+
+    <typeAlias alias="NMAL2530CMsg"      type="business.blap.NMAL2530.NMAL2530CMsg"/>
+    <typeAlias alias="NMAL2530_ASMsg"    type="business.blap.NMAL2530.NMAL2530_ASMsg"/>
+
+    <statement id="getOrganization" parameterClass="Map" resultMap="result.getContact">
+    WITH ORG_REN AS(
+        SELECT
+            RELN.GLBL_CMPY_CD
+            ,RELN.ORG_CD
+            ,RELN.PRNT_ORG_CD
+            ,RELN.ORG_STRU_TP_CD
+            ,RELN.EFF_FROM_DT
+            ,RELN.EFF_THRU_DT
+            ,RELN.GNRN_TP_CD
+        FROM
+            DS_ORG_RELN RELN
+            ,ORG_STRU_TP STRU
+        WHERE
+            RELN.GLBL_CMPY_CD = #glblCmpyCd#
+        AND RELN.EZCANCELFLAG = '0'
+        AND RELN.GLBL_CMPY_CD = STRU.GLBL_CMPY_CD
+        AND RELN.ORG_STRU_TP_CD = STRU.ORG_STRU_TP_CD
+        AND STRU.EZCANCELFLAG = '0'
+        AND STRU.TRTY_STRU_FLG = 'N'
+        AND RELN.GNRN_TP_CD IN (#gnrnTpCd#, #gnrnTpCdFuture#)
+        UNION ALL
+        SELECT
+            ORG.GLBL_CMPY_CD
+            ,ORG.ORG_CD
+            ,ORG.ORG_CD AS PRNT_ORG_CD
+            ,ORG.ORG_STRU_TP_CD
+            ,ORG.EFF_FROM_DT
+            ,ORG.EFF_THRU_DT
+            ,ORG.GNRN_TP_CD
+        FROM 
+            DS_ORG_UNIT ORG
+            ,ORG_STRU_TP STRU
+        WHERE
+            ORG.GLBL_CMPY_CD = #glblCmpyCd#
+        AND ORG.EZCANCELFLAG = '0'
+        AND ORG.GLBL_CMPY_CD = STRU.GLBL_CMPY_CD
+        AND ORG.ORG_STRU_TP_CD = STRU.ORG_STRU_TP_CD
+        AND STRU.EZCANCELFLAG = '0'
+        AND STRU.TRTY_STRU_FLG = 'N'
+        AND ORG.GNRN_TP_CD IN (#gnrnTpCd#, #gnrnTpCdFuture#)
+        AND ORG.ORG_TIER_CD = '0'
+    )
+    ,ORG_PRNT AS(
+        SELECT
+            ORG_PRNT.*
+        FROM
+            DS_ORG_UNIT ORG_PRNT
+            ,ORG_STRU_TP STRU
+        WHERE
+            ORG_PRNT.GLBL_CMPY_CD = #glblCmpyCd#
+        AND ORG_PRNT.EZCANCELFLAG = '0'
+        AND ORG_PRNT.GLBL_CMPY_CD = STRU.GLBL_CMPY_CD
+        AND ORG_PRNT.ORG_STRU_TP_CD = STRU.ORG_STRU_TP_CD
+        AND STRU.EZCANCELFLAG = '0'
+        AND STRU.TRTY_STRU_FLG = 'N'
+        AND ORG_PRNT.GNRN_TP_CD IN (#gnrnTpCd#, #gnrnTpCdFuture#)
+    )
+    SELECT 
+        ORG.ORG_CD AS ORG_CD
+        ,ORG.ORG_NM AS ORG_NM
+        ,ORG_REN.PRNT_ORG_CD AS PRNT_ORG_CD
+        ,ORG_PRNT.ORG_NM AS PRNT_ORG_NM
+        ,(SELECT OT.ORG_TIER_NM
+            FROM ORG_TIER OT 
+            WHERE OT.GLBL_CMPY_CD = ORG.GLBL_CMPY_CD
+            AND   OT.ORG_TIER_CD = ORG.ORG_TIER_CD
+            AND   OT.EZCANCELFLAG = '0') AS ORG_TIER_NM
+        ,ORG.EFF_FROM_DT  AS EFF_FROM_DT
+        ,ORG.EFF_THRU_DT  AS EFF_THRU_DT
+    FROM
+        DS_ORG_UNIT ORG
+        , ORG_REN
+        , ORG_PRNT
+        , ORG_TIER TIER
+        , ORG_STRU_TP STRU
+    WHERE 
+        ORG.GLBL_CMPY_CD = #glblCmpyCd#
+    AND ORG.EZCANCELFLAG = '0'
+
+    AND ORG.GLBL_CMPY_CD = ORG_REN.GLBL_CMPY_CD(+)
+    AND ORG.ORG_CD = ORG_REN.ORG_CD(+)
+    AND ORG.ORG_STRU_TP_CD = ORG_REN.ORG_STRU_TP_CD(+)
+    
+    AND ORG_REN.GLBL_CMPY_CD = ORG_PRNT.GLBL_CMPY_CD(+)
+    AND ORG_REN.PRNT_ORG_CD = ORG_PRNT.ORG_CD (+)
+    AND ORG_REN.ORG_STRU_TP_CD = ORG_PRNT.ORG_STRU_TP_CD(+)
+
+    AND ORG.GLBL_CMPY_CD = TIER.GLBL_CMPY_CD
+    AND TIER.EZCANCELFLAG = '0'
+    AND TIER.ORG_TIER_CD &lt;&gt; '0'
+    AND ORG.ORG_TIER_CD = TIER.ORG_TIER_CD
+
+    AND ORG.GLBL_CMPY_CD = STRU.GLBL_CMPY_CD
+    AND ORG.ORG_STRU_TP_CD = STRU.ORG_STRU_TP_CD
+    AND STRU.EZCANCELFLAG = '0'
+    AND STRU.TRTY_STRU_FLG = 'N'
+
+    <isNotNull property="cMsg.orgStruTpCd_H1">
+           AND ORG.FIRST_ORG_CD = #orgStruTpCd#
+    </isNotNull>
+
+    <isNotNull property="cMsg.orgNm_H1">
+           AND ORG.ORG_NM LIKE #orgNm#
+    </isNotNull>
+
+    <isNotNull property="cMsg.orgNm_H2">
+           AND ORG_PRNT.ORG_NM LIKE #prntOrgNm#
+    </isNotNull>
+
+    <isNotNull property="cMsg.tocNm_H1">
+           AND EXISTS (SELECT 1 FROM TOC_ORG_STRU_RELN RELN
+                            , ORG_STRU_TP STRU 
+                            , TOC T 
+                         WHERE RELN.GLBL_CMPY_CD = ORG.GLBL_CMPY_CD
+                         AND RELN.ORG_CD = ORG.ORG_CD
+                         AND RELN.EZCANCELFLAG = '0'
+                         AND RELN.EFF_FROM_DT &lt;= #slsDt#
+                         AND NVL(RELN.EFF_THRU_DT, #maxEffThruDt#) &gt;= #slsDt#
+
+                         AND RELN.GLBL_CMPY_CD = STRU.GLBL_CMPY_CD
+                         AND RELN.ORG_STRU_TP_CD = STRU.ORG_STRU_TP_CD
+                         AND STRU.EZCANCELFLAG = '0'
+                         AND STRU.TRTY_STRU_FLG = 'N'
+
+                         AND RELN.GLBL_CMPY_CD = T.GLBL_CMPY_CD
+                         AND RELN.TOC_CD = T.TOC_CD
+                         AND T.EZCANCELFLAG = '0'
+                         AND T.TOC_NM LIKE #tocNm#
+                      )
+    </isNotNull>
+
+    <isNotNull property="cMsg.psnCd_H1">
+           AND EXISTS (SELECT 1 FROM TOC_ORG_STRU_RELN RELN
+                        , ORG_STRU_TP STRU 
+                        , ORG_FUNC_ASG ASG
+                     WHERE RELN.GLBL_CMPY_CD = ORG.GLBL_CMPY_CD
+                     AND   RELN.ORG_CD = ORG.ORG_CD 
+                     AND   RELN.EZCANCELFLAG = '0'
+                     AND   RELN.EFF_FROM_DT &lt;= #slsDt#
+                     AND   NVL(RELN.EFF_THRU_DT, #maxEffThruDt#) &gt;= #slsDt#
+
+                     AND   RELN.GLBL_CMPY_CD = STRU.GLBL_CMPY_CD
+                     AND   RELN.ORG_STRU_TP_CD = STRU.ORG_STRU_TP_CD
+                     AND   STRU.EZCANCELFLAG = '0'
+                     AND   STRU.TRTY_STRU_FLG = 'N'
+
+                     AND   RELN.GLBL_CMPY_CD = ASG.GLBL_CMPY_CD
+                     AND   RELN.TOC_CD = ASG.TOC_CD
+                     AND   ASG.EZCANCELFLAG = '0'
+                     AND   ASG.GNRN_TP_CD IN (#gnrnTpCd#, #gnrnTpCdFuture#)
+
+                     AND   ASG.PSN_CD LIKE #psnCd#
+           )
+    </isNotNull>
+
+        <isNotNull property="cMsg.orgTierCd_H1">
+           AND ORG.ORG_TIER_CD = #orgTierCd#
+    </isNotNull>
+
+    <isNotNull property="cMsg.orgSvcPlnCd_H1">
+           AND ORG.ORG_SVC_PLN_CD = #orgSvcPlnCd#
+    </isNotNull>
+
+    <!-- MOD START S21_NA QC#16481  -->
+    <isNotNull property="cMsg.effFromDt_FR">
+           AND ORG.EFF_FROM_DT &gt;= #effFromDt_FR#
+           AND NVL(ORG.EFF_THRU_DT, #maxEffThruDt#) &gt;= #effFromDt_FR#
+    </isNotNull>
+    
+    <isNotNull property="cMsg.effFromDt_TO">
+           AND ORG.EFF_FROM_DT &lt;= #effFromDt_TO#
+           AND NVL(ORG.EFF_THRU_DT, #maxEffThruDt#) &gt;= #effFromDt_TO#
+    </isNotNull>
+    <!-- MOD END S21_NA QC#16481 -->
+
+    AND 
+      ROWNUM &lt;= #rowNum#
+
+    ORDER BY ORG.ORG_CD
+    </statement>
+
+    <resultMap id="result.getContact"  class="NMAL2530_ASMsg">
+        <result property="orgCd_A1"           column="ORG_CD"               javaType="EZDSStringItem"/>
+        <result property="orgNm_A1"           column="ORG_NM"               javaType="EZDSStringItem"/>
+        <result property="orgNm_A2"           column="PRNT_ORG_NM"          javaType="EZDSStringItem"/>
+        <result property="orgTierNm_A1"       column="ORG_TIER_NM"          javaType="EZDSStringItem"/>
+        <result property="effFromDt_A1"       column="EFF_FROM_DT"          javaType="EZDCDateItem"/>
+        <result property="effThruDt_A1"       column="EFF_THRU_DT"          javaType="EZDCDateItem"/>
+    </resultMap>
+
+    <statement id="getBusinessArea" parameterClass="Map" resultClass="Map">
+        SELECT BIZ_AREA_ORG_CD AS BIZ_AREA_ORG_CD
+            , BIZ_AREA_ORG_NM AS BIZ_AREA_ORG_NM
+        FROM 
+            BIZ_AREA_ORG AREA
+            , ORG_STRU_TP STRU 
+        WHERE AREA.GLBL_CMPY_CD = #glblCmpyCd#
+        AND AREA.EZCANCELFLAG = '0'
+
+        AND AREA.GLBL_CMPY_CD = STRU.GLBL_CMPY_CD
+        AND STRU.EZCANCELFLAG = '0'
+        AND AREA.ORG_STRU_TP_CD = STRU.ORG_STRU_TP_CD
+
+        AND STRU.TRTY_STRU_FLG = 'N'
+
+    </statement>
+
+    <statement id="getOrgTierNot0" parameterClass="Map" resultClass="Map">
+        SELECT 
+            ORG_TIER_CD
+           ,ORG_TIER_DESC_TXT
+        FROM 
+            ORG_TIER  OT
+        WHERE  
+                OT.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND OT.ORG_TIER_CD  &lt;&gt; '0'
+            AND OT.EZCANCELFLAG     = '0'
+        ORDER BY 
+            OT.ORG_TIER_SORT_NUM
+    </statement>
+</sqlMap>

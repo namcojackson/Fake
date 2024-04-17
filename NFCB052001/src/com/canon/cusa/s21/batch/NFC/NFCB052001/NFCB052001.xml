@@ -1,0 +1,595 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NFCB052001">
+
+    <statement id="getLockboxName" parameterClass="Map" resultClass="String">
+    SELECT DISTINCT
+           ARRI.AR_LOCK_BOX_FILE_NM
+      FROM AR_RCPT_RCV_INTFC ARRI
+     WHERE ARRI.GLBL_CMPY_CD = #glblCmpyCd#
+       AND ARRI.EZCANCELFLAG = '0'
+       AND ARRI.AR_LOCK_BOX_FILE_NM LIKE #lockBoxFlNm#
+     ORDER BY ARRI.AR_LOCK_BOX_FILE_NM DESC
+    </statement>
+
+    <statement id="getInterface" parameterClass="Map" resultClass="Map">
+    SELECT NFCI01.LOCK_BOX_DEP_DT
+         , NFCI01.LOCK_BOX_DEP_TM
+         , NFCI05.CSA_BANK_RTE_NUM_TXT
+         , NFCI05.CSA_BANK_ACCT_NUM_TXT
+         , NFCI05.CSA_BANK_RTE_NUM_TXT || NFCI05.CSA_BANK_ACCT_NUM_TXT AS CSA_BANK_MICR_TXT
+         , NFCI06.CUST_BANK_RTE_NUM_TXT
+         , NFCI06.CUST_BANK_ACCT_NUM_TXT
+         , NFCI06.CUST_BANK_RTE_NUM_TXT || NFCI06.CUST_BANK_ACCT_NUM_TXT AS CUST_BANK_MICR_TXT
+         , LTRIM(NFCI06.CUST_RCPT_NUM, '0') AS CUST_RCPT_NUM
+         , NFCI06.INTFC_CUST_RCPT_AMT
+         , NFCI04.CUST_INV_NUM_01
+         , NFCI04.CUST_INV_NUM_02
+         , NFCI04.INTFC_CUST_INV_AMT_01
+         , NFCI04.INTFC_CUST_INV_AMT_02
+         , NFCI06.BAT_RCPT_NUM       AS BAT_RCPT_NUM_06
+         , NFCI06.BAT_RCPT_LINE_NUM  AS BAT_RCPT_LINE_NUM_06
+         , NFCI04.BAT_RCPT_NUM       AS BAT_RCPT_NUM_04
+         , NFCI04.BAT_RCPT_LINE_NUM  AS BAT_RCPT_LINE_NUM_04
+         , NFCI04.BAT_RCPT_SQ_NUM
+         , LTRIM(NFCI05.LOCK_BOX_NUM_TXT,'0')   AS HDR_LOCK_BOX_NUM_TXT
+         , LTRIM(NFCI07.LOCK_BOX_NUM_TXT,'0')   AS BAT_LOCK_BOX_NUM_TXT
+         , LTRIM(NFCI08.LOCK_BOX_NUM_TXT,'0')   AS TRIAL_LOCK_BOX_NUM_TXT
+         , NFCI09.FILE_REC_CNT
+         , NFCI08.LOCK_BOX_REC_CNT
+         , NFCI08.INTFC_LOCK_BOX_AMT
+         , NFCI07.BAT_RCPT_REC_CNT
+         , NFCI07.INTFC_BAT_RCPT_AMT
+         , NFCI07.BAT_RCPT_NUM       AS BAT_RCPT_NUM_07
+         , NFCI04.UNIT_ID            AS UNIT_ID_04
+         , NFCI07.UNIT_ID            AS UNIT_ID_07
+      FROM NFCI1010_01 NFCI01
+         , NFCI1010_04 NFCI04
+         , NFCI1010_05 NFCI05
+         <!-- START 2022/11/29 T.Omura [QC#60858,MOD] -->
+         <!--, NFCI1010_06 NFCI06 -->
+         <isNotEqual property="intfcId" compareValue="NFCI1140">
+         , NFCI1010_06 NFCI06
+         </isNotEqual>
+         <isEqual property="intfcId" compareValue="NFCI1140">
+         , (SELECT NFCI06.*,
+                 LPAD(TO_CHAR(DENSE_RANK() OVER(PARTITION BY NFCI06.TRANSACTION_ID ORDER BY NFCI06.BAT_RCPT_NUM)), 
+                       3, '0') AS ROW_NUM
+            FROM NFCI1010_06 NFCI06) NFCI06
+         </isEqual>
+         <!-- END 2022/11/29 T.Omura [QC#60858,MOD] -->
+         <!-- START 2018/05/08 H.Ikeda [QC#25734,MOD] -->
+         <isNotEqual property="intfcId" compareValue="NFCI1140">
+         , NFCI1010_07 NFCI07
+         </isNotEqual>
+         <isEqual property="intfcId" compareValue="NFCI1140">
+         <!-- START 2022/12/15 T.Omura [QC#60858,MOD] -->
+         , (SELECT NFCI07.*, 
+                   LPAD(TO_CHAR(ROW_NUMBER() OVER (PARTITION BY NFCI07.TRANSACTION_ID ORDER BY NFCI07.SEQ_NUMBER)), 
+                        3, '0') AS ROW_NUM 
+            FROM NFCI1010_07 NFCI07) NFCI07
+         <!-- END 2022/12/15 T.Omura [QC#60858,MOD] -->
+         </isEqual>
+         <!-- END   2018/05/08 H.Ikeda [QC#25734,MOD] -->
+         , NFCI1010_08 NFCI08
+         , NFCI1010_09 NFCI09
+     WHERE NFCI01.INTERFACE_ID   = NFCI05.INTERFACE_ID
+       AND NFCI01.TRANSACTION_ID = NFCI05.TRANSACTION_ID
+       AND NFCI01.SEGMENT_ID     = NFCI05.SEGMENT_ID
+       AND NFCI05.INTERFACE_ID   = NFCI06.INTERFACE_ID
+       AND NFCI05.TRANSACTION_ID = NFCI06.TRANSACTION_ID
+       AND NFCI05.SEGMENT_ID     = NFCI06.SEGMENT_ID
+       <!-- START 2016/11/07 S.Fujita [QC#15742,MOD] -->
+       <!--
+       AND NFCI06.INTERFACE_ID   = NFCI04.INTERFACE_ID(+)
+       AND NFCI06.TRANSACTION_ID = NFCI04.TRANSACTION_ID(+)
+       AND NFCI06.SEGMENT_ID     = NFCI04.SEGMENT_ID(+)
+       AND NFCI06.UNIT_ID        = NFCI04.UNIT_ID(+)
+       -->
+       AND NFCI06.INTERFACE_ID   = NFCI04.INTERFACE_ID(+)
+       AND NFCI06.TRANSACTION_ID = NFCI04.TRANSACTION_ID(+)
+       AND NFCI06.SEGMENT_ID     = NFCI04.SEGMENT_ID(+)
+       AND NFCI06.BAT_RCPT_NUM            = LPAD(NFCI04.BAT_RCPT_NUM(+), 3, '0')
+       AND NFCI06.BAT_RCPT_LINE_NUM       = LPAD(NFCI04.BAT_RCPT_LINE_NUM(+), 3, '0')
+       <!-- END   2016/11/07 S.Fujita [QC#15742,MOD] -->
+       AND NFCI06.INTERFACE_ID   = NFCI07.INTERFACE_ID(+)
+       AND NFCI06.TRANSACTION_ID = NFCI07.TRANSACTION_ID(+)
+       AND NFCI06.SEGMENT_ID     = NFCI07.SEGMENT_ID(+)
+--       AND NFCI06.UNIT_ID        = NFCI07.UNIT_ID(+)
+       <!-- START 2022/11/29 T.Omura [QC#60858,MOD] -->
+       <!-- START 2018/05/08 H.Ikeda [QC#25734,MOD] -->
+       <isNotEqual property="intfcId" compareValue="NFCI1140">
+       <!-- START 2016/11/07 S.Fujita [QC#15742,ADD] -->
+       AND NFCI06.BAT_RCPT_NUM   = NFCI07.BAT_RCPT_NUM(+)
+       <!-- END   2016/11/07 S.Fujita [QC#15742,ADD] -->
+       </isNotEqual>
+       <isEqual property="intfcId" compareValue="NFCI1140">
+       <!-- AND NFCI06.BAT_RCPT_NUM   = NFCI07.ROW_NUM -->
+       <!-- START 2022/12/14 T.Omura [QC#60929,MOD] -->
+       <!--  AND NFCI06.ROW_NUM   = NFCI07.ROW_NUM -->
+       AND NFCI06.BAT_RCPT_NUM   = NFCI07.BAT_RCPT_NUM(+)
+       </isEqual>
+       <!-- END   2018/05/08 H.Ikeda [QC#25734,MOD] -->
+       <!-- END 2022/12/14 T.Omura [QC#60929,MOD] -->
+       AND NFCI06.INTERFACE_ID   = NFCI08.INTERFACE_ID
+       AND NFCI06.TRANSACTION_ID = NFCI08.TRANSACTION_ID
+       AND NFCI06.SEGMENT_ID     = NFCI08.SEGMENT_ID
+       AND NFCI06.INTERFACE_ID   = NFCI09.INTERFACE_ID
+       AND NFCI06.TRANSACTION_ID = NFCI09.TRANSACTION_ID
+       AND NFCI06.SEGMENT_ID     = NFCI09.SEGMENT_ID
+       AND NFCI01.INTERFACE_ID   = #intfcId#
+       AND NFCI01.TRANSACTION_ID = #tranId#
+     ORDER BY NFCI06.SEGMENT_ID
+            <!-- START 2016/11/07 S.Fujita [QC#15742,DEL] -->
+            <!--
+            , NFCI06.UNIT_ID
+            -->
+            <!-- END   2016/11/07 S.Fujita [QC#15742,DEL] -->
+            , NFCI06.SEQ_NUMBER
+            , NFCI04.SEQ_NUMBER
+    </statement>
+
+    <statement id="getFileRecCnt" parameterClass="Map" resultClass="BigDecimal">
+    SELECT SUM(ALL_TBL.TBL_CNT) FILE_REC_CNT
+      FROM (SELECT SUM(1) TBL_CNT
+              FROM NFCI1010_01 NFCI01
+             WHERE NFCI01.INTERFACE_ID   = #intfcId#
+               AND NFCI01.TRANSACTION_ID = #tranId#
+             UNION ALL
+            SELECT SUM(1) TBL_CNT
+              FROM NFCI1010_02 NFCI02
+             WHERE NFCI02.INTERFACE_ID   = #intfcId#
+               AND NFCI02.TRANSACTION_ID = #tranId#
+             UNION ALL
+            SELECT SUM(1) TBL_CNT
+              FROM NFCI1010_04 NFCI04
+             WHERE NFCI04.INTERFACE_ID   = #intfcId#
+               AND NFCI04.TRANSACTION_ID = #tranId#
+             UNION ALL
+            SELECT SUM(1) TBL_CNT
+              FROM NFCI1010_05 NFCI05
+             WHERE NFCI05.INTERFACE_ID   = #intfcId#
+               AND NFCI05.TRANSACTION_ID = #tranId#
+             UNION ALL
+            SELECT SUM(1) TBL_CNT
+              FROM NFCI1010_06 NFCI06
+             WHERE NFCI06.INTERFACE_ID   = #intfcId#
+               AND NFCI06.TRANSACTION_ID = #tranId#
+             UNION ALL
+            SELECT SUM(1) TBL_CNT
+              FROM NFCI1010_07 NFCI07
+             WHERE NFCI07.INTERFACE_ID   = #intfcId#
+               AND NFCI07.TRANSACTION_ID = #tranId#
+             UNION ALL
+            SELECT SUM(1) TBL_CNT
+              FROM NFCI1010_08 NFCI08
+             WHERE NFCI08.INTERFACE_ID   = #intfcId#
+               AND NFCI08.TRANSACTION_ID = #tranId#
+             UNION ALL
+            SELECT SUM(1) TBL_CNT
+              FROM NFCI1010_09 NFCI09
+             WHERE NFCI09.INTERFACE_ID   = #intfcId#
+               AND NFCI09.TRANSACTION_ID = #tranId#
+           ) ALL_TBL
+    </statement>
+
+    <statement id="getLockBoxInfo" parameterClass="Map" resultClass="Map">
+    SELECT NFCI06.TRANSACTION_ID
+         , COUNT(1) REC_CNT
+         , SUM(NFCI06.INTFC_CUST_RCPT_AMT) / #divideVal# AS REC_AMT
+      FROM NFCI1010_06 NFCI06
+     WHERE NFCI06.INTERFACE_ID   = #intfcId#
+       AND NFCI06.TRANSACTION_ID = #tranId#
+     GROUP BY NFCI06.TRANSACTION_ID
+    </statement>
+
+    <statement id="getBatRcptInfo" parameterClass="Map" resultClass="Map">
+    SELECT NFCI06.BAT_RCPT_NUM
+         , COUNT(1) REC_CNT
+         , SUM(NFCI06.INTFC_CUST_RCPT_AMT) / #divideVal# AS REC_AMT
+      FROM
+         <!-- START 2022/11/29 T.Omura [QC#60858,MOD] -->
+         <isNotEqual property="intfcId" compareValue="NFCI1140">
+         NFCI1010_06 NFCI06
+         </isNotEqual>
+         <isEqual property="intfcId" compareValue="NFCI1140">
+         (SELECT NFCI06.*,
+                 LPAD(TO_CHAR(DENSE_RANK() OVER(PARTITION BY NFCI06.TRANSACTION_ID ORDER BY NFCI06.BAT_RCPT_NUM)), 
+                       3, '0') AS ROW_NUM
+            FROM NFCI1010_06 NFCI06) NFCI06
+         </isEqual>
+         <!-- END 2022/11/29 T.Omura [QC#60858,MOD] -->
+         <!-- START 2018/05/08 H.Ikeda [QC#25734,MOD] -->
+         <isNotEqual property="intfcId" compareValue="NFCI1140">
+         , NFCI1010_07 NFCI07
+         </isNotEqual>
+         <isEqual property="intfcId" compareValue="NFCI1140">
+         , (SELECT NFCI07.*, 
+                   LPAD(TO_CHAR(ROW_NUMBER() OVER (PARTITION BY NFCI07.TRANSACTION_ID ORDER BY NFCI07.SEQ_NUMBER)), 
+                        3, '0') AS ROW_NUM 
+            FROM NFCI1010_07 NFCI07) NFCI07
+         </isEqual>
+         <!-- END  2018/05/08 H.Ikeda [QC#25734,MOD] -->
+     WHERE NFCI06.INTERFACE_ID   = #intfcId#
+       AND NFCI06.TRANSACTION_ID = #tranId#
+       AND NFCI06.BAT_RCPT_NUM   = #batRcptNum#
+       <!-- START 2016/11/07 S.Fujita [QC#15742,MOD] -->
+       <!--
+       AND NFCI06.INTERFACE_ID   = NFCI07.INTERFACE_ID(+)
+       AND NFCI06.TRANSACTION_ID = NFCI07.TRANSACTION_ID(+)
+       AND NFCI06.UNIT_ID   = NFCI07.UNIT_ID(+)
+       -->
+       AND NFCI06.INTERFACE_ID   = NFCI07.INTERFACE_ID
+       AND NFCI06.TRANSACTION_ID = NFCI07.TRANSACTION_ID
+       <!-- START 2018/05/08 H.Ikeda [QC#25734,MOD] -->
+       <isNotEqual property="intfcId" compareValue="NFCI1140">
+           AND NFCI06.BAT_RCPT_NUM   = NFCI07.BAT_RCPT_NUM
+       </isNotEqual>
+       <!-- START 2022/11/29 T.Omura [QC#60858,MOD] -->
+       <isEqual property="intfcId" compareValue="NFCI1140">
+           <!-- AND NFCI06.BAT_RCPT_NUM   = NFCI07.ROW_NUM -->
+           <!-- START 2022/12/14 T.Omura [QC#60929,MOD] -->
+           <!-- AND NFCI06.ROW_NUM   = NFCI07.ROW_NUM -->
+           AND NFCI06.BAT_RCPT_NUM   = NFCI07.BAT_RCPT_NUM
+           <!-- END 2022/12/14 T.Omura [QC#60929,MOD] -->
+       </isEqual>
+       <!-- END   2016/11/07 S.Fujita [QC#15742,MOD] -->
+       <!-- END 2018/05/08 H.Ikeda [QC#25734,MOD] -->
+       <!-- END 2022/11/29 T.Omura [QC#60858,MOD] -->
+     GROUP BY NFCI06.BAT_RCPT_NUM
+    </statement>
+
+    <!-- START 2018/08/22 H.Ikeda [QC#27776,ADD] -->
+    <statement id="getBatRcptInfo1050" parameterClass="Map" resultClass="Map">
+    SELECT NFCI06.BAT_RCPT_NUM
+         , COUNT(1) REC_CNT
+         , SUM(NFCI06.INTFC_CUST_RCPT_AMT) / #divideVal# / COUNT(1) AS REC_AMT
+      FROM NFCI1010_06 NFCI06
+         , NFCI1010_07 NFCI07
+         , NFCI1010_04 NFCI04
+     WHERE NFCI06.INTERFACE_ID   = #intfcId#
+       AND NFCI06.TRANSACTION_ID = #tranId#
+       AND NFCI06.BAT_RCPT_NUM   = #batRcptNum#
+       AND NFCI06.INTERFACE_ID   = NFCI07.INTERFACE_ID
+       AND NFCI06.TRANSACTION_ID = NFCI07.TRANSACTION_ID
+       AND NFCI06.BAT_RCPT_NUM   = NFCI07.BAT_RCPT_NUM
+       AND NFCI06.INTERFACE_ID   = NFCI04.INTERFACE_ID
+       AND NFCI06.TRANSACTION_ID = NFCI04.TRANSACTION_ID
+     GROUP BY NFCI06.BAT_RCPT_NUM
+    </statement>
+    <!-- END   2018/08/22 H.Ikeda [QC#27776,ADD] -->
+
+    <statement id="getArRcptRcvIntfcPk_org" parameterClass="Map" resultClass="BigDecimal">
+    SELECT ARRI.AR_RCPT_RCV_INTFC_PK
+      FROM AR_RCPT_RCV_INTFC ARRI
+     WHERE ARRI.GLBL_CMPY_CD = #glblCmpyCd#
+       AND ARRI.EZCANCELFLAG = '0'
+       <!-- START 2016/12/05 S.Fujita [QC#16255,ADD] -->
+       AND ARRI.RCV_FUNC_ID  = #intfcId#
+       <!-- END   2016/12/05 S.Fujita [QC#16255,ADD] -->
+       AND ARRI.AR_LOCK_BOX_STS_CD IN (#saved#, #reprocess#)
+     ORDER BY ARRI.AR_LOCK_BOX_FILE_NM
+            , ARRI.AR_BAT_RCPT_NM
+    </statement>
+
+    <statement id="getArLockBox" parameterClass="Map" resultClass="Map">
+    SELECT ALB.AR_LOCK_BOX_CD
+      FROM AR_LOCK_BOX ALB
+     WHERE ALB.GLBL_CMPY_CD = #glblCmpyCd#
+       AND ALB.EZCANCELFLAG = '0'
+       AND ALB.AR_LOCK_BOX_NM = #lockBoxNum#
+    </statement>
+
+    <statement id="getBankAcct" parameterClass="Map" resultClass="Map">
+    SELECT DBA.DS_BANK_ACCT_PK
+         , DBA.DS_BANK_MICR_NUM
+         , DBA.AR_RCPT_SRC_CD
+      FROM DS_BANK_ACCT DBA
+     WHERE DBA.GLBL_CMPY_CD = #glblCmpyCd#
+       AND DBA.EZCANCELFLAG = '0'
+       AND DBA.AR_LOCK_BOX_CD = #lockBoxCd#
+       AND DBA.DS_BANK_ACCT_TP_CD = #internal#
+    </statement>
+
+    <statement id="getArRcptSrcCnt" parameterClass="Map" resultClass="BigDecimal">
+    SELECT COUNT(1) REC_CNT
+      FROM AR_RCPT_SRC ARC
+     WHERE ARC.GLBL_CMPY_CD = #glblCmpyCd#
+       AND ARC.EZCANCELFLAG = '0'
+       AND ARC.AR_RCPT_SRC_CD = #arRcptSrcCd#
+    </statement>
+
+    <statement id="getTotCustRcptAmt" parameterClass="Map" resultClass="BigDecimal">
+    SELECT ARRI.CUST_INV_AMT
+      FROM AR_RCPT_RCV_INTFC ARRI
+     WHERE ARRI.GLBL_CMPY_CD = #glblCmpyCd#
+       AND ARRI.EZCANCELFLAG = '0'
+       AND ARRI.AR_BAT_RCPT_NM = #arBatRcptNm#
+       AND ARRI.CUST_RCPT_NUM = #custRcptNum#
+       <!-- START 2017/05/18 E.Kameishi [QC#18600,ADD] -->
+       AND ARRI.CUST_DS_BANK_MICR_NUM = #custDsBankMicrNum#
+       <!-- END 2017/05/18 E.Kameishi [QC#18600,ADD] -->
+    </statement>
+
+    <statement id="getArRcptRcvInfoWrk" parameterClass="Map" resultClass="BigDecimal">
+    SELECT ARRIW.AR_RCPT_RCV_INFO_WRK_PK
+      FROM AR_RCPT_RCV_INFO_WRK ARRIW
+     WHERE ARRIW.GLBL_CMPY_CD = #glblCmpyCd#
+       AND ARRIW.EZCANCELFLAG = '0'
+       AND ARRIW.AR_RCPT_RCV_INTFC_PK = #arRcptRcvIntfcPk#
+       <!-- START 2017/05/29 E.Kameishi [QC#18594,ADD] -->
+       AND ARRIW.AR_BAT_INFO_LVL_CD &lt;&gt; #warning#
+       <!-- END 2017/05/29 E.Kameishi [QC#18594,ADD] -->
+    </statement>
+
+    <!-- START 2017/05/29 E.Kameishi [QC#18594,ADD] -->
+    <statement id="getArRcptRcvInfoWrkWarn" parameterClass="Map" resultClass="BigDecimal">
+    SELECT COUNT(1) REC_CNT
+      FROM AR_RCPT_RCV_INFO_WRK ARRIW
+     WHERE ARRIW.GLBL_CMPY_CD = #glblCmpyCd#
+       AND ARRIW.EZCANCELFLAG = '0'
+       AND ARRIW.AR_RCPT_RCV_INTFC_PK = #arRcptRcvIntfcPk#
+       AND ARRIW.AR_BAT_INFO_LVL_CD = #warning#
+    </statement>
+    <!-- END 2017/05/29 E.Kameishi [QC#18594,ADD] -->
+    
+    <!-- START 2018/05/18 H.Ikeda [QC#25914,ADD] -->
+    <statement id="getArErrFileDataCnt" parameterClass="Map" resultClass="BigDecimal">
+    SELECT COUNT(1) REC_CNT
+      FROM AR_RCPT_RCV_INTFC ARRI
+     WHERE ARRI.GLBL_CMPY_CD = #glblCmpyCd#
+       AND ARRI.EZCANCELFLAG = '0'
+       AND ARRI.RCV_FUNC_ID = #rcvFuncId#
+       AND ARRI.DEP_DT = #depDt#
+       AND ARRI.DEP_TM = #depTm#
+       AND ARRI.AR_LOCK_BOX_BAT_NUM = #arLockBoxBatNum#
+    </statement>
+    <!-- END  2018/05/18 H.Ikeda [QC#25914,ADD] -->
+
+    <!-- START 2018/06/14 H.Ikeda [QC#25731,ADD] -->
+    <statement id="getChkFileData" parameterClass="Map" resultClass="Map">
+    SELECT NFCI01.LOCK_BOX_DEP_DT
+         , NFCI01.LOCK_BOX_DEP_TM
+         , NFCI06.BAT_RCPT_NUM       AS BAT_RCPT_NUM_06
+      FROM NFCI1010_01 NFCI01
+         , NFCI1010_04 NFCI04
+         , NFCI1010_05 NFCI05
+         <!-- START 2022/11/29 T.Omura [QC#60858,MOD] -->
+         <!-- , NFCI1010_06 NFCI06 -->
+         <isNotEqual property="intfcId" compareValue="NFCI1140">
+         , NFCI1010_06 NFCI06
+         </isNotEqual>
+         <isEqual property="intfcId" compareValue="NFCI1140">
+         , (SELECT NFCI06.*,
+                 LPAD(TO_CHAR(DENSE_RANK() OVER(PARTITION BY NFCI06.TRANSACTION_ID ORDER BY NFCI06.BAT_RCPT_NUM)), 
+                       3, '0') AS ROW_NUM
+            FROM NFCI1010_06 NFCI06) NFCI06
+         </isEqual>
+         <!-- END 2022/11/29 T.Omura [QC#60858,MOD] -->
+         <isNotEqual property="intfcId" compareValue="NFCI1140">
+         , NFCI1010_07 NFCI07
+         </isNotEqual>
+         <isEqual property="intfcId" compareValue="NFCI1140">
+         , (SELECT NFCI07.*, 
+                   LPAD(TO_CHAR(ROW_NUMBER() OVER (PARTITION BY NFCI07.TRANSACTION_ID ORDER BY NFCI07.SEQ_NUMBER)), 
+                        3, '0') AS ROW_NUM 
+            FROM NFCI1010_07 NFCI07) NFCI07
+         </isEqual>
+         , NFCI1010_08 NFCI08
+         , NFCI1010_09 NFCI09
+     WHERE NFCI01.INTERFACE_ID   = NFCI05.INTERFACE_ID
+       AND NFCI01.TRANSACTION_ID = NFCI05.TRANSACTION_ID
+       AND NFCI01.SEGMENT_ID     = NFCI05.SEGMENT_ID
+       AND NFCI05.INTERFACE_ID   = NFCI06.INTERFACE_ID
+       AND NFCI05.TRANSACTION_ID = NFCI06.TRANSACTION_ID
+       AND NFCI05.SEGMENT_ID     = NFCI06.SEGMENT_ID
+       AND NFCI06.INTERFACE_ID   = NFCI04.INTERFACE_ID(+)
+       AND NFCI06.TRANSACTION_ID = NFCI04.TRANSACTION_ID(+)
+       AND NFCI06.SEGMENT_ID     = NFCI04.SEGMENT_ID(+)
+       AND NFCI06.BAT_RCPT_NUM            = LPAD(NFCI04.BAT_RCPT_NUM(+), 3, '0')
+       AND NFCI06.BAT_RCPT_LINE_NUM       = LPAD(NFCI04.BAT_RCPT_LINE_NUM(+), 3, '0')
+       AND NFCI06.INTERFACE_ID   = NFCI07.INTERFACE_ID(+)
+       AND NFCI06.TRANSACTION_ID = NFCI07.TRANSACTION_ID(+)
+       AND NFCI06.SEGMENT_ID     = NFCI07.SEGMENT_ID(+)
+       <isNotEqual property="intfcId" compareValue="NFCI1140">
+           AND NFCI06.BAT_RCPT_NUM   = NFCI07.BAT_RCPT_NUM(+)
+       </isNotEqual>
+       <!-- START 2022/11/29 T.Omura [QC#60858,MOD] -->
+       <isEqual property="intfcId" compareValue="NFCI1140">
+           <!-- AND NFCI06.BAT_RCPT_NUM   = NFCI07.ROW_NUM -->
+           <!-- AND NFCI06.ROW_NUM   = NFCI07.ROW_NUM -->
+           AND NFCI06.BAT_RCPT_NUM   = NFCI07.BAT_RCPT_NUM(+)
+       </isEqual>
+       <!-- END 2022/11/29 T.Omura [QC#60858,MOD] -->
+       AND NFCI06.INTERFACE_ID   = NFCI08.INTERFACE_ID
+       AND NFCI06.TRANSACTION_ID = NFCI08.TRANSACTION_ID
+       AND NFCI06.SEGMENT_ID     = NFCI08.SEGMENT_ID
+       AND NFCI06.INTERFACE_ID   = NFCI09.INTERFACE_ID
+       AND NFCI06.TRANSACTION_ID = NFCI09.TRANSACTION_ID
+       AND NFCI06.SEGMENT_ID     = NFCI09.SEGMENT_ID
+       AND NFCI01.INTERFACE_ID   = #intfcId#
+       AND NFCI01.TRANSACTION_ID = #tranId#
+     GROUP BY NFCI01.LOCK_BOX_DEP_DT, NFCI01.LOCK_BOX_DEP_TM, NFCI06.BAT_RCPT_NUM
+    </statement>
+    
+    <statement id="getArRcptRcvIntfcPk" parameterClass="Map" resultClass="Map">
+    SELECT ARRI.AR_RCPT_RCV_INTFC_PK
+          ,ARRI.RCV_FUNC_ID
+          ,ARRI.RCV_DT
+          ,ARRI.DEP_DT
+          ,ARRI.DEP_TM
+          ,ARRI.AR_BAT_RCPT_NM
+          ,ARRI.REM_BANK_RTE_NUM
+          ,ARRI.REM_DS_BANK_ACCT_NUM
+          ,ARRI.REM_DS_BANK_MICR_NUM
+          ,ARRI.REM_DS_BANK_ACCT_PK
+          ,ARRI.CUST_BANK_RTE_NUM
+          ,ARRI.CUST_DS_BANK_ACCT_NUM
+          ,ARRI.CUST_DS_BANK_MICR_NUM
+          ,ARRI.CUST_DS_BANK_ACCT_PK
+          ,ARRI.CUST_ACCT_REF_NUM
+          ,ARRI.PAYER_CUST_CD
+          ,ARRI.BILL_TO_CUST_CD
+          ,ARRI.CUST_RCPT_NUM
+          ,ARRI.VLD_CUST_RCPT_NUM
+          ,ARRI.CUST_RCPT_AMT
+          ,ARRI.CUST_INV_NUM
+          ,ARRI.AR_TRX_NUM
+          ,ARRI.GRP_INV_NUM
+          ,ARRI.CUST_INV_AMT
+          ,ARRI.AR_RCPT_SRC_CD
+          ,ARRI.AR_RCPT_RCV_ERR_FLG
+          ,ARRI.AR_CUST_ID_STS_CD
+          ,ARRI.AR_RCPT_RCV_WRK_CRAT_FLG
+          ,ARRI.AR_LOCK_BOX_STS_CD
+          ,ARRI.AR_LOCK_BOX_FILE_NM
+          ,ARRI.AR_LOCK_BOX_BAT_NUM
+          ,ARRI.AR_LOCK_BOX_BAT_LINE_NUM
+          ,ARRI.AR_LOCK_BOX_BAT_LINE_SQ_NUM
+          ,ARRI.AR_LOCK_BOX_CD
+          ,ARRI.HDR_LOCK_BOX_NUM_TXT
+          ,ARRI.BAT_LOCK_BOX_NUM_TXT
+          ,ARRI.TRAIL_LOCK_BOX_NUM_TXT
+          ,ARRI.AR_LOCK_BOX_FILE_ERR_FLG
+          ,ARRI.INTFC_FILE_REC_CNT
+          ,ARRI.LOCK_BOX_REC_CNT
+          ,ARRI.LOCK_BOX_TOT_AMT
+          ,ARRI.BAT_RCPT_REC_CNT
+          ,ARRI.BAT_RCPT_TOT_AMT
+          ,ARRI.LOCK_BOX_NTFY_STS_CD
+      FROM AR_RCPT_RCV_INTFC ARRI
+     WHERE ARRI.GLBL_CMPY_CD = #glblCmpyCd#
+       AND ARRI.EZCANCELFLAG = '0'
+       AND ARRI.RCV_FUNC_ID  = #intfcId#
+       AND ARRI.AR_LOCK_BOX_STS_CD IN (#saved#, #reprocess#)
+     ORDER BY ARRI.AR_LOCK_BOX_FILE_NM
+            , ARRI.AR_BAT_RCPT_NM
+    </statement>
+
+    <statement id="getArRcptRcvInfoWrkWarnList" parameterClass="Map" resultClass="BigDecimal">
+    SELECT ARRIW.AR_RCPT_RCV_INFO_WRK_PK
+      FROM AR_RCPT_RCV_INFO_WRK ARRIW
+     WHERE ARRIW.GLBL_CMPY_CD = #glblCmpyCd#
+       AND ARRIW.EZCANCELFLAG = '0'
+       AND AR_BAT_INFO_LVL_CD = #warning#
+       AND ARRIW.AR_RCPT_RCV_INTFC_PK IN (SELECT ARRI.AR_RCPT_RCV_INTFC_PK
+                                          FROM AR_RCPT_RCV_INTFC ARRI
+                                          WHERE ARRI.GLBL_CMPY_CD = #glblCmpyCd#
+                                          AND ARRI.EZCANCELFLAG = '0'
+                                          AND ARRI.RCV_FUNC_ID  = #intfcId#
+                                          AND ARRI.AR_LOCK_BOX_STS_CD IN (#saved#, #reprocess#)
+                                         )
+    </statement>
+    <statement id="getArRcptRcvInfoWrkList" parameterClass="Map" resultClass="BigDecimal">
+    SELECT ARRIW.AR_RCPT_RCV_INFO_WRK_PK
+      FROM AR_RCPT_RCV_INFO_WRK ARRIW
+     WHERE ARRIW.GLBL_CMPY_CD = #glblCmpyCd#
+       AND ARRIW.EZCANCELFLAG = '0'
+       AND ARRIW.AR_BAT_INFO_LVL_CD &lt;&gt; #warning#
+       AND ARRIW.AR_RCPT_RCV_INTFC_PK IN (SELECT ARRI.AR_RCPT_RCV_INTFC_PK
+                                          FROM AR_RCPT_RCV_INTFC ARRI
+                                          WHERE ARRI.GLBL_CMPY_CD = #glblCmpyCd#
+                                          AND ARRI.EZCANCELFLAG = '0'
+                                          AND ARRI.RCV_FUNC_ID  = #intfcId#
+                                          AND ARRI.AR_LOCK_BOX_STS_CD IN (#saved#, #reprocess#)
+                                         )
+    </statement>
+    
+    <statement id="getLineNum" parameterClass="Map" resultClass="Map">
+    SELECT NFCI06.BAT_RCPT_LINE_NUM
+      FROM NFCI1010_06 NFCI06
+     WHERE NFCI06.INTERFACE_ID   = #intfcId#
+       AND NFCI06.TRANSACTION_ID = #tranId#
+     GROUP BY NFCI06.BAT_RCPT_LINE_NUM
+    </statement>
+    <!-- END  2018/06/14 H.Ikeda [QC#25731,ADD] -->
+    <!-- START 2018/07/20 H.Ikeda [QC#24991,ADD] -->
+    <statement id="getArRcptRcvIntfcErr" parameterClass="Map" resultClass="Map">
+    SELECT ARRI.AR_RCPT_RCV_INTFC_PK
+          ,ARRI.RCV_FUNC_ID
+          ,ARRI.RCV_DT
+          ,ARRI.DEP_DT
+          ,ARRI.DEP_TM
+          ,ARRI.AR_BAT_RCPT_NM
+          ,ARRI.REM_BANK_RTE_NUM
+          ,ARRI.REM_DS_BANK_ACCT_NUM
+          ,ARRI.REM_DS_BANK_MICR_NUM
+          ,ARRI.REM_DS_BANK_ACCT_PK
+          ,ARRI.CUST_BANK_RTE_NUM
+          ,ARRI.CUST_DS_BANK_ACCT_NUM
+          ,ARRI.CUST_DS_BANK_MICR_NUM
+          ,ARRI.CUST_DS_BANK_ACCT_PK
+          ,ARRI.CUST_ACCT_REF_NUM
+          ,ARRI.PAYER_CUST_CD
+          ,ARRI.BILL_TO_CUST_CD
+          ,ARRI.CUST_RCPT_NUM
+          ,ARRI.VLD_CUST_RCPT_NUM
+          ,ARRI.CUST_RCPT_AMT
+          ,ARRI.CUST_INV_NUM
+          ,ARRI.AR_TRX_NUM
+          ,ARRI.GRP_INV_NUM
+          ,ARRI.CUST_INV_AMT
+          ,ARRI.AR_RCPT_SRC_CD
+          ,ARRI.AR_RCPT_RCV_ERR_FLG
+          ,ARRI.AR_CUST_ID_STS_CD
+          ,ARRI.AR_RCPT_RCV_WRK_CRAT_FLG
+          ,ARRI.AR_LOCK_BOX_STS_CD
+          ,ARRI.AR_LOCK_BOX_FILE_NM
+          ,ARRI.AR_LOCK_BOX_BAT_NUM
+          ,ARRI.AR_LOCK_BOX_BAT_LINE_NUM
+          ,ARRI.AR_LOCK_BOX_BAT_LINE_SQ_NUM 
+          ,ARRI.AR_LOCK_BOX_CD
+          ,ARRI.HDR_LOCK_BOX_NUM_TXT
+          ,ARRI.BAT_LOCK_BOX_NUM_TXT
+          ,ARRI.TRAIL_LOCK_BOX_NUM_TXT
+          ,ARRI.AR_LOCK_BOX_FILE_ERR_FLG
+          ,ARRI.INTFC_FILE_REC_CNT
+          ,ARRI.LOCK_BOX_REC_CNT
+          ,ARRI.LOCK_BOX_TOT_AMT
+          ,ARRI.BAT_RCPT_REC_CNT
+          ,ARRI.BAT_RCPT_TOT_AMT
+          ,ARRI.LOCK_BOX_NTFY_STS_CD
+      FROM AR_RCPT_RCV_INTFC ARRI
+     WHERE ARRI.GLBL_CMPY_CD = #glblCmpyCd#
+       AND ARRI.EZCANCELFLAG = '0'
+       AND ARRI.RCV_FUNC_ID  = #intfcId#
+       AND ARRI.AR_LOCK_BOX_STS_CD = #error#
+       AND (ARRI.LOCK_BOX_NTFY_STS_CD &lt;&gt; #lockBoxNtfyStsCd# OR ARRI.LOCK_BOX_NTFY_STS_CD IS NULL)
+     ORDER BY ARRI.AR_LOCK_BOX_FILE_NM
+            , ARRI.AR_BAT_RCPT_NM
+    </statement>
+    <!-- END  2018/07/20 H.Ikeda [QC#24991,ADD] -->
+
+    <!-- START 2018/08/22 H.Ikeda [QC#27776,ADD] -->
+    <statement id="getCfsMdBatchCnt" parameterClass="Map" resultClass="BigDecimal">
+    SELECT COUNT(*)
+      FROM NFCI1010_04 NFCI04
+     WHERE NFCI04.INTERFACE_ID   = #intfcId#
+       AND NFCI04.TRANSACTION_ID = #tranId#
+    </statement>
+    <!-- END   2018/08/22 H.Ikeda [QC#27776,ADD] -->
+
+    <!-- START 2022/12/14 T.Omura [QC#60929,ADD] -->
+    <statement id="getNFCI1010_06" parameterClass="Map" resultClass="Map">
+    SELECT SUM(INTFC_CUST_RCPT_AMT) AS TOT_AMT
+          ,COUNT(*)                 AS TOT_CNT
+          ,BAT_RCPT_NUM
+     FROM NFCI1010_06
+    WHERE TRANSACTION_ID = #tranId#
+    GROUP BY BAT_RCPT_NUM
+    </statement>
+
+    <statement id="getNFCI1010_07" parameterClass="Map" resultClass="Map">
+    SELECT INTERFACE_ID
+          ,TRANSACTION_ID
+          ,SEGMENT_ID
+          ,UNIT_ID
+          ,SEQ_NUMBER
+          ,BAT_RCPT_REC_CNT
+          ,INTFC_BAT_RCPT_AMT
+     FROM NFCI1010_07
+    WHERE TRANSACTION_ID = #tranId#
+    </statement>
+    <!-- END 2022/12/14 T.Omura [QC#60929,ADD] -->
+</sqlMap>
+

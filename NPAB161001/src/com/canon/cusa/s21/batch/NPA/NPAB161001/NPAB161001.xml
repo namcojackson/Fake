@@ -1,0 +1,158 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NPAB161001">
+
+    <statement id="getPoAckIntfcLst" parameterClass="Map" resultClass="Map">
+        SELECT
+            EPAH.EDI_ACK_PO_NUM
+           ,EPAH.EDI_ACK_TRSMT_DT
+           ,EPAD.EDI_ACK_PO_NUM DTL_EDI_ACK_PO_NUM
+           ,EPAD.EDI_ACK_PO_LINE_NUM
+           ,EPAD.EDI_ACK_ACK_CD
+           ,EPAD.EDI_ACK_VND_ITEM_CD
+           ,EPAD.EDI_ACK_ACK_QTY_EDI_TXT
+           ,EPAD.EDI_ACK_FOB_TXT
+           ,EPAD.EDI_ACK_UOM_TXT_02
+           ,EPAD.EDI_ACK_RQST_DT
+           ,EPAD.EDI_ACK_QTY_EDI_TXT
+           ,VPAS.PO_ACK_LINE_STS_CD
+           ,PALS.PO_ACK_LINE_STS_NM
+        FROM
+            NPAI2100_01     EPAH
+           ,NPAI2100_02     EPAD
+           ,VND_PO_ACK_STS  VPAS
+           ,PO_ACK_LINE_STS PALS
+        WHERE
+            EPAH.INTERFACE_ID       = #interfaceId#
+        AND EPAH.TRANSACTION_ID     = #transactionId#
+        AND EPAH.INTERFACE_ID       = EPAD.INTERFACE_ID (+)
+        AND EPAH.TRANSACTION_ID     = EPAD.TRANSACTION_ID (+)
+        AND EPAH.EDI_ACK_PO_NUM     = EPAD.EDI_ACK_PO_NUM (+)
+        AND EPAD.EDI_ACK_ACK_CD     = VPAS.VND_PO_ACK_STS_CD (+)
+        AND VPAS.GLBL_CMPY_CD (+)   = #glblCmpyCd#
+        AND VPAS.GLBL_CMPY_CD       = PALS.GLBL_CMPY_CD (+)
+        AND VPAS.PO_ACK_LINE_STS_CD = PALS.PO_ACK_LINE_STS_CD (+)
+        AND EPAH.EZCANCELFLAG       = '0'
+        AND EPAD.EZCANCELFLAG (+)   = '0'
+        AND VPAS.EZCANCELFLAG (+)   = '0'
+        AND PALS.EZCANCELFLAG (+)   = '0'
+        ORDER BY
+            EPAH.UNIT_ID DESC
+           ,EPAD.SEQ_NUMBER DESC
+    </statement>
+
+    <statement id="getMaxPoAckNumFromPoAckHdrWrk" parameterClass="Map" resultClass="String">
+        SELECT
+            MAX(TO_NUMBER(PAHW.PO_ACK_NUM))
+        FROM
+            PO_ACK_HDR_WRK PAHW
+        WHERE
+            PAHW.EDI_PO_ORD_NUM = #ediPoOrdNum#
+        AND PAHW.GLBL_CMPY_CD   = #glblCmpyCd#
+        AND PAHW.EZCANCELFLAG   = '0'
+    </statement>
+
+    <statement id="getMaxPoAckNumFromPoAckHdr" parameterClass="Map" resultClass="String">
+        SELECT
+            MAX(TO_NUMBER(PAH.PO_ACK_NUM))
+        FROM
+            PO_ACK_HDR PAH
+        WHERE
+            PAH.PO_ORD_NUM     = #poOrdNum#
+        AND PAH.GLBL_CMPY_CD   = #glblCmpyCd#
+        AND PAH.EZCANCELFLAG   = '0'
+    </statement>
+
+    <statement id="getVndUom" parameterClass="Map" resultClass="String">
+        SELECT
+            DCC.DS_COND_CONST_VAL_TXT_01 AS VND_UOM_CD
+        FROM
+            DS_COND_CONST DCC
+        WHERE
+            DCC.GLBL_CMPY_CD         = #glblCmpyCd#
+        AND DCC.DS_COND_CONST_GRP_ID = #grpIdVndUomXref#
+        AND DCC.DS_COND_CONST_CD     = #ediAckUomTxt02#
+        AND DCC.EZCANCELFLAG         = '0'
+        AND ROWNUM                   = 1
+    </statement>
+
+    <statement id="getAzertyVndCd" parameterClass="Map" resultClass="String">
+        SELECT
+            RAV.RCV_ASN_VND_CD
+        FROM
+            RCV_ASN_VND RAV
+        WHERE
+            RAV.GLBL_CMPY_CD  = #glblCmpyCd#
+        AND RAV.VND_SYS_TP_CD = #vndSysTpCdA#
+        AND RAV.EZCANCELFLAG  = '0'
+    </statement>
+
+    <statement id="getPoInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+            PD.PO_ORD_NUM
+           ,PD.SHPG_SVC_LVL_CD
+           ,PD.SHIP_TO_ST_CD
+        FROM
+            PO_DTL PD
+        WHERE
+            PD.GLBL_CMPY_CD        = #glblCmpyCd#
+        AND PD.PO_ORD_NUM          = #poOrdNum#
+        AND PD.PO_ORD_DTL_LINE_NUM = #poOrdDtlLineNum#
+        AND PD.EZCANCELFLAG        = '0'
+    </statement>
+
+    <statement id="getAzertyLt" parameterClass="Map" resultClass="BigDecimal">
+    SELECT
+        A.DELY_LEAD_AOT
+    FROM (
+        SELECT
+            VSL_ACK.VND_SHIP_LT_PRIORITY
+           ,VSL_ACK.DELY_LEAD_AOT
+        FROM (
+            <!-- priority 1 : VND_CD, ST_CD, METH_CD -->
+            SELECT
+                1 VND_SHIP_LT_PRIORITY
+               ,VSL.DELY_LEAD_AOT
+            FROM
+                VND_SHIP_LT VSL
+            WHERE
+                VSL.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND VSL.VND_CD           = #vndCdAzerty#
+            AND VSL.DEST_ST_CD       = #stCd#
+            AND VSL.VND_SHIP_METH_CD = #vndShipMethCd#
+            AND VSL.EZCANCELFLAG     = '0'
+            <!-- priority 2 : VND_CD, METH_CD -->
+            UNION
+            SELECT
+                2 VND_SHIP_LT_PRIORITY
+               ,VSL.DELY_LEAD_AOT
+            FROM
+                VND_SHIP_LT VSL
+            WHERE
+                VSL.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND VSL.VND_CD           = #vndCdAzerty#
+            AND VSL.DEST_ST_CD       = #ast#
+            AND VSL.VND_SHIP_METH_CD = #vndShipMethCd#
+            AND VSL.EZCANCELFLAG     = '0'
+            <!-- priority 3 : VND_CD -->
+            UNION
+            SELECT
+                3 VND_SHIP_LT_PRIORITY
+               ,VSL.DELY_LEAD_AOT
+            FROM
+                VND_SHIP_LT VSL
+            WHERE
+                VSL.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND VSL.VND_CD           = #vndCdAzerty#
+            AND VSL.DEST_ST_CD       = #ast#
+            AND VSL.VND_SHIP_METH_CD = #ast#
+            AND VSL.EZCANCELFLAG     = '0'
+        ) VSL_ACK
+        ORDER BY
+            VSL_ACK.VND_SHIP_LT_PRIORITY
+    ) A
+    WHERE
+        ROWNUM = 1
+    </statement>
+
+</sqlMap>

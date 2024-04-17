@@ -1,0 +1,322 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NSBB099001">
+
+    <statement id="getResendTarget" parameterClass="Map" resultClass="Map">
+       SELECT
+           A.FSR_NUM
+          ,A.SVC_TASK_NUM
+          ,A.SVC_CMNT_TXT 
+          ,A.SVC_WRK_TXT
+          ,A.CUST_WBHK_ID
+          ,A.CUST_TBL_NM
+          ,A.CUST_SYS_ID
+          ,A.SVC_TASK_WATCH_FLD_TXT
+          ,A.SVC_TASK_RTRN_FLD_TXT
+          ,A.CUST_RSN_CD
+          ,A.SVC_STS_TXT
+          ,A.INTFC_ID
+          ,A.SVC_TASK_OTBD_MSG_PK
+          ,A.OTBD_INTFC_TP_CD
+          ,A.CUST_CALL_ID
+        FROM
+            SVC_TASK_OTBD_MSG A
+        WHERE
+            A.GLBL_CMPY_CD                 = #glblCmpyCd#
+            AND A.EZCANCELFLAG             = '0'
+        AND A.SVC_RQST_PROC_STS_CD         = #svcRqstProcStsCd#
+        ORDER BY
+            A.OTBD_INTFC_TP_CD
+           ,A.CRAT_TS
+    </statement>
+    
+    <statement id="getTaskTarget" parameterClass="Map" resultClass="Map">
+       SELECT
+            A.SVC_TASK_RQST_DUP_PK
+           ,B.FSR_NUM
+           ,B.SVC_TASK_NUM
+           ,A.CUST_SYS_ID
+           ,A.CUST_CALL_ID
+           <!-- START 2023/11/20 N.Takatsu [QC#61771, ADD] -->
+           ,C.DS_SVC_CALL_TP_CD
+           ,C.DS_SVC_CALL_TP_DESC_TXT
+           <!-- END   2023/11/20 N.Takatsu [QC#61771, ADD] -->
+           ,NULL                 AS SVC_MEMO_PK
+           ,NULL                 AS SVC_CMNT_TXT
+           ,NULL                 AS SVC_WRK_TXT
+           ,NULL                 AS CUST_RSN_CD
+           ,NULL                 AS SVC_STS_TXT
+           ,NULL                 AS CUST_WBHK_ID
+           ,NULL                 AS CUST_TBL_NM
+           ,NULL                 AS SVC_TASK_WATCH_FLD_TXT
+           ,NULL                 AS SVC_TASK_RTRN_FLD_TXT
+           ,NULL                 AS CRAT_TS
+           ,NULL                 AS INTFC_ID
+           ,NULL                 AS OTBD_INTFC_TP_CD
+           ,NULL                 AS SVC_RQST_PROC_STS_CD
+           ,NULL                 AS ERR_INFO_TXT
+        FROM
+            <!-- START 2023/09/25 N.Takatsu [QC#61771, MOD] -->
+            <!-- SVC_TASK_RQST_DUP    A -->
+            (
+                SELECT
+                     A.*
+                    ,ROW_NUMBER() OVER (PARTITION BY A.CUST_CALL_ID ORDER BY A.CRAT_TS, A.SVC_TASK_RQST_DUP_PK) ROW_NUM
+                FROM
+                    SVC_TASK_RQST_DUP A
+                WHERE
+                        A.GLBL_CMPY_CD         = #glblCmpyCd#
+                    AND A.EZCANCELFLAG         = '0'
+                    AND A.RQST_MODE_TXT        IN <iterate property="rqstModeRegisterList" var="rqstModeRegisterList[]" open=" (" close=")" conjunction=",">
+                                               #rqstModeRegisterList[]#
+                                                  </iterate>
+                    AND A.SVC_RQST_PROC_STS_CD = #svcRqstProcStsCd#
+                    AND A.FSR_NUM              IS NOT NULL
+            ) A
+            <!-- END   2023/09/25 N.Takatsu [QC#61771, MOD] -->
+           ,SVC_TASK             B
+           <!-- START 2023/11/20 N.Takatsu [QC#61771, ADD] -->
+           ,DS_SVC_CALL_TP       C
+           <!-- END   2023/11/20 N.Takatsu [QC#61771, ADD] -->
+        WHERE
+            A.GLBL_CMPY_CD              = #glblCmpyCd#
+        AND A.EZCANCELFLAG              = '0'
+        AND A.GLBL_CMPY_CD              = B.GLBL_CMPY_CD 
+        AND B.EZCANCELFLAG              = '0'
+        <!-- START 2023/11/20 N.Takatsu [QC#61771, ADD] -->
+        AND B.GLBL_CMPY_CD              = C.GLBL_CMPY_CD 
+        AND C.EZCANCELFLAG              = '0'
+        AND B.DS_SVC_CALL_TP_CD			= C.DS_SVC_CALL_TP_CD
+        <!-- END   2023/11/20 N.Takatsu [QC#61771, ADD] -->
+        <!-- START 2023/09/25 N.Takatsu [QC#61771, ADD] -->
+        AND A.ROW_NUM                   = #rowNum#
+        <!-- END   2023/09/25 N.Takatsu [QC#61771, ADD] -->
+        <!-- START 2023/09/25 N.Takatsu [QC#61771, DEL] -->
+        <!-- AND A.RQST_MODE_TXT             IN <iterate property="rqstModeRegisterList" var="rqstModeRegisterList[]" open=" (" close=")" conjunction=","> -->
+                                        <!-- #rqstModeRegisterList[]# -->
+                                           <!-- </iterate> -->
+        <!-- AND A.SVC_RQST_PROC_STS_CD      = #svcRqstProcStsCd# -->
+        <!-- AND A.FSR_NUM                   IS NOT NULL -->
+        <!-- END   2023/09/25 N.Takatsu [QC#61771, DEL] -->
+        AND NOT EXISTS (
+            SELECT
+                *
+            FROM
+                SVC_TASK_RQST_DUP       D
+            WHERE
+                D.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND D.EZCANCELFLAG          = '0'
+            AND D.CUST_CALL_ID          = A.CUST_CALL_ID
+            AND D.RQST_MODE_TXT         IN <iterate property="rqstModeCancelList" var="rqstModeCancelList[]" open=" (" close=")" conjunction=",">
+                                        #rqstModeCancelList[]#
+                                           </iterate>
+        )
+        AND A.FSR_NUM                   = B.FSR_NUM
+        AND NOT EXISTS  (
+            SELECT
+                *
+            FROM
+                SVC_TASK_KEY_INFO       E
+            WHERE
+                E.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND E.EZCANCELFLAG          = '0'
+            AND E.FSR_NUM               = B.FSR_NUM
+            AND E.SVC_TASK_NUM          = B.SVC_TASK_NUM
+        )
+        ORDER BY
+            A.FSR_NUM
+           ,B.SVC_TASK_NUM
+    </statement>
+
+    <statement id="getVendorTarget" parameterClass="Map" resultClass="Map">
+       SELECT
+            A.SVC_TASK_RQST_DUP_PK
+           ,A.CUST_SYS_ID
+           ,A.FSR_NUM
+           ,A.CUST_CALL_ID
+<!-- START 2023/09/08 K.Kitachi [QC#61771, MOD] -->
+<!--       ,B.ITT_NUM -->
+           ,NVL(B.ITT_NUM, SUBSTR(C.CRS_SVC_SR_NUM, 0, #subStrPos25#)) ITT_NUM
+<!-- END   2023/09/08 K.Kitachi [QC#61771, MOD] -->
+           <!-- START 2023/11/20 N.Takatsu [QC#61771, ADD] -->
+           ,D.TECH_CD
+           <!-- END   2023/11/20 N.Takatsu [QC#61771, ADD] -->
+           ,NULL                 AS SVC_TASK_NUM
+           ,NULL                 AS SVC_MEMO_PK
+           ,NULL                 AS SVC_CMNT_TXT
+           ,NULL                 AS SVC_WRK_TXT
+           ,NULL                 AS CUST_RSN_CD
+           ,NULL                 AS SVC_STS_TXT
+           ,NULL                 AS CUST_WBHK_ID
+           ,NULL                 AS CUST_TBL_NM
+           ,NULL                 AS SVC_TASK_WATCH_FLD_TXT
+           ,NULL                 AS SVC_TASK_RTRN_FLD_TXT
+           ,NULL                 AS CRAT_TS
+           ,NULL                 AS INTFC_ID
+           ,NULL                 AS OTBD_INTFC_TP_CD
+           ,NULL                 AS SVC_RQST_PROC_STS_CD
+           ,NULL                 AS ERR_INFO_TXT
+        FROM
+            <!-- START 2023/09/25 N.Takatsu [QC#61771, MOD] -->
+            <!-- SVC_TASK_RQST_DUP    A -->
+            (
+                SELECT
+                     A.*
+                    ,ROW_NUMBER() OVER (PARTITION BY A.CUST_CALL_ID ORDER BY A.CRAT_TS, A.SVC_TASK_RQST_DUP_PK) ROW_NUM
+                FROM
+                    SVC_TASK_RQST_DUP A
+                WHERE
+                        A.GLBL_CMPY_CD         = #glblCmpyCd#
+                    AND A.EZCANCELFLAG         = '0'
+                    AND A.RQST_MODE_TXT        IN <iterate property="rqstModeRegisterList" var="rqstModeRegisterList[]" open=" (" close=")" conjunction=",">
+                                               #rqstModeRegisterList[]#
+                                                  </iterate>
+                    AND A.SVC_RQST_PROC_STS_CD = #svcRqstProcStsCd#
+                    AND A.FSR_NUM              IS NOT NULL
+            ) A
+            <!-- END   2023/09/25 N.Takatsu [QC#61771, MOD] -->
+           ,FSR                         B
+           ,SVC_TASK                    C
+           <!-- START 2023/09/25 N.Takatsu [QC#61771, ADD] -->
+           ,FSR_VISIT                   D
+           <!-- END   2023/09/25 N.Takatsu [QC#61771, ADD] -->
+        WHERE
+            A.GLBL_CMPY_CD              = #glblCmpyCd#
+        AND A.EZCANCELFLAG              = '0'
+        AND A.GLBL_CMPY_CD              = B.GLBL_CMPY_CD
+        AND B.EZCANCELFLAG              = '0'
+        AND A.FSR_NUM                   = B.FSR_NUM
+        AND B.GLBL_CMPY_CD              = C.GLBL_CMPY_CD
+        AND C.EZCANCELFLAG              = '0'
+        AND B.FSR_NUM                   = C.FSR_NUM
+        <!-- START 2023/09/25 N.Takatsu [QC#61771, ADD] -->
+        AND C.GLBL_CMPY_CD              = D.GLBL_CMPY_CD
+        AND D.EZCANCELFLAG              = '0'
+        AND C.SVC_TASK_NUM              = D.SVC_TASK_NUM
+        AND D.FSR_VISIT_LTST_FLG        = #fsrVisitLtstFlg#
+        AND A.ROW_NUM                   = #rowNum#
+        <!-- END   2023/09/25 N.Takatsu [QC#61771, ADD] -->
+        <!-- START 2023/09/25 N.Takatsu [QC#61771, DEL] -->
+        <!-- AND A.RQST_MODE_TXT             IN <iterate property="rqstModeRegisterList" var="rqstModeRegisterList[]" open=" (" close=")" conjunction=","> -->
+                                        <!-- #rqstModeRegisterList[]# -->
+                                           <!-- </iterate> -->
+        <!-- AND A.SVC_RQST_PROC_STS_CD      = #svcRqstProcStsCd# -->
+        <!-- AND A.FSR_NUM                   IS NOT NULL -->
+        <!-- END   2023/09/25 N.Takatsu [QC#61771, DEL] -->
+        AND NOT EXISTS (
+            SELECT
+                *
+            FROM
+                SVC_TASK_RQST_DUP       E
+            WHERE
+                E.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND E.EZCANCELFLAG          = '0'
+            AND E.CUST_CALL_ID          = A.CUST_CALL_ID
+            AND E.RQST_MODE_TXT         IN <iterate property="rqstModeCancelList" var="rqstModeCancelList[]" open=" (" close=")" conjunction=",">
+                                        #rqstModeCancelList[]#
+                                           </iterate>
+        )
+        AND (
+<!-- START 2023/09/08 K.Kitachi [QC#61771, MOD] -->
+<!--        (A.ITT_NUM IS NULL     AND B.ITT_NUM IS NOT NULL) -->
+<!--     OR (A.ITT_NUM IS NOT NULL AND B.ITT_NUM IS NOT NULL AND A.ITT_NUM &lt;&gt; B.ITT_NUM) -->
+<!--     OR (A.ITT_NUM IS NOT NULL AND B.ITT_NUM IS NULL) -->
+            (A.ITT_NUM IS NULL     AND NVL(B.ITT_NUM, C.CRS_SVC_SR_NUM) IS NOT NULL)
+         OR (A.ITT_NUM IS NOT NULL AND NVL(B.ITT_NUM, C.CRS_SVC_SR_NUM) IS NOT NULL AND A.ITT_NUM &lt;&gt; NVL(B.ITT_NUM, SUBSTR(C.CRS_SVC_SR_NUM, 0, #subStrPos25#)))
+         OR (A.ITT_NUM IS NOT NULL AND NVL(B.ITT_NUM, C.CRS_SVC_SR_NUM) IS NULL)
+<!-- END   2023/09/08 K.Kitachi [QC#61771, MOD] -->
+        )
+        ORDER BY
+            A.FSR_NUM
+           ,C.SVC_TASK_NUM
+    </statement>
+
+    <statement id="getNoteTarget" parameterClass="Map" resultClass="Map">
+       SELECT
+            A.FSR_NUM
+           ,A.CUST_SYS_ID
+           ,A.SVC_TASK_RQST_DUP_PK
+           ,A.CUST_CALL_ID
+           ,B.SVC_TASK_NUM
+           ,C.SVC_MEMO_PK
+           ,C.SVC_CMNT_TXT
+           ,C.LAST_UPD_TS
+           ,D.SVC_MEMO_KEY_INFO_PK
+           ,NULL                 AS SVC_WRK_TXT
+           ,NULL                 AS CUST_RSN_CD
+           ,NULL                 AS SVC_STS_TXT
+           ,NULL                 AS CUST_WBHK_ID
+           ,NULL                 AS CUST_TBL_NM
+           ,NULL                 AS SVC_TASK_WATCH_FLD_TXT
+           ,NULL                 AS SVC_TASK_RTRN_FLD_TXT
+           ,NULL                 AS CRAT_TS
+           ,NULL                 AS INTFC_ID
+           ,NULL                 AS OTBD_INTFC_TP_CD
+           ,NULL                 AS SVC_RQST_PROC_STS_CD
+           ,NULL                 AS ERR_INFO_TXT
+        FROM
+            <!-- START 2023/09/25 N.Takatsu [QC#61771, MOD] -->
+            <!-- SVC_TASK_RQST_DUP    A -->
+            (
+                SELECT
+                     A.*
+                    ,ROW_NUMBER() OVER (PARTITION BY A.CUST_CALL_ID ORDER BY A.CRAT_TS, A.SVC_TASK_RQST_DUP_PK) ROW_NUM
+                FROM
+                    SVC_TASK_RQST_DUP A
+                WHERE
+                        A.GLBL_CMPY_CD         = #glblCmpyCd#
+                    AND A.EZCANCELFLAG         = '0'
+                    AND A.RQST_MODE_TXT        IN <iterate property="rqstModeRegisterList" var="rqstModeRegisterList[]" open=" (" close=")" conjunction=",">
+                                               #rqstModeRegisterList[]#
+                                                  </iterate>
+                    AND A.SVC_RQST_PROC_STS_CD = #svcRqstProcStsCd#
+                    AND A.FSR_NUM              IS NOT NULL
+            ) A
+            <!-- END   2023/09/25 N.Takatsu [QC#61771, MOD] -->
+           ,SVC_TASK               B
+           ,SVC_MEMO               C
+           ,SVC_MEMO_KEY_INFO      D
+        WHERE
+            A.GLBL_CMPY_CD              = #glblCmpyCd#
+        AND A.EZCANCELFLAG              = '0'
+        AND A.GLBL_CMPY_CD              = B.GLBL_CMPY_CD
+        AND B.EZCANCELFLAG              = '0'
+        AND A.FSR_NUM                   = B.FSR_NUM
+        AND B.GLBL_CMPY_CD              = C.GLBL_CMPY_CD
+        AND C.EZCANCELFLAG              = '0'
+        AND B.SVC_TASK_NUM              = C.SVC_TASK_NUM
+        AND C.GLBL_CMPY_CD              = D.GLBL_CMPY_CD(+)
+        AND D.EZCANCELFLAG(+)           = '0'
+        AND C.SVC_MEMO_PK               = D.SVC_MEMO_PK(+)
+        <!-- START 2023/09/25 N.Takatsu [QC#61771, ADD] -->
+        AND A.ROW_NUM                   = #rowNum#
+        <!-- END   2023/09/25 N.Takatsu [QC#61771, ADD] -->
+        <!-- START 2023/09/25 N.Takatsu [QC#61771, DEL] -->
+        <!-- AND A.RQST_MODE_TXT             IN <iterate property="rqstModeRegisterList" var="rqstModeRegisterList[]" open=" (" close=")" conjunction=","> -->
+                                        <!-- #rqstModeRegisterList[]# -->
+                                           <!-- </iterate> -->
+        <!-- AND A.SVC_RQST_PROC_STS_CD      = #svcRqstProcStsCd# -->
+        <!-- AND A.FSR_NUM                   IS NOT NULL -->
+        <!-- END   2023/09/25 N.Takatsu [QC#61771, DEL] -->
+        AND NOT EXISTS (
+            SELECT
+                *
+            FROM
+                SVC_TASK_RQST_DUP       E
+            WHERE
+                E.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND E.EZCANCELFLAG          = '0'
+            AND E.CUST_CALL_ID          = A.CUST_CALL_ID
+            AND E.RQST_MODE_TXT         IN <iterate property="rqstModeCancelList" var="rqstModeCancelList[]" open=" (" close=")" conjunction=",">
+                                        #rqstModeCancelList[]#
+                                           </iterate>
+        )
+        AND C.SVC_MEMO_CATG_CD          = #svcMemoCatgCd#
+        AND C.SVC_MEMO_TP_CD            = #svcMemoTpCd#
+        AND ((D.SVC_MEMO_PK IS NULL) OR (D.SVC_MEMO_PK IS NOT NULL AND C.LAST_UPD_TS &lt;&gt; D.LAST_UPD_TS))
+        ORDER BY
+            A.FSR_NUM
+           ,B.SVC_TASK_NUM
+           ,C.SVC_MEMO_PK
+           ,C.LAST_UPD_TS
+    </statement>
+</sqlMap>

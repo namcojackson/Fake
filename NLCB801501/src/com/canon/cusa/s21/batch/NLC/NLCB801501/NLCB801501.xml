@@ -1,0 +1,1118 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<sqlMap namespace="NLCB801501">
+
+<!-- #################### Type Alias #################### -->
+<!-- START 2017/05/25 [QC#8316,ADD] -->
+<typeAlias alias="InvtySlsCrDist"    type="com.canon.cusa.s21.batch.NLC.NLCB801501.InvtySlsCrDist"/>
+<!-- END   2017/05/25 [QC#8316,ADD] -->
+
+<!-- #################### Statement #################### -->
+
+    <statement id="getAjeInvtyIntfcListNotJrnlized" parameterClass="Map" resultClass="Map">
+        SELECT 
+            AIIF.GLBL_CMPY_CD         AS GLBL_CMPY_CD,
+            AIIF.AJE_INVTY_INTFC_PK   AS AJE_INVTY_INTFC_PK
+        FROM 
+            AJE_INVTY_INTFC AIIF
+        WHERE 
+            AIIF.EZCANCELFLAG         = '0'
+        AND AIIF.GLBL_CMPY_CD         = #glblCmpyCd#
+        AND AIIF.GL_DT                LIKE  #thisMonth#
+        AND NOT EXISTS (
+                          SELECT '*'
+                          FROM 
+                              AJE_INTFC_CTRL      AIC
+                            WHERE AIC.EZCANCELFLAG    = '0'
+                              AND AIC.GLBL_CMPY_CD    = #glblCmpyCd#
+                              AND AIC.AJE_INTFC_TP_CD = #ajeIntfcTpCd#
+                              AND AIC.JRNL_CPLT_FLG   = #jrnlCpltFlg#
+                              AND AIC.GLBL_CMPY_CD    = AIIF.GLBL_CMPY_CD
+                              AND AIC.AJE_INTFC_PK    = AIIF.AJE_INVTY_INTFC_PK
+                       )
+        ORDER BY AIIF.AJE_INVTY_INTFC_PK
+    </statement>
+
+    <statement id="getInvtyTrxNotJrnlized" parameterClass="Map" resultClass="Map">
+    WITH TARGET_TBL AS(
+       SELECT
+          ITX.GLBL_CMPY_CD                  AS GLBL_CMPY_CD,
+          ITX.INVTY_TRX_DT                  AS INVTY_TRX_DT,
+          ITX.INVTY_TRX_PK                  AS INVTY_TRX_PK,
+          ITX.SYS_SRC_CD                    AS SYS_SRC_CD,
+          ITX.TRX_CD                        AS TRX_CD,
+          ITX.TRX_RSN_CD                    AS TRX_RSN_CD,
+          ITX.BILL_TO_CUST_CD               AS BILL_TO_CUST_CD,
+          ITX.SELL_TO_CUST_CD               AS SELL_TO_CUST_CD,
+          ITX.SHIP_TO_CUST_CD               AS SHIP_TO_CUST_CD,
+          ITX.MDSE_CD                       AS MDSE_CD,
+          ITX.INVTY_LOC_CD                  AS INVTY_LOC_CD,
+          ITX.TOC_CD                        AS TOC_CD,
+          ITX.VND_CD                        AS VND_CD,
+          ITX.CCY_CD                        AS CCY_CD,
+          <!-- start 2016/06/08 add condition -->
+          <!-- start 2016/12/28 delete. This to be handled by qty flip flag on AJE pattern
+          (CASE WHEN ITX.TRX_CD = #sales# THEN ITX.INVTY_TRX_QTY * -1
+                ELSE ITX.INVTY_TRX_QTY END) AS INVTY_TRX_QTY,
+          -->
+          ITX.INVTY_TRX_QTY                 AS INVTY_TRX_QTY,
+          <!-- end 2016/06/08 -->
+          ITX.UNIT_COST_AMT                 AS UNIT_COST_AMT,
+          ITX.SHIP_COST_AMT                 AS SHIP_COST_AMT,
+          ITX.COA_ACCT_CD                   AS COA_ACCT_CD,
+          ITX.COA_PROD_CD                   AS COA_PROD_CD,
+<!-- START 2022/09/05 [QC#59131,MOD] -->
+          <!--ITX.EXP_PROJ_CD                   AS EXP_PROJ_CD, -->
+          CASE WHEN ITX.TRX_CD = #trxAdj# AND ITX.TRX_RSN_CD = #trxRsnKitStkIn# THEN MDSS.COA_MDSE_TP_CD
+                   ELSE ITX.EXP_PROJ_CD END AS EXP_PROJ_CD,
+<!-- END 2022/09/05 [QC#59131,MOD] -->
+          ITX.COA_BR_CD                     AS COA_BR_CD,
+<!-- START 2022/09/05 [QC#59131,MOD] -->
+          <!--ITX.COA_CC_CD                     AS COA_CC_CD,, -->
+          CASE WHEN ITX.TRX_CD = #trxAdj# AND ITX.TRX_RSN_CD = #trxRsnKitStkIn# THEN MDSS.COA_CC_CD
+                     ELSE ITX.COA_CC_CD END AS COA_CC_CD,
+<!-- END 2022/09/05 [QC#59131,MOD] -->
+          ITX.COA_CH_CD                     AS COA_CH_CD,
+          ITX.CPO_ORD_NUM                   AS CPO_ORD_NUM,
+          ITX.SO_NUM                        AS SO_NUM,
+          ITX.INV_NUM                       AS INV_NUM,
+          
+          <!-- added for CSA from here -->
+          ITX.INVTY_TRX_SLP_NUM                               AS INVTY_TRX_SLP_NUM,
+          ITX.INVTY_TRX_REF_NUM                               AS INVTY_TRX_REF_NUM,
+          ITX.INVTY_ORD_NUM                                   AS INVTY_ORD_NUM,
+          ITX.INVTY_ORD_LINE_NUM                              AS INVTY_ORD_LINE_NUM,
+          ITX.SHIP_SLS_AMT                                    AS SHIP_FROM_AMT,
+          ITX.SHIP_COST_AMT                                   AS SHIP_FROM_UNIT_COST_AMT,
+          <!-- start 2016/0727 QC#12416 Should be unit price -->
+          PD.ENT_DEAL_NET_UNIT_PRC_AMT                        AS PRCH_PRC_AMT,
+          <!-- end 2016/0727 -->
+          IOL.COA_CMPY_CD                                     AS LINK_CMPY,
+          IOL.COA_BR_CD                                       AS LINK_BR,
+          IOL.COA_CC_CD                                       AS LINK_CC,
+          IOL.COA_ACCT_CD                                     AS LINK_ACCT,
+          IOL.COA_PROD_CD                                     AS LINK_PROD,
+          IOL.COA_CH_CD                                       AS LINK_CH,
+          IOL.COA_AFFL_CD                                     AS LINK_AFFL,
+          IOL.COA_PROJ_CD                                     AS LINK_PROJ,
+          IOL.COA_EXTN_CD                                     AS LINK_EXTN,
+          <!-- START 2016/08/31 [QC#13776,MOD] Add SMMF to retrieve machine master related values -->
+          <!-- START 2017/03/02 [QC#17298,DEL] -->
+          <!--NVL(SI.SVC_MACH_MSTR_PK, NVL(FSR.SVC_MACH_MSTR_PK, SMMF.SVC_MACH_MSTR_PK))      AS SVC_MACH_MSTR_PK,
+          NVL(SMM.FIN_BR_CD, SMMF.FIN_BR_CD)                  AS FIN_BR_CD,
+          NVL(SMM.SER_NUM, SMMF.SER_NUM)                      AS SER_NUM,
+          -->
+          <!-- START 2019/10/10 [QC#54001,MOD] -->
+          <!-- START 2017/12/06 [QC#22802,MOD] -->
+          <!-- NVL(SMM.MDSE_CD, NVL(RO.RMNF_MAIN_UNIT_MDSE_CD, NVL(SMMF.MDSE_CD, SMMR.MDSE_CD)))         AS MACH_MDSE_CD, -->
+          <!-- END 2017/12/06 [QC#22802,MOD] -->
+          (CASE
+               WHEN SMM.MDSE_CD               IS NOT NULL AND ITX.SYS_SRC_CD = #sysSrcSv# THEN SMM.MDSE_CD
+               WHEN RO.RMNF_MAIN_UNIT_MDSE_CD IS NOT NULL                                 THEN RO.RMNF_MAIN_UNIT_MDSE_CD
+               WHEN SMMF.MDSE_CD              IS NOT NULL                                 THEN SMMF.MDSE_CD
+               WHEN SMMR.MDSE_CD              IS NOT NULL                                 THEN SMMR.MDSE_CD
+               ELSE SMM2.MDSE_CD
+          END) AS MACH_MDSE_CD,
+          <!-- END   2019/10/10 [QC#54001,MOD] -->
+          <!-- END 2016/08/31 [QC#13776,MOD] -->
+          <!-- start 2017/01/03 QC#16819 Change DS_INVTY_LOC_V to RTL_SWH -->
+          RS.RTL_WH_CD                                        AS RTL_WH_CD,
+          <!-- end 2017/01/03 -->
+          0                                                   AS RMNF_WIP_AMT,
+          <!-- 
+          NVL(CPD.RTL_WH_CD, ITX.SHIP_FROM_LOC_CUST_CD)       AS ORIG_RTL_WH_CD,
+          -->
+          <!-- start QC#8805 2016/05/23 SHIP_FROM_LOC_CUST_CD is not RTL_WH_CD -->
+          <!-- start 2017/01/03 QC#16819 Change DS_INVTY_LOC_V to RTL_SWH -->
+          NVL(CPD.RTL_WH_CD, RS_SHIP_FROM.RTL_WH_CD)         AS ORIG_RTL_WH_CD,
+          <!-- end 2017/01/03 -->
+          <!-- end 2016/05/23 -->
+          ITX.RWS_NUM                                         AS RWS_NUM,
+          ITX.WRK_ORD_NUM                                     AS WRK_ORD_NUM,
+          NVL(ITX.RMA_LINE_NUM, ITX.CPO_DTL_LINE_NUM)         AS CPO_DTL_LINE_NUM,
+          NVL(ITX.RMA_LINE_SUB_NUM, ITX.CPO_DTL_LINE_SUB_NUM) AS CPO_DTL_LINE_SUB_NUM,
+          ITX.PO_ORD_NUM                                      AS PO_ORD_NUM,
+          ITX.PO_ORD_DTL_LINE_NUM                             AS PO_ORD_DTL_LINE_NUM,
+          ITX.RMA_NUM                                         AS RMA_NUM,
+          ITX.RMA_LINE_NUM                                    AS RMA_LINE_NUM,
+          ITX.RMA_LINE_SUB_NUM                                AS RMA_LINE_SUB_NUM,
+          <!-- START 2016/08/30 [QC#13896,ADD] -->
+          (CASE
+               WHEN SWH.MDSE_COST_TP_CD = #stdCost# THEN ROUND(MDSS.THIS_MTH_TOT_STD_COST_AMT * SWH.MDSE_INVTY_COST_PCT/100, CCY.AFT_DECL_PNT_DIGIT_NUM)
+               WHEN SWH.MDSE_COST_TP_CD = #assetRecov# THEN ROUND(MDSS.ASSET_RECOV_COST_AMT * SWH.MDSE_INVTY_COST_PCT/100, CCY.AFT_DECL_PNT_DIGIT_NUM)
+               END) AS TRNSF_SHIP_COST_AMT
+          <!-- END 2016/08/30 [QC#13896,ADD] -->
+          <!-- START 2017/03/02 [QC#17298,ADD] -->
+         ,CASE WHEN SMM2.SVC_MACH_MSTR_PK IS NOT NULL THEN SMM2.SVC_MACH_MSTR_PK
+               WHEN SI.SVC_MACH_MSTR_PK   IS NOT NULL THEN SI.SVC_MACH_MSTR_PK
+               WHEN FSR.SVC_MACH_MSTR_PK  IS NOT NULL AND ITX.SYS_SRC_CD = #sysSrcSv# THEN FSR.SVC_MACH_MSTR_PK
+               WHEN SMMF.SVC_MACH_MSTR_PK IS NOT NULL THEN SMMF.SVC_MACH_MSTR_PK
+          <!-- START 2017/12/06 [QC#22802,MOD] -->
+               WHEN SMMR.SVC_MACH_MSTR_PK IS NOT NULL THEN SMMR.SVC_MACH_MSTR_PK
+          <!-- END 2017/12/06 [QC#22802,MOD] -->
+               ELSE CPD2.SVC_MACH_MSTR_PK
+          END                                                 AS SVC_MACH_MSTR_PK,
+          <!-- START 2018/05/25 [QC#26154,MOD] -->
+          <!-- START 2017/12/06 [QC#22802,MOD] -->
+          <!-- NVL(SMM.FIN_BR_CD, NVL(SMMF.FIN_BR_CD, SMMR.FIN_BR_CD))                  AS FIN_BR_CD, -->
+          CASE
+              <!-- START 2019/12/25 [QC#55147,MOD] -->
+              WHEN SMM.FIN_BR_CD  IS NOT NULL AND ITX.SYS_SRC_CD = #sysSrcSv# THEN SMM.FIN_BR_CD
+              <!-- END 2019/12/25 [QC#55147,MOD] -->
+              WHEN SMMF.FIN_BR_CD IS NOT NULL THEN SMMF.FIN_BR_CD
+              WHEN SMMR.FIN_BR_CD IS NOT NULL THEN SMMR.FIN_BR_CD
+              WHEN SMM3.FIN_BR_CD IS NOT NULL THEN SMM3.FIN_BR_CD
+              WHEN SMM4.FIN_BR_CD IS NOT NULL THEN SMM4.FIN_BR_CD
+          END                                                 AS FIN_BR_CD,
+          <!-- END 2017/12/06 [QC#22802,MOD] -->
+          <!-- END 2018/05/25 [QC#26154,MOD] -->
+          CPD2.SVC_CONFIG_MSTR_PK                                                  AS SVC_CONFIG_MSTR_PK,
+          <!-- START 2019/12/25 [QC#55147,MOD] -->
+          <!-- START 2017/12/06 [QC#22802,MOD] -->
+          DECODE(ITX.SYS_SRC_CD, #sysSrcSv#, SMM.SER_NUM, NVL(SMMF.SER_NUM, SMMR.SER_NUM))  AS CONFIG_SER_NUM,
+          <!-- END 2017/12/06 [QC#22802,MOD] -->
+          <!-- END 2019/12/25 [QC#55147,MOD] -->
+          CASE WHEN SO_SER.SER_NUM       IS NOT NULL THEN SO_SER.SER_NUM
+               <!-- QC#22924 Add Start -->
+               WHEN SO_SER_FROM_CPO.SER_NUM       IS NOT NULL THEN SO_SER_FROM_CPO.SER_NUM
+               <!-- QC#22849 Add Start -->
+               WHEN RMN_SER_STKOUT.SER_NUM IS NOT NULL THEN RMN_SER_STKOUT.SER_NUM 
+               WHEN RMN_SER_STKIN.SER_NUM IS NOT NULL THEN RMN_SER_STKIN.SER_NUM 
+               <!-- QC#22849 Add End -->
+               <!-- START 2017/08/28 [QC#20682,ADD] -->
+               <!-- WHEN SMM_FLG.MAX_SER_NUM  IS NOT NULL THEN SMM2.SER_NUM  -->
+               WHEN SMM2.SER_NUM     IS NOT NULL THEN SMM2.SER_NUM 
+               <!-- END 2017/08/28 [QC#20682,ADD] -->
+               WHEN SHIP_SER.SER_NUM IS NOT NULL THEN SHIP_SER.SER_NUM 
+          END                                                 AS SER_NUM
+          <!-- END   2017/03/02 [QC#17298,ADD] -->
+        FROM
+             INVTY_TRX          ITX
+            ,PO_DTL             PD
+            ,RWS_HDR            RH
+            ,INVTY_ORD_DTL      IOL
+            ,SVC_MACH_MSTR      SMM
+            ,FSR                FSR
+            <!-- start 2017/01/03 QC#16819 Change DS_INVTY_LOC_V to RTL_SWH -->
+            <!--,DS_INVTY_LOC_V     ILV-->
+            , DS_INVTY_LOC_V           RS
+            <!-- end 2017/01/03 -->
+            
+            <!-- 2016/05/23 added for SHIP_FROM_LOC_CUST_CD -->
+            <!-- start 2017/01/03 QC#16819 Change DS_INVTY_LOC_V to RTL_SWH -->
+            <!-- ,DS_INVTY_LOC_V     ILV_SHIP_FROM -->
+            ,DS_INVTY_LOC_V           RS_SHIP_FROM
+            <!-- end 2017/01/03 -->
+            <!-- end -->
+            ,CPO_DTL             CPD
+            ,RMNF_ORD            RO
+            ,SVC_INV             SI
+            <!-- START 2016/08/30 [QC#13896,ADD] -->
+            <!-- start 2017/01/03 QC#16819 Change DS_INVTY_LOC_V to RTL_SWH -->
+            <!-- ,DS_INVTY_LOC_V      DILV -->
+            ,DS_INVTY_LOC_V             RS_SHIP_TO
+            <!-- end 2017/01/03 -->
+            ,MDSE_DLY_SNAP_SHOT  MDSS
+            ,SWH                 SWH
+            ,CCY                 CCY
+            <!-- END 2016/08/30 [QC#13896,ADD] -->
+            <!-- START 2016/08/31 [QC#13776,MOD] -->
+            , CPO_DTL            CPD2
+            <!-- START 2018/10/17 [QC#28805,MOD] -->
+            <!--, SVC_MACH_MSTR      SMMF-->
+            ,(
+
+                SELECT SMM.GLBL_CMPY_CD, SMM.EZCANCELFLAG, SMM.CPO_ORD_NUM, SMM.CPO_DTL_LINE_NUM, SMM.CPO_DTL_LINE_SUB_NUM
+                     , SMM.FIN_BR_CD, SMM.SVC_MACH_MSTR_PK, SMM.MDSE_CD, SMM.SER_NUM
+                FROM
+                (
+                    SELECT S.GLBL_CMPY_CD, S.EZCANCELFLAG, S.CPO_ORD_NUM, S.CPO_DTL_LINE_NUM, S.CPO_DTL_LINE_SUB_NUM
+                         , S.FIN_BR_CD, S.SVC_MACH_MSTR_PK, S.MDSE_CD, S.SER_NUM
+                         , ROW_NUMBER() OVER(PARTITION BY S.CPO_ORD_NUM, S.CPO_DTL_LINE_NUM, S.CPO_DTL_LINE_SUB_NUM, S.MDSE_CD ORDER BY S.SVC_MACH_MSTR_PK) AS NUM
+                    FROM SVC_MACH_MSTR  S
+                    WHERE
+                        S.GLBL_CMPY_CD = #glblCmpyCd#
+                    AND S.EZCANCELFLAG = '0'
+                ) SMM
+                   WHERE SMM.NUM = 1
+            ) SMMF
+            <!-- END 2018/10/17 [QC#28805,MOD] -->
+            <!-- END 2016/08/31 [QC#13776,MOD] -->
+            ,(SELECT TRX_CD,
+                    TRX_RSN_CD
+               FROM AJE_PTRN
+              WHERE EZCANCELFLAG           = '0'
+                AND GLBL_CMPY_CD           = #glblCmpyCd#
+             GROUP BY TRX_CD, TRX_RSN_CD
+            ) AP
+          <!-- START 2017/03/02 [QC#17298,ADD] -->
+            , SVC_MACH_MSTR      SMM2
+            <!-- START 2017/08/28 [QC#20682,DEL] -->
+            <!--
+            , (SELECT SM.SVC_CONFIG_MSTR_PK , MAX(SM.SER_NUM) MAX_SER_NUM
+               FROM CPO_DTL CPD, SVC_MACH_MSTR SM
+               WHERE CPD.GLBL_CMPY_CD = #glblCmpyCd#
+               AND   CPD.GLBL_CMPY_CD = SM.GLBL_CMPY_CD
+               AND   CPD.SVC_CONFIG_MSTR_PK = SM.SVC_CONFIG_MSTR_PK
+               AND   CPD.EZCANCELFLAG      = '0'
+               AND   SM.EZCANCELFLAG      = '0'
+               GROUP BY SM.SVC_CONFIG_MSTR_PK
+               ) SMM_FLG 
+            -->
+            <!-- END 2017/08/28 [QC#20682,DEL] -->
+             ,(SELECT ITD.INVTY_TRX_PK  ,MAX(SSN.SER_NUM) SER_NUM
+                FROM INVTY_TRX ITD
+                    ,SHPG_ORD_DTL  SOD
+                    ,SHIP_SER_NUM  SSN
+                WHERE
+                    ITD.GLBL_CMPY_CD = #glblCmpyCd#
+                AND ITD.EZCANCELFLAG = '0' 
+                AND SOD.GLBL_CMPY_CD = ITD.GLBL_CMPY_CD
+                AND SOD.TRX_HDR_NUM  = ITD.WRK_ORD_NUM
+                AND SOD.TRX_LINE_NUM = ITD.WRK_ORD_LINE_NUM
+                AND SOD.EZCANCELFLAG = '0'
+                AND SOD.GLBL_CMPY_CD = SSN.GLBL_CMPY_CD
+                AND SOD.SO_NUM       = SSN.SO_NUM
+                AND SOD.SO_SLP_NUM   = SSN.SO_SLP_NUM
+                <!-- START 2017/11/30 [QC#22790,MOD] -->
+                AND SSN.MDSE_CD      = ITD.MDSE_CD
+                AND SSN.EZCANCELFLAG = '0'
+                AND ITD.INVTY_TRX_DT LIKE #thisMonth#
+                <!-- AND ITD.RWS_NUM IS NOT NULL -->
+                <!-- END 2017/11/30 [QC#22790,MOD] -->
+                GROUP BY ITD.INVTY_TRX_PK
+            ) SO_SER
+            <!-- QC#22924 Add Start -->
+            ,(SELECT ITD.INVTY_TRX_PK  ,MAX(SSN.SER_NUM) SER_NUM
+                FROM INVTY_TRX ITD
+                    ,SHPG_ORD_DTL  SOD
+                    ,SHIP_SER_NUM  SSN
+                WHERE
+                    ITD.GLBL_CMPY_CD = #glblCmpyCd#
+                AND ITD.EZCANCELFLAG = '0'
+                AND SOD.GLBL_CMPY_CD = ITD.GLBL_CMPY_CD
+                AND SOD.TRX_HDR_NUM  = ITD.CPO_ORD_NUM
+                AND SOD.TRX_LINE_NUM = ITD.CPO_DTL_LINE_NUM
+                AND SOD.TRX_LINE_SUB_NUM = ITD.CPO_DTL_LINE_SUB_NUM
+                AND SOD.EZCANCELFLAG = '0'
+                AND SOD.GLBL_CMPY_CD = SSN.GLBL_CMPY_CD
+                AND SOD.SO_NUM       = SSN.SO_NUM
+                AND SOD.SO_SLP_NUM   = SSN.SO_SLP_NUM
+                AND SSN.EZCANCELFLAG = '0'
+                AND SSN.MDSE_CD      = ITD.MDSE_CD
+                AND SSN.EZCANCELFLAG = '0'
+                AND ITD.INVTY_TRX_DT LIKE #thisMonth#
+                GROUP BY ITD.INVTY_TRX_PK
+            ) SO_SER_FROM_CPO
+            <!-- QC#22924 Add End -->
+            <!-- QC#22849 Add Start -->
+            ,(SELECT 
+                 ITD.INVTY_TRX_PK
+                ,ROD.CMPT_SER_NUM                      AS SER_NUM  
+                FROM 
+                     INVTY_TRX     ITD
+                    ,SHPG_ORD_DTL  SOD
+                    ,RMNF_ORD_DTL  ROD
+                WHERE
+                    ITD.GLBL_CMPY_CD = #glblCmpyCd#
+                AND ITD.EZCANCELFLAG = '0' 
+                AND ITD.GLBL_CMPY_CD = SOD.GLBL_CMPY_CD
+                AND ITD.SO_NUM       = SOD.SO_NUM
+                AND ITD.SO_SLP_NUM   = SOD.SO_SLP_NUM
+               <!--AND ((ITD.TRX_CD = '240' AND ITD.TRX_RSN_CD = '02') OR (ITD.TRX_CD = '240' AND ITD.TRX_RSN_CD = '05'))-->
+                AND ((ITD.TRX_CD = #trxRemnf# AND ITD.TRX_RSN_CD = #remnfItemChgStkOut#) OR (ITD.TRX_CD = #trxRemnf# AND ITD.TRX_RSN_CD = #remnfItemChgStkOutAcsry#))
+                AND ITD.INVTY_TRX_DT LIKE #thisMonth#
+                AND SOD.GLBL_CMPY_CD = ROD.GLBL_CMPY_CD
+                AND SOD.TRX_HDR_NUM  = ROD.RMNF_ORD_NUM
+                AND SOD.TRX_LINE_NUM = ROD.RMNF_ORD_DTL_LINE_NUM
+                AND ROD.CMPT_SER_NUM IS NOT NULL
+                AND ITD.EZCANCELFLAG = '0'
+                AND SOD.EZCANCELFLAG = '0'
+                AND ROD.EZCANCELFLAG = '0'
+            ) RMN_SER_STKOUT
+            ,(
+               SELECT 
+                 ITD.INVTY_TRX_PK
+                ,ROD.RMNF_TO_CMPT_SER_NUM               AS SER_NUM  
+                FROM 
+                     INVTY_TRX     ITD
+                    ,SHPG_ORD_DTL  SOD
+                    ,RMNF_ORD_DTL  ROD
+                WHERE
+                    ITD.GLBL_CMPY_CD = #glblCmpyCd#
+                AND ITD.EZCANCELFLAG = '0' 
+                AND ITD.GLBL_CMPY_CD = SOD.GLBL_CMPY_CD
+                AND ITD.SO_NUM       = SOD.SO_NUM
+                AND ITD.SO_SLP_NUM   = SOD.SO_SLP_NUM
+<!--                 AND ((ITD.TRX_CD = '240' AND ITD.TRX_RSN_CD = '03') OR (ITD.TRX_CD = '240' AND ITD.TRX_RSN_CD = '06')) -->
+                AND ((ITD.TRX_CD = #trxRemnf# AND ITD.TRX_RSN_CD =  #remnfItemChgStkIn#) OR (ITD.TRX_CD = #trxRemnf# AND ITD.TRX_RSN_CD = #remnfItemChgStkInAcsry#)) 
+                AND ITD.INVTY_TRX_DT LIKE #thisMonth#
+                AND SOD.GLBL_CMPY_CD = ROD.GLBL_CMPY_CD
+                AND SOD.TRX_HDR_NUM  = ROD.RMNF_ORD_NUM
+                AND SOD.TRX_LINE_NUM = ROD.RMNF_ORD_DTL_LINE_NUM
+                AND ROD.RMNF_TO_CMPT_SER_NUM IS NOT NULL
+                AND ITD.EZCANCELFLAG = '0'
+                AND SOD.EZCANCELFLAG = '0'
+                AND ROD.EZCANCELFLAG = '0'     
+            ) RMN_SER_STKIN
+            <!-- QC#22849 Add End -->
+            ,(SELECT ITD.INVTY_TRX_PK ,MAX(SSN.SER_NUM) SER_NUM
+                FROM INVTY_TRX ITD
+                    ,SHIP_SER_NUM  SSN
+                WHERE
+                    ITD.GLBL_CMPY_CD = #glblCmpyCd#
+                AND ITD.EZCANCELFLAG = '0' 
+                AND SSN.GLBL_CMPY_CD = ITD.GLBL_CMPY_CD
+                AND SSN.SO_NUM       = ITD.SO_NUM
+                AND SSN.SO_SLP_NUM   = ITD.SO_SLP_NUM
+                <!-- START 2017/11/30 [QC#22790,MOD] -->
+                AND SSN.MDSE_CD      = ITD.MDSE_CD
+                AND SSN.EZCANCELFLAG = '0'
+                AND ITD.INVTY_TRX_DT LIKE #thisMonth#
+                <!-- AND ITD.RWS_NUM   IS NULL-->
+                <!-- END 2017/11/30 [QC#22790,MOD] -->
+                GROUP BY ITD.INVTY_TRX_PK
+           ) SHIP_SER
+          <!-- END   2017/03/02 [QC#17298,ADD] -->
+          <!-- START 2017/12/06 [QC#22802,ADD] -->
+            ,DS_CPO_RTRN_DTL    CRD
+            ,SVC_MACH_MSTR      SMMR
+          <!-- END   2017/12/06 [QC#22802,ADD] -->
+          <!-- START 2018/05/25 [QC#26154,ADD] -->
+            ,SVC_MACH_MSTR      SMM3
+            ,SVC_MACH_MSTR      SMM4
+          <!-- END 2018/05/25 [QC#26154,ADD] -->
+        WHERE
+            ITX.EZCANCELFLAG              = '0'
+        AND ITX.GLBL_CMPY_CD              = #glblCmpyCd#
+        AND ITX.INVTY_TRX_DT              LIKE #thisMonth#
+        AND ITX.EZCANCELFLAG              = PD.EZCANCELFLAG(+)
+        AND ITX.GLBL_CMPY_CD              = PD.GLBL_CMPY_CD(+)
+        AND ITX.PO_ORD_NUM                = PD.PO_ORD_NUM(+)
+        AND ITX.PO_ORD_DTL_LINE_NUM       = PD.PO_ORD_DTL_LINE_NUM(+)
+        AND ITX.EZCANCELFLAG              = RH.EZCANCELFLAG(+)
+        AND ITX.GLBL_CMPY_CD              = RH.GLBL_CMPY_CD(+)
+        AND ITX.RWS_NUM                   = RH.RWS_NUM(+)
+        AND ITX.EZCANCELFLAG              = IOL.EZCANCELFLAG(+)
+        AND ITX.GLBL_CMPY_CD              = IOL.GLBL_CMPY_CD(+)
+        AND ITX.INVTY_ORD_NUM             = IOL.INVTY_ORD_NUM(+)
+        AND ITX.INVTY_ORD_LINE_NUM        = IOL.INVTY_ORD_LINE_NUM(+)
+        AND ITX.EZCANCELFLAG              = FSR.EZCANCELFLAG(+)
+        AND ITX.GLBL_CMPY_CD              = FSR.GLBL_CMPY_CD(+)
+        AND ITX.INVTY_TRX_SLP_NUM         = FSR.FSR_NUM(+)   -- slip number will carry FSR number for parts usage
+        AND FSR.EZCANCELFLAG              = SMM.EZCANCELFLAG(+)
+        AND FSR.GLBL_CMPY_CD              = SMM.GLBL_CMPY_CD(+)
+        AND NVL(SI.SVC_MACH_MSTR_PK, FSR.SVC_MACH_MSTR_PK)     = SMM.SVC_MACH_MSTR_PK(+)
+        <!-- start 2017/01/03 QC#16819 Change DS_INVTY_LOC_V to RTL_SWH -->
+        AND ITX.EZCANCELFLAG              = RS.EZCANCELFLAG(+)
+        AND ITX.GLBL_CMPY_CD              = RS.GLBL_CMPY_CD(+)
+        AND ITX.INVTY_LOC_CD              = RS.INVTY_LOC_CD(+)
+        <!-- end 2017/01/03 -->
+        <!-- start 2017/01/03 QC#16819 Change DS_INVTY_LOC_V to RTL_SWH -->
+        AND ITX.EZCANCELFLAG              = RS_SHIP_FROM.EZCANCELFLAG(+)
+        AND ITX.GLBL_CMPY_CD              = RS_SHIP_FROM.GLBL_CMPY_CD(+)
+        AND ITX.SHIP_FROM_LOC_CUST_CD     = RS_SHIP_FROM.INVTY_LOC_CD(+)
+        <!-- end 2017/01/03 -->
+        AND ITX.EZCANCELFLAG              = CPD.EZCANCELFLAG(+)
+        AND ITX.GLBL_CMPY_CD              = CPD.GLBL_CMPY_CD(+)
+        AND ITX.ORIG_CPO_ORD_NUM          = CPD.CPO_ORD_NUM(+)
+        AND ITX.ORIG_CPO_DTL_LINE_NUM     = CPD.CPO_DTL_LINE_NUM(+)
+        AND ITX.ORIG_CPO_DTL_LINE_SUB_NUM = CPD.CPO_DTL_LINE_SUB_NUM(+)
+        AND ITX.EZCANCELFLAG              = RO.EZCANCELFLAG(+)
+        AND ITX.GLBL_CMPY_CD              = RO.GLBL_CMPY_CD(+)
+        AND ITX.INVTY_TRX_SLP_NUM         = RO.RMNF_ORD_NUM(+)
+        AND ITX.EZCANCELFLAG              = SI.EZCANCELFLAG(+)
+        AND ITX.GLBL_CMPY_CD              = SI.GLBL_CMPY_CD(+)
+        AND ITX.INV_NUM                   = SI.SVC_INV_NUM(+)
+        AND NOT (ITX.TRX_CD = #trxKit# AND ITX.TRX_RSN_CD = #trxRsnKitOut# AND RH.SCE_ORD_TP_CD = #kitOrdTp#)   -- this is child of kit    
+        AND NOT (ITX.TRX_CD = #trxKit# AND ITX.TRX_RSN_CD = #trxRsnKitIn# AND RH.SCE_ORD_TP_CD = #unkitOrdTp#)  -- this is child of unkit
+        AND AP.TRX_CD                     = ITX.TRX_CD
+        AND AP.TRX_RSN_CD                 = ITX.TRX_RSN_CD
+        <!-- START 2016/08/30 [QC#13896,ADD] -->
+        <!-- start 2017/01/03 QC#16819 Change DS_INVTY_LOC_V to RTL_SWH -->
+        AND ITX.GLBL_CMPY_CD              = RS_SHIP_TO.GLBL_CMPY_CD(+)
+        AND ITX.SHIP_TO_LOC_CUST_CD       = RS_SHIP_TO.INVTY_LOC_CD(+)
+        AND ITX.EZCANCELFLAG              = RS_SHIP_TO.EZCANCELFLAG(+)
+        AND RS_SHIP_TO.GLBL_CMPY_CD       = SWH.GLBL_CMPY_CD(+)
+        AND RS_SHIP_TO.RTL_SWH_CD         = SWH.RTL_SWH_CD(+)
+        AND RS_SHIP_TO.EZCANCELFLAG       = SWH.EZCANCELFLAG(+)
+        <!-- end 2017/01/03 -->
+        AND ITX.GLBL_CMPY_CD              = MDSS.GLBL_CMPY_CD(+)
+        AND ITX.MDSE_CD                   = MDSS.MDSE_CD(+)
+        AND ITX.EZCANCELFLAG              = MDSS.EZCANCELFLAG(+)
+        AND MDSS.LTST_REC_FLG(+)          = #ltstRecFlg#
+        AND ITX.GLBL_CMPY_CD              = CCY.GLBL_CMPY_CD(+)
+        AND ITX.CCY_CD                    = CCY.CCY_CD(+)
+        AND ITX.EZCANCELFLAG              = CCY.EZCANCELFLAG(+)
+        <!-- END 2016/08/30 [QC#13896,ADD] -->
+        <!-- START 2016/08/31 [QC#13776,MOD] -->
+        AND ITX.GLBL_CMPY_CD              = CPD2.GLBL_CMPY_CD(+)
+        AND ITX.EZCANCELFLAG              = CPD2.EZCANCELFLAG(+)
+        AND ITX.CPO_ORD_NUM               = CPD2.CPO_ORD_NUM(+)
+        AND ITX.CPO_DTL_LINE_NUM          = CPD2.CPO_DTL_LINE_NUM(+)
+        AND ITX.CPO_DTL_LINE_SUB_NUM      = CPD2.CPO_DTL_LINE_SUB_NUM(+)
+        AND CPD2.GLBL_CMPY_CD             = SMMF.GLBL_CMPY_CD(+)
+        AND CPD2.CPO_ORD_NUM              = SMMF.CPO_ORD_NUM(+)
+        AND CPD2.CPO_DTL_LINE_NUM         = SMMF.CPO_DTL_LINE_NUM(+)
+        AND CPD2.CPO_DTL_LINE_SUB_NUM     = SMMF.CPO_DTL_LINE_SUB_NUM(+)
+        AND CPD2.EZCANCELFLAG             = SMMF.EZCANCELFLAG(+)
+        <!-- END 2016/08/31 [QC#13776,MOD] -->
+        <!-- START 2017/03/02 [QC#17298,ADD] -->
+        AND CPD2.GLBL_CMPY_CD             = SMM2.GLBL_CMPY_CD(+)
+        AND CPD2.SVC_MACH_MSTR_PK         = SMM2.SVC_MACH_MSTR_PK(+)
+        AND CPD2.EZCANCELFLAG             = SMM2.EZCANCELFLAG(+)
+        <!-- START 2017/08/28 [QC#20682,DEL] -->
+        <!-- AND SMM2.SVC_CONFIG_MSTR_PK       = SMM_FLG.SVC_CONFIG_MSTR_PK(+) -->
+        <!-- END 2017/08/28 [QC#20682,DEL] -->
+        AND ITX.INVTY_TRX_PK              = SO_SER.INVTY_TRX_PK(+)
+        <!-- QC#22924 Add Start -->
+        AND ITX.INVTY_TRX_PK              = SO_SER_FROM_CPO.INVTY_TRX_PK(+)
+        <!-- QC#22849 Add Start-->
+        AND ITX.INVTY_TRX_PK              = RMN_SER_STKOUT.INVTY_TRX_PK(+)
+        AND ITX.INVTY_TRX_PK              = RMN_SER_STKIN.INVTY_TRX_PK(+)
+        <!-- QC#22849 Add End-->
+        AND ITX.INVTY_TRX_PK              = SHIP_SER.INVTY_TRX_PK(+)
+        <!-- END 2017/03/02 [QC#17298,ADD] -->
+        AND NOT EXISTS 
+        (
+            SELECT '*'
+            FROM 
+                AJE_INTFC_CTRL           AIC,
+                AJE_INVTY_INTFC          AIIF
+            WHERE
+                AIC.EZCANCELFLAG        = '0'
+            AND AIIF.EZCANCELFLAG       = '0'
+            AND AIC.GLBL_CMPY_CD        = #glblCmpyCd#
+            AND AIC.AJE_INTFC_TP_CD     = #ajeIntfcTpCd#
+            AND AIC.JRNL_CPLT_FLG       = #jrnlCpltFlg#
+            AND AIC.GLBL_CMPY_CD        = AIIF.GLBL_CMPY_CD
+            AND AIC.AJE_INTFC_PK        = AIIF.AJE_INVTY_INTFC_PK
+            AND AIIF.GL_DT              LIKE #thisMonth#
+            AND AIIF.GLBL_CMPY_CD       = ITX.GLBL_CMPY_CD
+            AND AIIF.INVTY_TRX_PK       = ITX.INVTY_TRX_PK
+        )
+        <!-- START 2017/12/06 [QC#22802,ADD] -->
+        AND ITX.GLBL_CMPY_CD              = CRD.GLBL_CMPY_CD(+)
+        AND ITX.EZCANCELFLAG              = CRD.EZCANCELFLAG(+)
+        AND ITX.CPO_ORD_NUM               = CRD.CPO_ORD_NUM(+)
+        AND ITX.CPO_DTL_LINE_NUM          = CRD.DS_CPO_RTRN_LINE_NUM(+)
+        AND ITX.CPO_DTL_LINE_SUB_NUM      = CRD.DS_CPO_RTRN_LINE_SUB_NUM(+)
+        AND CRD.GLBL_CMPY_CD              = SMMR.GLBL_CMPY_CD(+)
+        AND CRD.SVC_MACH_MSTR_PK          = SMMR.SVC_MACH_MSTR_PK(+)
+        AND CRD.EZCANCELFLAG              = SMMR.EZCANCELFLAG(+)
+        <!-- END 2017/12/06 [QC#22802,ADD] -->
+        <!-- START 2018/05/25 [QC#26154,ADD] -->
+        AND CPD2.GLBL_CMPY_CD             = SMM3.GLBL_CMPY_CD(+)
+        AND CPD2.SVC_MACH_MSTR_PK         = SMM3.SVC_MACH_MSTR_PK(+)
+        AND CPD2.EZCANCELFLAG             = SMM3.EZCANCELFLAG(+)
+        AND CRD.GLBL_CMPY_CD              = SMM4.GLBL_CMPY_CD(+)
+        AND CRD.SVC_MACH_MSTR_PK          = SMM4.SVC_MACH_MSTR_PK(+)
+        AND CRD.EZCANCELFLAG              = SMM4.EZCANCELFLAG(+)
+        <!-- END 2018/05/25 [QC#26154,ADD] -->
+                )
+        SELECT  
+             TGT.GLBL_CMPY_CD
+            ,TGT.INVTY_TRX_DT
+            ,TGT.INVTY_TRX_PK
+            ,TGT.SYS_SRC_CD AS 
+            ,TGT.TRX_CD 
+            ,TGT.TRX_RSN_CD
+            ,TGT.BILL_TO_CUST_CD
+            ,TGT.SELL_TO_CUST_CD 
+            ,TGT.SHIP_TO_CUST_CD 
+            ,TGT.MDSE_CD
+            ,TGT.INVTY_LOC_CD 
+            ,TGT.TOC_CD 
+            ,TGT.VND_CD 
+            ,TGT.CCY_CD
+            ,TGT.INVTY_TRX_QTY
+            ,TGT.UNIT_COST_AMT
+            ,TGT.SHIP_COST_AMT
+            ,TGT.COA_ACCT_CD
+            ,TGT.COA_PROD_CD
+            ,TGT.EXP_PROJ_CD
+            ,TGT.COA_BR_CD
+            ,TGT.COA_CC_CD
+            ,TGT.COA_CH_CD
+            ,TGT.CPO_ORD_NUM 
+            ,TGT.SO_NUM 
+            ,TGT.INV_NUM 
+            ,TGT.INVTY_TRX_SLP_NUM 
+            ,TGT.INVTY_TRX_REF_NUM
+            ,TGT.INVTY_ORD_NUM 
+            ,TGT.INVTY_ORD_LINE_NUM 
+            ,TGT.SHIP_FROM_AMT
+            ,TGT.SHIP_FROM_UNIT_COST_AMT
+            ,TGT.PRCH_PRC_AMT
+            ,TGT.LINK_CMPY 
+            ,TGT.LINK_BR
+            ,TGT.LINK_CC
+            ,TGT.LINK_ACCT
+            ,TGT.LINK_PROD
+            ,TGT.LINK_CH
+            ,TGT.LINK_AFFL
+            ,TGT.LINK_PROJ
+            ,TGT.LINK_EXTN
+            ,TGT.SVC_MACH_MSTR_PK
+            ,TGT.FIN_BR_CD
+            <!-- START 2017/12/15 [QC#22852,DEL] -->
+            <!--,CASE WHEN SER_FLG.MAX_SER IS NOT NULL THEN TGT.SER_NUM
+                  WHEN TGT.SER_NUM     IS NOT NULL THEN TGT.SER_NUM
+                  ELSE TGT.CONFIG_SER_NUM
+             END    AS SER_NUM -->
+            <!-- END 2017/12/15 [QC#22852,DEL] -->
+            <!-- START 2017/12/15 [QC#22852,ADD] -->
+            ,CASE WHEN TGT.CONFIG_SER_NUM IS NOT NULL 
+                        AND TGT.MACH_MDSE_CD = TGT.MDSE_CD THEN TGT.CONFIG_SER_NUM
+                  WHEN TGT.SER_NUM     IS NOT NULL THEN TGT.SER_NUM
+             END    AS SER_NUM
+            <!-- END 2017/12/15 [QC#22852,ADD] -->
+            ,TGT.MACH_MDSE_CD
+            ,TGT.RTL_WH_CD
+            ,TGT.RMNF_WIP_AMT
+            ,TGT.ORIG_RTL_WH_CD
+            ,TGT.RWS_NUM
+            ,TGT.WRK_ORD_NUM AS WRK_ORD_NUM
+            ,TGT.CPO_DTL_LINE_NUM
+            ,TGT.CPO_DTL_LINE_SUB_NUM
+            ,TGT.PO_ORD_NUM
+            ,TGT.PO_ORD_DTL_LINE_NUM
+            ,TGT.RMA_NUM
+            ,TGT.RMA_LINE_NUM
+            ,TGT.RMA_LINE_SUB_NUM
+            ,TGT.TRNSF_SHIP_COST_AMT    
+        FROM  
+            TARGET_TBL TGT
+           <!-- START 2017/12/15 [QC#22852,DEL] -->
+           <!-- ,(SELECT 
+                 TGT.SVC_CONFIG_MSTR_PK
+                ,MAX(TGT.SER_NUM) MAX_SER
+            FROM TARGET_TBL TGT
+            GROUP BY TGT.SVC_CONFIG_MSTR_PK
+            ) SER_FLG
+        WHERE TGT.SVC_CONFIG_MSTR_PK = SER_FLG.SVC_CONFIG_MSTR_PK (+) -->
+            <!-- END 2017/12/15 [QC#22852,DEL] -->
+      -- Kit and Unkit
+      UNION ALL
+      SELECT
+          ITX.GLBL_CMPY_CD                  AS GLBL_CMPY_CD,
+          ITX.INVTY_TRX_DT                  AS INVTY_TRX_DT,
+          ITX.INVTY_TRX_PK                  AS INVTY_TRX_PK,
+          ITX.SYS_SRC_CD                    AS SYS_SRC_CD,
+          ITX.TRX_CD                        AS TRX_CD,
+          ITX.TRX_RSN_CD                    AS TRX_RSN_CD,
+          ITX.BILL_TO_CUST_CD               AS BILL_TO_CUST_CD,
+          ITX.SELL_TO_CUST_CD               AS SELL_TO_CUST_CD,
+          ITX.SHIP_TO_CUST_CD               AS SHIP_TO_CUST_CD,
+          ITX.MDSE_CD                       AS MDSE_CD,
+          ITX.INVTY_LOC_CD                  AS INVTY_LOC_CD,
+          ITX.TOC_CD                        AS TOC_CD,
+          ITX.VND_CD                        AS VND_CD,
+          ITX.CCY_CD                        AS CCY_CD,
+          ITX.INVTY_TRX_QTY                 AS INVTY_TRX_QTY,
+          ITX.UNIT_COST_AMT                 AS UNIT_COST_AMT,
+          ITX.SHIP_COST_AMT                 AS SHIP_COST_AMT,
+          ITX.COA_ACCT_CD                   AS COA_ACCT_CD,
+          NVL(ITX_P.COA_PROD_CD, ITX.COA_PROD_CD)    AS COA_PROD_CD,    -- product code of components should be same as kit item
+          NVL(MDSE_PARENT.COA_MDSE_TP_CD, MDSE_CHILD.COA_MDSE_TP_CD) AS EXP_PROJ_CD,
+          ITX.COA_BR_CD                     AS COA_BR_CD,
+<!-- START 2022/09/05 [QC#59131,MOD] -->
+          <!--ITX.COA_CC_CD                     AS COA_CC_CD, -->
+          NVL(MDSE_PARENT.COA_CC_CD, MDSE_CHILD.COA_CC_CD) AS COA_CC_CD,
+<!-- END 2022/09/05 [QC#59131,MOD] -->
+          ITX.COA_CH_CD                     AS COA_CH_CD,
+          ITX.CPO_ORD_NUM                   AS CPO_ORD_NUM,
+          ITX.SO_NUM                        AS SO_NUM,
+          ITX.INV_NUM                       AS INV_NUM,
+                                            
+          <!-- added for CSA from here -->
+          ITX.INVTY_TRX_SLP_NUM             AS INVTY_TRX_SLP_NUM,
+          ITX.INVTY_TRX_REF_NUM             AS INVTY_TRX_REF_NUM,
+          ITX.INVTY_ORD_NUM                 AS INVTY_ORD_NUM,
+          ITX.INVTY_ORD_LINE_NUM            AS INVTY_ORD_LINE_NUM,
+          ITX.SHIP_SLS_AMT                  AS SHIP_FROM_AMT,
+          ITX.SHIP_COST_AMT                 AS SHIP_FROM_UNIT_COST_AMT,
+          0                                 AS PRCH_PRC_AMT,
+          NULL                              AS LINK_CMPY,
+          NULL                              AS LINK_BR,
+          NULL                              AS LINK_CC,
+          NULL                              AS LINK_ACCT,
+          NULL                              AS LINK_PROD,
+          NULL                              AS LINK_CH,
+          NULL                              AS LINK_AFFL,
+          NULL                              AS LINK_PROJ,
+          NULL                              AS LINK_EXTN,
+          0                                 AS SVC_MACH_MSTR_PK,   -- FSR
+          NULL                              AS FIN_BR_CD,
+          NULL                              AS SER_NUM,
+          NULL                              AS MACH_MDSE_CD,
+          ITX.RTL_WH_CD                     AS RTL_WH_CD,
+          0                                 AS RMNF_WIP_AMT,
+          NULL                              AS ORIG_RTL_WH_CD,
+          ITX.RWS_NUM                       AS RWS_NUM,
+          ITX.WRK_ORD_NUM                   AS WRK_ORD_NUM,
+          ITX.CPO_DTL_LINE_NUM              AS CPO_DTL_LINE_NUM,
+          ITX.CPO_DTL_LINE_SUB_NUM          AS CPO_DTL_LINE_SUB_NUM,
+          ITX.PO_ORD_NUM                    AS PO_ORD_NUM,
+          ITX.PO_ORD_DTL_LINE_NUM           AS PO_ORD_DTL_LINE_NUM,
+          ITX.RMA_NUM                       AS RMA_NUM,
+          ITX.RMA_LINE_NUM                  AS RMA_LINE_NUM,
+          ITX.RMA_LINE_SUB_NUM              AS RMA_LINE_SUB_NUM,
+          <!-- START 2016/08/30 [QC#13896,ADD] -->
+          0                                 AS TRNSF_SHIP_COST_AMT
+          <!-- END 2016/08/30 [QC#13896,ADD] -->
+        FROM
+            -- child
+            (SELECT IT.*
+                   ,RH.SCE_ORD_TP_CD
+                   <!-- start 2017/01/03 QC#16819 Change DS_INVTY_LOC_V to RTL_SWH -->
+                   ,RS.RTL_WH_CD
+                   <!-- end 2017/01/03 -->
+               FROM INVTY_TRX          IT
+                   ,RWS_HDR            RH
+                   <!-- start 2017/01/03 QC#16819 Change DS_INVTY_LOC_V to RTL_SWH -->
+                   <!-- ,DS_INVTY_LOC_V     ILV -->
+                   , DS_INVTY_LOC_V           RS
+                   <!-- end 2017/01/03 -->
+              WHERE IT.EZCANCELFLAG             = '0'
+                AND IT.GLBL_CMPY_CD             = #glblCmpyCd#
+                AND IT.EZCANCELFLAG             = RH.EZCANCELFLAG(+)
+                AND IT.GLBL_CMPY_CD             = RH.GLBL_CMPY_CD(+)
+                AND IT.RWS_NUM                  = RH.RWS_NUM(+)
+                <!-- start 2017/01/03 QC#16819 Change DS_INVTY_LOC_V to RTL_SWH -->
+                AND IT.EZCANCELFLAG             = RS.EZCANCELFLAG(+)
+                AND IT.GLBL_CMPY_CD             = RS.GLBL_CMPY_CD(+)
+                AND IT.INVTY_LOC_CD             = RS.INVTY_LOC_CD(+)
+                <!-- end 2017/01/03 -->
+        
+                
+                AND ((IT.TRX_CD                 = #trxKit#
+                AND IT.TRX_RSN_CD               = #trxRsnKitOut#
+                AND RH.SCE_ORD_TP_CD            = #kitOrdTp#)
+                OR (IT.TRX_CD                   = #trxKit#
+                AND IT.TRX_RSN_CD               = #trxRsnKitIn#
+                AND RH.SCE_ORD_TP_CD            = #unkitOrdTp#))
+                
+                AND IT.INVTY_TRX_DT             LIKE #thisMonth#
+             ) ITX
+             -- parent
+            ,(SELECT IT.INVTY_TRX_DT
+                    ,IT.WRK_ORD_NUM
+                    ,MAX(IT.COA_PROD_CD)  AS  COA_PROD_CD
+                    ,MAX(IT.MDSE_CD) AS MDSE_CD
+               FROM INVTY_TRX    IT
+                   ,RWS_HDR      RH
+              WHERE IT.EZCANCELFLAG = '0'
+                AND IT.GLBL_CMPY_CD = #glblCmpyCd#
+                AND IT.EZCANCELFLAG             = RH.EZCANCELFLAG(+)
+                AND IT.GLBL_CMPY_CD             = RH.GLBL_CMPY_CD(+)
+                AND IT.RWS_NUM                  = RH.RWS_NUM(+)
+                
+                AND ((IT.TRX_CD                    = #trxKit#
+                AND IT.TRX_RSN_CD                  = #trxRsnKitOut#
+                AND RH.SCE_ORD_TP_CD               = #unkitOrdTp#)
+                OR (IT.TRX_CD                      = #trxKit#
+                AND IT.TRX_RSN_CD                  = #trxRsnKitIn#
+                AND RH.SCE_ORD_TP_CD               = #kitOrdTp#))
+                
+                AND IT.INVTY_TRX_DT LIKE #thisMonth#
+           GROUP BY IT.INVTY_TRX_DT,
+                    IT.WRK_ORD_NUM
+             ) ITX_P 
+            ,(SELECT TRX_CD,
+                    TRX_RSN_CD
+               FROM AJE_PTRN
+              WHERE EZCANCELFLAG           = '0'
+                AND GLBL_CMPY_CD           = #glblCmpyCd#
+             GROUP BY TRX_CD, TRX_RSN_CD
+             ) AP
+            ,MDSE_DLY_SNAP_SHOT MDSE_CHILD
+            ,MDSE_DLY_SNAP_SHOT MDSE_PARENT
+        WHERE
+            AP.TRX_CD                     = ITX.TRX_CD
+        AND AP.TRX_RSN_CD                 = ITX.TRX_RSN_CD
+        AND ITX.INVTY_TRX_DT              = ITX_P.INVTY_TRX_DT(+)
+        AND ITX.WRK_ORD_NUM               = ITX_P.WRK_ORD_NUM(+)
+        AND NOT EXISTS 
+        (
+            SELECT '*'
+            FROM 
+                AJE_INTFC_CTRL           AIC,
+                AJE_INVTY_INTFC          AIIF
+            WHERE
+                AIC.EZCANCELFLAG        = '0'
+            AND AIIF.EZCANCELFLAG       = '0'
+            AND AIC.GLBL_CMPY_CD        = #glblCmpyCd#
+            AND AIC.AJE_INTFC_TP_CD     = #ajeIntfcTpCd#
+            AND AIC.JRNL_CPLT_FLG       = #jrnlCpltFlg#
+            AND AIC.GLBL_CMPY_CD        = AIIF.GLBL_CMPY_CD
+            AND AIC.AJE_INTFC_PK        = AIIF.AJE_INVTY_INTFC_PK
+            AND AIIF.GL_DT              LIKE #thisMonth#
+            AND AIIF.GLBL_CMPY_CD       = ITX.GLBL_CMPY_CD
+            AND AIIF.INVTY_TRX_PK       = ITX.INVTY_TRX_PK
+        )
+        AND MDSE_CHILD.GLBL_CMPY_CD(+)    = #glblCmpyCd#
+        AND ITX.MDSE_CD                   = MDSE_CHILD.MDSE_CD(+)
+        AND MDSE_CHILD.LTST_REC_FLG(+)    = #ltstRecFlg#
+        AND MDSE_CHILD.EZCANCELFLAG(+)    = '0'
+        AND MDSE_PARENT.GLBL_CMPY_CD(+)   = #glblCmpyCd#
+        AND ITX_P.MDSE_CD                 = MDSE_PARENT.MDSE_CD(+)
+        AND MDSE_PARENT.LTST_REC_FLG(+)   = #ltstRecFlg#
+        AND MDSE_PARENT.EZCANCELFLAG(+)   = '0'
+        ORDER BY INVTY_TRX_PK 
+    </statement>
+
+<!-- START 2017/05/25 [QC#8316,ADD] -->
+<!-- Copied from NFAB104001.xml -->
+    <statement id="getStdCcyInfo" parameterClass="Map" resultClass="Map">
+    SELECT CCY.CCY_CD
+          ,CCY.AFT_DECL_PNT_DIGIT_NUM
+      FROM GLBL_CMPY GC
+          ,CCY       CCY
+     WHERE GC.EZCANCELFLAG   = '0'
+       AND GC.GLBL_CMPY_CD   = #glblCmpyCd#
+       AND CCY.EZCANCELFLAG  = '0'
+       AND GC.GLBL_CMPY_CD   = CCY.GLBL_CMPY_CD
+       AND GC.STD_CCY_CD  = CCY.CCY_CD
+    </statement>
+
+    <statement id="getTargetData" parameterClass="Map" resultMap="result.InvtySlsCrDist">
+    
+      SELECT
+             AII.GLBL_CMPY_CD
+            ,AII.AJE_INVTY_INTFC_PK
+            ,AII.GL_DT
+            ,AII.INVTY_TRX_PK
+            ,AII.SYS_SRC_CD
+            ,AII.TRX_CD
+            ,AII.TRX_RSN_CD
+            ,AII.INV_INVTY_IND_TP_CD
+            ,AII.BILL_TO_CUST_CD
+            ,AII.SELL_TO_CUST_CD
+            ,AII.SHIP_TO_CUST_CD
+            ,AII.INV_NUM
+            ,AII.CPO_ORD_NUM
+            ,AII.SO_NUM
+            ,AII.MDSE_CD
+            ,AII.MDSE_OR_PRT_CD
+            ,AII.INVTY_LOC_CD
+            ,CSC.SLS_REP_TOC_CD  AS TOC_CD
+            ,AII.VND_CD
+            ,AII.CCY_CD
+            ,AII.INVTY_TRX_QTY
+            ,AII.UNIT_COST_AMT
+            ,AII.SHIP_COST_AMT
+            ,AII.DEPC_AMT
+            ,AII.COA_ACCT_CD
+            ,AII.COA_PROD_CD
+            ,AII.EXP_PROJ_CD
+            ,AII.COA_BR_CD
+            ,AII.COA_CC_CD
+            ,AII.COA_CH_CD
+            ,AII.AJE_INTFC_CMNT_TXT
+            ,AII.DS_ACCT_NUM
+            ,AII.INVTY_TRX_SLP_NUM
+            ,AII.INVTY_TRX_REF_NUM
+            ,AII.INVTY_ORD_NUM
+            ,AII.INVTY_ORD_LINE_NUM
+            ,AII.RWS_NUM
+            ,AII.WRK_ORD_NUM
+            ,AII.CPO_DTL_LINE_NUM
+            ,AII.CPO_DTL_LINE_SUB_NUM
+            ,AII.DR_INVTY_ORD_CMPY_CD
+            ,AII.DR_INVTY_ORD_BR_CD
+            ,AII.DR_INVTY_ORD_CC_CD
+            ,AII.DR_INVTY_ORD_ACCT_CD
+            ,AII.DR_INVTY_ORD_PROD_CD
+            ,AII.DR_INVTY_ORD_CH_CD
+            ,AII.DR_INVTY_ORD_AFFL_CD
+            ,AII.DR_INVTY_ORD_PROJ_CD
+            ,AII.DR_INVTY_ORD_EXTN_CD
+            ,AII.CR_INVTY_ORD_CMPY_CD
+            ,AII.CR_INVTY_ORD_BR_CD
+            ,AII.CR_INVTY_ORD_CC_CD
+            ,AII.CR_INVTY_ORD_ACCT_CD
+            ,AII.CR_INVTY_ORD_PROD_CD
+            ,AII.CR_INVTY_ORD_CH_CD
+            ,AII.CR_INVTY_ORD_AFFL_CD
+            ,AII.CR_INVTY_ORD_PROJ_CD
+            ,AII.CR_INVTY_ORD_EXTN_CD
+            ,AII.PRCH_PRC_AMT
+            ,AII.SHIP_FROM_UNIT_COST_AMT
+            ,AII.SHIP_FROM_AMT
+            ,AII.RMNF_WIP_AMT
+            ,AII.SVC_MACH_MSTR_PK
+            ,AII.MACH_MDSE_CD
+            ,AII.FIN_BR_CD
+            ,AII.SER_NUM
+            ,AII.RTL_WH_CD
+            ,AII.ORIG_RTL_WH_CD
+            ,AII.RMNF_WIP_CPLT_FLG
+            ,AII.PO_ORD_NUM
+            ,AII.PO_ORD_DTL_LINE_NUM
+            ,AII.RMA_NUM
+            ,AII.RMA_LINE_NUM
+            ,AII.RMA_LINE_SUB_NUM
+            ,CSC.DS_CPO_SLS_CR_PK
+            ,CSC.SLS_REP_CR_PCT
+            ,CSC.SLS_CR_QUOT_FLG
+            ,ROUND((AII.SHIP_COST_AMT * NVL(CSC.SLS_REP_CR_PCT, 0)) / 100, #decPnt#) AS NEW_SHIP_COST_AMT
+            ,ROUND((AII.SHIP_FROM_AMT * NVL(CSC.SLS_REP_CR_PCT, 0)) / 100, #decPnt#) AS NEW_SHIP_FROM_COST_AMT
+        FROM AJE_INVTY_INTFC    AII
+            ,CPO_DTL            CPD
+            ,DS_CPO_SLS_CR      CSC
+            
+      WHERE AII.EZCANCELFLAG         = '0'
+        AND AII.GLBL_CMPY_CD         = #glblCmpyCd#
+        AND AII.SLS_CR_SPL_CPLT_FLG  = #flgN#
+        AND AII.EZCANCELFLAG         = CPD.EZCANCELFLAG
+        AND AII.GLBL_CMPY_CD         = CPD.GLBL_CMPY_CD
+        <!-- start QC#8883 If RMA_NUM is not null, the data should be retrieved from DS_CPO_RTRN_DTL -->
+        AND (CASE WHEN AII.RMA_NUM IS NOT NULL THEN 'NONE' 
+                  ELSE AII.CPO_ORD_NUM END)  = CPD.CPO_ORD_NUM
+        <!-- end 2016/05/24 -->
+        AND AII.CPO_DTL_LINE_NUM     = CPD.CPO_DTL_LINE_NUM
+        AND AII.CPO_DTL_LINE_SUB_NUM = CPD.CPO_DTL_LINE_SUB_NUM
+        AND CPD.EZCANCELFLAG         = CSC.EZCANCELFLAG
+        AND CPD.GLBL_CMPY_CD         = CSC.GLBL_CMPY_CD
+        AND CPD.DS_CPO_CONFIG_PK     = CSC.DS_CPO_CONFIG_PK
+        AND CSC.SLS_CR_QUOT_FLG      = #flgY#
+        AND CSC.SLS_REP_CR_PCT       IS NOT NULL
+     UNION ALL
+      -- For Return
+      SELECT
+             AII.GLBL_CMPY_CD
+            ,AII.AJE_INVTY_INTFC_PK
+            ,AII.GL_DT
+            ,AII.INVTY_TRX_PK
+            ,AII.SYS_SRC_CD
+            ,AII.TRX_CD
+            ,AII.TRX_RSN_CD
+            ,AII.INV_INVTY_IND_TP_CD
+            ,AII.BILL_TO_CUST_CD
+            ,AII.SELL_TO_CUST_CD
+            ,AII.SHIP_TO_CUST_CD
+            ,AII.INV_NUM
+            ,AII.CPO_ORD_NUM
+            ,AII.SO_NUM
+            ,AII.MDSE_CD
+            ,AII.MDSE_OR_PRT_CD
+            ,AII.INVTY_LOC_CD
+            ,CSC.SLS_REP_TOC_CD  AS TOC_CD
+            ,AII.VND_CD
+            ,AII.CCY_CD
+            ,AII.INVTY_TRX_QTY
+            ,AII.UNIT_COST_AMT
+            ,AII.SHIP_COST_AMT
+            ,AII.DEPC_AMT
+            ,AII.COA_ACCT_CD
+            ,AII.COA_PROD_CD
+            ,AII.EXP_PROJ_CD
+            ,AII.COA_BR_CD
+            ,AII.COA_CC_CD
+            ,AII.COA_CH_CD
+            ,AII.AJE_INTFC_CMNT_TXT
+            ,AII.DS_ACCT_NUM
+            ,AII.INVTY_TRX_SLP_NUM
+            ,AII.INVTY_TRX_REF_NUM
+            ,AII.INVTY_ORD_NUM
+            ,AII.INVTY_ORD_LINE_NUM
+            ,AII.RWS_NUM
+            ,AII.WRK_ORD_NUM
+            ,AII.CPO_DTL_LINE_NUM
+            ,AII.CPO_DTL_LINE_SUB_NUM
+            ,AII.DR_INVTY_ORD_CMPY_CD
+            ,AII.DR_INVTY_ORD_BR_CD
+            ,AII.DR_INVTY_ORD_CC_CD
+            ,AII.DR_INVTY_ORD_ACCT_CD
+            ,AII.DR_INVTY_ORD_PROD_CD
+            ,AII.DR_INVTY_ORD_CH_CD
+            ,AII.DR_INVTY_ORD_AFFL_CD
+            ,AII.DR_INVTY_ORD_PROJ_CD
+            ,AII.DR_INVTY_ORD_EXTN_CD
+            ,AII.CR_INVTY_ORD_CMPY_CD
+            ,AII.CR_INVTY_ORD_BR_CD
+            ,AII.CR_INVTY_ORD_CC_CD
+            ,AII.CR_INVTY_ORD_ACCT_CD
+            ,AII.CR_INVTY_ORD_PROD_CD
+            ,AII.CR_INVTY_ORD_CH_CD
+            ,AII.CR_INVTY_ORD_AFFL_CD
+            ,AII.CR_INVTY_ORD_PROJ_CD
+            ,AII.CR_INVTY_ORD_EXTN_CD
+            ,AII.PRCH_PRC_AMT
+            ,AII.SHIP_FROM_UNIT_COST_AMT
+            ,AII.SHIP_FROM_AMT
+            ,AII.RMNF_WIP_AMT
+            ,AII.SVC_MACH_MSTR_PK
+            ,AII.MACH_MDSE_CD
+            ,AII.FIN_BR_CD
+            ,AII.SER_NUM
+            ,AII.RTL_WH_CD
+            ,AII.ORIG_RTL_WH_CD
+            ,AII.RMNF_WIP_CPLT_FLG
+            ,AII.PO_ORD_NUM
+            ,AII.PO_ORD_DTL_LINE_NUM
+            ,AII.RMA_NUM
+            ,AII.RMA_LINE_NUM
+            ,AII.RMA_LINE_SUB_NUM
+            ,CSC.DS_CPO_SLS_CR_PK
+            ,CSC.SLS_REP_CR_PCT
+            ,CSC.SLS_CR_QUOT_FLG
+            ,ROUND((AII.SHIP_COST_AMT * NVL(CSC.SLS_REP_CR_PCT, 0)) / 100, #decPnt#) AS NEW_SHIP_COST_AMT
+            ,ROUND((AII.SHIP_FROM_AMT * NVL(CSC.SLS_REP_CR_PCT, 0)) / 100, #decPnt#) AS NEW_SHIP_FROM_COST_AMT
+        FROM AJE_INVTY_INTFC    AII
+            ,DS_CPO_RTRN_DTL    DCD
+            ,DS_CPO_SLS_CR      CSC
+            
+      WHERE AII.EZCANCELFLAG         = '0'
+        AND AII.GLBL_CMPY_CD         = #glblCmpyCd#
+        AND AII.SLS_CR_SPL_CPLT_FLG  = #flgN#
+        AND AII.EZCANCELFLAG         = DCD.EZCANCELFLAG
+        AND AII.GLBL_CMPY_CD         = DCD.GLBL_CMPY_CD
+        AND AII.RMA_NUM              = DCD.CPO_ORD_NUM
+        AND AII.RMA_LINE_NUM         = DCD.DS_CPO_RTRN_LINE_NUM
+        AND AII.RMA_LINE_SUB_NUM     = DCD.DS_CPO_RTRN_LINE_SUB_NUM
+        AND DCD.EZCANCELFLAG         = CSC.EZCANCELFLAG
+        AND DCD.GLBL_CMPY_CD         = CSC.GLBL_CMPY_CD
+        AND DCD.DS_CPO_CONFIG_PK     = CSC.DS_CPO_CONFIG_PK
+        AND CSC.SLS_CR_QUOT_FLG      = #flgY#
+        AND CSC.SLS_REP_CR_PCT       IS NOT NULL   
+     ORDER BY INVTY_TRX_PK
+             ,SLS_REP_CR_PCT
+                   
+    </statement>
+    
+    <resultMap id="result.InvtySlsCrDist" class="InvtySlsCrDist">
+        <result property="glblCmpyCd"                   column="GLBL_CMPY_CD"                  javaType="String"/>
+        <result property="ajeInvtyIntfcPk"              column="AJE_INVTY_INTFC_PK"            javaType="BigDecimal"/>
+        <result property="glDt"                         column="GL_DT"                         javaType="String"/>
+        <result property="invtyTrxPk"                   column="INVTY_TRX_PK"                  javaType="BigDecimal"/>
+        <result property="sysSrcCd"                     column="SYS_SRC_CD"                    javaType="String"/>
+        <result property="trxCd"                        column="TRX_CD"                        javaType="String"/>
+        <result property="trxRsnCd"                     column="TRX_RSN_CD"                    javaType="String"/>
+        <result property="invInvtyIndTpCd"              column="INV_INVTY_IND_TP_CD"           javaType="String"/>
+        <result property="billToCustCd"                 column="BILL_TO_CUST_CD"               javaType="String"/>
+        <result property="sellToCustCd"                 column="SELL_TO_CUST_CD"               javaType="String"/>
+        <result property="shipToCustCd"                 column="SHIP_TO_CUST_CD"               javaType="String"/>
+        <result property="invNum"                       column="INV_NUM"                       javaType="String"/>
+        <result property="cpoOrdNum"                    column="CPO_ORD_NUM"                   javaType="String"/>
+        <result property="soNum"                        column="SO_NUM"                        javaType="String"/>
+        <result property="mdseCd"                       column="MDSE_CD"                       javaType="String"/>
+        <result property="mdseOrPrtCd"                  column="MDSE_OR_PRT_CD"                javaType="String"/>
+        <result property="invtyLocCd"                   column="INVTY_LOC_CD"                  javaType="String"/>
+        <result property="tocCd"                        column="TOC_CD"                        javaType="String"/>
+        <result property="vndCd"                        column="VND_CD"                        javaType="String"/>
+        <result property="ccyCd"                        column="CCY_CD"                        javaType="String"/>
+        <result property="invtyTrxQty"                  column="INVTY_TRX_QTY"                 javaType="BigDecimal"/>
+        <result property="unitCostAmt"                  column="UNIT_COST_AMT"                 javaType="BigDecimal"/>
+        <result property="shipCostAmt"                  column="SHIP_COST_AMT"                 javaType="BigDecimal"/>
+        <result property="depcAmt"                      column="DEPC_AMT"                      javaType="BigDecimal"/>
+        <result property="coaAcctCd"                    column="COA_ACCT_CD"                   javaType="String"/>
+        <result property="coaProdCd"                    column="COA_PROD_CD"                   javaType="String"/>
+        <result property="expProjCd"                    column="EXP_PROJ_CD"                   javaType="String"/>
+        <result property="coaBrCd"                      column="COA_BR_CD"                     javaType="String"/>
+        <result property="coaCcCd"                      column="COA_CC_CD"                     javaType="String"/>
+        <result property="coaChCd"                      column="COA_CH_CD"                     javaType="String"/>
+        <result property="ajeIntfcCmntTxt"              column="AJE_INTFC_CMNT_TXT"            javaType="String"/>
+        <result property="dsAcctNum"                    column="DS_ACCT_NUM"                   javaType="String"/>
+        <result property="invtyTrxSlpNum"               column="INVTY_TRX_SLP_NUM"             javaType="String"/>
+        <result property="invtyTrxRefNum"               column="INVTY_TRX_REF_NUM"             javaType="String"/>
+        <result property="invtyOrdNum"                  column="INVTY_ORD_NUM"                 javaType="String"/>
+        <result property="invtyOrdLineNum"              column="INVTY_ORD_LINE_NUM"            javaType="String"/>
+        <result property="rwsNum"                       column="RWS_NUM"                       javaType="String"/>
+        <result property="wrkOrdNum"                    column="WRK_ORD_NUM"                   javaType="String"/>
+        <result property="cpoDtlLineNum"                column="CPO_DTL_LINE_NUM"              javaType="String"/>
+        <result property="cpoDtlLineSubNum"             column="CPO_DTL_LINE_SUB_NUM"          javaType="String"/>
+        <result property="drInvtyOrdCmpyCd"             column="DR_INVTY_ORD_CMPY_CD"          javaType="String"/>
+        <result property="drInvtyOrdBrCd"               column="DR_INVTY_ORD_BR_CD"            javaType="String"/>
+        <result property="drInvtyOrdCcCd"               column="DR_INVTY_ORD_CC_CD"            javaType="String"/>
+        <result property="drInvtyOrdAcctCd"             column="DR_INVTY_ORD_ACCT_CD"          javaType="String"/>
+        <result property="drInvtyOrdProdCd"             column="DR_INVTY_ORD_PROD_CD"          javaType="String"/>
+        <result property="drInvtyOrdChCd"               column="DR_INVTY_ORD_CH_CD"            javaType="String"/>
+        <result property="drInvtyOrdAfflCd"             column="DR_INVTY_ORD_AFFL_CD"          javaType="String"/>
+        <result property="drInvtyOrdProjCd"             column="DR_INVTY_ORD_PROJ_CD"          javaType="String"/>
+        <result property="drInvtyOrdExtnCd"             column="DR_INVTY_ORD_EXTN_CD"          javaType="String"/>
+        <result property="crInvtyOrdCmpyCd"             column="CR_INVTY_ORD_CMPY_CD"          javaType="String"/>
+        <result property="crInvtyOrdBrCd"               column="CR_INVTY_ORD_BR_CD"            javaType="String"/>
+        <result property="crInvtyOrdCcCd"               column="CR_INVTY_ORD_CC_CD"            javaType="String"/>
+        <result property="crInvtyOrdAcctCd"             column="CR_INVTY_ORD_ACCT_CD"          javaType="String"/>
+        <result property="crInvtyOrdProdCd"             column="CR_INVTY_ORD_PROD_CD"          javaType="String"/>
+        <result property="crInvtyOrdChCd"               column="CR_INVTY_ORD_CH_CD"            javaType="String"/>
+        <result property="crInvtyOrdAfflCd"             column="CR_INVTY_ORD_AFFL_CD"          javaType="String"/>
+        <result property="crInvtyOrdProjCd"             column="CR_INVTY_ORD_PROJ_CD"          javaType="String"/>
+        <result property="crInvtyOrdExtnCd"             column="CR_INVTY_ORD_EXTN_CD"          javaType="String"/>
+        <result property="prchPrcAmt"                   column="PRCH_PRC_AMT"                  javaType="BigDecimal"/>
+        <result property="shipFromUnitCostAmt"          column="SHIP_FROM_UNIT_COST_AMT"       javaType="BigDecimal"/>
+        <result property="shipFromAmt"                  column="SHIP_FROM_AMT"                 javaType="BigDecimal"/>
+        <result property="rmnfWipAmt"                   column="RMNF_WIP_AMT"                  javaType="BigDecimal"/>
+        <result property="svcMachMstrPk"                column="SVC_MACH_MSTR_PK"              javaType="BigDecimal"/>
+        <result property="machMdseCd"                   column="MACH_MDSE_CD"                  javaType="String"/>
+        <result property="finBrCd"                      column="FIN_BR_CD"                     javaType="String"/>
+        <result property="serNum"                       column="SER_NUM"                       javaType="String"/>
+        <result property="rtlWhCd"                      column="RTL_WH_CD"                     javaType="String"/>
+        <result property="origRtlWhCd"                  column="ORIG_RTL_WH_CD"                javaType="String"/>
+        <result property="rmnfWipCpltFlg"               column="RMNF_WIP_CPLT_FLG"             javaType="String"/>
+        <result property="poOrdNum"                     column="PO_ORD_NUM"                    javaType="String"/>
+        <result property="poOrdDtlLineNum"              column="PO_ORD_DTL_LINE_NUM"           javaType="String"/>
+        <result property="rmaNum"                       column="RMA_NUM"                       javaType="String"/>
+        <result property="rmaLineNum"                   column="RMA_LINE_NUM"                  javaType="String"/>
+        <result property="rmaLineSubNum"                column="RMA_LINE_SUB_NUM"              javaType="String"/>
+        <result property="dsCpoSlsCrPk"                 column="DS_CPO_SLS_CR_PK"              javaType="BigDecimal"/>
+        <result property="slsRepCrPct"                  column="SLS_REP_CR_PCT"                javaType="BigDecimal"/>
+        <result property="slsCrQuotFlg"                 column="SLS_CR_QUOT_FLG"               javaType="String"/>
+        <result property="dividedShipCostAmt"           column="NEW_SHIP_COST_AMT"             javaType="BigDecimal"/>
+        <result property="dividedShipFromCostAmt"       column="NEW_SHIP_FROM_COST_AMT"        javaType="BigDecimal"/>
+    </resultMap>
+<!-- END   2017/05/25 [QC#8316,ADD] -->
+
+<!-- START 2019/02/19 [QC#29707,ADD] -->
+    <statement id="getInvtyTrxIntfcRMACredit" parameterClass="Map" resultClass="Map">
+        SELECT
+             AII.GLBL_CMPY_CD
+            ,AII.AJE_INVTY_INTFC_PK
+            ,IL.INV_NUM
+        FROM 
+             AJE_INVTY_INTFC   AII
+            ,INVTY_TRX         ITX
+            ,DS_CPO_RTRN_DTL   CRD
+            ,INV_LINE          IL
+            ,INV               IV
+        WHERE
+            AII.GLBL_CMPY_CD            = #glblCmpyCd#
+        AND AII.RWS_NUM                IS NOT NULL
+        AND AII.EZCANCELFLAG            = '0'
+        AND AII.GLBL_CMPY_CD            = ITX.GLBL_CMPY_CD
+        AND AII.INVTY_TRX_PK            = ITX.INVTY_TRX_PK
+        AND ITX.EZCANCELFLAG            = '0'
+        AND AII.GLBL_CMPY_CD            = CRD.GLBL_CMPY_CD
+        AND AII.CPO_ORD_NUM             = CRD.CPO_ORD_NUM
+        AND AII.CPO_DTL_LINE_NUM        = CRD.DS_CPO_RTRN_LINE_NUM
+        AND AII.CPO_DTL_LINE_SUB_NUM    = CRD.DS_CPO_RTRN_LINE_SUB_NUM
+        AND CRD.EZCANCELFLAG            = '0'
+        AND AII.GLBL_CMPY_CD            = IL.GLBL_CMPY_CD
+        AND AII.CPO_ORD_NUM             = IL.CPO_ORD_NUM
+        AND AII.CPO_DTL_LINE_NUM        = IL.CPO_DTL_LINE_NUM
+        AND AII.CPO_DTL_LINE_SUB_NUM    = IL.CPO_DTL_LINE_SUB_NUM
+        AND IL.EZCANCELFLAG             = '0'
+        AND IL.GLBL_CMPY_CD             = IV.GLBL_CMPY_CD
+        AND IL.INV_NUM                  = IV.INV_NUM
+        <!-- 2019/03/26 QC#30946 Add Start -->
+        AND IV.INV_TP_CD                = #invTpCr#
+        <!-- 2019/03/26 QC#30946 Add End -->
+        AND IV.EZCANCELFLAG             = '0'
+        AND ITX.INVTY_TRX_DT            = IV.INV_DT
+        AND NOT EXISTS 
+        (
+            SELECT '*'
+            FROM AJE_INTFC_CTRL      AIC
+           WHERE AIC.EZCANCELFLAG    = '0'
+             AND AIC.GLBL_CMPY_CD    = #glblCmpyCd#
+             AND AIC.AJE_INTFC_TP_CD = #ajeIntfcTpCd#
+             AND AIC.JRNL_CPLT_FLG   = #jrnlCpltFlg#
+             AND AIC.GLBL_CMPY_CD    = AII.GLBL_CMPY_CD
+             AND AIC.AJE_INTFC_PK    = AII.AJE_INVTY_INTFC_PK
+        )
+        ORDER BY AJE_INVTY_INTFC_PK
+    </statement>
+<!-- END   2019/02/19 [QC#29707,ADD] -->
+</sqlMap>

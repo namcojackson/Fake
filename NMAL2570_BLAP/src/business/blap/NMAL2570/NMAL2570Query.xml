@@ -1,0 +1,204 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NMAL2570Query">
+
+    <typeAlias alias="NMAL2570CMsg"      type="business.blap.NMAL2570.NMAL2570CMsg"/>
+    <typeAlias alias="NMAL2570_ASMsg"    type="business.blap.NMAL2570.NMAL2570_ASMsg"/>
+
+    <statement id="getResource" parameterClass="Map" resultMap="result.getContact">
+    SELECT
+        *
+    FROM
+        (SELECT
+            DISTINCT
+             PSN.PSN_CD
+            ,TP.PSN_TP_CD
+            ,TP.PSN_TP_NM
+            ,PSN.PSN_LAST_NM
+            ,PSN.PSN_FIRST_NM
+            ,PSN.JOB_TTL_CD
+            ,PSN.HR_TTL_NM
+            ,NVL(PSN.JOB_TTL_CD,'') || ' ' || NVL(PSN.HR_TTL_NM,'') AS JOB_TTL_NM
+            ,PSN.PSN_NUM
+            ,PSN.HR_SUPV_NM
+            ,PSN.EFF_FROM_DT
+            ,PSN.EFF_THRU_DT
+        FROM
+             S21_PSN PSN
+            ,PSN_TP TP
+            ,(
+                SELECT
+                     DISTINCT ASG.PSN_CD
+                    ,RQST.ORG_FUNC_ROLE_TP_CD
+                FROM
+                     ORG_FUNC_ASG ASG
+                    ,ORG_TOC_CHNG_RQST RQST
+               <isNotNull property="trtyStruFlg">
+                    ,ORG_FUNC_ROLE_TP OFR
+               </isNotNull>
+                WHERE
+                    ASG.GLBL_CMPY_CD   =  #glblCmpyCd#
+                AND ASG.GNRN_TP_CD     IN (#gnrnTpCdCurrent#, #gnrnTpCdFuture#)
+                AND ASG.EZCANCELFLAG   =  '0'
+
+                AND ASG.TOC_CD         =  RQST.TOC_CD
+                AND ASG.GLBL_CMPY_CD   =  RQST.GLBL_CMPY_CD
+                AND RQST.RGTN_STS_CD   IN (#rgtnStsCdP01#, #rgtnStsCdP20#)
+                AND RQST.EZCANCELFLAG  =  '0'
+
+               <isNotNull property="trtyStruFlg">
+                AND RQST.ORG_FUNC_ROLE_TP_CD = OFR.ORG_FUNC_ROLE_TP_CD
+                AND RQST.GLBL_CMPY_CD  =  OFR.GLBL_CMPY_CD
+                AND OFR.FIRST_ORG_CD   =  #firstOrgCdSales#
+                AND OFR.EZCANCELFLAG   =  '0'
+                AND OFR.MGR_FLG = 'N'
+               </isNotNull>
+            ) ROLE
+        WHERE
+            PSN.GLBL_CMPY_CD = #glblCmpyCd#
+        AND PSN.EZCANCELFLAG = '0'
+        AND TP.GLBL_CMPY_CD = #glblCmpyCd#
+        AND TP.EZCANCELFLAG = '0'
+        AND PSN.PSN_TP_CD = TP.PSN_TP_CD
+        <!-- QC#5319 -->
+        <isNotNull property="trtyStruFlg">
+        AND PSN.PSN_CD = ROLE.PSN_CD
+        </isNotNull>
+        <isNull property="trtyStruFlg">
+        AND PSN.PSN_CD = ROLE.PSN_CD(+)
+        </isNull>
+        <isNotNull property="cMsg.xxPsnNm_H1">
+        AND
+            (
+                UPPER(PSN.PSN_LAST_NM) LIKE UPPER(#xxPsnNm#)
+            OR  UPPER(PSN.PSN_FIRST_NM) LIKE UPPER(#xxPsnNm#)
+            <!-- QC#6919 -->
+            OR  UPPER(PSN.PSN_FIRST_NM) || ' ' || UPPER(PSN.PSN_LAST_NM) LIKE UPPER(#xxPsnNm#)
+            )
+        </isNotNull>
+        <isNotNull property="cMsg.psnCd_H1">
+        AND PSN.PSN_CD LIKE #psnCd#
+        </isNotNull>
+        <isNotNull property="cMsg.jobTtlCd_H1">
+        AND PSN.JOB_TTL_CD = #jobTtlCd#
+        </isNotNull>
+        <isNotNull property="cMsg.psnNum_H1">
+        AND PSN.PSN_NUM = #psnNum#
+        </isNotNull>
+        <isNotNull property="cMsg.orgFuncRoleTpCd_H1">
+        AND EXISTS(
+                SELECT
+                    1
+                FROM
+                    ORG_FUNC_ASG ASG
+                    ,ORG_TOC_CHNG_RQST CHNG
+                    ,ORG_FUNC_ROLE_TP ROLE
+                WHERE
+                    ASG.GLBL_CMPY_CD = #glblCmpyCd#
+                AND ASG.EZCANCELFLAG = '0'
+                AND CHNG.GLBL_CMPY_CD = #glblCmpyCd#
+                AND CHNG.EZCANCELFLAG = '0'
+                AND ROLE.GLBL_CMPY_CD = #glblCmpyCd#
+                AND ROLE.EZCANCELFLAG = '0'
+                AND PSN.PSN_CD = ASG.PSN_CD
+                AND ASG.TOC_CD = CHNG.TOC_CD
+                AND CHNG.ORG_FUNC_ROLE_TP_CD = ROLE.ORG_FUNC_ROLE_TP_CD
+                AND ROLE.ORG_FUNC_ROLE_TP_CD = #orgFuncRoleTpCd#
+                AND ASG.GNRN_TP_CD = #gnrnTpCdCurrent#
+                AND CHNG.RGTN_STS_CD = #rgtnStsCdP20#
+            )
+        </isNotNull>
+        <isNotNull property="cMsg.orgNm_H1">
+        AND EXISTS(
+                SELECT
+                    1
+                FROM
+                    DS_ORG_RESRC_RELN RELN
+                   ,DS_ORG_UNIT ORG
+                WHERE
+                    RELN.GLBL_CMPY_CD = #glblCmpyCd#
+                AND RELN.EZCANCELFLAG = '0'
+                AND RELN.EFF_FROM_DT &lt;= #slsDt#
+                AND (RELN.EFF_THRU_DT &gt;= #slsDt# OR RELN.EFF_THRU_DT IS NULL)
+                AND RELN.PSN_CD = PSN.PSN_CD
+                AND RELN.ORG_CD = ORG.ORG_CD
+                AND ORG.GNRN_TP_CD = #gnrnTpCdCurrent#
+                AND ORG.ORG_NM LIKE #orgNm#
+            )
+        </isNotNull>
+        <isNotNull property="effFromDtFrom">
+        AND PSN.EFF_FROM_DT &gt;= #effFromDtFrom#
+        </isNotNull>
+        <isNotNull property="effFromDtTo">
+        AND PSN.EFF_FROM_DT &lt;= #effFromDtTo#
+        </isNotNull>
+        <isNotNull property="effThruDtFrom">
+        AND NVL(PSN.EFF_THRU_DT, #highValDt#) &gt;= #effThruDtFrom#
+        </isNotNull>
+        <isNotNull property="effThruDtTo">
+        AND NVL(PSN.EFF_THRU_DT, #highValDt#) &lt;= #effThruDtTo#
+        </isNotNull>
+        <isNotNull property="hasEmlAddrFlg">
+        AND PSN.EML_ADDR IS NOT NULL
+        </isNotNull>
+        ORDER BY
+            PSN.PSN_FIRST_NM , PSN.PSN_LAST_NM)
+    WHERE
+        ROWNUM &lt;= #rowNum#
+    </statement>
+
+    <resultMap id="result.getContact"  class="NMAL2570_ASMsg">
+        <result property="psnNum_A1"         column="PSN_NUM"              javaType="EZDSStringItem"/>
+        <result property="psnTpCd_A1"        column="PSN_TP_CD"            javaType="EZDSStringItem"/>
+        <result property="psnTpNm_A1"        column="PSN_TP_NM"            javaType="EZDSStringItem"/>
+        <result property="psnFirstNm_A1"     column="PSN_FIRST_NM"         javaType="EZDSStringItem"/>
+        <result property="psnLastNm_A1"      column="PSN_LAST_NM"          javaType="EZDSStringItem"/>
+        <result property="jobTtlCd_A1"       column="JOB_TTL_CD"           javaType="EZDSStringItem"/>
+        <result property="hrTtlNm_A1"        column="HR_TTL_NM"            javaType="EZDSStringItem"/>
+        <result property="jobTtlNm_A1"       column="JOB_TTL_NM"           javaType="EZDSStringItem"/>
+        <result property="psnCd_A1"          column="PSN_CD"               javaType="EZDSStringItem"/>
+        <result property="hrSupvNm_A1"       column="HR_SUPV_NM"           javaType="EZDSStringItem"/>
+        <result property="effFromDt_A1"      column="EFF_FROM_DT"          javaType="EZDCDateItem"/>
+        <result property="effThruDt_A1"      column="EFF_THRU_DT"          javaType="EZDCDateItem"/>
+    </resultMap>
+
+    <statement id="getRoleName" parameterClass="Map" resultClass="Map">
+    SELECT
+        ORG_FUNC_ROLE_TP_CD AS ORG_FUNC_ROLE_TP_CD
+        ,ORG_FUNC_ROLE_TP_NM AS ORG_FUNC_ROLE_TP_NM
+    FROM
+        ORG_FUNC_ROLE_TP ROLE
+    WHERE
+        ROLE.GLBL_CMPY_CD = #glblCmpyCd#
+    AND ROLE.EZCANCELFLAG = '0'
+    </statement>
+    
+    <!-- QC#7781 -->
+    <statement id="getPerson" parameterClass="Map" resultClass="Map">
+    SELECT
+         DISTINCT
+         PSN.PSN_CD
+        ,TP.PSN_TP_CD
+        ,TP.PSN_TP_NM
+        ,PSN.PSN_LAST_NM
+        ,PSN.PSN_FIRST_NM
+        ,PSN.JOB_TTL_CD
+        ,PSN.HR_TTL_NM
+        ,NVL(PSN.JOB_TTL_CD,'') || ' ' || NVL(PSN.HR_TTL_NM,'') AS JOB_TTL_NM
+        ,PSN.PSN_NUM
+        ,PSN.HR_SUPV_NM
+        ,PSN.EFF_FROM_DT
+        ,PSN.EFF_THRU_DT
+    FROM
+         S21_PSN PSN
+        ,PSN_TP TP
+    WHERE
+         PSN.GLBL_CMPY_CD = #glblCmpyCd#
+     AND PSN.EZCANCELFLAG = '0'
+     AND TP.GLBL_CMPY_CD = #glblCmpyCd#
+     AND TP.EZCANCELFLAG = '0'
+     AND PSN.PSN_TP_CD = TP.PSN_TP_CD
+     AND PSN.PSN_CD = #psnCd#
+    </statement>
+
+</sqlMap>

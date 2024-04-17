@@ -1,0 +1,884 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<sqlMap namespace="NLCB803001">
+
+<!-- #################### Type Alias #################### -->
+
+<!-- #################### Statement #################### -->
+
+   	<statement id="getAjeMdseReclsIntfcListNotJrnlized" parameterClass="Map" resultClass="Map">
+        SELECT AMRI.GLBL_CMPY_CD            AS GLBL_CMPY_CD,
+               AMRI.AJE_MDSE_RECLS_INTFC_PK AS AJE_MDSE_RECLS_INTFC_PK
+          FROM AJE_MDSE_RECLS_INTFC AMRI
+         WHERE AMRI.EZCANCELFLAG   = '0'
+           AND AMRI.GLBL_CMPY_CD   = #glblCmpyCd#
+           AND AMRI.GL_DT          = #glDt#
+           AND AMRI.TRX_RSN_CD     = #trxRsnCdRcls#
+           AND NOT EXISTS (
+                           SELECT '*'
+                             FROM AJE_INTFC_CTRL      AIC
+                            WHERE AIC.EZCANCELFLAG    = '0'
+                              AND AIC.GLBL_CMPY_CD    = #glblCmpyCd#
+                              AND AIC.AJE_INTFC_TP_CD = #ajeIntfcTpCd#
+                              AND AIC.JRNL_CPLT_FLG   = #jrnlCpltFlg#
+                              AND AIC.TRX_RSN_CD      = #trxRsnCdRcls#
+                              AND AIC.GLBL_CMPY_CD    = AMRI.GLBL_CMPY_CD
+                              AND AIC.AJE_INTFC_PK    = AMRI.AJE_MDSE_RECLS_INTFC_PK
+                              )
+         UNION ALL
+         SELECT AMRI.GLBL_CMPY_CD           AS GLBL_CMPY_CD,
+               AMRI.AJE_MDSE_RECLS_INTFC_PK AS AJE_MDSE_RECLS_INTFC_PK
+          FROM AJE_MDSE_RECLS_INTFC AMRI
+         WHERE AMRI.EZCANCELFLAG   = '0'
+           AND AMRI.GLBL_CMPY_CD   = #glblCmpyCd#
+           AND AMRI.GL_DT          = #glDt#
+           AND AMRI.TRX_RSN_CD     = #trxRsnCdRvsl#
+           AND NOT EXISTS (
+                           SELECT '*'
+                             FROM AJE_INTFC_CTRL      AIC
+                            WHERE AIC.EZCANCELFLAG    = '0'
+                              AND AIC.GLBL_CMPY_CD    = #glblCmpyCd#
+                              AND AIC.AJE_INTFC_TP_CD = #ajeIntfcTpCd#
+                              AND AIC.JRNL_CPLT_FLG   = #jrnlCpltFlg#
+                              AND AIC.TRX_RSN_CD      = #trxRsnCdRvsl#
+                              AND AIC.GLBL_CMPY_CD    = AMRI.GLBL_CMPY_CD
+                              AND AIC.AJE_INTFC_PK    = AMRI.AJE_MDSE_RECLS_INTFC_PK
+                              )                     
+    </statement>
+    
+    <statement id="getMdseReclsNotJrnlized" parameterClass="Map" resultClass="Map">
+      -- for reclass
+      
+      SELECT  MAX(W.GLBL_CMPY_CD)                   AS GLBL_CMPY_CD
+             ,NULL                                  AS INVTY_SNAP_SHOT_PK
+             ,#glDt#                                AS INVTY_SNAP_SHOT_DT
+             ,NULL                                  AS MDSE_CD
+             ,SUM(W.INVTY_QTY)                      AS INVTY_QTY
+             ,W.RTL_WH_CD                           AS RTL_WH_CD
+             ,NULL                                  AS COA_BR_CD
+             ,W.COA_CC_CD                           AS COA_CC_CD
+             ,NULL                                  AS COA_ACCT_CD
+             ,W.COA_PROD_CD                         AS COA_PROD_CD
+             ,NULL                                  AS COA_CH_CD
+             ,NULL                                  AS COA_AFFL_CD
+             ,W.COA_PROJ_CD                         AS COA_PROJ_CD
+             ,NULL                                  AS COA_EXTN_CD
+             ,SUM(W.RECLS_AMT)                      AS RECLS_AMT
+             ,W.COST_CCY_CD                         AS COST_CCY_CD
+             <!-- start 2016/12/28 QC#16819 vendor code won't be set in MDSE master. -->
+             ,NVL(W.VND_CD, 'NONE')                                  AS VND_CD
+             <!-- end 2016/12/28 -->
+             ,W.LOC_STS_CD                          AS LOC_STS_CD
+             ,W.INVTY_LOC_CD                        AS INVTY_LOC_CD
+             ,W.RTL_SWH_CD                          AS RTL_SWH_CD
+             ,MAX(W.MDSE_COST_TP_CD)                AS MDSE_COST_TP_CD
+             ,MAX(W.MDSE_INVTY_COST_PCT)            AS MDSE_INVTY_COST_PCT
+             ,#trxRsnCdRcls#                        AS TRX_RSN_CD
+        FROM
+            (   SELECT  MAX(ISS.GLBL_CMPY_CD)                AS GLBL_CMPY_CD
+                       ,NULL                                 AS INVTY_SNAP_SHOT_PK
+                       ,#glDt#                               AS INVTY_SNAP_SHOT_DT
+                       ,ISS.MDSE_CD                          AS MDSE_CD
+                       ,SUM(ISS.INVTY_QTY)                   AS INVTY_QTY
+                       ,RW.RTL_WH_CD                         AS RTL_WH_CD
+                       ,MAX(MDSE.COA_CC_CD)                  AS COA_CC_CD
+                       ,MAX(MDSE.COA_PROD_CD)                AS COA_PROD_CD
+                       ,MAX(MDSE.COA_MDSE_TP_CD)             AS COA_PROJ_CD 
+                       ,(CASE WHEN NVL(MAX(SWH.MDSE_COST_TP_CD), #stdCost#) = #stdCost#  
+                              THEN ROUND((MAX(MDSE.THIS_MTH_TOT_STD_COST_AMT) * NVL(MAX(SWH.MDSE_INVTY_COST_PCT), 100) / 100), MAX(CCY.AFT_DECL_PNT_DIGIT_NUM)) * SUM(ISS.INVTY_QTY)
+                              ELSE ROUND((MAX(MDSE.ASSET_RECOV_COST_AMT) * NVL(MAX(SWH.MDSE_INVTY_COST_PCT), 100) / 100), MAX(CCY.AFT_DECL_PNT_DIGIT_NUM)) * SUM(ISS.INVTY_QTY) END)  AS RECLS_AMT
+                       ,MAX(MDSE.COST_CCY_CD)                AS COST_CCY_CD
+                       <!-- start 2016/12/28 QC#16819 vendor code won't be set in MDSE master. -->
+                       ,AD.VND_CD               AS VND_CD
+                       <!-- end 2016/12/28 -->
+                       ,ISS.LOC_STS_CD                       AS LOC_STS_CD
+                       ,ISS.INVTY_LOC_CD                     AS INVTY_LOC_CD
+                       ,NVL(SWH.RTL_SWH_CD, ISS.INVTY_LOC_CD)       AS RTL_SWH_CD
+                       ,NVL(MAX(SWH.MDSE_COST_TP_CD), #stdCost#)    AS MDSE_COST_TP_CD
+                       ,NVL(MAX(SWH.MDSE_INVTY_COST_PCT), 100)      AS MDSE_INVTY_COST_PCT
+                  FROM  INVTY_SNAP_SHOT_V   ISS
+                       <!-- start 12/28 QC#16819 Change DS_INVTY_LOC_V to RTL_SWH
+                       ,DS_INVTY_LOC_V      ILV
+                       -->
+                       ,RTL_SWH             RS
+                       <!-- end 12/28 QC#16819 -->
+                       ,SWH                 SWH
+                       ,MDSE_DLY_SNAP_SHOT  MDSE
+                       <!-- start 2016/12/28 QC#16819 vendor code won't be set in MDSE master. 
+                       ,VND_DLY_SNAP_SHOT   VND
+                       -->
+                       ,VND_DLY_SNAP_SHOT   VND
+                       ,RTL_WH              RW
+                       ,CCY                 CCY
+                       ,ASL_DTL             AD
+                 WHERE ISS.EZCANCELFLAG               =  '0'
+                   
+                   AND SWH.EZCANCELFLAG(+)            =  '0'
+                   AND MDSE.EZCANCELFLAG              =  '0'
+                   AND RW.EZCANCELFLAG                =  '0'
+                   AND CCY.EZCANCELFLAG               =  '0'
+                   AND AD.EZCANCELFLAG(+)             =  '0'
+                   AND MDSE.LTST_REC_FLG              =  #flgY#
+                   AND ISS.GLBL_CMPY_CD               =  #glblCmpyCd#
+                   AND ISS.INVTY_SNAP_SHOT_DT         =  #glDt#
+                   AND ISS.GLBL_CMPY_CD               =  MDSE.GLBL_CMPY_CD
+                   AND ISS.MDSE_CD                    =  MDSE.MDSE_CD
+                   <!-- start 2016/12/28 QC#16819
+                   AND ILV.EZCANCELFLAG               =  '0'
+                   AND ISS.GLBL_CMPY_CD               =  ILV.GLBL_CMPY_CD
+                   AND ISS.INVTY_LOC_CD               =  ILV.INVTY_LOC_CD
+                   AND ILV.GLBL_CMPY_CD               =  SWH.GLBL_CMPY_CD
+                   AND ILV.RTL_SWH_CD                 =  SWH.RTL_SWH_CD
+                    -->
+                   <!-- start 2016/12/28 QC#16819 -->
+                   AND RS.EZCANCELFLAG(+)             =  '0'
+                   AND ISS.GLBL_CMPY_CD               =  RS.GLBL_CMPY_CD(+)
+                   AND ISS.INVTY_LOC_CD               =  RS.INVTY_LOC_CD(+)
+                   AND RS.GLBL_CMPY_CD                =  SWH.GLBL_CMPY_CD(+)
+                   AND RS.RTL_SWH_CD                  =  SWH.RTL_SWH_CD(+)
+                   <!-- end 2016/12/28 -->
+                   <!-- start 2016/12/28 QC#16819 vendor code won't be set in MDSE master. 
+                   AND VND.EZCANCELFLAG(+)            =  '0'
+                   AND VND.GLBL_CMPY_CD(+)            =  #glblCmpyCd#
+                   AND VND.VND_CD(+)                  =  MDSE.VND_CD
+                   -->
+                   AND VND.EZCANCELFLAG(+)            =  '0'
+                   AND VND.GLBL_CMPY_CD(+)            =  #glblCmpyCd#
+                   AND VND.VND_CD(+)                  =  MDSE.VND_CD
+                   AND RW.GLBL_CMPY_CD                =  #glblCmpyCd#
+                   AND ISS.RTL_WH_CD                  =  RW.RTL_WH_CD
+                   AND MDSE.GLBL_CMPY_CD              =  CCY.GLBL_CMPY_CD
+                   AND MDSE.COST_CCY_CD               =  CCY.CCY_CD
+
+                   AND ISS.MDSE_CD = AD.MDSE_CD(+)
+                   AND AD.EFF_FROM_DT(+) &lt;= #glDt#
+                   AND NVL(AD.EFF_THRU_DT(+), '99991231') &gt;= #glDt#
+                   AND AD.PRIM_SPLY_FLG(+) = 'Y'
+                 GROUP BY ISS.MDSE_CD
+                         ,NVL(SWH.RTL_SWH_CD, ISS.INVTY_LOC_CD)
+                         ,RW.RTL_WH_CD
+                         ,ISS.LOC_STS_CD
+                         ,ISS.INVTY_LOC_CD
+                         ,AD.VND_CD
+              ) W
+          WHERE
+            NOT EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        AJE_INTFC_CTRL AIC,
+                        AJE_MDSE_RECLS_INTFC AMRI
+                    WHERE
+                        AIC.EZCANCELFLAG               = '0'
+                    AND AMRI.EZCANCELFLAG              = '0'
+                    AND AIC.GLBL_CMPY_CD               = #glblCmpyCd#
+                    AND AIC.AJE_INTFC_TP_CD            = #ajeIntfcTpCd#
+                    AND AIC.JRNL_CPLT_FLG              = #jrnlCpltFlg#
+                    AND AIC.TRX_RSN_CD                 = #trxRsnCdRcls#
+                    AND AIC.GLBL_CMPY_CD               = AMRI.GLBL_CMPY_CD
+                    AND AIC.AJE_INTFC_PK               = AMRI.AJE_MDSE_RECLS_INTFC_PK
+                    AND AMRI.INVTY_SNAP_SHOT_DT        = #glDt#
+                    AND W.GLBL_CMPY_CD                 = AMRI.GLBL_CMPY_CD
+                    AND W.INVTY_SNAP_SHOT_DT           = AMRI.INVTY_SNAP_SHOT_DT
+                    AND W.RTL_WH_CD                    = AMRI.RTL_WH_CD
+                    AND W.COA_CC_CD                    = AMRI.COA_CC_CD
+                    AND W.COA_PROD_CD                  = AMRI.COA_PROD_CD
+                    AND W.COA_PROJ_CD                  = AMRI.COA_PROJ_CD
+                    AND W.VND_CD                       = AMRI.VND_CD
+                    AND W.INVTY_LOC_CD                 = AMRI.INVTY_LOC_CD
+                    AND W.LOC_STS_CD                   = AMRI.LOC_STS_CD
+                )
+            GROUP BY
+                 W.RTL_WH_CD
+                ,W.COA_CC_CD
+                ,W.COA_PROD_CD
+                ,W.COA_PROJ_CD
+                ,W.VND_CD
+                ,W.LOC_STS_CD
+                ,W.INVTY_LOC_CD
+                ,W.COST_CCY_CD
+                ,W.RTL_SWH_CD
+                 
+      UNION ALL
+        -- for reversal
+      <!-- START 2018/02/02 QC#22714 MOD -->
+      SELECT  MAX(W.GLBL_CMPY_CD)                   AS GLBL_CMPY_CD
+             ,NULL                                  AS INVTY_SNAP_SHOT_PK
+             ,#glDt#                                AS INVTY_SNAP_SHOT_DT
+             ,NULL                                  AS MDSE_CD
+             ,SUM(W.INVTY_QTY)                      AS INVTY_QTY
+             ,W.RTL_WH_CD                           AS RTL_WH_CD
+             ,NULL                                  AS COA_BR_CD
+             ,W.COA_CC_CD                           AS COA_CC_CD
+             ,NULL                                  AS COA_ACCT_CD
+             ,W.COA_PROD_CD                         AS COA_PROD_CD
+             ,NULL                                  AS COA_CH_CD
+             ,NULL                                  AS COA_AFFL_CD
+             ,W.COA_PROJ_CD                         AS COA_PROJ_CD
+             ,NULL                                  AS COA_EXTN_CD
+             ,SUM(W.RECLS_AMT)                      AS RECLS_AMT
+             ,W.COST_CCY_CD                         AS COST_CCY_CD
+             <!-- start 2016/12/28 QC#16819 vendor code won't be set in MDSE master. -->
+             ,NVL(W.VND_CD, 'NONE')                                  AS VND_CD
+             <!-- end 2016/12/28 -->
+             ,W.LOC_STS_CD                          AS LOC_STS_CD
+             ,W.INVTY_LOC_CD                        AS INVTY_LOC_CD
+             ,W.RTL_SWH_CD                          AS RTL_SWH_CD
+             ,MAX(W.MDSE_COST_TP_CD)                AS MDSE_COST_TP_CD
+             ,MAX(W.MDSE_INVTY_COST_PCT)            AS MDSE_INVTY_COST_PCT
+             ,#trxRsnCdRvsl#                        AS TRX_RSN_CD
+        FROM
+            (   SELECT  MAX(ISS.GLBL_CMPY_CD)                AS GLBL_CMPY_CD
+                       ,NULL                                 AS INVTY_SNAP_SHOT_PK
+                       ,#glDt#                               AS INVTY_SNAP_SHOT_DT
+                       ,ISS.MDSE_CD                          AS MDSE_CD
+                       ,SUM(ISS.INVTY_QTY)                   AS INVTY_QTY
+                       ,RW.RTL_WH_CD                         AS RTL_WH_CD
+                       ,MAX(MDSE.COA_CC_CD)                  AS COA_CC_CD
+                       ,MAX(MDSE.COA_PROD_CD)                AS COA_PROD_CD
+                       ,MAX(MDSE.COA_MDSE_TP_CD)             AS COA_PROJ_CD 
+                       ,(CASE WHEN NVL(MAX(SWH.MDSE_COST_TP_CD), #stdCost#) = #stdCost#  
+                              THEN ROUND((MAX(MDSE.THIS_MTH_TOT_STD_COST_AMT) * NVL(MAX(SWH.MDSE_INVTY_COST_PCT), 100) / 100), MAX(CCY.AFT_DECL_PNT_DIGIT_NUM)) * SUM(ISS.INVTY_QTY)
+                              ELSE ROUND((MAX(MDSE.ASSET_RECOV_COST_AMT) * NVL(MAX(SWH.MDSE_INVTY_COST_PCT), 100) / 100), MAX(CCY.AFT_DECL_PNT_DIGIT_NUM)) * SUM(ISS.INVTY_QTY) END)  AS RECLS_AMT
+                       ,MAX(MDSE.COST_CCY_CD)                AS COST_CCY_CD
+                       ,AD.VND_CD               AS VND_CD
+                       ,ISS.LOC_STS_CD                       AS LOC_STS_CD
+                       ,ISS.INVTY_LOC_CD                     AS INVTY_LOC_CD
+                       ,NVL(SWH.RTL_SWH_CD, ISS.INVTY_LOC_CD)       AS RTL_SWH_CD
+                       ,NVL(MAX(SWH.MDSE_COST_TP_CD), #stdCost#)    AS MDSE_COST_TP_CD
+                       ,NVL(MAX(SWH.MDSE_INVTY_COST_PCT), 100)      AS MDSE_INVTY_COST_PCT
+                  FROM  INVTY_SNAP_SHOT_V   ISS
+                       ,RTL_SWH             RS
+                       ,SWH                 SWH
+                       ,MDSE_DLY_SNAP_SHOT  MDSE
+                       ,VND_DLY_SNAP_SHOT   VND
+                       ,RTL_WH              RW
+                       ,CCY                 CCY
+                       ,ASL_DTL             AD
+                 WHERE ISS.EZCANCELFLAG               =  '0'
+                   AND SWH.EZCANCELFLAG(+)            =  '0'
+                   AND MDSE.EZCANCELFLAG              =  '0'
+                   AND RW.EZCANCELFLAG                =  '0'
+                   AND CCY.EZCANCELFLAG               =  '0'
+                   AND AD.EZCANCELFLAG(+)             =  '0'
+                   AND MDSE.LTST_REC_FLG              =  #flgY#
+                   AND ISS.GLBL_CMPY_CD               =  #glblCmpyCd#
+                   AND ISS.INVTY_SNAP_SHOT_DT         =  #glDt#
+                   AND ISS.GLBL_CMPY_CD               =  MDSE.GLBL_CMPY_CD
+                   AND ISS.MDSE_CD                    =  MDSE.MDSE_CD
+                   AND RS.EZCANCELFLAG(+)             =  '0'
+                   AND ISS.GLBL_CMPY_CD               =  RS.GLBL_CMPY_CD(+)
+                   AND ISS.INVTY_LOC_CD               =  RS.INVTY_LOC_CD(+)
+                   AND RS.GLBL_CMPY_CD                =  SWH.GLBL_CMPY_CD(+)
+                   AND RS.RTL_SWH_CD                  =  SWH.RTL_SWH_CD(+)
+                   AND VND.EZCANCELFLAG(+)            =  '0'
+                   AND VND.GLBL_CMPY_CD(+)            =  #glblCmpyCd#
+                   AND VND.VND_CD(+)                  =  MDSE.VND_CD
+                   AND RW.GLBL_CMPY_CD                =  #glblCmpyCd#
+                   AND ISS.RTL_WH_CD                  =  RW.RTL_WH_CD
+                   AND MDSE.GLBL_CMPY_CD              =  CCY.GLBL_CMPY_CD
+                   AND MDSE.COST_CCY_CD               =  CCY.CCY_CD
+
+                   AND ISS.MDSE_CD = AD.MDSE_CD(+)
+                   AND AD.EFF_FROM_DT(+) &lt;= #glDt#
+                   AND NVL(AD.EFF_THRU_DT(+), '99991231') &gt;= #glDt#
+                   AND AD.PRIM_SPLY_FLG(+) = 'Y'
+                 GROUP BY ISS.MDSE_CD
+                         ,NVL(SWH.RTL_SWH_CD, ISS.INVTY_LOC_CD)
+                         ,RW.RTL_WH_CD
+                         ,ISS.LOC_STS_CD
+                         ,ISS.INVTY_LOC_CD
+                         ,AD.VND_CD
+              ) W
+          WHERE
+            NOT EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        AJE_INTFC_CTRL AIC,
+                        AJE_MDSE_RECLS_INTFC AMRI
+                    WHERE
+                        AIC.EZCANCELFLAG               = '0'
+                    AND AMRI.EZCANCELFLAG              = '0'
+                    AND AIC.GLBL_CMPY_CD               = #glblCmpyCd#
+                    AND AIC.AJE_INTFC_TP_CD            = #ajeIntfcTpCd#
+                    AND AIC.JRNL_CPLT_FLG              = #jrnlCpltFlg#
+                    AND AIC.TRX_RSN_CD                 = #trxRsnCdRcls#
+                    AND AIC.GLBL_CMPY_CD               = AMRI.GLBL_CMPY_CD
+                    AND AIC.AJE_INTFC_PK               = AMRI.AJE_MDSE_RECLS_INTFC_PK
+                    AND AMRI.INVTY_SNAP_SHOT_DT        = #glDt#
+                    AND W.GLBL_CMPY_CD                 = AMRI.GLBL_CMPY_CD
+                    AND W.INVTY_SNAP_SHOT_DT           = AMRI.INVTY_SNAP_SHOT_DT
+                    AND W.RTL_WH_CD                    = AMRI.RTL_WH_CD
+                    AND W.COA_CC_CD                    = AMRI.COA_CC_CD
+                    AND W.COA_PROD_CD                  = AMRI.COA_PROD_CD
+                    AND W.COA_PROJ_CD                  = AMRI.COA_PROJ_CD
+                    AND W.VND_CD                       = AMRI.VND_CD
+                    AND W.INVTY_LOC_CD                 = AMRI.INVTY_LOC_CD
+                    AND W.LOC_STS_CD                   = AMRI.LOC_STS_CD
+                )
+            GROUP BY
+                 W.RTL_WH_CD
+                ,W.COA_CC_CD
+                ,W.COA_PROD_CD
+                ,W.COA_PROJ_CD
+                ,W.VND_CD
+                ,W.LOC_STS_CD
+                ,W.INVTY_LOC_CD
+                ,W.COST_CCY_CD
+                ,W.RTL_SWH_CD
+      <!-- 
+        SELECT  AMRI.GLBL_CMPY_CD               AS GLBL_CMPY_CD
+               ,AMRI.INVTY_SNAP_SHOT_PK         AS INVTY_SNAP_SHOT_PK
+               ,#glDt#                          AS INVTY_SNAP_SHOT_DT
+               ,AMRI.MDSE_CD                    AS MDSE_CD
+               ,AMRI.INVTY_QTY                  AS INVTY_QTY
+               ,AMRI.RTL_WH_CD                  AS RTL_WH_CD
+               ,JE.DR_COA_BR_CD                 AS COA_BR_CD
+               ,JE.DR_COA_CC_CD                 AS COA_CC_CD
+               ,JE.DR_COA_ACCT_CD               AS COA_ACCT_CD
+               ,JE.DR_COA_PROD_CD               AS COA_PROD_CD
+               ,JE.DR_COA_CH_CD                 AS COA_CH_CD
+               ,JE.DR_COA_AFFL_CD               AS COA_AFFL_CD
+               ,JE.DR_COA_PROJ_CD               AS COA_PROJ_CD
+               ,JE.DR_COA_EXTN_CD               AS COA_EXTN_CD
+               ,AMRI.RECLS_AMT                  AS RECLS_AMT
+               ,AMRI.COST_CCY_CD                AS COST_CCY_CD
+               ,AMRI.VND_CD                     AS VND_CD
+               ,AMRI.LOC_STS_CD                 AS LOC_STS_CD
+               ,AMRI.INVTY_LOC_CD               AS INVTY_LOC_CD
+               ,AMRI.RTL_SWH_CD                 AS RTL_SWH_CD
+               ,AMRI.MDSE_COST_TP_CD            AS MDSE_COST_TP_CD
+               ,AMRI.MDSE_INVTY_COST_PCT        AS MDSE_INVTY_COST_PCT
+               ,#trxRsnCdRvsl#                  AS TRX_RSN_CD 
+        FROM AJE_MDSE_RECLS_INTFC AMRI
+            ,JRNL_ENTRY           JE
+        WHERE AMRI.EZCANCELFLAG               = '0'
+          AND AMRI.GLBL_CMPY_CD               = #glblCmpyCd#
+          AND AMRI.GL_DT                      = (SELECT MAX(GL_DT) 
+                                                   FROM AJE_MDSE_RECLS_INTFC
+                                                  WHERE GLBL_CMPY_CD = #glblCmpyCd#
+                                                    AND EZCANCELFLAG = '0'
+                                                    AND GL_DT &lt; #glDt#)
+          AND AMRI.TRX_RSN_CD                 = #trxRsnCdRcls#
+          AND JE.EZCANCELFLAG                 = '0'
+          AND AMRI.GLBL_CMPY_CD               = JE.GLBL_CMPY_CD
+          AND JE.AJE_INTFC_TP_CD              = #ajeIntfcTpCd#
+          AND JE.AJE_INTFC_PK                 = AMRI.AJE_MDSE_RECLS_INTFC_PK
+          AND JE.SYS_SRC_CD                   = #sysSrcCd#
+          AND JE.TRX_CD                       = #trxCd#
+          AND JE.TRX_RSN_CD                   = #trxRsnCdRcls#
+          AND NOT EXISTS (
+                          SELECT '*'
+                            FROM AJE_INTFC_CTRL AIC,
+                                 AJE_MDSE_RECLS_INTFC AMRI_RVSL,
+                                (SELECT *
+                                   FROM AJE_MDSE_RECLS_INTFC
+                                  WHERE EZCANCELFLAG = '0'
+                                    AND GLBL_CMPY_CD = #glblCmpyCd#
+                                    AND GL_DT        = (SELECT MAX(GL_DT) 
+                                                          FROM AJE_MDSE_RECLS_INTFC
+                                                         WHERE GLBL_CMPY_CD = #glblCmpyCd#
+                                                           AND EZCANCELFLAG = '0'
+                                                           AND GL_DT &lt; #glDt#)
+                                    AND TRX_RSN_CD   = #trxRsnCdRcls#
+                                ) AMRI_RCLS
+                           WHERE AIC.EZCANCELFLAG                    = '0'
+                             AND AMRI_RVSL.EZCANCELFLAG              = '0'
+                             AND AIC.GLBL_CMPY_CD                    = #glblCmpyCd#
+                             AND AIC.AJE_INTFC_TP_CD                 = #ajeIntfcTpCd#
+                             AND AIC.JRNL_CPLT_FLG                   = #jrnlCpltFlg#
+                             AND AIC.TRX_RSN_CD                      = #trxRsnCdRvsl#
+                             AND AIC.GLBL_CMPY_CD                    = AMRI_RVSL.GLBL_CMPY_CD
+                             AND AIC.AJE_INTFC_PK                    = AMRI_RVSL.AJE_MDSE_RECLS_INTFC_PK
+                             AND AMRI_RVSL.GL_DT                     = #glDt#
+                             AND AMRI_RVSL.GLBL_CMPY_CD              = AMRI_RCLS.GLBL_CMPY_CD
+                             AND AMRI_RVSL.RECLS_AMT                 = AMRI_RCLS.RECLS_AMT
+                             AND AMRI_RVSL.INVTY_QTY                 = AMRI_RCLS.INVTY_QTY
+                             AND AMRI_RVSL.RTL_WH_CD                 = AMRI_RCLS.RTL_WH_CD
+                             AND AMRI_RVSL.COA_CC_CD                 = AMRI_RCLS.COA_CC_CD
+                             AND AMRI_RVSL.COA_PROD_CD               = AMRI_RCLS.COA_PROD_CD
+                             AND AMRI_RVSL.COA_PROJ_CD               = AMRI_RCLS.COA_PROJ_CD
+                             AND AMRI_RVSL.VND_CD                    = AMRI_RCLS.VND_CD
+                             AND AMRI_RVSL.VND_CD                    = AMRI_RCLS.VND_CD
+                             AND AMRI_RVSL.LOC_STS_CD                = AMRI_RCLS.LOC_STS_CD
+                             AND AMRI_RVSL.INVTY_LOC_CD              = AMRI_RCLS.INVTY_LOC_CD
+                             AND AMRI_RVSL.COST_CCY_CD               = AMRI_RCLS.COST_CCY_CD
+                             AND AMRI_RCLS.GLBL_CMPY_CD              = AMRI.GLBL_CMPY_CD
+                             AND AMRI_RCLS.AJE_MDSE_RECLS_INTFC_PK   = AMRI.AJE_MDSE_RECLS_INTFC_PK
+                          )
+      -->
+      <!-- END 2018/02/02 QC#22714 MOD -->
+    </statement>
+    
+    
+    <statement id="back_getMdseReclsNotJrnlized" parameterClass="Map" resultClass="Map">
+        SELECT MAX(W1.GLBL_CMPY_CD)                 AS GLBL_CMPY_CD,
+               NULL                                 AS INVTY_SNAP_SHOT_PK,
+               #glDt#                               AS INVTY_SNAP_SHOT_DT,
+               NULL                                 AS MDSE_CD,
+               NULL                                 AS INVTY_LOC_CD,
+               NULL                                 AS LOC_STS_CD,
+               NULL                                 AS STK_STS_CD,
+               SUM(INVTY_QTY)                       AS INVTY_QTY,
+               NULL                                 AS ASSET_CD,
+               COA_PROD_CD                          AS COA_PROD_CD,
+               SUM(RECLS_AMT)                       AS RECLS_AMT,
+               COST_CCY_CD                          AS COST_CCY_CD,
+               NULL                                 AS VND_CD,
+               #trxRsnCdRcls#                       AS TRX_RSN_CD,
+               #afflCd001#                          AS COA_AFFL_CD,
+               COA_ACCT_CD                          AS COA_ACCT_CD,
+               MDSE_CATG_CD                         AS MDSE_CATG_CD
+        FROM
+               (SELECT MAX(ISS.GLBL_CMPY_CD)                AS GLBL_CMPY_CD,
+                       NULL                                 AS INVTY_SNAP_SHOT_PK,
+                       #glDt#                               AS INVTY_SNAP_SHOT_DT,
+                       ISS.MDSE_CD                          AS MDSE_CD,
+                       NULL                                 AS INVTY_LOC_CD,
+                       NULL                                 AS LOC_STS_CD,
+                       NULL                                 AS STK_STS_CD,
+                       SUM(ISS.INVTY_QTY)                   AS INVTY_QTY,
+                       NULL                                 AS ASSET_CD,
+                       MDSE.COA_PROD_CD                     AS COA_PROD_CD,
+                       (MAX(MDSE.THIS_MTH_TOT_STD_COST_AMT) - MAX(MDSE.THIS_MTH_FOB_AMT))
+                       * SUM(ISS.INVTY_QTY)                 AS RECLS_AMT,
+                       MDSE.COST_CCY_CD                     AS COST_CCY_CD,
+                       MDSE.VND_CD                          AS VND_CD,
+                       MDSE.COA_ACCT_CD                     AS COA_ACCT_CD,
+                       MDSE.MDSE_CATG_CD                    AS MDSE_CATG_CD
+                  FROM INVTY_SNAP_SHOT_V   ISS,
+                       MDSE_DLY_SNAP_SHOT  MDSE
+                 WHERE ISS.EZCANCELFLAG               =  '0'
+                   AND MDSE.EZCANCELFLAG              =  '0'
+                   AND ISS.GLBL_CMPY_CD               =  #glblCmpyCd#
+                   AND ISS.INVTY_SNAP_SHOT_DT         =  #glDt#
+                   AND ISS.GLBL_CMPY_CD               =  MDSE.GLBL_CMPY_CD
+                   AND ISS.MDSE_CD                    =  MDSE.MDSE_CD
+                   AND (MDSE.THIS_MTH_TOT_STD_COST_AMT - MDSE.THIS_MTH_FOB_AMT) * ISS.INVTY_QTY &lt;&gt; 0
+                 GROUP BY ISS.MDSE_CD, MDSE.COA_PROD_CD, MDSE.COST_CCY_CD, MDSE.VND_CD, MDSE.COA_ACCT_CD, MDSE.MDSE_CATG_CD
+               ) W1
+        WHERE RECLS_AMT        &lt;&gt; 0
+          AND NOT EXISTS (
+                           SELECT '*'
+                             FROM AJE_INTFC_CTRL AIC,
+                                  AJE_MDSE_RECLS_INTFC AMRI
+                            WHERE AIC.EZCANCELFLAG               = '0'
+                              AND AMRI.EZCANCELFLAG              = '0'
+                              AND AIC.GLBL_CMPY_CD               = #glblCmpyCd#
+                              AND AIC.AJE_INTFC_TP_CD            = #ajeIntfcTpCd#
+                              AND AIC.JRNL_CPLT_FLG              = #jrnlCpltFlg#
+                              AND AIC.TRX_RSN_CD                 = #trxRsnCdRcls#
+                              AND AIC.GLBL_CMPY_CD               = AMRI.GLBL_CMPY_CD
+                              AND AIC.AJE_INTFC_PK               = AMRI.AJE_MDSE_RECLS_INTFC_PK
+                              AND AMRI.GLBL_CMPY_CD              = W1.GLBL_CMPY_CD
+                              AND AMRI.INVTY_SNAP_SHOT_DT        = W1.INVTY_SNAP_SHOT_DT
+                              AND AMRI.COA_PROD_CD               = W1.COA_PROD_CD
+                              AND AMRI.COA_AFFL_CD               = #afflCd001#
+                              AND AMRI.COST_CCY_CD               = W1.COST_CCY_CD
+                              AND NVL(AMRI.COA_ACCT_CD, 'NONE')  = NVL(W1.COA_ACCT_CD, 'NONE')  -- it should have value all the time, but just in case
+                              AND AMRI.MDSE_CATG_CD              = W1.MDSE_CATG_CD
+                          )
+        GROUP BY W1.COA_PROD_CD, W1.COST_CCY_CD, W1.COA_ACCT_CD, W1.MDSE_CATG_CD
+      
+      UNION ALL
+      
+        SELECT MAX(W1.GLBL_CMPY_CD)                 AS GLBL_CMPY_CD,
+               NULL                                 AS INVTY_SNAP_SHOT_PK,
+               #glDt#                               AS INVTY_SNAP_SHOT_DT,
+               NULL                                 AS MDSE_CD,
+               NULL                                 AS INVTY_LOC_CD,
+               NULL                                 AS LOC_STS_CD,
+               NULL                                 AS STK_STS_CD,
+               SUM(INVTY_QTY)                       AS INVTY_QTY,
+               NULL                                 AS ASSET_CD,
+               COA_PROD_CD                          AS COA_PROD_CD,
+               SUM(RECLS_AMT)                       AS RECLS_AMT,
+               COST_CCY_CD                          AS COST_CCY_CD,
+               NULL                                 AS VND_CD,
+               #trxRsnCdRcls#                       AS TRX_RSN_CD,
+               VND.COA_AFFL_CD                      AS COA_AFFL_CD,
+               COA_ACCT_CD                          AS COA_ACCT_CD,
+               MDSE_CATG_CD                         AS MDSE_CATG_CD
+        FROM
+               (SELECT MAX(ISS.GLBL_CMPY_CD)                AS GLBL_CMPY_CD,
+                       NULL                                 AS INVTY_SNAP_SHOT_PK,
+                       #glDt#                               AS INVTY_SNAP_SHOT_DT,
+                       ISS.MDSE_CD                          AS MDSE_CD,
+                       NULL                                 AS INVTY_LOC_CD,
+                       NULL                                 AS LOC_STS_CD,
+                       NULL                                 AS STK_STS_CD,
+                       SUM(ISS.INVTY_QTY)                   AS INVTY_QTY,
+                       NULL                                 AS ASSET_CD,
+                       MDSE.COA_PROD_CD                     AS COA_PROD_CD,
+                       MAX(MDSE.THIS_MTH_FOB_AMT)
+                       * SUM(ISS.INVTY_QTY)                 AS RECLS_AMT,
+                       MDSE.COST_CCY_CD                     AS COST_CCY_CD,
+                       MDSE.VND_CD                          AS VND_CD,
+                       MDSE.COA_ACCT_CD                     AS COA_ACCT_CD,
+                       MDSE.MDSE_CATG_CD                    AS MDSE_CATG_CD
+                  FROM INVTY_SNAP_SHOT_V   ISS,
+                       MDSE_DLY_SNAP_SHOT  MDSE
+                 WHERE ISS.EZCANCELFLAG               =  '0'
+                   AND MDSE.EZCANCELFLAG              =  '0'
+                   AND ISS.GLBL_CMPY_CD               =  #glblCmpyCd#
+                   AND ISS.INVTY_SNAP_SHOT_DT         =  #glDt#
+                   AND ISS.GLBL_CMPY_CD               =  MDSE.GLBL_CMPY_CD
+                   AND ISS.MDSE_CD                    =  MDSE.MDSE_CD
+                   AND MDSE.THIS_MTH_FOB_AMT * ISS.INVTY_QTY &lt;&gt; 0
+                 GROUP BY ISS.MDSE_CD, MDSE.COA_PROD_CD, MDSE.COST_CCY_CD, MDSE.VND_CD, MDSE.COA_ACCT_CD, MDSE.MDSE_CATG_CD
+               ) W1,
+               VND_DLY_SNAP_SHOT VND
+        WHERE RECLS_AMT        &lt;&gt; 0
+          AND VND.EZCANCELFLAG = '0'
+          AND W1.GLBL_CMPY_CD  = VND.GLBL_CMPY_CD(+)
+          AND W1.VND_CD        = VND.VND_CD(+) 
+          AND NOT EXISTS (
+                           SELECT '*'
+                             FROM AJE_INTFC_CTRL AIC,
+                                  AJE_MDSE_RECLS_INTFC AMRI
+                            WHERE AIC.EZCANCELFLAG              = '0'
+                              AND AMRI.EZCANCELFLAG             = '0'
+                              AND AIC.GLBL_CMPY_CD              = #glblCmpyCd#
+                              AND AIC.AJE_INTFC_TP_CD           = #ajeIntfcTpCd#
+                              AND AIC.JRNL_CPLT_FLG             = #jrnlCpltFlg#
+                              AND AIC.TRX_RSN_CD                = #trxRsnCdRcls#
+                              AND AIC.GLBL_CMPY_CD              = AMRI.GLBL_CMPY_CD
+                              AND AIC.AJE_INTFC_PK              = AMRI.AJE_MDSE_RECLS_INTFC_PK
+                              AND AMRI.GLBL_CMPY_CD             = W1.GLBL_CMPY_CD
+                              AND AMRI.INVTY_SNAP_SHOT_DT       = W1.INVTY_SNAP_SHOT_DT
+                              AND AMRI.COA_PROD_CD              = W1.COA_PROD_CD
+                              AND AMRI.COA_AFFL_CD              = VND.COA_AFFL_CD
+                              AND AMRI.COST_CCY_CD              = W1.COST_CCY_CD
+                              AND NVL(AMRI.COA_ACCT_CD, 'NONE') = NVL(W1.COA_ACCT_CD, 'NONE')
+                              AND AMRI.MDSE_CATG_CD             = W1.MDSE_CATG_CD
+                          )
+        GROUP BY W1.COA_PROD_CD, VND.COA_AFFL_CD, W1.COST_CCY_CD, W1.COA_ACCT_CD, W1.MDSE_CATG_CD
+             
+      UNION ALL
+      
+        SELECT AMRI.GLBL_CMPY_CD               AS GLBL_CMPY_CD,
+               AMRI.INVTY_SNAP_SHOT_PK         AS INVTY_SNAP_SHOT_PK,
+               #glDt#                          AS INVTY_SNAP_SHOT_DT,
+               AMRI.MDSE_CD                    AS MDSE_CD,
+               AMRI.INVTY_LOC_CD               AS INVTY_LOC_CD,
+               AMRI.LOC_STS_CD                 AS LOC_STS_CD,
+               AMRI.STK_STS_CD                 AS STK_STS_CD,
+               AMRI.INVTY_QTY                  AS INVTY_QTY,
+               AMRI.ASSET_CD                   AS ASSET_CD,
+               AMRI.COA_PROD_CD                AS COA_PROD_CD,
+               AMRI.RECLS_AMT                  AS RECLS_AMT,
+               AMRI.COST_CCY_CD                AS COST_CCY_CD,
+               AMRI.VND_CD                     AS VND_CD,
+               #trxRsnCdRvsl#                  AS TRX_RSN_CD,
+               AMRI.COA_AFFL_CD                AS COA_AFFL_CD,
+               AMRI.COA_ACCT_CD                AS COA_ACCT_CD,
+               AMRI.MDSE_CATG_CD               AS MDSE_CATG_CD
+        FROM AJE_MDSE_RECLS_INTFC AMRI
+        WHERE AMRI.EZCANCELFLAG               = '0'
+          AND AMRI.GLBL_CMPY_CD               = #glblCmpyCd#
+          AND AMRI.GL_DT                      = (SELECT MAX(GL_DT) 
+                                                   FROM AJE_MDSE_RECLS_INTFC
+                                                  WHERE GLBL_CMPY_CD = #glblCmpyCd#
+                                                    AND EZCANCELFLAG = '0'
+                                                    AND GL_DT &lt; #glDt#)
+          AND AMRI.TRX_RSN_CD                 = #trxRsnCdRcls#
+          AND NOT EXISTS (
+                          SELECT '*'
+                            FROM AJE_INTFC_CTRL AIC,
+                                 AJE_MDSE_RECLS_INTFC AMRI_RVSL,
+                                (SELECT *
+                                   FROM AJE_MDSE_RECLS_INTFC
+                                  WHERE EZCANCELFLAG = '0'
+                                    AND GLBL_CMPY_CD = #glblCmpyCd#
+                                    AND GL_DT        = (SELECT MAX(GL_DT) 
+                                                          FROM AJE_MDSE_RECLS_INTFC
+                                                         WHERE GLBL_CMPY_CD = #glblCmpyCd#
+                                                           AND EZCANCELFLAG = '0'
+                                                           AND GL_DT &lt; #glDt#)
+                                    AND TRX_RSN_CD   = #trxRsnCdRcls#
+                                ) AMRI_RCLS
+                           WHERE AIC.EZCANCELFLAG                    = '0'
+                             AND AMRI_RVSL.EZCANCELFLAG              = '0'
+                             AND AIC.GLBL_CMPY_CD                    = #glblCmpyCd#
+                             AND AIC.AJE_INTFC_TP_CD                 = #ajeIntfcTpCd#
+                             AND AIC.JRNL_CPLT_FLG                   = #jrnlCpltFlg#
+                             AND AIC.TRX_RSN_CD                      = #trxRsnCdRvsl#
+                             AND AIC.GLBL_CMPY_CD                    = AMRI_RVSL.GLBL_CMPY_CD
+                             AND AIC.AJE_INTFC_PK                    = AMRI_RVSL.AJE_MDSE_RECLS_INTFC_PK
+                             AND AMRI_RVSL.GL_DT                     = #glDt#
+                             AND AMRI_RVSL.GLBL_CMPY_CD              = AMRI_RCLS.GLBL_CMPY_CD
+                             AND AMRI_RVSL.RECLS_AMT                 = AMRI_RCLS.RECLS_AMT
+                             AND AMRI_RVSL.INVTY_QTY                 = AMRI_RCLS.INVTY_QTY
+                             AND AMRI_RVSL.COA_PROD_CD               = AMRI_RCLS.COA_PROD_CD
+                             AND AMRI_RVSL.COA_AFFL_CD               = AMRI_RCLS.COA_AFFL_CD
+                             AND AMRI_RVSL.COST_CCY_CD               = AMRI_RCLS.COST_CCY_CD
+                             AND NVL(AMRI_RVSL.COA_ACCT_CD, 'NONE')  = NVL(AMRI_RCLS.COA_ACCT_CD, 'NONE')
+                             AND AMRI_RVSL.MDSE_CATG_CD              = AMRI_RCLS.MDSE_CATG_CD
+                             AND AMRI_RCLS.GLBL_CMPY_CD              = AMRI.GLBL_CMPY_CD
+                             AND AMRI_RCLS.AJE_MDSE_RECLS_INTFC_PK   = AMRI.AJE_MDSE_RECLS_INTFC_PK
+                          )
+    </statement>
+    
+    <!-- 
+   	<statement id="getMdseReclsNotJrnlized" parameterClass="Map" resultClass="Map">
+        SELECT MAX(W1.GLBL_CMPY_CD)                 AS GLBL_CMPY_CD,
+               NULL                                 AS INVTY_SNAP_SHOT_PK,
+               #glDt#                               AS INVTY_SNAP_SHOT_DT,
+               NULL                                 AS MDSE_CD,
+               NULL                                 AS INVTY_LOC_CD,
+               NULL                                 AS LOC_STS_CD,
+               NULL                                 AS STK_STS_CD,
+               SUM(INVTY_QTY)                       AS INVTY_QTY,
+               MAX(ASSET_CD)                        AS ASSET_CD,
+               COA_PROD_CD                          AS COA_PROD_CD,
+               SUM(RECLS_AMT)                       AS RECLS_AMT,
+               COST_CCY_CD                          AS COST_CCY_CD,
+               NULL                                 AS VND_CD,
+               #trxRsnCdRcls#                       AS TRX_RSN_CD,
+               #afflCd001#                          AS COA_AFFL_CD,
+               COA_ACCT_CD                          AS COA_ACCT_CD
+        FROM
+               (SELECT MAX(ISS.GLBL_CMPY_CD)                AS GLBL_CMPY_CD,
+                       NULL                                 AS INVTY_SNAP_SHOT_PK,
+                       #glDt#                               AS INVTY_SNAP_SHOT_DT,
+                       ISS.MDSE_CD                          AS MDSE_CD,
+                       NULL                                 AS INVTY_LOC_CD,
+                       NULL                                 AS LOC_STS_CD,
+                       NULL                                 AS STK_STS_CD,
+                       SUM(ISS.INVTY_QTY)                   AS INVTY_QTY,
+                       MAX(LS.ASSET_CD)                     AS ASSET_CD,
+                       MDSE.COA_PROD_CD                     AS COA_PROD_CD,
+                       (MAX(MDSE.THIS_MTH_TOT_STD_COST_AMT) - MAX(MDSE.THIS_MTH_FOB_AMT))
+                       * SUM(ISS.INVTY_QTY)                 AS RECLS_AMT,
+                       MDSE.COST_CCY_CD                     AS COST_CCY_CD,
+                       MDSE.VND_CD                          AS VND_CD,
+                       MDSE.COA_ACCT_CD                     AS COA_ACCT_CD
+                  FROM INVTY_SNAP_SHOT     ISS,
+                       LOC_STS             LS,
+                       MDSE_DLY_SNAP_SHOT  MDSE
+                 WHERE ISS.EZCANCELFLAG               =  '0'
+                   AND LS.EZCANCELFLAG                =  '0'
+                   AND MDSE.EZCANCELFLAG              =  '0'
+                   AND ISS.GLBL_CMPY_CD               =  #glblCmpyCd#
+                   AND ISS.INVTY_SNAP_SHOT_DT         =  #glDt#
+                   AND ISS.GLBL_CMPY_CD               =  LS.GLBL_CMPY_CD
+                   AND ISS.LOC_STS_CD                 =  LS.LOC_STS_CD
+                   AND LS.ASSET_CD                    =  #assetCd#
+                   AND ISS.GLBL_CMPY_CD               =  MDSE.GLBL_CMPY_CD
+                   AND ISS.MDSE_CD                    =  MDSE.MDSE_CD
+                   AND (MDSE.THIS_MTH_TOT_STD_COST_AMT - MDSE.THIS_MTH_FOB_AMT) * ISS.INVTY_QTY &lt;&gt; 0
+                   AND NOT EXISTS
+                               (SELECT '*' 
+                                  FROM INVTY_LOC_V ILV
+                                 WHERE  ILV.EZCANCELFLAG    = '0'
+                                   AND ISS.GLBL_CMPY_CD    = ILV.GLBL_CMPY_CD
+                                   AND	ISS.INVTY_LOC_CD 	= ILV.INVTY_LOC_CD
+                                   AND	ISS.LOC_STS_CD 		 = #locStsCdInTransit#
+                                   AND	(ILV.INVTY_LOC_TP_CD = #invtyLocTpCdWarehouse#
+                                         OR ILV.INVTY_LOC_TP_CD = #invtyLocTpCdConsignee#)
+                                )
+                   AND NOT EXISTS
+                               (SELECT '*' 
+                                  FROM INVTY_LOC_V ILV,
+                                       VND_TP_RELN VTR
+                                 WHERE  ILV.EZCANCELFLAG    = '0'
+                                   AND 	ISS.GLBL_CMPY_CD    = ILV.GLBL_CMPY_CD
+                                   AND  ISS.INVTY_LOC_CD    = ILV.INVTY_LOC_CD
+                                   AND  (VTR.EZCANCELFLAG   = '0' OR VTR.EZCANCELFLAG IS NULL)
+                                   AND  ILV.GLBL_CMPY_CD    = VTR.GLBL_CMPY_CD(+)
+                                   AND  ILV.INVTY_LOC_CD    = VTR.VND_CD(+)
+                                   AND  ISS.LOC_STS_CD      = #locStsCdInTransit#
+                                   AND  ILV.INVTY_LOC_TP_CD = #invtyLocTpCdVendor#
+                                   AND  (VTR.VND_TP_CD     != #vndTpKitting#
+                                   AND   VTR.VND_TP_CD     != #vndTpRefurbish#) 
+                               )
+                 GROUP BY ISS.MDSE_CD, MDSE.COA_PROD_CD, MDSE.COST_CCY_CD, MDSE.VND_CD, MDSE.COA_ACCT_CD
+               ) W1
+        WHERE RECLS_AMT        &lt;&gt; 0
+          AND NOT EXISTS (
+                           SELECT '*'
+                             FROM AJE_INTFC_CTRL AIC,
+                                  AJE_MDSE_RECLS_INTFC AMRI
+                            WHERE AIC.EZCANCELFLAG            = '0'
+                              AND AMRI.EZCANCELFLAG           = '0'
+                              AND AIC.GLBL_CMPY_CD            = #glblCmpyCd#
+                              AND AIC.AJE_INTFC_TP_CD         = #ajeIntfcTpCd#
+                              AND AIC.JRNL_CPLT_FLG           = #jrnlCpltFlg#
+                              AND AIC.TRX_RSN_CD              = #trxRsnCdRcls#
+                              AND AIC.GLBL_CMPY_CD            = AMRI.GLBL_CMPY_CD
+                              AND AIC.AJE_INTFC_PK            = AMRI.AJE_MDSE_RECLS_INTFC_PK
+                              AND AMRI.GLBL_CMPY_CD           = W1.GLBL_CMPY_CD
+                              AND AMRI.INVTY_SNAP_SHOT_DT     = W1.INVTY_SNAP_SHOT_DT
+                              AND AMRI.COA_PROD_CD            = W1.COA_PROD_CD
+                              AND AMRI.COA_AFFL_CD            = #afflCd001#
+                              AND AMRI.COST_CCY_CD            = W1.COST_CCY_CD
+                              AND AMRI.COA_ACCT_CD            = W1.COA_ACCT_CD
+                          )
+        GROUP BY W1.COA_PROD_CD, W1.COST_CCY_CD, W1.COA_ACCT_CD 
+      
+      UNION ALL
+      
+        SELECT MAX(W1.GLBL_CMPY_CD)                 AS GLBL_CMPY_CD,
+               NULL                                 AS INVTY_SNAP_SHOT_PK,
+               #glDt#                               AS INVTY_SNAP_SHOT_DT,
+               NULL                                 AS MDSE_CD,
+               NULL                                 AS INVTY_LOC_CD,
+               NULL                                 AS LOC_STS_CD,
+               NULL                                 AS STK_STS_CD,
+               SUM(INVTY_QTY)                       AS INVTY_QTY,
+               MAX(ASSET_CD)                        AS ASSET_CD,
+               COA_PROD_CD                          AS COA_PROD_CD,
+               SUM(RECLS_AMT)                       AS RECLS_AMT,
+               COST_CCY_CD                          AS COST_CCY_CD,
+               NULL                                 AS VND_CD,
+               #trxRsnCdRcls#                       AS TRX_RSN_CD,
+               VND.COA_AFFL_CD                      AS COA_AFFL_CD,
+               COA_ACCT_CD                          AS COA_ACCT_CD
+        FROM
+               (SELECT MAX(ISS.GLBL_CMPY_CD)                AS GLBL_CMPY_CD,
+                       NULL                                 AS INVTY_SNAP_SHOT_PK,
+                       #glDt#                               AS INVTY_SNAP_SHOT_DT,
+                       ISS.MDSE_CD                          AS MDSE_CD,
+                       NULL                                 AS INVTY_LOC_CD,
+                       NULL                                 AS LOC_STS_CD,
+                       NULL                                 AS STK_STS_CD,
+                       SUM(ISS.INVTY_QTY)                   AS INVTY_QTY,
+                       MAX(LS.ASSET_CD)                     AS ASSET_CD,
+                       MDSE.COA_PROD_CD                     AS COA_PROD_CD,
+                       MAX(MDSE.THIS_MTH_FOB_AMT)
+                       * SUM(ISS.INVTY_QTY)                 AS RECLS_AMT,
+                       MDSE.COST_CCY_CD                     AS COST_CCY_CD,
+                       MDSE.VND_CD                          AS VND_CD,
+                       MDSE.COA_ACCT_CD                     AS COA_ACCT_CD
+                  FROM INVTY_SNAP_SHOT     ISS,
+                       LOC_STS             LS,
+                       MDSE_DLY_SNAP_SHOT  MDSE
+                 WHERE ISS.EZCANCELFLAG               =  '0'
+                   AND LS.EZCANCELFLAG                =  '0'
+                   AND MDSE.EZCANCELFLAG              =  '0'
+                   AND ISS.GLBL_CMPY_CD               =  #glblCmpyCd#
+                   AND ISS.INVTY_SNAP_SHOT_DT         =  #glDt#
+                   AND ISS.GLBL_CMPY_CD               =  LS.GLBL_CMPY_CD
+                   AND ISS.LOC_STS_CD                 =  LS.LOC_STS_CD
+                   AND LS.ASSET_CD                    =  #assetCd#
+                   AND ISS.GLBL_CMPY_CD               =  MDSE.GLBL_CMPY_CD
+                   AND ISS.MDSE_CD                    =  MDSE.MDSE_CD
+                   AND MDSE.THIS_MTH_FOB_AMT * ISS.INVTY_QTY &lt;&gt; 0
+                   AND NOT EXISTS
+                               (SELECT '*' 
+                                  FROM INVTY_LOC_V ILV
+                                 WHERE  ILV.EZCANCELFLAG    = '0'
+                                   AND ISS.GLBL_CMPY_CD    = ILV.GLBL_CMPY_CD
+                                   AND	ISS.INVTY_LOC_CD 	= ILV.INVTY_LOC_CD
+                                   AND	ISS.LOC_STS_CD 		 = #locStsCdInTransit#
+                                   AND	(ILV.INVTY_LOC_TP_CD = #invtyLocTpCdWarehouse#
+                                         OR ILV.INVTY_LOC_TP_CD = #invtyLocTpCdConsignee#)
+                                )
+                   AND NOT EXISTS
+                               (SELECT '*' 
+                                  FROM INVTY_LOC_V ILV,
+                                       VND_TP_RELN VTR
+                                 WHERE  ILV.EZCANCELFLAG    = '0'
+                                   AND 	ISS.GLBL_CMPY_CD    = ILV.GLBL_CMPY_CD
+                                   AND  ISS.INVTY_LOC_CD    = ILV.INVTY_LOC_CD
+                                   AND  (VTR.EZCANCELFLAG   = '0' OR VTR.EZCANCELFLAG IS NULL)
+                                   AND  ILV.GLBL_CMPY_CD    = VTR.GLBL_CMPY_CD(+)
+                                   AND  ILV.INVTY_LOC_CD    = VTR.VND_CD(+)
+                                   AND  ISS.LOC_STS_CD      = #locStsCdInTransit#
+                                   AND  ILV.INVTY_LOC_TP_CD = #invtyLocTpCdVendor#
+                                   AND  (VTR.VND_TP_CD     != #vndTpKitting#
+                                   AND   VTR.VND_TP_CD     != #vndTpRefurbish#) 
+                               )
+                 GROUP BY ISS.MDSE_CD, MDSE.COA_PROD_CD, MDSE.COST_CCY_CD, MDSE.VND_CD, MDSE.COA_ACCT_CD
+               ) W1,
+               VND_DLY_SNAP_SHOT VND
+        WHERE RECLS_AMT        &lt;&gt; 0
+          AND VND.EZCANCELFLAG = '0'
+          AND W1.GLBL_CMPY_CD  = VND.GLBL_CMPY_CD(+)
+          AND W1.VND_CD        = VND.VND_CD(+) 
+          AND NOT EXISTS (
+                           SELECT '*'
+                             FROM AJE_INTFC_CTRL AIC,
+                                  AJE_MDSE_RECLS_INTFC AMRI
+                            WHERE AIC.EZCANCELFLAG            = '0'
+                              AND AMRI.EZCANCELFLAG           = '0'
+                              AND AIC.GLBL_CMPY_CD            = #glblCmpyCd#
+                              AND AIC.AJE_INTFC_TP_CD         = #ajeIntfcTpCd#
+                              AND AIC.JRNL_CPLT_FLG           = #jrnlCpltFlg#
+                              AND AIC.TRX_RSN_CD              = #trxRsnCdRcls#
+                              AND AIC.GLBL_CMPY_CD            = AMRI.GLBL_CMPY_CD
+                              AND AIC.AJE_INTFC_PK            = AMRI.AJE_MDSE_RECLS_INTFC_PK
+                              AND AMRI.GLBL_CMPY_CD           = W1.GLBL_CMPY_CD
+                              AND AMRI.INVTY_SNAP_SHOT_DT     = W1.INVTY_SNAP_SHOT_DT
+                              AND AMRI.COA_PROD_CD            = W1.COA_PROD_CD
+                              AND AMRI.COA_AFFL_CD            = VND.COA_AFFL_CD
+                              AND AMRI.COST_CCY_CD            = W1.COST_CCY_CD
+                              AND AMRI.COA_ACCT_CD            = W1.COA_ACCT_CD
+                          )
+        GROUP BY W1.COA_PROD_CD, VND.COA_AFFL_CD, W1.COST_CCY_CD, W1.COA_ACCT_CD
+             
+      UNION ALL
+      
+        SELECT AMRI.GLBL_CMPY_CD               AS GLBL_CMPY_CD,
+               AMRI.INVTY_SNAP_SHOT_PK         AS INVTY_SNAP_SHOT_PK,
+               #glDt#                          AS INVTY_SNAP_SHOT_DT,
+               AMRI.MDSE_CD                    AS MDSE_CD,
+               AMRI.INVTY_LOC_CD               AS INVTY_LOC_CD,
+               AMRI.LOC_STS_CD                 AS LOC_STS_CD,
+               AMRI.STK_STS_CD                 AS STK_STS_CD,
+               AMRI.INVTY_QTY                  AS INVTY_QTY,
+               AMRI.ASSET_CD                   AS ASSET_CD,
+               AMRI.COA_PROD_CD                AS COA_PROD_CD,
+               AMRI.RECLS_AMT                  AS RECLS_AMT,
+               AMRI.COST_CCY_CD                AS COST_CCY_CD,
+               AMRI.VND_CD                     AS VND_CD,
+               #trxRsnCdRvsl#                  AS TRX_RSN_CD,
+               AMRI.COA_AFFL_CD                AS COA_AFFL_CD,
+               AMRI.COA_ACCT_CD                AS COA_ACCT_CD
+        FROM AJE_MDSE_RECLS_INTFC AMRI
+        WHERE AMRI.EZCANCELFLAG               = '0'
+          AND AMRI.GLBL_CMPY_CD               = #glblCmpyCd#
+          AND AMRI.GL_DT                      = (SELECT MAX(GL_DT) 
+                                                   FROM AJE_MDSE_RECLS_INTFC
+                                                  WHERE GLBL_CMPY_CD = #glblCmpyCd#
+                                                    AND EZCANCELFLAG = '0'
+                                                    AND GL_DT &lt; #glDt#)
+          AND AMRI.TRX_RSN_CD                 = #trxRsnCdRcls#
+          AND NOT EXISTS (
+                          SELECT '*'
+                            FROM AJE_INTFC_CTRL AIC,
+                                 AJE_MDSE_RECLS_INTFC AMRI_RVSL,
+                                (SELECT *
+                                   FROM AJE_MDSE_RECLS_INTFC
+                                  WHERE EZCANCELFLAG = '0'
+                                    AND GLBL_CMPY_CD = #glblCmpyCd#
+                                    AND GL_DT        = (SELECT MAX(GL_DT) 
+                                                          FROM AJE_MDSE_RECLS_INTFC
+                                                         WHERE GLBL_CMPY_CD = #glblCmpyCd#
+                                                           AND EZCANCELFLAG = '0'
+                                                           AND GL_DT &lt; #glDt#)
+                                    AND TRX_RSN_CD   = #trxRsnCdRcls#
+                                ) AMRI_RCLS
+                           WHERE AIC.EZCANCELFLAG                  = '0'
+                             AND AMRI_RVSL.EZCANCELFLAG            = '0'
+                             AND AIC.GLBL_CMPY_CD                  = #glblCmpyCd#
+                             AND AIC.AJE_INTFC_TP_CD               = #ajeIntfcTpCd#
+                             AND AIC.JRNL_CPLT_FLG                 = #jrnlCpltFlg#
+                             AND AIC.TRX_RSN_CD                    = #trxRsnCdRvsl#
+                             AND AIC.GLBL_CMPY_CD                  = AMRI_RVSL.GLBL_CMPY_CD
+                             AND AIC.AJE_INTFC_PK                  = AMRI_RVSL.AJE_MDSE_RECLS_INTFC_PK
+                             AND AMRI_RVSL.GL_DT                   = #glDt#
+                             AND AMRI_RVSL.GLBL_CMPY_CD            = AMRI_RCLS.GLBL_CMPY_CD
+                             AND AMRI_RVSL.RECLS_AMT               = AMRI_RCLS.RECLS_AMT
+                             AND AMRI_RVSL.INVTY_QTY               = AMRI_RCLS.INVTY_QTY
+                             AND AMRI_RVSL.COA_PROD_CD             = AMRI_RCLS.COA_PROD_CD
+                             AND AMRI_RVSL.COA_AFFL_CD             = AMRI_RCLS.COA_AFFL_CD
+                             AND AMRI_RVSL.COST_CCY_CD             = AMRI_RCLS.COST_CCY_CD
+                             AND AMRI_RVSL.COA_ACCT_CD             = AMRI_RCLS.COA_ACCT_CD
+                             AND AMRI_RCLS.GLBL_CMPY_CD            = AMRI.GLBL_CMPY_CD
+                             AND AMRI_RCLS.AJE_MDSE_RECLS_INTFC_PK = AMRI.AJE_MDSE_RECLS_INTFC_PK
+                          )
+    </statement>
+     -->
+</sqlMap>

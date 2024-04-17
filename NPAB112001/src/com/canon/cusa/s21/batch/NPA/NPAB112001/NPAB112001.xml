@@ -1,0 +1,659 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NPAB112001">
+    <statement id="getMrpRunParameter" parameterClass="Map">
+        SELECT
+            MRP.MRP_RUN_PRM_PK
+            ,MRP.DMND_CTOFF_DT
+            ,MRP.DMND_CTOFF_DAYS_AOT
+            ,MRP.SPLY_CTOFF_DT
+            ,MRP.SPLY_CTOFF_DAYS_AOT
+            ,MRP.CRAT_PRCH_REQ_FLG
+            ,MRP.PRINT_ITEM_STS_FLG
+            ,MRP.PRINT_ITEM_DESC_FLG
+            ,MRP.MRP_RUN_SCHD_ID
+            ,MRP.LOC_TP_CD
+            ,MRP.MRP_PLN_NM
+            ,MRP.RTL_WH_CD
+            ,MRP.RTL_SWH_CD
+            ,MRP.MRP_RUN_GRP_ID
+            ,MRP.LINE_BIZ_TP_CD
+        FROM
+            MRP_RUN_PRM MRP
+        WHERE
+                MRP.GLBL_CMPY_CD                           = #glblCmpyCd#
+            AND NVL(MRP.MRP_RUN_GRP_ID, #defaultRunGrpId#) = #mrpRunGrpId#
+            AND MRP.MRP_RUN_STS_CD                         = #mrpRunStsCd#
+            AND MRP.EZCANCELFLAG                           = '0'
+        ORDER BY
+            MRP.MRP_RUN_RQST_TS
+            ,MRP.MRP_RUN_PRM_PK
+    </statement>
+
+    <statement id="getMrpInformation" parameterClass="Map">
+        SELECT
+        -- 08/21/2017 CITS H.Naoi Add MRP_PLN_NM Sol 097 QC18398
+            MI.MDSE_CD
+            ,MI.MRP_PLN_NM
+            ,MI.INVTY_LOC_CD
+            ,MI.ROP_QTY
+            ,CASE
+                WHEN MI.OVRD_MAX_INVTY_QTY IS NULL THEN MI.MAX_INVTY_QTY
+                WHEN MI.OVRD_MAX_INVTY_QTY = 0 THEN MI.MAX_INVTY_QTY
+                ELSE MI.OVRD_MAX_INVTY_QTY
+             END AS MAX_INVTY_QTY
+            ,MI.MIN_ORD_QTY
+            ,MI.PROCR_TP_CD
+            ,MI.INCR_ORD_QTY
+            ,MI.LOC_ROLE_TP_CD
+            ,MI.SRC_LOC_CD
+            ,MI.SRC_RTL_WH_CD
+            ,MI.SRC_RTL_SWH_CD
+            ,MI.RTL_WH_CD
+            ,MI.RTL_SWH_CD
+            ,RW.RTL_WH_NM
+            ,RW.TECH_TOC_CD
+            ,RW.PRF_CARR_CD
+            ,RW.LOC_TP_CD
+            ,RS.RTL_SWH_NM
+            ,AMV.COA_PROD_CD
+            ,AMV.MDSE_DESC_SHORT_TXT
+            ,AMV.COA_MDSE_TP_CD
+            ,MIS.PRCH_PLN_AVAL_FLG
+            ,PT.PROCR_TP_DESC_TXT
+        FROM
+            MRP_INFO MI
+            ,RTL_WH RW
+            ,RTL_SWH RS
+            ,ALL_MDSE_V AMV
+            ,MDSE_ITEM_STS MIS
+            ,PROCR_TP PT
+        WHERE
+                MI.GLBL_CMPY_CD      = #glblCmpyCd#
+            AND MI.MRP_RUN_PRM_PK    = #mrpRunPrmPk#
+            <isNotNull property="rtlWhCd">
+            AND MI.RTL_WH_CD         = #rtlWhCd#
+            </isNotNull>
+            AND MI.GLBL_CMPY_CD      = RW.GLBL_CMPY_CD
+            AND MI.RTL_WH_CD         = RW.RTL_WH_CD
+
+            AND MI.GLBL_CMPY_CD      = RS.GLBL_CMPY_CD
+            AND MI.RTL_WH_CD         = RS.RTL_WH_CD
+            AND MI.RTL_SWH_CD        = RS.RTL_SWH_CD
+
+            AND MI.GLBL_CMPY_CD      = AMV.GLBL_CMPY_CD
+            AND MI.MDSE_CD           = AMV.MDSE_CD
+
+            AND AMV.GLBL_CMPY_CD     = MIS.GLBL_CMPY_CD
+            AND AMV.MDSE_ITEM_STS_CD = MIS.MDSE_ITEM_STS_CD
+            AND PT.GLBL_CMPY_CD      = MI.GLBL_CMPY_CD
+            AND PT.PROCR_TP_CD       = MI.PROCR_TP_CD
+
+            AND MI.EZCANCELFLAG = '0'
+            AND RW.EZCANCELFLAG = '0'
+            AND RS.EZCANCELFLAG = '0'
+            AND AMV.EZCANCELFLAG = '0'
+            AND MIS.EZCANCELFLAG = '0'
+            AND PT.EZCANCELFLAG  = '0'
+    </statement>
+
+    <statement id="getRemoveMrpInfo" parameterClass="Map">
+        SELECT DISTINCT MI.INVTY_LOC_CD
+              ,MI.MRP_PLN_NM
+        FROM   MRP_INFO MI
+        WHERE  MI.GLBL_CMPY_CD   = #glblCmpyCd#
+        AND    MI.MRP_RUN_PRM_PK = #mrpRunPrmPk#
+        AND    MI.EZCANCELFLAG   = '0'
+        ORDER BY MI.INVTY_LOC_CD
+                ,MI.MRP_PLN_NM
+    </statement>
+
+    <statement id="getPrchReqIntfcPkForLogicalRemove" parameterClass="Map" resultClass="Map">
+        SELECT PRI.PRCH_REQ_INTFC_PK
+              ,PRI.EZUPTIME
+        FROM   PRCH_REQ_INTFC PRI
+        WHERE  PRI.GLBL_CMPY_CD    = #glblCmpyCd#
+        AND    DEST_INVTY_LOC_CD   = #invtyLocCd#
+        <isNotNull property="mrpPlnNm">
+        AND    MRP_PLN_NM          = #mrpPlnNm#
+        </isNotNull>
+        AND    PROC_STS_CD        IN (#inCompleted#, #error#)
+        AND    PRCH_REQ_SRC_TP_CD IN (#techPlanning#, #whPlanning#)
+        AND    PRI.EZCANCELFLAG    = '0'
+        ORDER BY PRI.PRCH_REQ_INTFC_PK
+    </statement>
+
+    <statement id="getPrchReqPkForLogicalRemove" parameterClass="Map" resultClass="Map">
+        SELECT PR.PRCH_REQ_NUM
+              ,PRD.PRCH_REQ_LINE_NUM
+              ,PRD.PRCH_REQ_LINE_SUB_NUM
+              ,PR.EZUPTIME
+        FROM   PRCH_REQ     PR
+              ,PRCH_REQ_DTL PRD
+        WHERE  PR.GLBL_CMPY_CD         = #glblCmpyCd#
+        AND    PR.PRCH_REQ_APVL_STS_CD = #entered#
+        AND    PR.PRCH_REQ_SRC_TP_CD  IN (#techPlanning#, #whPlanning#)
+        AND    PR.PRCH_REQ_TP_CD      != #prchReqTpCdMinMax#
+        <isNotNull property="mrpPlnNm">
+        AND    PR.MRP_PLN_NM           = #mrpPlnNm#
+        </isNotNull>
+        AND    PR.EZCANCELFLAG         = '0'
+        AND    PR.GLBL_CMPY_CD         = PRD.GLBL_CMPY_CD
+        AND    PR.PRCH_REQ_NUM         = PRD.PRCH_REQ_NUM
+        AND    PRD.DEST_INVTY_LOC_CD   = #invtyLocCd#
+        AND    PRD.EZCANCELFLAG        = '0'
+        ORDER BY PR.PRCH_REQ_NUM
+                ,PRD.PRCH_REQ_LINE_NUM
+                ,PRD.PRCH_REQ_LINE_SUB_NUM
+    </statement>
+
+    <statement id="getPrchReqIntfcPkForPhysicalRemove" parameterClass="Map" resultClass="Map">
+        SELECT PRI.PRCH_REQ_INTFC_PK
+        FROM   PRCH_REQ_INTFC PRI
+        WHERE  PRI.GLBL_CMPY_CD    = #glblCmpyCd#
+        AND    PRI.EZCANCELFLAG    = '1'
+        AND    PRI.EZUPTIME        &lt; TO_CHAR(TRUNC(TO_DATE(#salesDate#,'YYYYMMDD')-#keepPeriod#, 'DD'), 'YYYYMMDD')
+        ORDER BY PRI.PRCH_REQ_INTFC_PK
+    </statement>
+
+    <statement id="getPrchReqPkForPhysicalRemove" parameterClass="Map" resultClass="Map">
+        SELECT PR.PRCH_REQ_NUM
+              ,PRD.PRCH_REQ_LINE_NUM
+              ,PRD.PRCH_REQ_LINE_SUB_NUM
+        FROM   PRCH_REQ     PR
+              ,PRCH_REQ_DTL PRD
+        WHERE  PR.GLBL_CMPY_CD         = #glblCmpyCd#
+        AND    PR.EZCANCELFLAG         = '1'
+        AND    PR.EZUPTIME             &lt; TO_CHAR(TRUNC(TO_DATE(#salesDate#,'YYYYMMDD')-#keepPeriod#, 'DD'), 'YYYYMMDD')
+        AND    PRD.GLBL_CMPY_CD        = PR.GLBL_CMPY_CD
+        AND    PRD.PRCH_REQ_NUM        = PR.PRCH_REQ_NUM
+        ORDER BY PR.PRCH_REQ_NUM
+                ,PRD.PRCH_REQ_LINE_NUM
+                ,PRD.PRCH_REQ_LINE_SUB_NUM
+    </statement>
+
+    <statement id="getRtlWhList" parameterClass="Map" resultClass="Map">
+        SELECT DISTINCT
+             MI.RTL_WH_CD
+            ,MRS.MRP_RUN_SCHD_ID
+        FROM
+             MRP_INFO MI
+            ,MRP_RUN_SCHD MRS
+        WHERE
+            MI.GLBL_CMPY_CD     = #glblCmpyCd#
+        AND MI.MRP_RUN_PRM_PK   = #mrpRunPrmPk#
+        AND MI.EZCANCELFLAG     = '0'
+        AND MI.GLBL_CMPY_CD     = MRS.GLBL_CMPY_CD
+        AND MI.RTL_WH_CD        = MRS.RTL_WH_CD
+        AND MRS.MRP_RUN_SCHD_ID = #mrpRunSchdId#
+        AND MRS.EZCANCELFLAG    = '0'
+    </statement>
+
+    <statement id="countRtlWhInWhOwnr" parameterClass="Map" resultClass="Integer">
+        SELECT
+            COUNT(*)
+        FROM
+            RTL_WH RW
+        WHERE
+            RW.GLBL_CMPY_CD = #glblCmpyCd#
+        AND RW.RTL_WH_CD    = #rtlWhCd#
+        <iterate property="whOwnrCdList" var="whOwnrCd[]" open="AND RW.WH_OWNR_CD IN (" close=")" conjunction=",">
+            #whOwnrCd[]#
+        </iterate>
+        AND RW.EZCANCELFLAG = '0'
+    </statement>
+    <!-- 08/18/2017 CITS S.Endo Add Sol#013(QC#18717) START -->
+    <statement id="getAvalWhInvty" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            INV.INVTY_AVAL_QTY
+        FROM
+            INVTY INV
+        WHERE
+                INV.GLBL_CMPY_CD = #glblCmpyCd#
+            AND INV.MDSE_CD      = #mdseCd#
+            AND INV.INVTY_LOC_CD = #invtyLocCd#
+            AND INV.LOC_STS_CD   = #locStsCd#
+            AND INV.STK_STS_CD   = #stkStsCd#
+            AND INV.EZCANCELFLAG = '0'
+    </statement>
+    <!-- 08/18/2017 CITS S.Endo Add Sol#013(QC#18717) END -->
+    
+    <statement id="isDiscontinuedItem" parameterClass="Map" resultClass="Map">
+        SELECT
+             STS.DSCTN_FLG
+        FROM
+             ALL_MDSE_V    MDSE
+           , MDSE_ITEM_STS STS
+        WHERE 1=1 
+        AND MDSE.GLBL_CMPY_CD     = #glblCmpyCd#
+        AND MDSE.EZCANCELFLAG     = '0'
+        AND MDSE.MDSE_CD          = #mdseCd#
+        AND MDSE.MDSE_ITEM_STS_CD = STS.MDSE_ITEM_STS_CD
+        AND MDSE.GLBL_CMPY_CD     = STS.GLBL_CMPY_CD
+        AND STS.EZCANCELFLAG      = '0'
+        AND ROWNUM                = 1
+    </statement>
+
+    <statement id="getMrpInformationDmndInfo" parameterClass="Map">
+        SELECT DISTINCT
+            MI.MDSE_CD
+            ,MI.MRP_PLN_NM
+            ,MI.INVTY_LOC_CD
+            ,MI.ROP_QTY
+            ,CASE
+                WHEN MI.OVRD_MAX_INVTY_QTY IS NULL THEN MI.MAX_INVTY_QTY
+                WHEN MI.OVRD_MAX_INVTY_QTY = 0 THEN MI.MAX_INVTY_QTY
+                ELSE MI.OVRD_MAX_INVTY_QTY
+             END AS MAX_INVTY_QTY
+            ,MI.MIN_ORD_QTY
+            ,MI.PROCR_TP_CD
+            ,MI.INCR_ORD_QTY
+            ,MI.LOC_ROLE_TP_CD
+            ,MI.SRC_LOC_CD
+            ,MI.SRC_RTL_WH_CD
+            ,MI.SRC_RTL_SWH_CD
+            ,MI.RTL_WH_CD
+            ,MI.RTL_SWH_CD
+            ,RW.RTL_WH_NM
+            ,RW.TECH_TOC_CD
+            ,RW.PRF_CARR_CD
+            ,RW.LOC_TP_CD
+            ,RS.RTL_SWH_NM
+            ,AMV.COA_PROD_CD
+            ,AMV.MDSE_DESC_SHORT_TXT
+            ,AMV.COA_MDSE_TP_CD
+            ,MIS.PRCH_PLN_AVAL_FLG
+            ,PT.PROCR_TP_DESC_TXT
+        FROM
+             MRP_INFO MI
+            ,RTL_WH RW
+            ,RTL_SWH RS
+            ,ALL_MDSE_V AMV
+            <!-- QC#54719 2019/11/19 ADD START -->
+            ,ALL_MDSE_V AMVO
+            <!-- QC#54719 2019/11/19 ADD END -->
+            ,MDSE_ITEM_STS MIS
+            ,PROCR_TP PT
+            ,(
+                SELECT
+                    CPD.ORD_QTY
+                    ,CPD.MDSE_CD
+                    ,CPD.INVTY_LOC_CD
+                FROM
+                     CPO_DTL           CPD
+                    ,CPO               CPO
+                    ,CPO_ORD_TP        COT
+                    ,ORD_HDR_DPLY_STS  HDS
+                    ,MRP_INFO          MI
+                    <!-- QC#54719 2019/11/19 ADD START -->
+                    ,ALL_MDSE_V        AMVC
+                    ,ALL_MDSE_V        AMVM
+                    <!-- QC#54719 2019/11/19 ADD END -->
+                WHERE
+                    CPD.GLBL_CMPY_CD          = #glblCmpyCd#
+                AND CPD.EZCANCELFLAG          = '0'
+                AND CPD.RSD_DT                &lt;= #thruDt#
+                <iterate property="stkstsCd" var="stkstsCd[]" open="AND CPD.STK_STS_CD IN (" close=")" conjunction=",">
+                    #stkstsCd[]#
+                </iterate>
+                AND CPD.GLBL_CMPY_CD          = CPO.GLBL_CMPY_CD
+                AND CPD.CPO_ORD_NUM           = CPO.CPO_ORD_NUM
+                AND CPO.ORD_HDR_DPLY_STS_CD   &lt; #booked#
+                AND CPO.EZCANCELFLAG          = '0'
+                AND CPD.GLBL_CMPY_CD          = COT.GLBL_CMPY_CD
+                AND CPD.CPO_ORD_TP_CD         = COT.CPO_ORD_TP_CD
+                AND COT.EZCANCELFLAG          = '0'
+                AND CPO.GLBL_CMPY_CD          = HDS.GLBL_CMPY_CD
+                AND CPO.ORD_HDR_DPLY_STS_CD   = HDS.ORD_HDR_DPLY_STS_CD
+                AND HDS.EZCANCELFLAG          = '0'
+                <!-- QC#54719 2019/11/19 MOD START -->
+                <!--AND CPD.GLBL_CMPY_CD          = MI.GLBL_CMPY_CD-->
+                <!--AND CPD.MDSE_CD               = MI.MDSE_CD-->
+                AND CPD.GLBL_CMPY_CD          = AMVC.GLBL_CMPY_CD
+                AND CPD.MDSE_CD               = AMVC.MDSE_CD
+                AND AMVC.EZCANCELFLAG         = '0'
+                AND MI.GLBL_CMPY_CD           = AMVM.GLBL_CMPY_CD
+                AND MI.MDSE_CD                = AMVM.MDSE_CD
+                AND AMVM.EZCANCELFLAG         = '0'
+                AND CASE WHEN AMVC.MERC_CLS_CD = #mercClsCd# THEN SUBSTR(AMVC.MDSE_CD, #subStrStart#, #subStrEnd#)
+                         ELSE AMVC.MDSE_CD
+                    END = CASE WHEN AMVM.MERC_CLS_CD = #mercClsCd# THEN SUBSTR(AMVM.MDSE_CD, #subStrStart#, #subStrEnd#)
+                          ELSE AMVM.MDSE_CD
+                          END
+                <!-- QC#54719 2019/11/19 MOD START -->
+                AND MI.MRP_RUN_PRM_PK         = #mrpRunPrmPk#
+                AND MI.CALC_ORD_PROC_CD       = '1'
+                AND MI.EZCANCELFLAG           = '0'
+                UNION ALL
+                SELECT
+                     SHP.ORD_QTY
+                    ,SHP.MDSE_CD
+                    ,SHP.INVTY_LOC_CD
+                FROM
+                     SHPG_PLN          SHP
+                    ,CPO_DTL           CPD
+                    ,CPO               CPO
+                    ,CPO_ORD_TP        COT
+                    ,ORD_HDR_DPLY_STS  HDS
+                    ,SHPG_STS          SS
+                WHERE
+                SHP.GLBL_CMPY_CD              = #glblCmpyCd#
+                AND SHP.EZCANCELFLAG          = '0'
+                AND SHP.RSD_DT                &lt;= #thruDt#
+                AND SHP.SHPG_STS_CD BETWEEN #validatd# AND #inshed#
+                <iterate property="stkstsCd" var="stkstsCd[]" open="AND SHP.STK_STS_CD IN (" close=")" conjunction=",">
+                    #stkstsCd[]#
+                </iterate>
+                AND SHP.GLBL_CMPY_CD          = CPD.GLBL_CMPY_CD
+                AND SHP.TRX_HDR_NUM           = CPD.CPO_ORD_NUM
+                AND SHP.TRX_LINE_NUM          = CPD.CPO_DTL_LINE_NUM
+                AND SHP.TRX_LINE_SUB_NUM      = CPD.CPO_DTL_LINE_SUB_NUM
+                AND CPD.EZCANCELFLAG          = '0'
+                AND CPD.GLBL_CMPY_CD          = CPO.GLBL_CMPY_CD
+                AND CPD.CPO_ORD_NUM           = CPO.CPO_ORD_NUM
+                AND CPO.ORD_HDR_DPLY_STS_CD   &gt;= #booked#
+                AND CPO.EZCANCELFLAG          = '0'
+                AND CPD.GLBL_CMPY_CD          = COT.GLBL_CMPY_CD
+                AND CPD.CPO_ORD_TP_CD         = COT.CPO_ORD_TP_CD
+                AND COT.EZCANCELFLAG          = '0'
+                AND CPO.GLBL_CMPY_CD          = HDS.GLBL_CMPY_CD
+                AND CPO.ORD_HDR_DPLY_STS_CD   = HDS.ORD_HDR_DPLY_STS_CD
+                AND HDS.EZCANCELFLAG          = '0'
+                AND SHP.GLBL_CMPY_CD          = SS.GLBL_CMPY_CD
+                AND SHP.SHPG_STS_CD           = SS.SHPG_STS_CD
+                AND SS.EZCANCELFLAG           = '0'
+                UNION ALL
+                SELECT
+                     PRDT.PRCH_REQ_BAL_QTY
+                    ,PRDT.MDSE_CD
+                    ,PRDT.SRC_INVTY_LOC_CD
+                FROM
+                     PRCH_REQ           PRRQ
+                    ,PRCH_REQ_DTL       PRDT
+                    ,PRCH_REQ_APVL_STS  PRAS
+                    ,PRCH_REQ_LINE_STS  PRLS
+                    ,PRCH_REQ_TP        PRRT
+                WHERE
+                    PRRQ.GLBL_CMPY_CD          = #glblCmpyCd#
+                AND PRRQ.EZCANCELFLAG          = '0'
+                AND PRRQ.PRCH_REQ_REC_TP_CD    = #techRequest#
+                AND PRRQ.PRCH_REQ_STS_CD       = #open#
+                AND PRRQ.GLBL_CMPY_CD          = PRDT.GLBL_CMPY_CD
+                AND PRRQ.PRCH_REQ_NUM          = PRDT.PRCH_REQ_NUM
+                AND PRDT.EZCANCELFLAG          = '0'
+                AND PRDT.PRCH_REQ_LINE_SUB_NUM = 0
+                AND PRDT.RQST_RCV_DT           &lt;= #thruDt#
+<!-- START 2019/09/27 M.Naito [QC#53742,MOD] -->
+                AND (
+                    PRDT.TO_STK_STS_CD IS NULL
+                    OR
+                <iterate property="stkstsCd" var="stkstsCd[]" open="PRDT.TO_STK_STS_CD IN (" close=")" conjunction=",">
+                    #stkstsCd[]#
+                </iterate>
+                    )
+<!-- END 2019/09/27 M.Naito [QC#53742,MOD] -->
+                AND PRDT.PRCH_REQ_BAL_QTY      &gt; 0
+                AND PRRQ.GLBL_CMPY_CD          = PRAS.GLBL_CMPY_CD
+                AND PRRQ.PRCH_REQ_APVL_STS_CD  = PRAS.PRCH_REQ_APVL_STS_CD
+                AND PRAS.EZCANCELFLAG          = '0'
+                AND PRDT.GLBL_CMPY_CD          = PRLS.GLBL_CMPY_CD
+                AND PRDT.PRCH_REQ_LINE_STS_CD  = PRLS.PRCH_REQ_LINE_STS_CD
+                AND PRLS.EZCANCELFLAG          = '0'
+                AND PRLS.OPEN_STS_FLG          = #flgY#
+                AND PRRQ.GLBL_CMPY_CD          = PRRT.GLBL_CMPY_CD
+                AND PRRQ.PRCH_REQ_TP_CD        = PRRT.PRCH_REQ_TP_CD
+                AND PRRT.EZCANCELFLAG          = '0'
+                UNION ALL
+                SELECT
+                     PRDT.PRCH_REQ_QTY SCHD_OTBD_QTY
+                    ,PRDT.MDSE_CD
+                    ,PRDT.SRC_INVTY_LOC_CD
+                FROM
+                     PRCH_REQ           PRRQ
+                    ,PRCH_REQ_DTL       PRDT
+                    ,PRCH_REQ_APVL_STS  PRAS
+                    ,PRCH_REQ_LINE_STS  PRLS
+                    ,PRCH_REQ_TP        PRRT
+                    ,PRCH_REQ_REC_TP    PRRRT
+                WHERE
+                    PRRQ.GLBL_CMPY_CD                 = #glblCmpyCd#
+                AND PRRQ.EZCANCELFLAG                 = '0'
+                AND PRRQ.PRCH_REQ_TP_CD              != #kitting#
+                AND PRRQ.PRCH_REQ_STS_CD              = #open#
+                AND PRRQ.GLBL_CMPY_CD                 = PRRRT.GLBL_CMPY_CD
+                AND PRRQ.PRCH_REQ_REC_TP_CD           = PRRRT.PRCH_REQ_REC_TP_CD
+                AND PRRRT.EZCANCELFLAG                = '0'
+                AND PRRQ.GLBL_CMPY_CD                 = PRDT.GLBL_CMPY_CD
+                AND PRRQ.PRCH_REQ_NUM                 = PRDT.PRCH_REQ_NUM
+                AND PRDT.EZCANCELFLAG                 = '0'
+                <iterate property="stkstsCd" var="stkstsCd[]" open="AND PRDT.FROM_STK_STS_CD IN (" close=")" conjunction=",">
+                    #stkstsCd[]#
+                </iterate>
+                AND PRRQ.GLBL_CMPY_CD                 = PRAS.GLBL_CMPY_CD
+                AND PRRQ.PRCH_REQ_APVL_STS_CD         = PRAS.PRCH_REQ_APVL_STS_CD
+                AND PRAS.EZCANCELFLAG                 = '0'
+                AND PRLS.PRCH_REQ_LINE_STS_CD         = PRDT.PRCH_REQ_LINE_STS_CD
+                AND PRLS.OPEN_STS_FLG                 = #flgY#
+                AND PRLS.GLBL_CMPY_CD                 = PRDT.GLBL_CMPY_CD
+                AND PRLS.EZCANCELFLAG                 = '0'
+                AND PRRQ.GLBL_CMPY_CD                 = PRRT.GLBL_CMPY_CD
+                AND PRRQ.PRCH_REQ_TP_CD               = PRRT.PRCH_REQ_TP_CD
+                AND PRRT.EZCANCELFLAG                 = '0'
+                AND (NOT EXISTS (
+                        SELECT
+                            1
+                        FROM
+                            SHPG_ORD_DTL SOD
+                        WHERE
+                            SOD.PRCH_REQ_NUM          = PRDT.PRCH_REQ_NUM
+                        AND SOD.PRCH_REQ_LINE_NUM     = PRDT.PRCH_REQ_LINE_NUM
+                        AND SOD.PRCH_REQ_LINE_SUB_NUM = TO_CHAR(PRDT.PRCH_REQ_LINE_SUB_NUM)
+                        AND SOD.DS_SO_LINE_STS_CD    IN (#dsSoLineShipped#, #dsSoLineCanceld#)
+                        AND SOD.GLBL_CMPY_CD          = PRDT.GLBL_CMPY_CD
+                        AND SOD.EZCANCELFLAG          = '0'
+                    )
+                    AND NOT EXISTS (
+                        SELECT
+                            1
+                        FROM
+                             CPO     CPO
+                            ,CPO_DTL CD
+                        WHERE
+                            CPO.ORD_SRC_REF_NUM          = PRDT.PRCH_REQ_NUM
+                        AND CPO.GLBL_CMPY_CD             = PRDT.GLBL_CMPY_CD
+                        AND CPO.EZCANCELFLAG             = '0'
+                        AND CPO.CPO_ORD_NUM              = CD.CPO_ORD_NUM
+                        AND CPO.GLBL_CMPY_CD             = CD.GLBL_CMPY_CD
+                        AND CD.ORD_SRC_REF_LINE_NUM      = PRDT.PRCH_REQ_LINE_NUM
+                        AND CD.ORD_SRC_REF_LINE_SUB_NUM  = TO_CHAR(PRDT.PRCH_REQ_LINE_SUB_NUM)
+                        AND CD.GLBL_CMPY_CD              = PRDT.GLBL_CMPY_CD
+                        AND CD.EZCANCELFLAG              = '0'
+                    )
+                )
+                UNION ALL
+                SELECT
+                     WRKD.ORIG_GOODS_BAL_QTY SCHD_OTBD_QTY
+                    ,WRKD.ORIG_GOODS_MDSE_CD MDSE_CD
+                    ,WRKO.RTL_WH_CD || WRKD.SPLY_RTL_SWH_CD INVTY_LOC_CD
+                FROM
+                     WRK_ORD            WRKO
+                    ,WRK_ORD_DTL        WRKD
+                    ,DS_WRK_ORD_TP      DWKT
+                    ,WRK_ORD_STS        WOS
+                WHERE
+                    WRKO.GLBL_CMPY_CD                           = #glblCmpyCd#
+                AND WRKO.EZCANCELFLAG                           = '0'
+                AND WRKO.WRK_ORD_STS_CD                         = #saved#
+                AND WRKO.DS_WRK_ORD_TP_CD                       = #kit#
+                AND WRKO.GLBL_CMPY_CD                           = WRKD.GLBL_CMPY_CD
+                AND WRKO.WRK_ORD_NUM                            = WRKD.WRK_ORD_NUM
+                <iterate property="stkstsCd" var="stkstsCd[]" open="AND WRKD.STK_STS_CD IN (" close=")" conjunction=",">
+                    #stkstsCd[]#
+                </iterate>
+                AND WRKD.EZCANCELFLAG                           = '0'
+                AND WRKO.GLBL_CMPY_CD                           = DWKT.GLBL_CMPY_CD
+                AND WRKO.DS_WRK_ORD_TP_CD                       = DWKT.DS_WRK_ORD_TP_CD
+                AND DWKT.EZCANCELFLAG                           = '0'
+                AND WRKO.GLBL_CMPY_CD                           = WOS.GLBL_CMPY_CD
+                AND WRKO.WRK_ORD_STS_CD                         = WOS.WRK_ORD_STS_CD
+                AND WOS.EZCANCELFLAG                            = '0'
+                UNION ALL
+                SELECT
+                     SCHD_OTBD_QTY
+                    ,MDSE_CD
+                    ,INVTY_LOC_CD
+                FROM (
+                    SELECT
+                         RPR.PRT_RQST_QTY       AS  SCHD_OTBD_QTY
+                        ,RPR.MDSE_CD
+                        ,RPR.SRC_INVTY_LOC_CD   AS  INVTY_LOC_CD
+                        ,NVL(SOD.SHPG_STS_CD , 0) AS SHPG_STS_CD
+                    FROM
+                         RMNF_ORD     ROH
+                        ,RMNF_PRT_REQ RPR
+                        ,RMNF_ORD_TP  ROT
+                        ,SHPG_ORD_DTL SOD
+                        ,RMNF_ORD_STS ROS
+                    WHERE
+                        ROH.GLBL_CMPY_CD         = #glblCmpyCd#
+                    AND ROH.EZCANCELFLAG         = '0'
+                    AND    ROH.GLBL_CMPY_CD      = RPR.GLBL_CMPY_CD
+                    AND    ROH.RMNF_ORD_NUM      = RPR.RMNF_ORD_NUM
+                    AND    RPR.EZCANCELFLAG      = '0'
+                    AND    ROH.GLBL_CMPY_CD      = ROT.GLBL_CMPY_CD
+                    AND    ROH.RMNF_ORD_TP_CD    = ROT.RMNF_ORD_TP_CD
+                    AND    ROT.EZCANCELFLAG      = '0'
+                    AND    RPR.GLBL_CMPY_CD      = SOD.GLBL_CMPY_CD(+)
+                    AND    RPR.RMNF_ORD_NUM      = SOD.TRX_HDR_NUM(+)
+                    AND    RPR.RMNF_PRT_REQ_LINE_NUM = SOD.TRX_LINE_NUM(+)
+                    AND    SOD.EZCANCELFLAG(+)   = '0'
+                    AND    ROH.GLBL_CMPY_CD      = ROS.GLBL_CMPY_CD
+                    AND    ROH.RMNF_ORD_STS_CD   = ROS.RMNF_ORD_STS_CD
+                    AND    ROS.OPEN_STS_FLG      = #flgY#
+                    AND    ROS.EZCANCELFLAG      = '0'
+                    )
+                WHERE
+                    1=1
+                AND SHPG_STS_CD  &lt; #shpgStsShipped#
+            ) OTBD
+        WHERE
+                MI.GLBL_CMPY_CD      = #glblCmpyCd#
+            AND MI.MRP_RUN_PRM_PK    = #mrpRunPrmPk#
+            <isNotNull property="rtlWhCd">
+            AND MI.RTL_WH_CD         = #rtlWhCd#
+            </isNotNull>
+            AND (MI.ROP_QTY = 0 AND MI.MAX_INVTY_QTY = 0)
+            AND MI.GLBL_CMPY_CD      = RW.GLBL_CMPY_CD
+            AND MI.RTL_WH_CD         = RW.RTL_WH_CD
+
+            AND MI.GLBL_CMPY_CD      = RS.GLBL_CMPY_CD
+            AND MI.RTL_WH_CD         = RS.RTL_WH_CD
+            AND MI.RTL_SWH_CD        = RS.RTL_SWH_CD
+
+            AND MI.GLBL_CMPY_CD      = AMV.GLBL_CMPY_CD
+            AND MI.MDSE_CD           = AMV.MDSE_CD
+
+            AND AMV.GLBL_CMPY_CD     = MIS.GLBL_CMPY_CD
+            AND AMV.MDSE_ITEM_STS_CD = MIS.MDSE_ITEM_STS_CD
+            AND PT.GLBL_CMPY_CD      = MI.GLBL_CMPY_CD
+            AND PT.PROCR_TP_CD       = MI.PROCR_TP_CD
+
+            AND OTBD.ORD_QTY         &gt; 0
+            <!-- QC#54719 2019/11/19 MOD START -->
+            <!--AND MI.MDSE_CD           = OTBD.MDSE_CD-->
+            AND AMVO.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND OTBD.MDSE_CD         = AMVO.MDSE_CD
+            AND AMVO.EZCANCELFLAG    = '0'
+            AND CASE WHEN AMV.MERC_CLS_CD = #mercClsCd# THEN SUBSTR(AMV.MDSE_CD, #subStrStart#, #subStrEnd#)
+                         ELSE AMV.MDSE_CD
+                    END = CASE WHEN AMVO.MERC_CLS_CD = #mercClsCd# THEN SUBSTR(AMVO.MDSE_CD, #subStrStart#, #subStrEnd#)
+                          ELSE AMVO.MDSE_CD
+                          END
+            <!-- QC#54719 2019/11/19 MOD END -->
+            AND MI.INVTY_LOC_CD      = OTBD.INVTY_LOC_CD
+
+            AND MI.EZCANCELFLAG = '0'
+            AND RW.EZCANCELFLAG = '0'
+            AND RS.EZCANCELFLAG = '0'
+            AND AMV.EZCANCELFLAG = '0'
+            AND MIS.EZCANCELFLAG = '0'
+            AND PT.EZCANCELFLAG  = '0'
+    </statement>
+
+    <statement id="getMrpInformationWh" parameterClass="Map">
+        SELECT
+             MI.MDSE_CD
+            ,MI.MRP_PLN_NM
+            ,MI.INVTY_LOC_CD
+            ,MI.ROP_QTY
+            ,CASE
+                WHEN MI.OVRD_MAX_INVTY_QTY IS NULL THEN MI.MAX_INVTY_QTY
+                WHEN MI.OVRD_MAX_INVTY_QTY = 0 THEN MI.MAX_INVTY_QTY
+                ELSE MI.OVRD_MAX_INVTY_QTY
+             END AS MAX_INVTY_QTY
+            ,MI.MIN_ORD_QTY
+            ,MI.PROCR_TP_CD
+            ,MI.INCR_ORD_QTY
+            ,MI.LOC_ROLE_TP_CD
+            ,MI.SRC_LOC_CD
+            ,MI.SRC_RTL_WH_CD
+            ,MI.SRC_RTL_SWH_CD
+            ,MI.RTL_WH_CD
+            ,MI.RTL_SWH_CD
+            ,RW.RTL_WH_NM
+            ,RW.TECH_TOC_CD
+            ,RW.PRF_CARR_CD
+            ,RW.LOC_TP_CD
+            ,RS.RTL_SWH_NM
+            ,AMV.COA_PROD_CD
+            ,AMV.MDSE_DESC_SHORT_TXT
+            ,AMV.COA_MDSE_TP_CD
+            ,MIS.PRCH_PLN_AVAL_FLG
+            ,PT.PROCR_TP_DESC_TXT
+        FROM
+            MRP_INFO MI
+            ,RTL_WH RW
+            ,RTL_SWH RS
+            ,ALL_MDSE_V AMV
+            ,MDSE_ITEM_STS MIS
+            ,PROCR_TP PT
+        WHERE
+                MI.GLBL_CMPY_CD      = #glblCmpyCd#
+            AND MI.MRP_RUN_PRM_PK    = #mrpRunPrmPk#
+            <isNotNull property="rtlWhCd">
+            AND MI.RTL_WH_CD         = #rtlWhCd#
+            </isNotNull>
+            AND NOT (MI.ROP_QTY = 0 AND MI.MAX_INVTY_QTY = 0)
+            AND MI.GLBL_CMPY_CD      = RW.GLBL_CMPY_CD
+            AND MI.RTL_WH_CD         = RW.RTL_WH_CD
+
+            AND MI.GLBL_CMPY_CD      = RS.GLBL_CMPY_CD
+            AND MI.RTL_WH_CD         = RS.RTL_WH_CD
+            AND MI.RTL_SWH_CD        = RS.RTL_SWH_CD
+
+            AND MI.GLBL_CMPY_CD      = AMV.GLBL_CMPY_CD
+            AND MI.MDSE_CD           = AMV.MDSE_CD
+
+            AND AMV.GLBL_CMPY_CD     = MIS.GLBL_CMPY_CD
+            AND AMV.MDSE_ITEM_STS_CD = MIS.MDSE_ITEM_STS_CD
+            AND PT.GLBL_CMPY_CD      = MI.GLBL_CMPY_CD
+            AND PT.PROCR_TP_CD       = MI.PROCR_TP_CD
+
+            AND MI.EZCANCELFLAG = '0'
+            AND RW.EZCANCELFLAG = '0'
+            AND RS.EZCANCELFLAG = '0'
+            AND AMV.EZCANCELFLAG = '0'
+            AND MIS.EZCANCELFLAG = '0'
+            AND PT.EZCANCELFLAG  = '0'
+    </statement>
+
+    <statement id="getStsCd" parameterClass="Map" resultClass="String">
+        SELECT
+            STK_STS_CD
+        FROM
+            AVAL_INVTY_APP_ID
+        WHERE
+            GLBL_CMPY_CD       = #GLBL_CMPY_CD#
+        AND BIZ_APP_ID         = #BIZ_APP_ID#
+        AND EZCANCELFLAG       = '0'
+    </statement>
+</sqlMap>

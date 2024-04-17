@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NLAB317001">
+
+    <statement id="getRwsRefNum" parameterClass="Map" resultClass="String">
+        SELECT 
+            RH.RWS_REF_NUM
+           ,RH.RWS_NUM
+        FROM
+            RWS_HDR  RH
+            ,RWS_STS RS
+        WHERE
+            RS.RWS_OPEN_FLG = 'Y'
+        AND RH.RWS_STS_CD = RS.RWS_STS_CD
+        AND EXISTS (
+            SELECT 1 
+            FROM 
+            (
+                SELECT
+                    TARGET_CPO.CPO_ORD_NUM
+                FROM
+                (
+                    SELECT
+                        CPO.CPO_ORD_NUM
+                    FROM
+                        CPO  CPO
+                    WHERE
+                        CPO.GLBL_CMPY_CD                  = #glblCmpyCd#
+                    AND CPO.ORD_BOOK_FLG                  = 'Y'
+                    AND CPO.ORD_HDR_STS_CD                &lt; #ordHdrStsCd#
+                    AND SUBSTR(CPO.ORD_BOOK_REQ_TS, 1, 8) = #ordBookReqTs#
+                    AND CPO.EZCANCELFLAG = '0'
+                ) TARGET_CPO
+                ,(
+                    SELECT
+                        CD.CPO_ORD_NUM
+                        ,COUNT(CD.CPO_ORD_NUM) CNT
+                    FROM
+                        CPO_DTL  CD
+                        ,(
+                            SELECT
+                                CPO.CPO_ORD_NUM
+                                ,CPO.GLBL_CMPY_CD
+                            FROM
+                                CPO  CPO
+                            WHERE
+                                CPO.GLBL_CMPY_CD                  = #glblCmpyCd#
+                            AND CPO.ORD_BOOK_FLG                  = 'Y'
+                            AND CPO.ORD_HDR_STS_CD                &lt; #ordHdrStsCd#
+                            AND SUBSTR(CPO.ORD_BOOK_REQ_TS, 1, 8) = #ordBookReqTs#
+                            AND CPO.EZCANCELFLAG = '0'
+                        ) ORD_NUM
+                    WHERE
+                        CD.GLBL_CMPY_CD    = #glblCmpyCd#
+                    AND CD.GLBL_CMPY_CD    = ORD_NUM.GLBL_CMPY_CD
+                    AND CD.CPO_ORD_NUM     = ORD_NUM.CPO_ORD_NUM
+                    AND CD.ORD_LINE_STS_CD != #ordLineStsCd#
+                    AND CD.EZCANCELFLAG    = '0'
+                    GROUP BY
+                        CD.CPO_ORD_NUM
+                ) ORD_LINE
+                WHERE
+                    TARGET_CPO.CPO_ORD_NUM = ORD_LINE.CPO_ORD_NUM(+)
+                AND ORD_LINE.CPO_ORD_NUM   IS NULL
+            ) TGT_CPO
+            WHERE
+                RH.TRX_ORD_NUM = TGT_CPO.CPO_ORD_NUM
+        )
+        AND NOT EXISTS (SELECT 1 FROM RPT_RMA_PRINT_LOG WHERE RPT_RMA_PRINT_LOG.RWS_REF_NUM = RH.RWS_REF_NUM)
+        ORDER BY RH.RWS_REF_NUM, RH.RWS_NUM
+    </statement>
+
+    <statement id="getCarrEmlAddr" parameterClass="Map" resultClass="String">
+        SELECT 
+            RCI.CARR_CTAC_EML_ADDR
+        FROM
+            RPT_CARR_INFO  RCI
+        WHERE
+            RCI.GLBL_CMPY_CD = #glblCmpyCd#
+        AND RCI.RPT_ID       = #rptId#
+        AND RCI.CARR_CD      = #carrCd#
+        AND RCI.EZCANCELFLAG = '0'
+    </statement>
+
+    <statement id="getRptBrNum" parameterClass="Map" resultClass="String">
+        SELECT
+            RPC.RPT_BR_ID
+        FROM
+            RPT_PRINT_CTRL RPC
+            ,EIP_RPT_CTRL  ERC
+        WHERE
+            RPC.GLBL_CMPY_CD      = #glblCmpyCd#
+        AND RPC.RPT_ID            = #rptId#
+        AND RPC.RPT_PRINT_CTRL_ID = #rtlWhCd#
+        AND RPC.GLBL_CMPY_CD      = ERC.GLBL_CMPY_CD
+        AND RPC.RPT_ID            = ERC.RPT_ID
+        AND RPC.RPT_BR_ID         = ERC.RPT_BR_NUM
+        AND RPC.EZCANCELFLAG      = '0'
+        AND ERC.EZCANCELFLAG      = '0'
+    </statement>
+</sqlMap>

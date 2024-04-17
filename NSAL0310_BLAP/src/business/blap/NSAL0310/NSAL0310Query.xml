@@ -1,0 +1,341 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sqlMap namespace="NSAL0310Query">
+    <statement id="getSvcMachMstr" parameterClass="Map" resultClass="Map">
+        SELECT
+            *
+        FROM
+        (
+            SELECT
+                SMM.BILL_TO_ACCT_NUM
+            ,    SMM.SVC_CONFIG_MSTR_PK
+            ,    SMM.SVC_MACH_TP_CD
+            ,    SMM.SVC_MACH_MSTR_PK
+            ,    SMM.SER_NUM
+            ,    SMM.MDSE_CD
+<!-- START 2016/09/15 N.Arai [QC#11616, MOD] -->
+<!--            ,    MDS.MDSE_NM    -->
+            ,    MDS.MDSE_DESC_SHORT_TXT
+<!-- END 2016/09/15 N.Arai [QC#11616, MOD] -->
+<!-- START 2016/05/16 T.Tomita [QC#4578, MOD] -->
+<!-- START 2015/10/08 T.Tomita [N/A, MOD] -->
+<!--            ,    SMM.SHIP_TO_CUST_CD -->
+<!--            ,    SMM.CUR_LOC_NUM -->
+            ,    SMM.IND_CUR_LOC_NUM
+<!-- END 2015/10/08 T.Tomita [N/A, MOD] -->
+<!-- END 2016/05/16 T.Tomita [QC#4578, MOD] -->
+            ,    STC.LOC_NM                AS    SHIP_TO_LOC_NM
+            ,    STC.FIRST_LINE_ADDR
+            ,    STC.SCD_LINE_ADDR
+            ,    STC.THIRD_LINE_ADDR
+            ,    STC.FRTH_LINE_ADDR
+            ,    STC.CTY_ADDR
+            ,    STC.ST_CD
+            ,    STC.POST_CD
+<!-- START 2015/10/08 T.Tomita [N/A, ADD] -->
+            ,    MN.T_MDL_NM
+            ,    DM.MTR_REQ_MDL_FLG
+<!-- END 2015/10/08 T.Tomita [N/A, ADD] -->
+            ,    ROW_NUMBER() OVER (
+                    ORDER BY
+<!-- START 2023/10/10 [QC#61955, ADD] -->
+                        SMC.SVC_CONFIG_MSTR_PK
+                    ,   SMM.SVC_MACH_TP_CD
+                    ,
+<!-- END   2023/10/10 [QC#61955, ADD] -->
+                        SMM.BILL_TO_ACCT_NUM
+                    ,    SMC.SER_NUM
+                    ,    SMT.SVC_MACH_TP_SORT_NUM
+                    ,    SMM.SER_NUM
+<!-- START 2022/02/03 R.Cabral [QC#59502, ADD] -->
+                    ,    SMM.SVC_MACH_MSTR_PK
+<!-- END   2022/02/03 R.Cabral [QC#59502, ADD] -->
+                )                        AS    ROW_NUM
+            FROM
+                SVC_MACH_MSTR            SMM
+            ,    SHIP_TO_CUST            STC
+            ,    MDSE                    MDS
+            ,    SVC_CONFIG_MSTR         SCM
+            ,    SVC_MACH_MSTR           SMC
+            ,    SVC_MACH_TP             SMT
+<!-- START 2015/10/08 T.Tomita [N/A, ADD] -->
+            ,    MDL_NM             MN
+            ,    DS_MDL             DM
+<!-- END 2015/10/08 T.Tomita [N/A, ADD] -->
+            WHERE
+<!-- START 2018/10/30 [QC#28890, MOD] -->
+                SMM.GLBL_CMPY_CD        =    #glblCmpyCd#
+            <isNotNull property="dsAcctNum">
+            AND    SMM.BILL_TO_ACCT_NUM    =    #dsAcctNum#
+            </isNotNull>
+<!-- END 2018/10/30 [QC#28890, MOD] -->
+<!-- START 2015/10/08 T.Tomita [N/A, ADD] -->
+<!-- START 2015/12/03 A.Kohinata [QC501, MOD] -->
+            <iterate property="svcMachMstrStsCdList" var="svcMachMstrStsCd[]" open="AND SMM.SVC_MACH_MSTR_STS_CD IN (" close=")" conjunction=",">
+                #svcMachMstrStsCd[]#
+            </iterate>
+<!--
+            AND NOT EXISTS (
+                SELECT
+                    *
+                FROM
+                    DS_CONTR_DTL A
+                WHERE
+                        A.GLBL_CMPY_CD     = SMM.GLBL_CMPY_CD
+                    AND A.SVC_MACH_MSTR_PK = SMM.SVC_MACH_MSTR_PK
+                    AND A.EZCANCELFLAG     = '0'
+                    AND A.DS_CONTR_PK      = #dsContrPk#
+                )
+-->
+<!-- END 2015/12/03 A.Kohinata [QC501, MOD] -->
+<!-- END 2015/10/08 T.Tomita [N/A, ADD] -->
+            <isNotNull property="serNum">
+                <isEqual property="xxConfigFlg" compareValue="Y">
+            AND    EXISTS (
+                SELECT
+                    *
+                FROM
+                    SVC_MACH_MSTR            SM2
+                WHERE
+                    SM2.SER_NUM                LIKE    #serNum#
+                AND    SM2.SVC_CONFIG_MSTR_PK    =    SCM.SVC_CONFIG_MSTR_PK
+                AND    SM2.GLBL_CMPY_CD        =    SCM.GLBL_CMPY_CD
+                AND    SM2.EZCANCELFLAG        =    SCM.EZCANCELFLAG
+            )
+                </isEqual>
+                <isNotEqual property="xxConfigFlg" compareValue="Y">
+            AND    SMM.SER_NUM                    LIKE    #serNum#
+                </isNotEqual>
+            </isNotNull>
+<!-- [QC#3017,MOD]START -->
+            <isNotNull property="xxComnScrColValTxt">
+<!-- [QC#10590,MOD]START -->
+            AND (  DECODE(STC.FIRST_LINE_ADDR, null, '', STC.FIRST_LINE_ADDR)
+                || DECODE(STC.CTY_ADDR,        null, '', ', ' || STC.CTY_ADDR)
+                || DECODE(STC.ST_CD,           null, '', ', ' || STC.ST_CD)
+                || DECODE(STC.POST_CD,         null, '', ' '  || STC.POST_CD)
+                                           LIKE    #xxComnScrColValTxt#
+                OR STC.LOC_NM              LIKE    #xxComnScrColValTxt#)
+<!-- [QC#10590,MOD]END -->
+            </isNotNull>
+<!-- [QC#3017,MOD]END -->
+            <isNotNull property="xxScrItem29Txt">
+            AND    TO_CHAR(SMM.SVC_MACH_MSTR_PK, 'FM9999999999999999999999999999')    LIKE #xxScrItem29Txt#
+            </isNotNull>
+<!-- START 2016/09/15 N.Arai [QC#11616, MOD] -->
+<!--        <isNotNull property="mdseNm">
+            AND    MDS.MDSE_NM                LIKE    #mdseNm#
+            </isNotNull>     -->
+            <isNotNull property="mdseDescShortTxt">
+            AND    MDS.MDSE_DESC_SHORT_TXT   LIKE #mdseDescShortTxt#
+            </isNotNull>
+<!-- END 2016/09/15 N.Arai [QC#11616, MOD] -->
+            <isNotEqual property="xxConfigFlg" compareValue="Y">
+            AND    SMM.SVC_MACH_TP_CD        =    #svcMachTpMach#
+            </isNotEqual>
+            AND    SMM.EZCANCELFLAG        =    '0'
+<!-- START 2015/10/08 T.Tomita [N/A, MOD] -->
+<!--            AND    SMM.SHIP_TO_CUST_CD        =    STC.SHIP_TO_CUST_CD(+) -->
+            AND    SMM.CUR_LOC_NUM         =    STC.SHIP_TO_CUST_CD(+)
+<!-- END 2015/10/08 T.Tomita [N/A, MOD] -->
+            AND    SMM.GLBL_CMPY_CD        =    STC.GLBL_CMPY_CD(+)
+            AND    SMM.EZCANCELFLAG        =    STC.EZCANCELFLAG(+)
+            AND    SMM.MDSE_CD             =    MDS.MDSE_CD(+)
+            AND    SMM.GLBL_CMPY_CD        =    MDS.GLBL_CMPY_CD(+)
+            AND    SMM.EZCANCELFLAG        =    MDS.EZCANCELFLAG(+)
+            AND    SCM.SVC_CONFIG_MSTR_PK  =    SMM.SVC_CONFIG_MSTR_PK
+            AND    SCM.GLBL_CMPY_CD        =    SMM.GLBL_CMPY_CD
+            AND    SCM.EZCANCELFLAG        =    SMM.EZCANCELFLAG
+            AND    SMC.SVC_MACH_MSTR_PK    =    SCM.SVC_MACH_MSTR_PK
+            AND    SMC.GLBL_CMPY_CD        =    SCM.GLBL_CMPY_CD
+            AND    SMC.EZCANCELFLAG        =    SCM.EZCANCELFLAG
+            AND    SMT.SVC_MACH_TP_CD      =    SMM.SVC_MACH_TP_CD
+            AND    SMT.GLBL_CMPY_CD        =    SMM.GLBL_CMPY_CD
+            AND    SMT.EZCANCELFLAG        =    SMM.EZCANCELFLAG
+<!-- START 2015/10/08 T.Tomita [N/A, ADD] -->
+            AND    SCM.GLBL_CMPY_CD        =    MN.T_GLBL_CMPY_CD
+            AND    SCM.MDL_ID              =    MN.T_MDL_ID
+            AND    MN.EZCANCELFLAG         =    '0'
+<!-- START 2016/05/16 T.Tomita [QC#4578, ADD] -->
+            <isNotNull property="mdlNm">
+            AND    MN.T_MDL_NM             LIKE #mdlNm#
+            </isNotNull>
+<!-- END 2016/05/16 T.Tomita [QC#4578, ADD] -->
+            AND    SCM.GLBL_CMPY_CD        =    DM.GLBL_CMPY_CD
+            AND    SCM.MDL_ID              =    DM.MDL_ID
+            AND    DM.EZCANCELFLAG         =    '0'
+<!-- START 2022/01/21 R.Cabral [QC#59502, ADD] -->
+            <isNotNull property="svcMachMstrPk">
+            AND    SMM.SVC_MACH_MSTR_PK    = #svcMachMstrPk#
+            </isNotNull>
+<!-- START 2022/02/03 R.Cabral [QC#59502, ADD] -->
+            <isNotNull property="svcConfigMstrPk">
+            AND    SMM.SVC_CONFIG_MSTR_PK    = #svcConfigMstrPk#
+            AND    SMM.SVC_MACH_TP_CD      = #accCd#
+            </isNotNull>
+<!-- END   2022/02/03 R.Cabral [QC#59502, ADD] -->
+<!-- END   2022/01/21 R.Cabral [QC#59502, ADD] -->
+<!-- END 2015/10/08 T.Tomita [N/A, ADD] -->
+            <isEqual property="contrInacFlg" compareValue="Y">
+            AND NOT EXISTS (
+                SELECT
+                    *
+                FROM
+                     DS_CONTR_DTL      A
+                    ,DS_CONTR          B
+                WHERE
+                        A.GLBL_CMPY_CD        = SMM.GLBL_CMPY_CD
+                    AND A.SVC_MACH_MSTR_PK    = SMM.SVC_MACH_MSTR_PK
+                    AND A.EZCANCELFLAG        = '0'
+                    AND A.GLBL_CMPY_CD        = B.GLBL_CMPY_CD
+                    AND A.DS_CONTR_PK         = B.DS_CONTR_PK
+                    AND B.EZCANCELFLAG        = '0'
+                    <isEqual property="wtyFlg" compareValue="N">
+                    AND B.DS_CONTR_CATG_CD    &lt;&gt; #warranty#
+                    </isEqual>
+                    <isEqual property="wtyFlg" compareValue="Y">
+                    AND B.DS_CONTR_CATG_CD    = #warranty#
+                    </isEqual>
+                    AND A.CONTR_EFF_FROM_DT   &lt;= #thruDate#
+<!-- [QC#6391,MOD]START -->
+                    AND NVL(A.CONTR_CLO_DT, A.CONTR_EFF_THRU_DT)   &gt;= #fromDate#
+<!-- [QC#6391,MOD]END -->
+                    AND A.DS_CONTR_DTL_STS_CD &lt;&gt; #dsContrDtlStsCd_Cancelled#
+            )
+            </isEqual>
+        )
+        <!-- START 2023/04/20 K.Watanabe [QC#61146, ADD] -->
+        <isNotEqual property="rowNum" compareValue="0">
+        <!-- END 2023/04/20 K.Watanabe [QC#61146, ADD] -->
+        WHERE
+            ROW_NUM                        &lt;=    #rowNum#
+        <!-- START 2023/04/20 K.Watanabe [QC#61146, ADD] -->
+        </isNotEqual>
+        <!-- END 2023/04/20 K.Watanabe [QC#61146, ADD] -->
+    </statement>
+
+<!-- [QC#3017,ADD]START -->
+    <statement id="getDsAcctNm" parameterClass="Map" resultClass="String">
+        SELECT
+            SC.DS_ACCT_NM       AS DS_ACCT_NM
+        FROM
+             DS_CONTR      DC
+            ,SELL_TO_CUST  SC
+        WHERE
+                DC.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND DC.DS_CONTR_PK      = #dsContrPk#
+            AND DC.EZCANCELFLAG     = '0'
+            AND DC.GLBL_CMPY_CD     = SC.GLBL_CMPY_CD
+            AND DC.DS_ACCT_NUM      = SC.SELL_TO_CUST_CD
+            AND SC.EZCANCELFLAG     = '0'
+    </statement>
+<!-- [QC#3017,ADD]END -->
+
+<!-- START 2017/09/04 U.Kim [QC#20856, ADD] -->
+    <statement id="getMainMachine" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            COUNT(*)
+        FROM
+             DS_CONTR_DTL   DCD
+            ,SVC_MACH_MSTR  SMM
+        WHERE
+                DCD.GLBL_CMPY_CD       = #glblCmpyCd#
+            AND DCD.DS_CONTR_PK        = #dsContrPk#
+            AND DCD.SVC_CONFIG_MSTR_PK = #svcConfigMstrPk#
+            AND DCD.EZCANCELFLAG       = '0'
+            AND SMM.GLBL_CMPY_CD       = DCD.GLBL_CMPY_CD
+            AND SMM.SVC_MACH_MSTR_PK   = DCD.SVC_MACH_MSTR_PK
+            AND SMM.SVC_MACH_TP_CD     = #svcMachTpCd#
+            AND SMM.EZCANCELFLAG       = '0'
+    </statement>
+<!-- END 2017/09/04 U.Kim [QC#20856, ADD] -->
+
+<!-- START 2018/10/30 [QC#28890, ADD] -->
+    <statement id="getDsAcct" parameterClass="Map" resultClass="String">
+        SELECT
+             STC.DS_ACCT_NM
+        FROM
+            SELL_TO_CUST STC
+        WHERE
+                STC.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND STC.SELL_TO_CUST_CD = #dsAcctNum#
+            AND STC.EZCANCELFLAG    = '0'
+    </statement>
+<!-- END 2018/10/30 [QC#28890, ADD] -->
+<!-- START 2022/01/21 R.Cabral [QC#59502, ADD] -->
+    <statement id="getDsContrDtlMachInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+            DCD.SVC_MACH_MSTR_PK
+            ,DCD.DS_CONTR_DTL_PK
+            ,DCD.SVC_CONFIG_MSTR_PK
+            ,DCD.PRNT_DS_CONTR_DTL_PK
+            ,DCD.CONTR_EFF_FROM_DT
+            ,DCD.CONTR_EFF_THRU_DT
+            ,M.MDSE_NM
+        FROM
+            DS_CONTR_DTL DCD
+            ,MDSE M
+            ,SVC_MACH_MSTR SMM
+<!-- START 2022/02/03 R.Cabral [QC#59502, ADD] -->
+            ,SVC_PGM_TP SPT
+            ,DS_CONTR_DTL_TP DDT
+<!-- END   2022/02/03 R.Cabral [QC#59502, ADD] -->
+        WHERE
+                DCD.GLBL_CMPY_CD        = #glblCmpyCd#
+            AND DCD.DS_CONTR_PK         = #dsContrPk# 
+            AND DCD.EZCANCELFLAG        = '0'
+            AND DCD.SVC_MACH_MSTR_PK    IS NOT NULL
+            AND M.GLBL_CMPY_CD          = DCD.GLBL_CMPY_CD
+            AND M.MDSE_CD               = DCD.SVC_PGM_MDSE_CD
+            AND M.EZCANCELFLAG          = '0'
+            AND SMM.SVC_MACH_MSTR_PK    = DCD.SVC_MACH_MSTR_PK
+            AND SMM.SVC_MACH_TP_CD      = #svcMachTpCd#
+            AND SMM.EZCANCELFLAG        = '0'
+<!-- START 2022/02/03 R.Cabral [QC#59502, ADD] -->
+            AND M.GLBL_CMPY_CD          = SPT.GLBL_CMPY_CD(+)
+            AND M.SVC_PGM_TP_CD         = SPT.SVC_PGM_TP_CD(+)
+            AND M.EZCANCELFLAG          = '0'
+            AND DCD.DS_CONTR_DTL_TP_CD  = DDT.DS_CONTR_DTL_TP_CD
+            AND DDT.SVC_PRC_FLG         = #svcPrcFlg#
+            AND DCD.GLBL_CMPY_CD        = DDT.GLBL_CMPY_CD
+            AND DCD.EZCANCELFLAG        = '0'
+        ORDER BY
+            SMM.SER_NUM
+            ,SMM.MDSE_CD
+            ,NVL(DCD.PRNT_DS_CONTR_DTL_PK, DCD.DS_CONTR_DTL_PK)
+            ,SPT.SVC_PGM_TP_SORT_NUM
+            ,NVL(DCD.DS_CONTR_CRAT_TP_CD, #dsContrCratTp#)
+            ,DDT.DS_CONTR_DTL_TP_SORT_NUM
+<!-- END   2022/02/03 R.Cabral [QC#59502, ADD] -->
+    </statement>
+    <statement id="getDsContrDtlAccInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+            DCD.SVC_MACH_MSTR_PK
+            ,DCD.DS_CONTR_DTL_PK
+            ,DCD.PRNT_DS_CONTR_DTL_PK
+            ,DCD.CONTR_EFF_FROM_DT
+            ,DCD.CONTR_EFF_THRU_DT
+        FROM
+            DS_CONTR_DTL DCD
+        WHERE
+                DCD.GLBL_CMPY_CD         = #glblCmpyCd#
+            AND DCD.DS_CONTR_PK          = #dsContrPk#
+            AND DCD.EZCANCELFLAG         = '0'
+            AND DCD.PRNT_DS_CONTR_DTL_PK = #dsContrDtlPk#
+    </statement>
+<!-- START 2022/02/03 R.Cabral [QC#59502, DEL] -->
+    <!-- <statement id="getMachAccInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+            SVC_MACH_MSTR_PK
+        FROM
+            SVC_MACH_MSTR
+        WHERE
+                GLBL_CMPY_CD        = #glblCmpyCd#
+            AND EZCANCELFLAG        = '0'
+            AND SVC_CONFIG_MSTR_PK  = #svcConfigMstrPk#
+            <iterate property="svcMachMstrPkList" var="svcMachMstrPk[]" open="AND SVC_MACH_MSTR_PK NOT IN (" close=")" conjunction=",">
+                #svcMachMstrPk[]#
+            </iterate>
+    </statement> -->
+<!-- END   2022/02/03 R.Cabral [QC#59502, DEL] -->
+<!-- END   2022/01/21 R.Cabral [QC#59502, ADD] -->
+</sqlMap>

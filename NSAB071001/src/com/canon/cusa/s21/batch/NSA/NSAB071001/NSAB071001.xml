@@ -1,0 +1,801 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NSAB071001">
+
+    <statement id="getTrgtYrMth" parameterClass="Map" resultClass="String">
+        SELECT
+            CAL.DWH_TRGT_YR_MTH
+        FROM
+            DMN_RPT_CAL            CAL
+        WHERE 
+            CAL.GLBL_CMPY_CD       = #glblCmpyCd#
+        AND CAL.DWH_TRGT_DT        = #trgtDt#
+        AND CAL.EZCANCELFLAG       = '0'
+    </statement>
+
+    <statement id="getTrgtYrMthRec" parameterClass="Map" resultClass="BigDecimal">
+        SELECT COUNT(1)
+        FROM
+            FCT_MLY_HIST_USG          FMHU
+        WHERE 
+            FMHU.GLBL_CMPY_CD         = #glblCmpyCd#
+        AND FMHU.DWH_TRGT_YR_MTH      = #trgtYrMth#
+        AND FMHU.EZCANCELFLAG         = '0'
+    </statement>
+
+    <statement id="getMainData" parameterClass="Map" resultClass="Map">
+        SELECT
+            USG.FCT_CATG_CD
+           ,USG.SVC_BY_LINE_BIZ_TP_CD
+           ,USG.MDL_GRP_ID
+           ,USG.MDL_GRP_DESC_TXT
+           ,USG.MDL_ID
+           ,USG.T_MDL_NM
+           ,ROUND(USG.COPY_USG_QTY, 1)                                   AS COPY_USG_QTY
+           ,CASE
+               WHEN USG.LAST_YR_QTY = 0 THEN 0
+               ELSE ROUND((USG.COPY_USG_QTY - USG.LAST_YR_QTY) * 100 / USG.LAST_YR_QTY, 1)
+               END                                                       AS YR_ON_YR_COPY_PCT
+           ,CASE
+               WHEN USG.LAST_MTH_QTY = 0 THEN 0
+               ELSE ROUND((USG.COPY_USG_QTY - USG.LAST_MTH_QTY) * 100 / USG.LAST_MTH_QTY, 1)
+               END                                                       AS MTH_ON_MTH_COPY_PCT
+           ,ROUND(USG.COPY_USG_QTY - USG.LAST_YR_QTY, 1)                 AS YR_ON_YR_COPY_QTY
+           ,ROUND(USG.COPY_USG_QTY - USG.LAST_MTH_QTY, 1)                AS MTH_ON_MTH_COPY_QTY
+           ,CASE
+               WHEN USG.LAST_MAX_QTY = 0 THEN ROUND(USG.COPY_USG_QTY, 1)
+               WHEN USG.COPY_USG_QTY - USG.LAST_MAX_QTY &gt;= 0 THEN ROUND(USG.COPY_USG_QTY, 1)
+               ELSE USG.LAST_MAX_QTY
+               END                                                       AS MAX_COPY_QTY
+           ,CASE
+               WHEN USG.LAST_MIN_QTY = 0 THEN ROUND(USG.COPY_USG_QTY, 1) 
+               WHEN USG.COPY_USG_QTY - USG.LAST_MIN_QTY &lt;= 0 THEN ROUND(USG.COPY_USG_QTY, 1)
+               ELSE USG.LAST_MIN_QTY
+               END                                                       AS MIN_COPY_QTY
+           ,CASE
+               WHEN TOTAL_MDL_GRP.TOTAL_QTY = 0 THEN 0
+               WHEN USG.FCT_CATG_CD = #catgCdMdlGrp# THEN ROUND((USG.COPY_USG_QTY * 100 / TOTAL_MDL_GRP.TOTAL_QTY), 1)
+               ELSE ROUND((USG.COPY_USG_QTY * 100 / TOTAL_MDL_GRP.TOTAL_QTY), 1)
+               END                                                       AS ACCT_ALL_MDL_GRP_COPY_PCT
+        FROM
+        (
+            SELECT
+                #catgCdMdlGrp#                     AS FCT_CATG_CD
+               ,MAIN.SVC_BY_LINE_BIZ_TP_CD         AS SVC_BY_LINE_BIZ_TP_CD
+               ,MAIN.MDL_GRP_ID                    AS MDL_GRP_ID
+               ,MAIN.MDL_GRP_DESC_TXT              AS MDL_GRP_DESC_TXT
+               ,NULL                               AS MDL_ID
+               ,NULL                               AS T_MDL_NM
+               ,MAIN.COPY_USG_QTY                  AS COPY_USG_QTY
+               ,NVL(LAST_YR.COPY_USG_QTY, 0)       AS LAST_YR_QTY
+               ,NVL(LAST_MTH.COPY_USG_QTY, 0)      AS LAST_MTH_QTY
+               ,NVL(MIN_MAX.MAX_COPY_QTY, 0)       AS LAST_MAX_QTY
+               ,NVL(MIN_MAX.MIN_COPY_QTY, 0)       AS LAST_MIN_QTY
+            FROM
+            (
+                SELECT
+                    DMG.MDL_GRP_ID                 AS MDL_GRP_ID
+                   ,DMG.MDL_GRP_DESC_TXT           AS MDL_GRP_DESC_TXT
+                   ,MIN(CNT.SVC_BY_LINE_BIZ_TP_CD) AS SVC_BY_LINE_BIZ_TP_CD
+                   ,SUM(CNT.MTR_CNT_DIFF) / SUM(CNT.READ_DT_DIFF) * TO_NUMBER(TO_CHAR(LAST_DAY(TO_DATE(#trgtDt#, 'YYYYMMDD')), 'DD')) * SUM(CNT.MPP) AS COPY_USG_QTY
+                FROM
+                    DS_MDL_GRP      DMG
+                   ,DS_MDL          DM
+                   ,SVC_CONFIG_MSTR SCM
+                   ,(
+                       SELECT
+                           SMM.SVC_CONFIG_MSTR_PK
+                          ,SMM.SVC_BY_LINE_BIZ_TP_CD
+                          ,SMM.MPP
+                          ,CASE 
+                              WHEN SUBSTR(SMM.ISTL_DT, 0, 6) = #trgtYrMth# AND ISTL_DT_CNT.READ_MTR_CNT IS NOT NULL THEN TRGT.READ_MTR_CNT - ISTL_DT_CNT.READ_MTR_CNT
+                              ELSE TRGT.READ_MTR_CNT - NVL(LAST.READ_MTR_CNT, 0)
+                              END AS MTR_CNT_DIFF
+                          ,CASE 
+                              WHEN SUBSTR(SMM.ISTL_DT, 0, 6) = #trgtYrMth# AND ISTL_DT_CNT.READ_MTR_CNT IS NOT NULL THEN TO_DATE(TRGT.MTR_READ_DT, 'YYYYMMDD') - TO_DATE(SMM.ISTL_DT, 'YYYYMMDD') + 1
+                              WHEN LAST.MTR_READ_DT IS NULL THEN TO_DATE(TRGT.MTR_READ_DT, 'YYYYMMDD') - TO_DATE(SMM.ISTL_DT, 'YYYYMMDD') + 1
+                              ELSE TO_DATE(TRGT.MTR_READ_DT, 'YYYYMMDD') - TO_DATE(LAST.MTR_READ_DT, 'YYYYMMDD') + 1
+                              END AS READ_DT_DIFF
+                       FROM
+                       (
+                           SELECT
+                               MACH.SVC_MACH_MSTR_PK
+                              ,MACH.SVC_CONFIG_MSTR_PK
+                              ,MACH.SVC_BY_LINE_BIZ_TP_CD
+                              ,MACH.ISTL_DT
+                              ,CASE
+                                   WHEN SUBSTR(MACH.ISTL_DT, 0, 6) = #trgtYrMth# THEN (LAST_DAY(TO_DATE(#trgtDt#, 'YYYYMMDD')) - TO_DATE(MACH.ISTL_DT, 'YYYYMMDD') + 1) / TO_NUMBER(TO_CHAR(LAST_DAY(TO_DATE(#trgtDt#, 'YYYYMMDD')), 'DD'))
+                                   ELSE 1
+                                   END AS MPP
+                           FROM
+                               SVC_MACH_MSTR MACH
+                           WHERE
+                               MACH.GLBL_CMPY_CD = #glblCmpyCd#
+                           AND MACH.EZCANCELFLAG = '0'
+                       ) SMM
+                       ,(
+                           SELECT
+                               SVC_MACH_MSTR_PK
+                              ,MTR_READ_DT
+                              ,CASE WHEN SUM(TL_CNT) != 0 THEN SUM(TL_CNT) ELSE SUM(BW_CNT) + SUM(CL_CNT) END AS READ_MTR_CNT
+                           FROM
+                           (
+                               SELECT
+                                   SPMR.SVC_MACH_MSTR_PK
+                                  ,SPMR.MTR_READ_DT
+                                  ,CASE WHEN ML.BW_MTR_FLG    = 'Y' THEN SPMR.READ_MTR_CNT ELSE 0 END AS BW_CNT
+                                  ,CASE WHEN ML.COLOR_MTR_FLG = 'Y' THEN SPMR.READ_MTR_CNT ELSE 0 END AS CL_CNT
+                                  ,CASE WHEN ML.TOT_MTR_FLG   = 'Y' THEN SPMR.READ_MTR_CNT ELSE 0 END AS TL_CNT
+                                  ,ROW_NUMBER() OVER(PARTITION BY SPMR.SVC_MACH_MSTR_PK, SPMR.MTR_READ_DT, SPMR.MTR_LB_CD ORDER BY SPMR.READ_MTR_CNT DESC) IDX
+                               FROM
+                                   MTR_LB ML
+                                  ,(
+                                      SELECT
+                                          MTR.GLBL_CMPY_CD
+                                         ,MTR.SVC_MACH_MSTR_PK
+                                         ,MTR.MTR_LB_CD
+                                         ,MTR.MTR_READ_DT
+                                         ,MTR.READ_MTR_CNT
+                                      FROM
+                                          SVC_PHYS_MTR_READ         MTR
+                                      WHERE
+                                          MTR.GLBL_CMPY_CD          = #glblCmpyCd#
+                                      AND SUBSTR(MTR_READ_DT, 0, 6) = #trgtYrMth#
+                                      AND MTR.TEST_MTR_CNT          = 0
+                                      AND MTR.VLD_MTR_FLG           = 'Y'
+                                      AND MTR.DS_MTR_READ_TP_GRP_CD = #dsMtrReadTpGrpCd#
+                                      AND MTR.EZCANCELFLAG          = '0'
+                                  ) SPMR
+                               WHERE
+                                   SPMR.GLBL_CMPY_CD = ML.GLBL_CMPY_CD
+                               AND SPMR.MTR_LB_CD    = ML.MTR_LB_CD
+                               AND ML.ACTV_FLG       = 'Y'
+                               AND ML.EZCANCELFLAG   = '0'
+                               )
+                           WHERE
+                               IDX = 1
+                           GROUP BY
+                               SVC_MACH_MSTR_PK
+                              ,MTR_READ_DT
+                       ) ISTL_DT_CNT
+                       ,(
+                           SELECT
+                               SVC_MACH_MSTR_PK
+                              ,MTR_READ_DT
+                              ,CASE WHEN SUM(TL_CNT) != 0 THEN SUM(TL_CNT) ELSE SUM(BW_CNT) + SUM(CL_CNT) END AS READ_MTR_CNT
+                           FROM
+                           (
+                               SELECT
+                                   MTR.SVC_MACH_MSTR_PK
+                                  ,MTR.MTR_READ_DT
+                                  ,CASE WHEN ML.BW_MTR_FLG    = 'Y' THEN MTR.READ_MTR_CNT ELSE 0 END AS BW_CNT
+                                  ,CASE WHEN ML.COLOR_MTR_FLG = 'Y' THEN MTR.READ_MTR_CNT ELSE 0 END AS CL_CNT
+                                  ,CASE WHEN ML.TOT_MTR_FLG   = 'Y' THEN MTR.READ_MTR_CNT ELSE 0 END AS TL_CNT
+                                  ,ROW_NUMBER() OVER(PARTITION BY MTR.SVC_MACH_MSTR_PK, MTR.MTR_READ_DT, MTR.MTR_LB_CD ORDER BY MTR.READ_MTR_CNT DESC) IDX
+                               FROM
+                                   SVC_PHYS_MTR_READ    MTR
+                                  ,MTR_LB               ML
+                                  ,(
+                                     SELECT
+                                         MTR.SVC_MACH_MSTR_PK
+                                        ,MAX(MTR_READ_DT)          AS MTR_READ_DT
+                                     FROM
+                                         SVC_PHYS_MTR_READ         MTR
+                                     WHERE
+                                         MTR.GLBL_CMPY_CD          = #glblCmpyCd#
+                                     AND SUBSTR(MTR_READ_DT, 0, 6) = #trgtYrMth#
+                                     AND MTR.VLD_MTR_FLG           = 'Y'
+                                     AND MTR.DS_MTR_READ_TP_GRP_CD = #dsMtrReadTpGrpCd#
+                                     AND MTR.EZCANCELFLAG          = '0'
+                                     GROUP BY
+                                         MTR.SVC_MACH_MSTR_PK
+                                  ) MTR_WK
+                               WHERE
+                                   MTR.GLBL_CMPY_CD     = #glblCmpyCd#
+                               AND MTR.TEST_MTR_CNT     = 0
+                               AND MTR.GLBL_CMPY_CD     = ML.GLBL_CMPY_CD
+                               AND MTR.MTR_LB_CD        = ML.MTR_LB_CD
+                               AND ML.ACTV_FLG          = 'Y'
+                               AND MTR.SVC_MACH_MSTR_PK = MTR_WK.SVC_MACH_MSTR_PK
+                               AND MTR.MTR_READ_DT      = MTR_WK.MTR_READ_DT
+                               AND MTR.EZCANCELFLAG     = '0'
+                               AND ML.EZCANCELFLAG      = '0'
+                           )
+                           WHERE
+                               IDX = 1
+                           GROUP BY
+                               SVC_MACH_MSTR_PK
+                              ,MTR_READ_DT
+                       ) TRGT
+                       ,(
+                           SELECT
+                               SVC_MACH_MSTR_PK
+                              ,MTR_READ_DT
+                              ,CASE WHEN SUM(TL_CNT) != 0 THEN SUM(TL_CNT) ELSE SUM(BW_CNT) + SUM(CL_CNT) END AS READ_MTR_CNT
+                           FROM
+                           (
+                               SELECT
+                                   MTR.SVC_MACH_MSTR_PK
+                                  ,MTR.MTR_READ_DT
+                                  ,CASE WHEN ML.BW_MTR_FLG    = 'Y' THEN MTR.READ_MTR_CNT ELSE 0 END AS BW_CNT
+                                  ,CASE WHEN ML.COLOR_MTR_FLG = 'Y' THEN MTR.READ_MTR_CNT ELSE 0 END AS CL_CNT
+                                  ,CASE WHEN ML.TOT_MTR_FLG   = 'Y' THEN MTR.READ_MTR_CNT ELSE 0 END AS TL_CNT
+                                  ,ROW_NUMBER() OVER(PARTITION BY MTR.SVC_MACH_MSTR_PK, MTR.MTR_READ_DT, MTR.MTR_LB_CD ORDER BY MTR.READ_MTR_CNT DESC) IDX
+                               FROM
+                                   SVC_PHYS_MTR_READ    MTR
+                                  ,MTR_LB               ML
+                                  ,(
+                                     SELECT
+                                         MTR.SVC_MACH_MSTR_PK
+                                        ,MAX(MTR_READ_DT)          AS MTR_READ_DT
+                                     FROM
+                                         SVC_PHYS_MTR_READ         MTR
+                                     WHERE
+                                         MTR.GLBL_CMPY_CD          = #glblCmpyCd#
+                                     AND SUBSTR(MTR_READ_DT, 0, 6) &lt;= TO_CHAR(ADD_MONTHS(TO_DATE(#trgtYrMth#, 'YYYYMM'), -1), 'YYYYMM')
+                                     AND MTR.VLD_MTR_FLG           = 'Y'
+                                     AND MTR.DS_MTR_READ_TP_GRP_CD = #dsMtrReadTpGrpCd#
+                                     AND MTR.EZCANCELFLAG          = '0'
+                                     GROUP BY
+                                         MTR.SVC_MACH_MSTR_PK
+                                  ) MTR_WK
+                               WHERE
+                                   MTR.GLBL_CMPY_CD     = #glblCmpyCd#
+                               AND MTR.TEST_MTR_CNT     = 0
+                               AND MTR.GLBL_CMPY_CD     = ML.GLBL_CMPY_CD
+                               AND MTR.MTR_LB_CD        = ML.MTR_LB_CD
+                               AND ML.ACTV_FLG          = 'Y'
+                               AND MTR.SVC_MACH_MSTR_PK = MTR_WK.SVC_MACH_MSTR_PK
+                               AND MTR.MTR_READ_DT      = MTR_WK.MTR_READ_DT
+                               AND MTR.EZCANCELFLAG     = '0'
+                               AND ML.EZCANCELFLAG      = '0'
+                           )
+                           WHERE
+                               IDX = 1
+                           GROUP BY
+                               SVC_MACH_MSTR_PK
+                              ,MTR_READ_DT
+                       ) LAST
+                       WHERE
+                           SMM.SVC_MACH_MSTR_PK  = TRGT.SVC_MACH_MSTR_PK
+                       AND SMM.SVC_MACH_MSTR_PK  = ISTL_DT_CNT.SVC_MACH_MSTR_PK(+)
+                       AND SMM.ISTL_DT           = ISTL_DT_CNT.MTR_READ_DT(+)
+                       AND TRGT.SVC_MACH_MSTR_PK = LAST.SVC_MACH_MSTR_PK(+)
+                    ) CNT
+                WHERE
+                    DMG.GLBL_CMPY_CD       = #glblCmpyCd#
+                AND DMG.GLBL_CMPY_CD       = DM.GLBL_CMPY_CD
+                AND DMG.MDL_GRP_ID         = DM.MDL_GRP_ID
+                AND DM.GLBL_CMPY_CD        = SCM.GLBL_CMPY_CD
+                AND DM.MDL_ID              = SCM.MDL_ID
+                AND SCM.SVC_CONFIG_MSTR_PK = CNT.SVC_CONFIG_MSTR_PK
+                AND DMG.EZCANCELFLAG       = '0'
+                AND DM.EZCANCELFLAG        = '0'
+                AND SCM.EZCANCELFLAG       = '0'
+                GROUP BY 
+                    DMG.MDL_GRP_ID
+                   ,DMG.MDL_GRP_DESC_TXT
+            ) MAIN
+            ,(
+                SELECT
+                    FMHU.COPY_USG_QTY
+                   ,FMHU.MDL_GRP_ID
+                FROM 
+                    FCT_MLY_HIST_USG FMHU
+                WHERE
+                    FMHU.GLBL_CMPY_CD    = #glblCmpyCd#
+                AND FMHU.FCT_CATG_CD     = #catgCdMdlGrp#
+                AND FMHU.DWH_TRGT_YR_MTH = TO_CHAR(ADD_MONTHS(TO_DATE(#trgtYrMth#, 'YYYYMM'), -12), 'YYYYMM')
+                AND FMHU.EZCANCELFLAG    = '0'
+            ) LAST_YR
+            ,(
+                SELECT
+                    FMHU.COPY_USG_QTY
+                   ,FMHU.MDL_GRP_ID
+                FROM 
+                    FCT_MLY_HIST_USG FMHU
+                WHERE
+                    FMHU.GLBL_CMPY_CD    = #glblCmpyCd#
+                AND FMHU.FCT_CATG_CD     = #catgCdMdlGrp#
+                AND FMHU.DWH_TRGT_YR_MTH = TO_CHAR(ADD_MONTHS(TO_DATE(#trgtYrMth#, 'YYYYMM'), -1), 'YYYYMM')
+                AND FMHU.EZCANCELFLAG    = '0'
+            ) LAST_MTH
+            ,(
+                SELECT
+                    MAX(FMHU.COPY_USG_QTY) AS MAX_COPY_QTY
+                   ,MIN(FMHU.COPY_USG_QTY) AS MIN_COPY_QTY
+                   ,FMHU.MDL_GRP_ID
+                FROM 
+                    FCT_MLY_HIST_USG FMHU
+                WHERE
+                    FMHU.GLBL_CMPY_CD    = #glblCmpyCd#
+                AND FMHU.FCT_CATG_CD     = #catgCdMdlGrp#
+                AND FMHU.DWH_TRGT_YR_MTH &gt;= TO_CHAR(ADD_MONTHS(TO_DATE(#trgtYrMth#, 'YYYYMM'), -24), 'YYYYMM')
+                AND FMHU.DWH_TRGT_YR_MTH &lt; #trgtYrMth#
+                AND FMHU.EZCANCELFLAG    = '0'
+                GROUP BY(FMHU.MDL_GRP_ID)
+            ) MIN_MAX
+            WHERE
+                MAIN.MDL_GRP_ID = LAST_YR.MDL_GRP_ID(+)
+            AND MAIN.MDL_GRP_ID = LAST_MTH.MDL_GRP_ID(+)
+            AND MAIN.MDL_GRP_ID = MIN_MAX.MDL_GRP_ID(+)
+
+        UNION ALL
+
+            SELECT
+                #catgCdMdlId#                  AS FCT_CATG_CD
+               ,MAIN.SVC_BY_LINE_BIZ_TP_CD     AS SVC_BY_LINE_BIZ_TP_CD
+               ,MAIN.MDL_GRP_ID                AS MDL_GRP_ID
+               ,MAIN.MDL_GRP_DESC_TXT          AS MDL_GRP_DESC_TXT
+               ,MAIN.MDL_ID                    AS MDL_ID
+               ,MAIN.T_MDL_NM                  AS T_MDL_NM
+               ,MAIN.COPY_USG_QTY              AS COPY_USG_QTY
+               ,NVL(LAST_YR.COPY_USG_QTY, 0)   AS LAST_YR_QTY
+               ,NVL(LAST_MTH.COPY_USG_QTY, 0)  AS LAST_MTH_QTY
+               ,NVL(MIN_MAX.MAX_COPY_QTY, 0)   AS LAST_MAX_QTY
+               ,NVL(MIN_MAX.MIN_COPY_QTY, 0)   AS LAST_MIN_QTY
+            FROM
+            (
+                SELECT
+                    DMG.MDL_GRP_ID                 AS MDL_GRP_ID
+                   ,DMG.MDL_GRP_DESC_TXT           AS MDL_GRP_DESC_TXT
+                   ,SCM.MDL_ID                     AS MDL_ID
+                   ,MN.T_MDL_NM                    AS T_MDL_NM
+                   ,MIN(CNT.SVC_BY_LINE_BIZ_TP_CD) AS SVC_BY_LINE_BIZ_TP_CD
+                   ,SUM(CNT.MTR_CNT_DIFF) / SUM(CNT.READ_DT_DIFF) * TO_NUMBER(TO_CHAR(LAST_DAY(TO_DATE(#trgtDt#, 'YYYYMMDD')), 'DD')) * SUM(CNT.MPP) AS COPY_USG_QTY
+                FROM
+                    DS_MDL_GRP      DMG
+                   ,DS_MDL          DM
+                   ,MDL_NM          MN
+                   ,SVC_CONFIG_MSTR SCM
+                   ,(
+                       SELECT
+                           SMM.SVC_CONFIG_MSTR_PK
+                          ,SMM.SVC_BY_LINE_BIZ_TP_CD
+                          ,SMM.MPP
+                          ,CASE 
+                              WHEN SUBSTR(SMM.ISTL_DT, 0, 6) = #trgtYrMth# AND ISTL_DT_CNT.READ_MTR_CNT IS NOT NULL THEN TRGT.READ_MTR_CNT - ISTL_DT_CNT.READ_MTR_CNT
+                              ELSE TRGT.READ_MTR_CNT - NVL(LAST.READ_MTR_CNT, 0)
+                              END AS MTR_CNT_DIFF
+                          ,CASE 
+                              WHEN SUBSTR(SMM.ISTL_DT, 0, 6) = #trgtYrMth# AND ISTL_DT_CNT.READ_MTR_CNT IS NOT NULL THEN TO_DATE(TRGT.MTR_READ_DT, 'YYYYMMDD') - TO_DATE(SMM.ISTL_DT, 'YYYYMMDD') + 1
+                              WHEN LAST.MTR_READ_DT IS NULL THEN TO_DATE(TRGT.MTR_READ_DT, 'YYYYMMDD') - TO_DATE(SMM.ISTL_DT, 'YYYYMMDD') + 1
+                              ELSE TO_DATE(TRGT.MTR_READ_DT, 'YYYYMMDD') - TO_DATE(LAST.MTR_READ_DT, 'YYYYMMDD') + 1
+                              END AS READ_DT_DIFF
+                       FROM
+                       (
+                           SELECT
+                               MACH.SVC_MACH_MSTR_PK
+                              ,MACH.SVC_CONFIG_MSTR_PK
+                              ,MACH.SVC_BY_LINE_BIZ_TP_CD
+                              ,MACH.ISTL_DT
+                              ,CASE
+                                   WHEN SUBSTR(MACH.ISTL_DT, 0, 6) = #trgtYrMth# THEN (LAST_DAY(TO_DATE(#trgtDt#, 'YYYYMMDD')) - TO_DATE(MACH.ISTL_DT, 'YYYYMMDD') + 1) / TO_NUMBER(TO_CHAR(LAST_DAY(TO_DATE(#trgtDt#, 'YYYYMMDD')), 'DD'))
+                                   ELSE 1
+                                   END AS MPP
+                           FROM
+                               SVC_MACH_MSTR MACH
+                           WHERE
+                               MACH.GLBL_CMPY_CD  = #glblCmpyCd#
+                           AND MACH.EZCANCELFLAG  = '0'
+                       ) SMM
+                       ,(
+                           SELECT
+                               SVC_MACH_MSTR_PK
+                              ,MTR_READ_DT
+                              ,CASE WHEN SUM(TL_CNT) != 0 THEN SUM(TL_CNT) ELSE SUM(BW_CNT) + SUM(CL_CNT) END AS READ_MTR_CNT
+                           FROM
+                               (
+                               SELECT
+                                   SPMR.SVC_MACH_MSTR_PK
+                                  ,SPMR.MTR_READ_DT
+                                  ,CASE WHEN ML.BW_MTR_FLG    = 'Y' THEN SPMR.READ_MTR_CNT ELSE 0 END AS BW_CNT
+                                  ,CASE WHEN ML.COLOR_MTR_FLG = 'Y' THEN SPMR.READ_MTR_CNT ELSE 0 END AS CL_CNT
+                                  ,CASE WHEN ML.TOT_MTR_FLG   = 'Y' THEN SPMR.READ_MTR_CNT ELSE 0 END AS TL_CNT
+                                  ,ROW_NUMBER() OVER(PARTITION BY SPMR.SVC_MACH_MSTR_PK, SPMR.MTR_READ_DT, SPMR.MTR_LB_CD ORDER BY SPMR.READ_MTR_CNT DESC) IDX
+                               FROM
+                                   MTR_LB ML
+                                  ,(
+                                      SELECT
+                                          MTR.GLBL_CMPY_CD
+                                         ,MTR.SVC_MACH_MSTR_PK
+                                         ,MTR.MTR_LB_CD
+                                         ,MTR.MTR_READ_DT
+                                         ,MTR.READ_MTR_CNT
+                                         
+                                      FROM
+                                          SVC_PHYS_MTR_READ         MTR
+                                      WHERE
+                                          MTR.GLBL_CMPY_CD          = #glblCmpyCd#
+                                      AND SUBSTR(MTR_READ_DT, 0, 6) = #trgtYrMth#
+                                      AND MTR.TEST_MTR_CNT          = 0
+                                      AND MTR.VLD_MTR_FLG           = 'Y'
+                                      AND MTR.DS_MTR_READ_TP_GRP_CD = #dsMtrReadTpGrpCd#
+                                      AND MTR.EZCANCELFLAG          = '0'
+                                  ) SPMR
+                               WHERE
+                                   SPMR.GLBL_CMPY_CD = ML.GLBL_CMPY_CD
+                               AND SPMR.MTR_LB_CD    = ML.MTR_LB_CD
+                               AND ML.ACTV_FLG       = 'Y'
+                               AND ML.EZCANCELFLAG   = '0'
+                               )
+                           WHERE
+                               IDX = 1
+                           GROUP BY
+                               SVC_MACH_MSTR_PK
+                              ,MTR_READ_DT
+                       ) ISTL_DT_CNT
+                       ,(
+                           SELECT
+                               SVC_MACH_MSTR_PK
+                              ,MTR_READ_DT
+                              ,CASE WHEN SUM(TL_CNT) != 0 THEN SUM(TL_CNT) ELSE SUM(BW_CNT) + SUM(CL_CNT) END AS READ_MTR_CNT
+                           FROM
+                               (
+                               SELECT
+                                   MTR.SVC_MACH_MSTR_PK
+                                  ,MTR.MTR_READ_DT
+                                  ,CASE WHEN ML.BW_MTR_FLG    = 'Y' THEN MTR.READ_MTR_CNT ELSE 0 END AS BW_CNT
+                                  ,CASE WHEN ML.COLOR_MTR_FLG = 'Y' THEN MTR.READ_MTR_CNT ELSE 0 END AS CL_CNT
+                                  ,CASE WHEN ML.TOT_MTR_FLG   = 'Y' THEN MTR.READ_MTR_CNT ELSE 0 END AS TL_CNT
+                                  ,ROW_NUMBER() OVER(PARTITION BY MTR.SVC_MACH_MSTR_PK, MTR.MTR_READ_DT, MTR.MTR_LB_CD ORDER BY MTR.READ_MTR_CNT DESC) IDX
+                               FROM
+                                   SVC_PHYS_MTR_READ    MTR
+                                  ,MTR_LB               ML
+                                  ,(
+                                     SELECT
+                                         MTR.SVC_MACH_MSTR_PK
+                                        ,MAX(MTR_READ_DT)          AS MTR_READ_DT
+                                     FROM
+                                         SVC_PHYS_MTR_READ         MTR
+                                     WHERE
+                                         MTR.GLBL_CMPY_CD                = #glblCmpyCd#
+                                     AND SUBSTR(MTR_READ_DT, 0, 6)       = #trgtYrMth#
+                                     AND MTR.VLD_MTR_FLG                 = 'Y'
+                                     AND MTR.DS_MTR_READ_TP_GRP_CD       = #dsMtrReadTpGrpCd#
+                                     AND MTR.EZCANCELFLAG                = '0'
+                                     GROUP BY
+                                         MTR.SVC_MACH_MSTR_PK
+                                  ) MTR_WK
+                               WHERE
+                                   MTR.GLBL_CMPY_CD     = #glblCmpyCd#
+                               AND MTR.TEST_MTR_CNT     = 0
+                               AND MTR.GLBL_CMPY_CD     = ML.GLBL_CMPY_CD
+                               AND MTR.MTR_LB_CD        = ML.MTR_LB_CD
+                               AND ML.ACTV_FLG          = 'Y'
+                               AND MTR.SVC_MACH_MSTR_PK = MTR_WK.SVC_MACH_MSTR_PK
+                               AND MTR.MTR_READ_DT      = MTR_WK.MTR_READ_DT
+                               AND MTR.EZCANCELFLAG     = '0'
+                               AND ML.EZCANCELFLAG      = '0'
+                               )
+                           WHERE
+                               IDX = 1
+                           GROUP BY
+                               SVC_MACH_MSTR_PK
+                              ,MTR_READ_DT
+                       ) TRGT
+                       ,(
+                           SELECT
+                               SVC_MACH_MSTR_PK
+                              ,MTR_READ_DT
+                              ,CASE WHEN SUM(TL_CNT) != 0 THEN SUM(TL_CNT) ELSE SUM(BW_CNT) + SUM(CL_CNT) END AS READ_MTR_CNT
+                           FROM
+                               (
+                               SELECT
+                                   MTR.SVC_MACH_MSTR_PK
+                                  ,MTR.MTR_READ_DT
+                                  ,CASE WHEN ML.BW_MTR_FLG    = 'Y' THEN MTR.READ_MTR_CNT ELSE 0 END AS BW_CNT
+                                  ,CASE WHEN ML.COLOR_MTR_FLG = 'Y' THEN MTR.READ_MTR_CNT ELSE 0 END AS CL_CNT
+                                  ,CASE WHEN ML.TOT_MTR_FLG   = 'Y' THEN MTR.READ_MTR_CNT ELSE 0 END AS TL_CNT
+                                  ,ROW_NUMBER() OVER(PARTITION BY MTR.SVC_MACH_MSTR_PK, MTR.MTR_READ_DT, MTR.MTR_LB_CD ORDER BY MTR.READ_MTR_CNT DESC) IDX
+                               FROM
+                                   SVC_PHYS_MTR_READ    MTR
+                                  ,MTR_LB               ML
+                                  ,(
+                                     SELECT
+                                         MTR.SVC_MACH_MSTR_PK
+                                        ,MAX(MTR_READ_DT)          AS MTR_READ_DT
+                                     FROM
+                                         SVC_PHYS_MTR_READ         MTR
+                                     WHERE
+                                         MTR.GLBL_CMPY_CD                = #glblCmpyCd#
+                                     AND SUBSTR(MTR_READ_DT, 0, 6)       &lt;= TO_CHAR(ADD_MONTHS(TO_DATE(#trgtYrMth#, 'YYYYMM'), -1), 'YYYYMM')
+                                     AND MTR.VLD_MTR_FLG                 = 'Y'
+                                     AND MTR.DS_MTR_READ_TP_GRP_CD       = #dsMtrReadTpGrpCd#
+                                     AND MTR.EZCANCELFLAG                = '0'
+                                     GROUP BY
+                                         MTR.SVC_MACH_MSTR_PK
+                                  ) MTR_WK
+                               WHERE
+                                   MTR.GLBL_CMPY_CD     = #glblCmpyCd#
+                               AND MTR.TEST_MTR_CNT     = 0
+                               AND MTR.GLBL_CMPY_CD     = ML.GLBL_CMPY_CD
+                               AND MTR.MTR_LB_CD        = ML.MTR_LB_CD
+                               AND ML.ACTV_FLG          = 'Y'
+                               AND MTR.SVC_MACH_MSTR_PK = MTR_WK.SVC_MACH_MSTR_PK
+                               AND MTR.MTR_READ_DT      = MTR_WK.MTR_READ_DT
+                               AND MTR.EZCANCELFLAG     = '0'
+                               AND ML.EZCANCELFLAG      = '0'
+                               )
+                           WHERE
+                               IDX = 1
+                           GROUP BY
+                               SVC_MACH_MSTR_PK
+                              ,MTR_READ_DT
+                       ) LAST
+                        WHERE
+                            SMM.SVC_MACH_MSTR_PK  = TRGT.SVC_MACH_MSTR_PK
+                        AND SMM.SVC_MACH_MSTR_PK  = ISTL_DT_CNT.SVC_MACH_MSTR_PK(+)
+                        AND SMM.ISTL_DT           = ISTL_DT_CNT.MTR_READ_DT(+)
+                        AND TRGT.SVC_MACH_MSTR_PK = LAST.SVC_MACH_MSTR_PK(+)
+                   ) CNT
+                WHERE
+                    SCM.GLBL_CMPY_CD       = #glblCmpyCd#
+                AND SCM.GLBL_CMPY_CD       = DM.GLBL_CMPY_CD
+                AND SCM.MDL_ID             = DM.MDL_ID
+                AND DM.GLBL_CMPY_CD        = DMG.GLBL_CMPY_CD
+                AND DM.MDL_GRP_ID          = DMG.MDL_GRP_ID
+                AND DM.GLBL_CMPY_CD        = MN.T_GLBL_CMPY_CD(+)
+                AND DM.MDL_ID              = MN.T_MDL_ID(+)
+                AND SCM.SVC_CONFIG_MSTR_PK = CNT.SVC_CONFIG_MSTR_PK
+                AND SCM.EZCANCELFLAG       = '0'
+                AND DMG.EZCANCELFLAG       = '0'
+                AND DM.EZCANCELFLAG        = '0'
+                AND MN.EZCANCELFLAG(+)     = '0'
+                GROUP BY 
+                    DMG.MDL_GRP_ID
+                   ,DMG.MDL_GRP_DESC_TXT
+                   ,SCM.MDL_ID
+                   ,MN.T_MDL_NM
+            ) MAIN
+            ,(
+                SELECT
+                    FMHU.COPY_USG_QTY
+                   ,FMHU.MDL_ID
+                FROM 
+                    FCT_MLY_HIST_USG FMHU
+                WHERE
+                    FMHU.GLBL_CMPY_CD    = #glblCmpyCd#
+                AND FMHU.FCT_CATG_CD     = #catgCdMdlId#
+                AND FMHU.DWH_TRGT_YR_MTH = TO_CHAR(ADD_MONTHS(TO_DATE(#trgtYrMth#, 'YYYYMM'), -12), 'YYYYMM')
+                AND FMHU.EZCANCELFLAG    = '0'
+            ) LAST_YR
+            ,(
+                SELECT
+                    FMHU.COPY_USG_QTY
+                   ,FMHU.MDL_ID
+                FROM 
+                    FCT_MLY_HIST_USG FMHU
+                WHERE
+                    FMHU.GLBL_CMPY_CD    = #glblCmpyCd#
+                AND FMHU.FCT_CATG_CD     = #catgCdMdlId#
+                AND FMHU.DWH_TRGT_YR_MTH = TO_CHAR(ADD_MONTHS(TO_DATE(#trgtYrMth#, 'YYYYMM'), -1), 'YYYYMM')
+                AND FMHU.EZCANCELFLAG    = '0'
+            ) LAST_MTH
+            ,(
+                SELECT
+                    MAX(FMHU.COPY_USG_QTY) AS MAX_COPY_QTY
+                   ,MIN(FMHU.COPY_USG_QTY) AS MIN_COPY_QTY
+                   ,FMHU.MDL_ID
+                FROM 
+                    FCT_MLY_HIST_USG FMHU
+                WHERE
+                    FMHU.GLBL_CMPY_CD     = #glblCmpyCd#
+                AND FMHU.FCT_CATG_CD      = #catgCdMdlId#
+                AND FMHU.DWH_TRGT_YR_MTH  &gt;= TO_CHAR(ADD_MONTHS(TO_DATE(#trgtYrMth#, 'YYYYMM'), -24), 'YYYYMM')
+                AND FMHU.DWH_TRGT_YR_MTH  &lt; #trgtYrMth#
+                AND FMHU.EZCANCELFLAG     = '0'
+                GROUP BY(FMHU.MDL_ID)
+            ) MIN_MAX
+            WHERE
+                MAIN.MDL_ID = LAST_YR.MDL_ID(+)
+            AND MAIN.MDL_ID = LAST_MTH.MDL_ID(+)
+            AND MAIN.MDL_ID = MIN_MAX.MDL_ID(+)
+        ) USG
+        ,(
+            SELECT
+                SUM(COPY_USG_QTY) AS TOTAL_QTY
+            FROM
+            (
+                SELECT
+                    SUM(CNT.MTR_CNT_DIFF) / SUM(CNT.READ_DT_DIFF) * TO_NUMBER(TO_CHAR(LAST_DAY(TO_DATE(#trgtDt#, 'YYYYMMDD')), 'DD')) * SUM(CNT.MPP) AS COPY_USG_QTY
+                FROM
+                    DS_MDL_GRP      DMG
+                   ,DS_MDL          DM
+                   ,SVC_CONFIG_MSTR SCM
+                   ,(
+                       SELECT
+                           SMM.SVC_CONFIG_MSTR_PK
+                          ,SMM.MPP
+                          ,CASE 
+                              WHEN SUBSTR(SMM.ISTL_DT, 0, 6) = #trgtYrMth# AND ISTL_DT_CNT.READ_MTR_CNT IS NOT NULL THEN TRGT.READ_MTR_CNT - ISTL_DT_CNT.READ_MTR_CNT
+                              ELSE TRGT.READ_MTR_CNT - NVL(LAST.READ_MTR_CNT, 0)
+                              END AS MTR_CNT_DIFF
+                          ,CASE 
+                              WHEN SUBSTR(SMM.ISTL_DT, 0, 6) = #trgtYrMth# AND ISTL_DT_CNT.READ_MTR_CNT IS NOT NULL THEN TO_DATE(TRGT.MTR_READ_DT, 'YYYYMMDD') - TO_DATE(SMM.ISTL_DT, 'YYYYMMDD') + 1
+                              WHEN LAST.MTR_READ_DT IS NULL THEN TO_DATE(TRGT.MTR_READ_DT, 'YYYYMMDD') - TO_DATE(SMM.ISTL_DT, 'YYYYMMDD') + 1
+                              ELSE TO_DATE(TRGT.MTR_READ_DT, 'YYYYMMDD') - TO_DATE(LAST.MTR_READ_DT, 'YYYYMMDD') + 1
+                              END AS READ_DT_DIFF
+                       FROM
+                       (
+                           SELECT
+                               MACH.SVC_MACH_MSTR_PK
+                              ,MACH.SVC_CONFIG_MSTR_PK
+                              ,MACH.ISTL_DT
+                              ,CASE
+                                   WHEN SUBSTR(MACH.ISTL_DT, 0, 6) = #trgtYrMth# THEN (LAST_DAY(TO_DATE(#trgtDt#, 'YYYYMMDD')) - TO_DATE(MACH.ISTL_DT, 'YYYYMMDD') + 1) / TO_NUMBER(TO_CHAR(LAST_DAY(TO_DATE(#trgtDt#, 'YYYYMMDD')), 'DD'))
+                                   ELSE 1
+                                   END AS MPP
+                           FROM
+                               SVC_MACH_MSTR MACH
+                           WHERE
+                               MACH.GLBL_CMPY_CD  = #glblCmpyCd#
+                           AND MACH.EZCANCELFLAG  = '0'
+                       ) SMM
+                       ,(
+                           SELECT
+                               SVC_MACH_MSTR_PK
+                              ,MTR_READ_DT
+                              ,CASE WHEN SUM(TL_CNT) != 0 THEN SUM(TL_CNT) ELSE SUM(BW_CNT) + SUM(CL_CNT) END AS READ_MTR_CNT
+                           FROM
+                               (
+                               SELECT
+                                   SPMR.SVC_MACH_MSTR_PK
+                                  ,SPMR.MTR_READ_DT
+                                  ,CASE WHEN ML.BW_MTR_FLG    = 'Y' THEN SPMR.READ_MTR_CNT ELSE 0 END AS BW_CNT
+                                  ,CASE WHEN ML.COLOR_MTR_FLG = 'Y' THEN SPMR.READ_MTR_CNT ELSE 0 END AS CL_CNT
+                                  ,CASE WHEN ML.TOT_MTR_FLG   = 'Y' THEN SPMR.READ_MTR_CNT ELSE 0 END AS TL_CNT
+                                  ,ROW_NUMBER() OVER(PARTITION BY SPMR.SVC_MACH_MSTR_PK, SPMR.MTR_READ_DT, SPMR.MTR_LB_CD ORDER BY SPMR.READ_MTR_CNT DESC) IDX
+                               FROM
+                                   MTR_LB ML
+                                  ,(
+                                      SELECT
+                                          MTR.GLBL_CMPY_CD
+                                         ,MTR.SVC_MACH_MSTR_PK
+                                         ,MTR.MTR_LB_CD
+                                         ,MTR.MTR_READ_DT
+                                         ,MTR.READ_MTR_CNT
+                                         
+                                      FROM
+                                          SVC_PHYS_MTR_READ         MTR
+                                      WHERE
+                                          MTR.GLBL_CMPY_CD          = #glblCmpyCd#
+                                      AND SUBSTR(MTR_READ_DT, 0, 6) = #trgtYrMth#
+                                      AND MTR.TEST_MTR_CNT          = 0
+                                      AND MTR.VLD_MTR_FLG           = 'Y'
+                                      AND MTR.DS_MTR_READ_TP_GRP_CD = #dsMtrReadTpGrpCd#
+                                      AND MTR.EZCANCELFLAG          = '0'
+                                  ) SPMR
+                               WHERE
+                                   SPMR.GLBL_CMPY_CD = ML.GLBL_CMPY_CD
+                               AND SPMR.MTR_LB_CD    = ML.MTR_LB_CD
+                               AND ML.ACTV_FLG       = 'Y'
+                               AND ML.EZCANCELFLAG   = '0'
+                               )
+                           WHERE
+                               IDX = 1
+                           GROUP BY
+                               SVC_MACH_MSTR_PK
+                              ,MTR_READ_DT
+                       ) ISTL_DT_CNT
+                       ,(
+                           SELECT
+                               SVC_MACH_MSTR_PK
+                              ,MTR_READ_DT
+                              ,CASE WHEN SUM(TL_CNT) != 0 THEN SUM(TL_CNT) ELSE SUM(BW_CNT) + SUM(CL_CNT) END AS READ_MTR_CNT
+                           FROM
+                               (
+                               SELECT
+                                   MTR.SVC_MACH_MSTR_PK
+                                  ,MTR.MTR_READ_DT
+                                  ,CASE WHEN ML.BW_MTR_FLG    = 'Y' THEN MTR.READ_MTR_CNT ELSE 0 END AS BW_CNT
+                                  ,CASE WHEN ML.COLOR_MTR_FLG = 'Y' THEN MTR.READ_MTR_CNT ELSE 0 END AS CL_CNT
+                                  ,CASE WHEN ML.TOT_MTR_FLG   = 'Y' THEN MTR.READ_MTR_CNT ELSE 0 END AS TL_CNT
+                                  ,ROW_NUMBER() OVER(PARTITION BY MTR.SVC_MACH_MSTR_PK, MTR.MTR_READ_DT, MTR.MTR_LB_CD ORDER BY MTR.READ_MTR_CNT DESC) IDX
+                               FROM
+                                   SVC_PHYS_MTR_READ    MTR
+                                  ,MTR_LB               ML
+                                  ,(
+                                     SELECT
+                                         MTR.SVC_MACH_MSTR_PK
+                                        ,MAX(MTR_READ_DT)          AS MTR_READ_DT
+                                     FROM
+                                         SVC_PHYS_MTR_READ         MTR
+                                     WHERE
+                                         MTR.GLBL_CMPY_CD                = #glblCmpyCd#
+                                     AND SUBSTR(MTR_READ_DT, 0, 6)       = #trgtYrMth#
+                                     AND MTR.VLD_MTR_FLG                 = 'Y'
+                                     AND MTR.DS_MTR_READ_TP_GRP_CD       = #dsMtrReadTpGrpCd#
+                                     AND MTR.EZCANCELFLAG                = '0'
+                                     GROUP BY
+                                         MTR.SVC_MACH_MSTR_PK
+                                  ) MTR_WK
+                               WHERE
+                                   MTR.GLBL_CMPY_CD     = #glblCmpyCd#
+                               AND MTR.TEST_MTR_CNT     = 0
+                               AND MTR.GLBL_CMPY_CD     = ML.GLBL_CMPY_CD
+                               AND MTR.MTR_LB_CD        = ML.MTR_LB_CD
+                               AND ML.ACTV_FLG          = 'Y'
+                               AND MTR.SVC_MACH_MSTR_PK = MTR_WK.SVC_MACH_MSTR_PK
+                               AND MTR.MTR_READ_DT      = MTR_WK.MTR_READ_DT
+                               AND MTR.EZCANCELFLAG     = '0'
+                               AND ML.EZCANCELFLAG      = '0'
+                               )
+                           WHERE
+                               IDX = 1
+                           GROUP BY
+                               SVC_MACH_MSTR_PK
+                              ,MTR_READ_DT
+                       ) TRGT
+                       ,(
+                           SELECT
+                               SVC_MACH_MSTR_PK
+                              ,MTR_READ_DT
+                              ,CASE WHEN SUM(TL_CNT) != 0 THEN SUM(TL_CNT) ELSE SUM(BW_CNT) + SUM(CL_CNT) END AS READ_MTR_CNT
+                           FROM
+                               (
+                               SELECT
+                                   MTR.SVC_MACH_MSTR_PK
+                                  ,MTR.MTR_READ_DT
+                                  ,CASE WHEN ML.BW_MTR_FLG    = 'Y' THEN MTR.READ_MTR_CNT ELSE 0 END AS BW_CNT
+                                  ,CASE WHEN ML.COLOR_MTR_FLG = 'Y' THEN MTR.READ_MTR_CNT ELSE 0 END AS CL_CNT
+                                  ,CASE WHEN ML.TOT_MTR_FLG   = 'Y' THEN MTR.READ_MTR_CNT ELSE 0 END AS TL_CNT
+                                  ,ROW_NUMBER() OVER(PARTITION BY MTR.SVC_MACH_MSTR_PK, MTR.MTR_READ_DT, MTR.MTR_LB_CD ORDER BY MTR.READ_MTR_CNT DESC) IDX
+                               FROM
+                                   SVC_PHYS_MTR_READ    MTR
+                                  ,MTR_LB               ML
+                                  ,(
+                                     SELECT
+                                         MTR.SVC_MACH_MSTR_PK
+                                        ,MAX(MTR_READ_DT)          AS MTR_READ_DT
+                                     FROM
+                                         SVC_PHYS_MTR_READ         MTR
+                                     WHERE
+                                         MTR.GLBL_CMPY_CD                = #glblCmpyCd#
+                                     AND SUBSTR(MTR_READ_DT, 0, 6)       &lt;= TO_CHAR(ADD_MONTHS(TO_DATE(#trgtYrMth#, 'YYYYMM'), -1), 'YYYYMM')
+                                     AND MTR.VLD_MTR_FLG                 = 'Y'
+                                     AND MTR.DS_MTR_READ_TP_GRP_CD       = #dsMtrReadTpGrpCd#
+                                     AND MTR.EZCANCELFLAG                = '0'
+                                     GROUP BY
+                                         MTR.SVC_MACH_MSTR_PK
+                                  ) MTR_WK
+                               WHERE
+                                   MTR.GLBL_CMPY_CD     = #glblCmpyCd#
+                               AND MTR.TEST_MTR_CNT     = 0
+                               AND MTR.GLBL_CMPY_CD     = ML.GLBL_CMPY_CD
+                               AND MTR.MTR_LB_CD        = ML.MTR_LB_CD
+                               AND ML.ACTV_FLG          = 'Y'
+                               AND MTR.SVC_MACH_MSTR_PK = MTR_WK.SVC_MACH_MSTR_PK
+                               AND MTR.MTR_READ_DT      = MTR_WK.MTR_READ_DT
+                               AND MTR.EZCANCELFLAG     = '0'
+                               AND ML.EZCANCELFLAG      = '0'
+                               )
+                           WHERE
+                               IDX = 1
+                           GROUP BY
+                               SVC_MACH_MSTR_PK
+                              ,MTR_READ_DT
+                       ) LAST
+                        WHERE
+                            SMM.SVC_MACH_MSTR_PK  = TRGT.SVC_MACH_MSTR_PK
+                        AND SMM.SVC_MACH_MSTR_PK  = ISTL_DT_CNT.SVC_MACH_MSTR_PK(+)
+                        AND SMM.ISTL_DT           = ISTL_DT_CNT.MTR_READ_DT(+)
+                        AND TRGT.SVC_MACH_MSTR_PK = LAST.SVC_MACH_MSTR_PK(+)
+                   ) CNT
+                WHERE
+                    DMG.GLBL_CMPY_CD       = #glblCmpyCd#
+                AND DMG.GLBL_CMPY_CD       = DM.GLBL_CMPY_CD
+                AND DMG.MDL_GRP_ID         = DM.MDL_GRP_ID
+                AND DM.GLBL_CMPY_CD        = SCM.GLBL_CMPY_CD
+                AND DM.MDL_ID              = SCM.MDL_ID
+                AND SCM.SVC_CONFIG_MSTR_PK = CNT.SVC_CONFIG_MSTR_PK
+                AND DMG.EZCANCELFLAG       = '0'
+                AND DM.EZCANCELFLAG        = '0'
+                AND SCM.EZCANCELFLAG       = '0'
+                GROUP BY 
+                     DMG.MDL_GRP_ID
+            )
+        ) TOTAL_MDL_GRP
+
+    </statement>
+
+</sqlMap>

@@ -1,0 +1,581 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sqlMap namespace="NSAL0920Query">
+    <typeAlias alias="NSAL0920_ASMsg"  type="business.blap.NSAL0920.NSAL0920_ASMsg"/>
+    <statement id="getSearchData" parameterClass="Map" resultMap="result.getSearchData">
+        <!-- START 2018/10/02 K.Kojima [QC#28408, ADD] -->
+        WITH TARGET_SVC_CONTR_BLLG AS (
+            SELECT
+                 SCB.SVC_CONTR_BLLG_PK
+                ,SCB.BASE_BLLG_NEXT_BLLG_DT
+                ,SCB.BILL_TO_CUST_CD
+                ,SCB.BLLG_APVL_CPLT_FLG
+                ,SCB.BLLG_APVL_REQ_FLG
+                ,SCB.DS_CONTR_BLLG_SCHD_PK
+                ,SCB.DS_CONTR_DTL_PK
+                ,SCB.DS_CONTR_PK
+                ,SCB.EZCANCELFLAG
+                ,SCB.GLBL_CMPY_CD
+                ,SCB.MTR_BLLG_NEXT_BLLG_DT
+                ,SCB.OVRD_NEXT_BLLG_DT
+                ,SCB.SVC_CONTR_BLLG_FROM_DT
+                ,SCB.SVC_MACH_MSTR_PK
+                ,SCB.EZINTIME
+                ,SCB.EZINUSERID
+                ,SCB.EZUPTIME
+                ,SCB.EZUPUSERID
+                ,SCB.EZTABLEID
+                <!-- START 2019/09/26 [QC#53722, ADD] -->
+                ,SCB.INV_TP_CD
+                <!-- END 2019/09/26 [QC#53722, ADD] -->
+            FROM
+                SVC_CONTR_BLLG         SCB
+            WHERE
+                    SCB.GLBL_CMPY_CD = #glblCmpyCd#
+                AND SCB.EZCANCELFLAG = '0'
+                <isNotNull property="apvlReqYes">
+                <isNull property="apvlReqNo">
+                AND SCB.BLLG_APVL_REQ_FLG           = 'Y'
+                AND SCB.BLLG_APVL_CPLT_FLG          = 'N'
+                </isNull>
+                </isNotNull>
+                <isNull property="apvlReqYes">
+                <isNotNull property="apvlReqNo">
+                AND SCB.BLLG_APVL_REQ_FLG    &lt;&gt; 'Y'
+                AND SCB.BLLG_APVL_CPLT_FLG   &lt;&gt; 'N'
+                </isNotNull>
+                </isNull>
+                <isNotNull property="fromDt">
+                AND NVL(SCB.OVRD_NEXT_BLLG_DT, NVL(SCB.MTR_BLLG_NEXT_BLLG_DT, SCB.BASE_BLLG_NEXT_BLLG_DT))  &gt;= #fromDt#
+                </isNotNull>
+                <isNotNull property="thruDt">
+                AND NVL(SCB.OVRD_NEXT_BLLG_DT, NVL(SCB.MTR_BLLG_NEXT_BLLG_DT, SCB.BASE_BLLG_NEXT_BLLG_DT))  &lt;= #thruDt#
+                </isNotNull>
+                <isEqual property="dsContrSearchFlag" compareValue="Y">
+                AND EXISTS(
+                    SELECT
+                        1
+                    FROM
+                        DS_CONTR HDR
+                    WHERE
+                            SCB.GLBL_CMPY_CD    = HDR.GLBL_CMPY_CD
+                        AND SCB.DS_CONTR_PK     = HDR.DS_CONTR_PK
+                        <isNotNull property="dsContrNum">
+                        AND HDR.DS_CONTR_NUM LIKE #dsContrNum#
+                        </isNotNull>
+                        AND HDR.EZCANCELFLAG    = '0'
+                        <isEqual property="sellToCustSearchFlag" compareValue="Y">
+                        AND EXISTS(
+                            SELECT
+                                1
+                            FROM
+                                SELL_TO_CUST            STC
+                            WHERE
+                                    HDR.GLBL_CMPY_CD       = STC.GLBL_CMPY_CD
+                                AND HDR.DS_ACCT_NUM        = STC.SELL_TO_CUST_CD
+                                <isNotNull property="dsAcctNum">
+                                AND STC.SELL_TO_CUST_CD LIKE #dsAcctNum#
+                                </isNotNull>
+                                <isNotNull property="dsAcctNm">
+                                AND STC.DS_ACCT_NM      LIKE #dsAcctNm#
+                                </isNotNull>
+                                AND STC.EZCANCELFLAG       = '0'
+                        )
+                        </isEqual>
+                        <isEqual property="billToCustSearchFlag" compareValue="Y">
+                        AND EXISTS(
+                            SELECT
+                                1
+                            FROM
+                                BILL_TO_CUST BTC
+                            WHERE
+                                    HDR.GLBL_CMPY_CD                = BTC.GLBL_CMPY_CD
+                                AND HDR.ALT_PAYER_CUST_CD           = BTC.BILL_TO_CUST_CD
+                                AND BTC.EZCANCELFLAG                = '0'
+                                <isNotNull property="billToLocNum">
+                                AND BTC.BILL_TO_CUST_CD          LIKE #billToLocNum#
+                                </isNotNull>
+                                <isNotNull property="billToLocNm">
+                                AND BTC.LOC_NM                   LIKE #billToLocNm#
+                                </isNotNull>
+                        )
+                        </isEqual>
+                        <isEqual property="svcContrBrSearchFlag" compareValue="Y">
+                        AND EXISTS(
+                            SELECT
+                                1
+                            FROM
+                                SVC_CONTR_BR SBR
+                            WHERE
+                                    HDR.GLBL_CMPY_CD                = SBR.GLBL_CMPY_CD
+                                AND HDR.SVC_CONTR_BR_CD             = SBR.SVC_CONTR_BR_CD
+                                <isNotNull property="svcContrBrCd">
+                                AND SBR.SVC_CONTR_BR_CD             = #svcContrBrCd#
+                                </isNotNull>
+                                AND SBR.EFF_FROM_DT             &lt;= #salesDt#
+                                AND SBR.EZCANCELFLAG                = '0'
+                                <isEqual property="isExistsFlg" compareValue="Y">
+                                <isNull property="psnCd">
+                                AND EXISTS(
+                                    SELECT
+                                        1
+                                    FROM
+                                         SVC_RG_BR_RELN         BRL
+                                        ,SVC_RG                 SRG
+                                    WHERE
+                                            BRL.GLBL_CMPY_CD                = SBR.GLBL_CMPY_CD
+                                        AND BRL.SVC_CONTR_BR_CD             = SBR.SVC_CONTR_BR_CD
+                                        AND BRL.EZCANCELFLAG                = '0'
+                                        AND BRL.GLBL_CMPY_CD                = SRG.GLBL_CMPY_CD
+                                        AND BRL.SVC_RG_PK                   = SRG.SVC_RG_PK
+                                        <isNotNull property="svcRgPk">
+                                        AND SRG.SVC_RG_PK                   = #svcRgPk#
+                                        </isNotNull>
+                                        AND SRG.EZCANCELFLAG                = '0'
+                                )
+                                </isNull>
+                                <isNotNull property="psnCd">
+                                AND EXISTS(
+                                    SELECT
+                                        1
+                                    FROM
+                                         SVC_RG_BR_RELN         BRL
+                                        ,SVC_RG                 SRG
+                                        ,SVC_BR_RESRC_RELN      BRR
+                                        ,S21_PSN                PSN
+                                    WHERE
+                                            BRL.GLBL_CMPY_CD                = SBR.GLBL_CMPY_CD
+                                        AND BRL.SVC_CONTR_BR_CD             = SBR.SVC_CONTR_BR_CD
+                                        AND BRL.EZCANCELFLAG                = '0'
+                                        AND BRL.GLBL_CMPY_CD                = SRG.GLBL_CMPY_CD
+                                        AND BRL.SVC_RG_PK                   = SRG.SVC_RG_PK
+                                        <isNotNull property="svcRgPk">
+                                        AND SRG.SVC_RG_PK                   = #svcRgPk#
+                                        </isNotNull>
+                                        AND SRG.EZCANCELFLAG                = '0'
+                                        AND BRL.GLBL_CMPY_CD                = BRR.GLBL_CMPY_CD
+                                        AND BRL.SVC_CONTR_BR_CD             = BRR.SVC_CONTR_BR_CD
+                                        AND BRR.SVC_ORG_FUNC_ROLE_TP_CD     = #svcOrgFuncRoleTpCd#
+                                        AND BRR.EZCANCELFLAG                = '0'
+                                        AND BRR.GLBL_CMPY_CD                = PSN.GLBL_CMPY_CD
+                                        AND BRR.PSN_CD                      = PSN.PSN_CD
+                                        AND PSN.PSN_CD                      = #psnCd#
+                                        AND PSN.EZCANCELFLAG                = '0'
+                                )
+                                </isNotNull>
+                                </isEqual>
+                        )
+                        </isEqual>
+                )
+                </isEqual>
+        )
+        <!-- END 2018/10/02 K.Kojima [QC#28408, ADD] -->
+            SELECT
+                 SVC_CONTR_BLLG_PK
+                ,SVC_CONTR_XS_MTR_BLLG_PK
+                ,BLLG_APVL_REQ_FLG
+                ,BLLG_APVL_CPLT_FLG
+                ,OVRD_NEXT_BLLG_DT
+                ,SVC_CONTR_BR_DESC_TXT
+                ,DS_CONTR_NUM
+                ,DS_CONTR_CATG_CD
+                ,DS_CONTR_CATG_DESC_TXT
+                <!-- START 2018/10/02 K.Kojima [QC#28408, MOD] -->
+                <!-- ,DS_CONTR_CTRL_STS_NM -->
+                ,(
+                    SELECT
+                        DCDSV.DS_CONTR_CTRL_STS_NM
+                    FROM
+                        DS_CONTR_DTL_STS_V DCDSV
+                    WHERE
+                            DCDSV.GLBL_CMPY_CD    = #glblCmpyCd#
+                        AND DCDSV.DS_CONTR_DTL_PK = SUB.DS_CONTR_DTL_PK
+                        AND DCDSV.EZCANCELFLAG    = '0'
+                        AND ROWNUM                = 1
+                 ) AS DS_CONTR_CTRL_STS_NM
+                <!-- END 2018/10/02 K.Kojima [QC#28408, MOD] -->
+                ,SER_NUM
+                ,DS_ACCT_NUM
+                ,BILL_TO_CUST_CD
+                ,MTR_LB_DESC_TXT
+                ,MTR_BLLG_FROM_DT
+                ,MTR_BLLG_THRU_DT
+                ,XS_MTR_FROM_COPY_QTY
+                ,XS_MTR_AMT_RATE
+                ,START_READ_MTR_CNT
+                ,END_READ_MTR_CNT
+                ,MTR_CHRG_DEAL_AMT
+                ,YES_NO_NM
+                <!-- START 2016/12/02 K.Kojima [QC#14204, ADD] -->
+                ,XX_REC_HIST_CRAT_TS_A
+                ,XX_REC_HIST_CRAT_BY_NM_A
+                ,XX_REC_HIST_UPD_TS_A
+                ,XX_REC_HIST_UPD_BY_NM_A
+                ,XX_REC_HIST_TBL_NM_A
+                <!-- END 2016/12/02 K.Kojima [QC#14204, ADD] -->
+                <!-- START 2018/02/08 K.Kojima [QC#20793,ADD] -->
+                ,SHIP_TO_CUST_CD
+                ,LOC_NM
+                <!-- END 2018/02/08 K.Kojima [QC#20793,ADD] -->
+            FROM (
+                SELECT
+                     SCB.SVC_CONTR_BLLG_PK          AS SVC_CONTR_BLLG_PK
+                    ,XMB.SVC_CONTR_XS_MTR_BLLG_PK   AS SVC_CONTR_XS_MTR_BLLG_PK
+                    ,SCB.BLLG_APVL_REQ_FLG          AS BLLG_APVL_REQ_FLG
+                    ,SCB.BLLG_APVL_CPLT_FLG         AS BLLG_APVL_CPLT_FLG
+                    ,NVL(SCB.OVRD_NEXT_BLLG_DT, SCB.MTR_BLLG_NEXT_BLLG_DT) AS OVRD_NEXT_BLLG_DT
+                    ,SBR.SVC_CONTR_BR_DESC_TXT      AS SVC_CONTR_BR_DESC_TXT
+                    ,HDR.DS_CONTR_NUM               AS DS_CONTR_NUM
+                    ,CTG.DS_CONTR_CATG_CD           AS DS_CONTR_CATG_CD
+                    ,CTG.DS_CONTR_CATG_DESC_TXT     AS DS_CONTR_CATG_DESC_TXT
+                    ,(
+                        CASE
+                            WHEN
+                                HDR.DS_CONTR_CATG_CD = #dsContrCatgCd_Fleet#
+                            THEN
+                                CTG.DS_CONTR_CATG_ABBR_NM || '_' || HDR.DS_CONTR_NUM
+                            ELSE
+                                SMM.SER_NUM
+                        END
+                    ) AS SER_NUM
+                    ,HDR.DS_ACCT_NUM                AS DS_ACCT_NUM
+                    ,SCB.BILL_TO_CUST_CD            AS BILL_TO_CUST_CD
+                    ,MLB.MTR_LB_DESC_TXT            AS MTR_LB_DESC_TXT
+                    ,CMB.MTR_BLLG_FROM_DT           AS MTR_BLLG_FROM_DT
+                    ,CMB.MTR_BLLG_THRU_DT           AS MTR_BLLG_THRU_DT
+                    ,XMB.XS_MTR_FROM_COPY_QTY       AS XS_MTR_FROM_COPY_QTY
+                    ,XMB.XS_MTR_AMT_RATE            AS XS_MTR_AMT_RATE
+                    ,CMB.PREV_TOT_COPY_QTY          AS START_READ_MTR_CNT
+                    ,CMB.TOT_COPY_QTY               AS END_READ_MTR_CNT
+                    <!-- START 2019/09/26 [QC#53722, MOD] -->
+                    <!-- ,CMB.MTR_CHRG_DEAL_AMT          AS MTR_CHRG_DEAL_AMT -->
+                    ,CASE
+                        WHEN SCB.INV_TP_CD = #creditMemo#
+                        THEN CMB.MTR_CHRG_DEAL_AMT * -1
+                        ELSE CMB.MTR_CHRG_DEAL_AMT
+                        END                         AS MTR_CHRG_DEAL_AMT
+                    <!-- END 2019/09/26 [QC#53722, MOD] -->
+                    ,CASE
+                        WHEN SCB.BLLG_APVL_REQ_FLG = 'Y' AND SCB.BLLG_APVL_CPLT_FLG = 'N'
+                        THEN 'YES'
+                        ELSE 'NO'
+                        END                         AS YES_NO_NM
+                    ,SCB.DS_CONTR_DTL_PK            AS DS_CONTR_DTL_PK
+                    ,DCM.BLLG_MTR_LB_CD             AS BLLG_MTR_LB_CD
+                    ,SCB.SVC_CONTR_BLLG_FROM_DT     AS SVC_CONTR_BLLG_FROM_DT
+                    ,XMB.XS_MTR_COPY_QTY            AS XS_MTR_COPY_QTY
+                    <!-- START 2016/12/02 K.Kojima [QC#14204, ADD] -->
+                    ,SCB.EZINTIME                   AS XX_REC_HIST_CRAT_TS_A
+                    ,SCB.EZINUSERID                 AS XX_REC_HIST_CRAT_BY_NM_A
+                    ,SCB.EZUPTIME                   AS XX_REC_HIST_UPD_TS_A
+                    ,SCB.EZUPUSERID                 AS XX_REC_HIST_UPD_BY_NM_A
+                    ,SCB.EZTABLEID                  AS XX_REC_HIST_TBL_NM_A
+                    <!-- END 2016/12/02 K.Kojima [QC#14204, ADD] -->
+                    <!-- START 2018/02/08 K.Kojima [QC#20793,ADD] -->
+                    ,(CASE WHEN HDR.DS_CONTR_CATG_CD = #dsContrCatgCd_Fleet#
+                           THEN STCF.SHIP_TO_CUST_CD
+                           ELSE STC.SHIP_TO_CUST_CD END
+                        ) AS SHIP_TO_CUST_CD
+                    ,(CASE WHEN HDR.DS_CONTR_CATG_CD = #dsContrCatgCd_Fleet#
+                           THEN STCF.LOC_NM
+                           ELSE STC.LOC_NM END
+                        ) AS LOC_NM
+                    <!-- END 2018/02/08 K.Kojima [QC#20793,ADD] -->
+                FROM
+                    <!-- START 2018/10/02 K.Kojima [QC#28408, MOD] -->
+                    <!--  SVC_CONTR_BLLG         SCB -->
+                     TARGET_SVC_CONTR_BLLG  SCB
+                    <!-- END 2018/10/02 K.Kojima [QC#28408, MOD] -->
+                    ,SVC_CONTR_MTR_BLLG     CMB
+                    ,SVC_CONTR_XS_MTR_BLLG  XMB
+                    ,DS_CONTR_BLLG_MTR      DCM
+                    ,MTR_LB                 MLB
+                    ,SVC_MACH_MSTR          SMM
+                    ,DS_CONTR               HDR
+                    ,DS_CONTR_CATG          CTG
+                    ,BILL_TO_CUST           BTC
+                    ,SHIP_TO_CUST           STC
+                    ,SVC_CONTR_BR           SBR
+                    <!-- START 2018/02/08 K.Kojima [QC#20793,ADD] -->
+                    ,DS_CONTR_DTL           DCDF
+                    ,SHIP_TO_CUST           STCF
+                    <!-- END 2018/02/08 K.Kojima [QC#20793,ADD] -->
+                WHERE
+                        SCB.GLBL_CMPY_CD                 = #glblCmpyCd#
+                    AND SCB.EZCANCELFLAG                = '0'
+                    AND SCB.GLBL_CMPY_CD                = CMB.GLBL_CMPY_CD
+                    AND SCB.SVC_CONTR_BLLG_PK           = CMB.SVC_CONTR_BLLG_PK
+                    AND CMB.EZCANCELFLAG                = '0'
+                    AND CMB.GLBL_CMPY_CD                = XMB.GLBL_CMPY_CD
+                    AND CMB.SVC_CONTR_MTR_BLLG_PK       = XMB.SVC_CONTR_MTR_BLLG_PK
+                    AND XMB.EZCANCELFLAG                = '0'
+                    AND CMB.GLBL_CMPY_CD                = DCM.GLBL_CMPY_CD(+)
+                    AND CMB.DS_CONTR_BLLG_MTR_PK        = DCM.DS_CONTR_BLLG_MTR_PK(+)
+                    AND DCM.EZCANCELFLAG(+)             = '0'
+                    AND DCM.GLBL_CMPY_CD                = MLB.GLBL_CMPY_CD(+)
+                    AND DCM.BLLG_MTR_LB_CD              = MLB.MTR_LB_CD(+)
+                    AND MLB.EZCANCELFLAG(+)             = '0'
+                    AND SCB.GLBL_CMPY_CD                = SMM.GLBL_CMPY_CD(+)
+                    AND SCB.SVC_MACH_MSTR_PK            = SMM.SVC_MACH_MSTR_PK(+)
+                    AND SMM.EZCANCELFLAG(+)             = '0'
+                    AND SCB.GLBL_CMPY_CD                = HDR.GLBL_CMPY_CD
+                    AND SCB.DS_CONTR_PK                 = HDR.DS_CONTR_PK
+                    AND HDR.EZCANCELFLAG                = '0'
+                    AND HDR.GLBL_CMPY_CD                = CTG.GLBL_CMPY_CD(+)
+                    AND HDR.DS_CONTR_CATG_CD            = CTG.DS_CONTR_CATG_CD(+)
+                    AND CTG.EZCANCELFLAG(+)             = '0'
+                    AND HDR.GLBL_CMPY_CD                = BTC.GLBL_CMPY_CD
+                    AND HDR.ALT_PAYER_CUST_CD           = BTC.BILL_TO_CUST_CD
+                    AND BTC.EZCANCELFLAG                = '0'
+                    AND SMM.GLBL_CMPY_CD                = STC.GLBL_CMPY_CD(+)
+                    AND SMM.CUR_LOC_NUM                 = STC.SHIP_TO_CUST_CD(+)
+                    AND STC.EZCANCELFLAG(+)             = '0'
+                    AND HDR.GLBL_CMPY_CD                = SBR.GLBL_CMPY_CD
+                    AND HDR.SVC_CONTR_BR_CD             = SBR.SVC_CONTR_BR_CD
+                    AND SBR.EFF_FROM_DT             &lt;= #salesDt#
+                    AND SBR.EZCANCELFLAG                = '0'
+                    <!-- START 2018/02/08 K.Kojima [QC#20793,ADD] -->
+                    AND SCB.GLBL_CMPY_CD                = DCDF.GLBL_CMPY_CD(+)
+                    AND SCB.DS_CONTR_DTL_PK             = DCDF.DS_CONTR_DTL_PK(+)
+                    AND DCDF.EZCANCELFLAG(+)            = '0'
+                    AND DCDF.GLBL_CMPY_CD               = STCF.GLBL_CMPY_CD(+)
+                    AND DCDF.SHIP_TO_CUST_CD            = STCF.SHIP_TO_CUST_CD(+)
+                    AND STCF.EZCANCELFLAG(+)            = '0'
+                    <!-- END 2018/02/08 K.Kojima [QC#20793,ADD] -->
+<!-- END 2017/01/23 K.Kitachi [QC#17219, MOD] -->
+<!-- Add Start 2016/08/01 QC#12504 -->
+                UNION ALL
+                <!-- Base Billing -->
+                SELECT
+                     SCB.SVC_CONTR_BLLG_PK          AS SVC_CONTR_BLLG_PK
+                    ,NULL                           AS SVC_CONTR_XS_MTR_BLLG_PK
+                    ,SCB.BLLG_APVL_REQ_FLG          AS BLLG_APVL_REQ_FLG
+                    ,SCB.BLLG_APVL_CPLT_FLG         AS BLLG_APVL_CPLT_FLG
+                    ,NVL(SCB.OVRD_NEXT_BLLG_DT, SCB.BASE_BLLG_NEXT_BLLG_DT) AS OVRD_NEXT_BLLG_DT
+                    ,SBR.SVC_CONTR_BR_DESC_TXT      AS SVC_CONTR_BR_DESC_TXT
+                    ,HDR.DS_CONTR_NUM               AS DS_CONTR_NUM
+                    ,CTG.DS_CONTR_CATG_CD           AS DS_CONTR_CATG_CD
+                    ,CTG.DS_CONTR_CATG_DESC_TXT     AS DS_CONTR_CATG_DESC_TXT
+                    ,(
+                        CASE
+                            WHEN
+                                HDR.DS_CONTR_CATG_CD = #dsContrCatgCd_Fleet#
+                            THEN
+                                CTG.DS_CONTR_CATG_ABBR_NM || '_' || HDR.DS_CONTR_NUM
+                            ELSE
+                                SMM.SER_NUM
+                        END
+                    ) AS SER_NUM
+                    ,HDR.DS_ACCT_NUM                AS DS_ACCT_NUM
+                    ,SCB.BILL_TO_CUST_CD            AS BILL_TO_CUST_CD
+                    ,#base#                         AS MTR_LB_DESC_TXT
+                    ,CBB.BASE_BLLG_FROM_DT          AS BASE_BLLG_FROM_DT
+                    ,CBB.BASE_BLLG_THRU_DT          AS BASE_BLLG_THRU_DT
+                    ,NULL                           AS XS_MTR_FROM_COPY_QTY
+                    ,CBS.BASE_PRC_DEAL_AMT          AS BASE_PRC_DEAL_AMT
+                    ,NULL                           AS START_READ_MTR_CNT
+                    ,NULL                           AS END_READ_MTR_CNT
+                    <!-- START 2019/09/26 [QC#53722, MOD] -->
+                    <!-- ,CBB.BASE_DEAL_AMT              AS BASE_DEAL_AMT -->
+                    ,CASE
+                        WHEN SCB.INV_TP_CD = #creditMemo#
+                        THEN CBB.BASE_DEAL_AMT * -1
+                        ELSE CBB.BASE_DEAL_AMT
+                        END                         AS BASE_DEAL_AMT
+                    <!-- END 2019/09/26 [QC#53722, MOD] -->
+                    ,CASE
+                        WHEN SCB.BLLG_APVL_REQ_FLG = 'Y' AND SCB.BLLG_APVL_CPLT_FLG = 'N'
+                        THEN 'YES'
+                        ELSE 'NO'
+                        END                         AS YES_NO_NM
+                    ,SCB.DS_CONTR_DTL_PK            AS DS_CONTR_DTL_PK
+                    ,NULL                           AS BLLG_MTR_LB_CD
+                    ,SCB.SVC_CONTR_BLLG_FROM_DT     AS SVC_CONTR_BLLG_FROM_DT
+                    ,NULL                           AS XS_MTR_COPY_QTY
+                    <!-- START 2016/12/02 K.Kojima [QC#14204, ADD] -->
+                    ,SCB.EZINTIME                   AS XX_REC_HIST_CRAT_TS_A
+                    ,SCB.EZINUSERID                 AS XX_REC_HIST_CRAT_BY_NM_A
+                    ,SCB.EZUPTIME                   AS XX_REC_HIST_UPD_TS_A
+                    ,SCB.EZUPUSERID                 AS XX_REC_HIST_UPD_BY_NM_A
+                    ,SCB.EZTABLEID                  AS XX_REC_HIST_TBL_NM_A
+                    <!-- END 2016/12/02 K.Kojima [QC#14204, ADD] -->
+                    <!-- START 2018/02/08 K.Kojima [QC#20793,ADD] -->
+                    ,(CASE WHEN HDR.DS_CONTR_CATG_CD = #dsContrCatgCd_Fleet#
+                           THEN STCF.SHIP_TO_CUST_CD
+                           ELSE STC.SHIP_TO_CUST_CD END
+                        ) AS SHIP_TO_CUST_CD
+                    ,(CASE WHEN HDR.DS_CONTR_CATG_CD = #dsContrCatgCd_Fleet#
+                           THEN STCF.LOC_NM
+                           ELSE STC.LOC_NM END
+                        ) AS LOC_NM
+                    <!-- END 2018/02/08 K.Kojima [QC#20793,ADD] -->
+                FROM
+                    <!-- START 2018/10/02 K.Kojima [QC#28408, MOD] -->
+                    <!--  SVC_CONTR_BLLG         SCB -->
+                     TARGET_SVC_CONTR_BLLG  SCB
+                    <!-- END 2018/10/02 K.Kojima [QC#28408, MOD] -->
+                    ,SVC_CONTR_BASE_BLLG    CBB
+                    ,SVC_MACH_MSTR          SMM
+                    ,DS_CONTR               HDR
+                    ,DS_CONTR_CATG          CTG
+                    ,BILL_TO_CUST           BTC
+                    ,SHIP_TO_CUST           STC
+                    ,SVC_CONTR_BR           SBR
+                    ,DS_CONTR_BLLG_SCHD     CBS
+                    <!-- START 2018/02/08 K.Kojima [QC#20793,ADD] -->
+                    ,DS_CONTR_DTL           DCDF
+                    ,SHIP_TO_CUST           STCF
+                    <!-- END 2018/02/08 K.Kojima [QC#20793,ADD] -->
+                WHERE
+                        SCB.GLBL_CMPY_CD                 = #glblCmpyCd#
+                    AND SCB.EZCANCELFLAG                = '0'
+                    AND SCB.GLBL_CMPY_CD                = CBB.GLBL_CMPY_CD
+                    AND SCB.SVC_CONTR_BLLG_PK           = CBB.SVC_CONTR_BLLG_PK
+                    AND CBB.EZCANCELFLAG                = '0'
+                    AND SCB.GLBL_CMPY_CD                = SMM.GLBL_CMPY_CD(+)
+                    AND SCB.SVC_MACH_MSTR_PK            = SMM.SVC_MACH_MSTR_PK(+)
+                    AND SMM.EZCANCELFLAG(+)             = '0'
+                    AND SCB.GLBL_CMPY_CD                = HDR.GLBL_CMPY_CD
+                    AND SCB.DS_CONTR_PK                 = HDR.DS_CONTR_PK
+                    AND HDR.EZCANCELFLAG                = '0'
+                    AND HDR.GLBL_CMPY_CD                = CTG.GLBL_CMPY_CD(+)
+                    AND HDR.DS_CONTR_CATG_CD            = CTG.DS_CONTR_CATG_CD(+)
+                    AND CTG.EZCANCELFLAG(+)             = '0'
+                    AND HDR.GLBL_CMPY_CD                = BTC.GLBL_CMPY_CD
+                    AND HDR.ALT_PAYER_CUST_CD           = BTC.BILL_TO_CUST_CD
+                    AND BTC.EZCANCELFLAG                = '0'
+                    AND SMM.GLBL_CMPY_CD                = STC.GLBL_CMPY_CD(+)
+                    AND SMM.CUR_LOC_NUM                 = STC.SHIP_TO_CUST_CD(+)
+                    AND STC.EZCANCELFLAG(+)             = '0'
+                    AND HDR.GLBL_CMPY_CD                = SBR.GLBL_CMPY_CD
+                    AND HDR.SVC_CONTR_BR_CD             = SBR.SVC_CONTR_BR_CD
+                    AND SBR.EFF_FROM_DT             &lt;= #salesDt#
+                    AND SBR.EZCANCELFLAG                = '0'
+                    AND SCB.GLBL_CMPY_CD                = CBS.GLBL_CMPY_CD(+)
+                    AND SCB.DS_CONTR_BLLG_SCHD_PK       = CBS.DS_CONTR_BLLG_SCHD_PK(+)
+                    AND CBS.EZCANCELFLAG(+)             = '0'
+                    <!-- START 2018/02/08 K.Kojima [QC#20793,ADD] -->
+                    AND SCB.GLBL_CMPY_CD                = DCDF.GLBL_CMPY_CD(+)
+                    AND SCB.DS_CONTR_DTL_PK             = DCDF.DS_CONTR_DTL_PK(+)
+                    AND DCDF.EZCANCELFLAG(+)            = '0'
+                    AND DCDF.GLBL_CMPY_CD               = STCF.GLBL_CMPY_CD(+)
+                    AND DCDF.SHIP_TO_CUST_CD            = STCF.SHIP_TO_CUST_CD(+)
+                    AND STCF.EZCANCELFLAG(+)            = '0'
+                    <!-- END 2018/02/08 K.Kojima [QC#20793,ADD] -->
+<!-- START 2017/01/23 K.Kitachi [QC#17219, MOD] -->
+<!-- END 2017/01/23 K.Kitachi [QC#17219, MOD] -->
+<!-- Add End 2016/08/01 QC#12504 -->
+                ORDER BY
+                     OVRD_NEXT_BLLG_DT          DESC
+                    ,SVC_CONTR_BR_DESC_TXT      ASC
+                    ,DS_CONTR_NUM               DESC
+                    ,DS_CONTR_DTL_PK            ASC
+                    ,BLLG_MTR_LB_CD             ASC NULLS FIRST
+                    ,SVC_CONTR_BLLG_FROM_DT     DESC
+                    ,XS_MTR_COPY_QTY            ASC
+                    ,SVC_CONTR_XS_MTR_BLLG_PK   ASC
+            <!-- START 2018/10/02 K.Kojima [QC#28408, MOD] -->
+            <!-- ) WHERE -->
+            ) SUB WHERE
+            <!-- END 2018/10/02 K.Kojima [QC#28408, MOD] -->
+                ROWNUM        &lt;= #rowNum#
+    </statement>
+
+    <resultMap id="result.getSearchData"        class="NSAL0920_ASMsg">
+        <result property="svcContrBllgPk_A"       column="SVC_CONTR_BLLG_PK"         javaType="EZDSBigDecimalItem" />
+        <result property="svcContrXsMtrBllgPk_A"  column="SVC_CONTR_XS_MTR_BLLG_PK"  javaType="EZDSBigDecimalItem" />
+        <result property="bllgApvlReqFlg_A"       column="BLLG_APVL_REQ_FLG"         javaType="EZDSStringItem" />
+        <result property="bllgApvlCpltFlg_A"      column="BLLG_APVL_CPLT_FLG"        javaType="EZDSStringItem" />
+        <result property="ovrdNextBllgDt_A"       column="OVRD_NEXT_BLLG_DT"         javaType="EZDSDateItem" />
+        <result property="svcContrBrDescTxt_A"    column="SVC_CONTR_BR_DESC_TXT"     javaType="EZDSStringItem" />
+        <result property="dsContrNum_A"           column="DS_CONTR_NUM"              javaType="EZDSStringItem" />
+        <result property="dsContrCatgCd_A"        column="DS_CONTR_CATG_CD"          javaType="EZDSStringItem" />
+        <result property="dsContrCatgDescTxt_A"   column="DS_CONTR_CATG_DESC_TXT"    javaType="EZDSStringItem" />
+        <result property="dsContrCtrlStsNm_A"     column="DS_CONTR_CTRL_STS_NM"      javaType="EZDSStringItem" />
+        <result property="serNum_A"               column="SER_NUM"                   javaType="EZDSStringItem" />
+        <result property="dsAcctNum_A"            column="DS_ACCT_NUM"               javaType="EZDSStringItem" />
+        <result property="billToCustCd_A"         column="BILL_TO_CUST_CD"           javaType="EZDSStringItem" />
+        <result property="mtrLbDescTxt_A"         column="MTR_LB_DESC_TXT"           javaType="EZDSStringItem" />
+        <result property="mtrBllgFromDt_A"        column="MTR_BLLG_FROM_DT"          javaType="EZDSDateItem" />
+        <result property="mtrBllgThruDt_A"        column="MTR_BLLG_THRU_DT"          javaType="EZDSDateItem" />
+        <result property="xsMtrFromCopyQty_A"     column="XS_MTR_FROM_COPY_QTY"      javaType="EZDSBigDecimalItem" />
+        <result property="xsMtrAmtRate_A"         column="XS_MTR_AMT_RATE"           javaType="EZDSBigDecimalItem" />
+        <result property="readMtrCnt_AS"          column="START_READ_MTR_CNT"        javaType="EZDSBigDecimalItem" />
+        <result property="readMtrCnt_AE"          column="END_READ_MTR_CNT"          javaType="EZDSBigDecimalItem" />
+        <result property="mtrChrgDealAmt_A"       column="MTR_CHRG_DEAL_AMT"         javaType="EZDSBigDecimalItem" />
+        <result property="xxYesNoNm_A"            column="YES_NO_NM"                 javaType="EZDSStringItem" />
+        <!-- START 2016/12/02 K.Kojima [QC#14204, ADD] -->
+        <result property="xxRecHistCratTs_A"      column="XX_REC_HIST_CRAT_TS_A"     javaType="EZDSStringItem"/>
+        <result property="xxRecHistCratByNm_A"    column="XX_REC_HIST_CRAT_BY_NM_A"  javaType="EZDSStringItem"/>
+        <result property="xxRecHistUpdTs_A"       column="XX_REC_HIST_UPD_TS_A"      javaType="EZDSStringItem"/>
+        <result property="xxRecHistUpdByNm_A"     column="XX_REC_HIST_UPD_BY_NM_A"   javaType="EZDSStringItem"/>
+        <result property="xxRecHistTblNm_A"       column="XX_REC_HIST_TBL_NM_A"      javaType="EZDSStringItem"/>
+        <!-- END 2016/12/02 K.Kojima [QC#14204, ADD] -->
+        <!-- START 2018/02/08 K.Kojima [QC#20793,ADD] -->
+        <result property="curLocNum_A"            column="SHIP_TO_CUST_CD"           javaType="EZDSStringItem"/>
+        <result property="locNm_A"                column="LOC_NM"                    javaType="EZDSStringItem"/>
+        <!-- START 2018/02/08 K.Kojima [QC#20793,ADD] -->
+    </resultMap>
+
+<!-- START 2016/09/01 T.Tomita [QC#13976, ADD] -->
+    <statement id="getSvcRgPulldownList" parameterClass="Map" resultClass="Map">
+        SELECT
+             A.SVC_RG_PK
+            ,A.SVC_RG_DESC_TXT
+        FROM
+            SVC_RG A
+        WHERE
+                A.GLBL_CMPY_CD                  = #glblCmpyCd#
+            AND A.EZCANCELFLAG                  = '0'
+            AND A.SVC_RG_ACTV_FLG               = 'Y'
+            AND A.EFF_FROM_DT               &lt;= #slsDt#
+            AND NVL(A.EFF_THRU_DT, #endDt#) &gt;= #slsDt#
+        ORDER BY 
+            A.SVC_RG_PK
+    </statement>
+
+<!-- START 2017/01/23 K.Kitachi [QC#17219, DEL] -->
+<!--<statement id="getSvcContrBrPulldownList" parameterClass="Map" resultClass="Map"> -->
+<!--    SELECT -->
+<!--         A.SVC_CONTR_BR_CD -->
+<!--        ,A.SVC_CONTR_BR_DESC_TXT -->
+<!--    FROM -->
+<!--        SVC_CONTR_BR A -->
+<!--    WHERE -->
+<!--            A.GLBL_CMPY_CD                  = #glblCmpyCd# -->
+<!--        AND A.EZCANCELFLAG                  = '0' -->
+<!--        AND A.SVC_CONTR_BR_ACTV_FLG         = 'Y' -->
+<!--        AND A.EFF_FROM_DT               &lt;= #slsDt# -->
+<!--        AND NVL(A.EFF_THRU_DT, #endDt#) &gt;= #slsDt# -->
+<!--    ORDER BY  -->
+<!--        A.SVC_CONTR_BR_CD -->
+<!--</statement> -->
+<!-- END 2017/01/23 K.Kitachi [QC#17219, DEL] -->
+<!-- END 2016/09/01 T.Tomita [QC#13976, ADD] -->
+
+<!-- START 2017/01/23 K.Kitachi [QC#17219, DEL] -->
+<!--<statement id="getPsnNm" parameterClass="Map" resultClass="Map"> -->
+<!--    SELECT -->
+<!--         PSN.PSN_CD                     AS PSN_CD -->
+<!--        ,TRIM(PSN.PSN_FIRST_NM  -->
+<!--                        || ' ' || PSN.PSN_LAST_NM) -->
+<!--                                        AS PSN_NM -->
+<!--    FROM -->
+<!--         S21_PSN                PSN -->
+<!--        ,SVC_BR_RESRC_RELN      BRR -->
+<!--    WHERE -->
+<!--            PSN.GLBL_CMPY_CD                 = #glblCmpyCd# -->
+<!--        AND PSN.EFF_FROM_DT             &lt;= #salesDt# -->
+<!-- START 2016/09/01 T.Tomita [QC#13976, MOD] -->
+<!--        AND PSN.EFF_THRU_DT             &gt;= #salesDt# -->
+<!--        AND NVL(PSN.EFF_THRU_DT, #endDt#) &gt;= #salesDt# -->
+<!-- END 2016/09/01 T.Tomita [QC#13976, MOD] -->
+<!--            AND PSN.EZCANCELFLAG                = '0' -->
+<!--            AND PSN.GLBL_CMPY_CD                = BRR.GLBL_CMPY_CD -->
+<!--            AND PSN.PSN_CD                      = BRR.PSN_CD -->
+<!--            AND BRR.SVC_ORG_FUNC_ROLE_TP_CD     = #svcOrgFuncRoleTpCd# -->
+<!--            AND BRR.EZCANCELFLAG                = '0' -->
+<!--        ORDER BY -->
+<!--                PSN.PSN_CD -->
+<!--    </statement> -->
+<!-- END 2017/01/23 K.Kitachi [QC#17219, DEL] -->
+</sqlMap>

@@ -1,0 +1,160 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NWAL1680Query">
+
+    <statement id="getLineOrRmaConfig" parameterClass="Map" resultClass="Integer">
+        SELECT
+            COUNT(*)
+        FROM
+            DS_CPO_CONFIG DCC
+        WHERE 
+                DCC.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND DCC.EZCANCELFLAG    = '0'
+            AND DCC.CPO_ORD_NUM     = #cpoOrdNum#
+            AND DCC.CONFIG_CATG_CD  = #configCatgCd#
+    </statement>
+
+    <statement id="getMachineLineConfig" parameterClass="Map" resultClass="Integer">
+        SELECT
+            COUNT(*)
+        FROM
+             CPO_DTL CD
+            ,ALL_MDSE_V AMV
+        WHERE 
+                CD.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND CD.EZCANCELFLAG     = '0'
+            AND CD.CPO_ORD_NUM      = #cpoOrdNum#
+            AND CD.ORD_LINE_STS_CD  &lt;&gt; #stsCd#
+            AND CD.GLBL_CMPY_CD     = AMV.GLBL_CMPY_CD
+            AND CD.MDSE_CD          = AMV.MDSE_CD
+            AND AMV.EZCANCELFLAG    = '0'
+            AND AMV.COA_MDSE_TP_CD  = #mdseTpCd#
+    </statement>
+    
+    <statement id="getMachineRmaConfig" parameterClass="Map" resultClass="Integer">
+        SELECT
+            COUNT(*)
+        FROM
+            DS_CPO_RTRN_DTL DCRD
+            ,MDSE DMI
+        WHERE 
+                DCRD.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND DCRD.EZCANCELFLAG    = '0'
+            AND DCRD.CPO_ORD_NUM     = #cpoOrdNum#
+            AND DCRD.RTRN_LINE_STS_CD &lt;&gt; #stsCd#
+            AND DMI.GLBL_CMPY_CD      = DCRD.GLBL_CMPY_CD
+            AND DMI.EZCANCELFLAG      = '0'
+            AND DCRD.MDSE_CD    = DMI.MDSE_CD
+            AND DMI.COA_MDSE_TP_CD  = #mdseTpCd#
+    </statement>
+
+    <statement id="getTotalMachinesCoveredByShell" parameterClass="Map" resultClass="Integer">
+        SELECT
+            COUNT(*)
+        FROM
+             DS_CONTR_DTL DCD
+            ,CPO_DTL CD
+            ,ALL_MDSE_V   AMV
+            ,DS_CONTR DC
+        WHERE
+                DCD.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND DCD.EZCANCELFLAG          = '0'
+            AND DCD.CPO_ORD_NUM           = #cpoOrdNum#
+            AND DCD.GLBL_CMPY_CD          = CD.GLBL_CMPY_CD
+            AND DCD.CPO_ORD_NUM           = CD.CPO_ORD_NUM
+            AND DCD.CPO_DTL_LINE_NUM      = CD.CPO_DTL_LINE_NUM
+            AND DCD.CPO_DTL_LINE_SUB_NUM  = CD.CPO_DTL_LINE_SUB_NUM
+            AND CD.EZCANCELFLAG           = '0'
+            AND CD.GLBL_CMPY_CD           = AMV.GLBL_CMPY_CD
+            AND CD.MDSE_CD                = AMV.MDSE_CD
+            AND AMV.EZCANCELFLAG          = '0'
+            AND AMV.COA_MDSE_TP_CD        = #mdseTpCd#
+            AND DCD.GLBL_CMPY_CD          = DC.GLBL_CMPY_CD
+            AND DCD.EZCANCELFLAG          = DC.EZCANCELFLAG
+            AND DCD.DS_CONTR_PK           = DC.DS_CONTR_PK
+            AND DC.DS_CONTR_CATG_CD       &lt;&gt; #warranty#
+    </statement>
+
+    <statement id="getTotalShells" parameterClass="Map" resultClass="Integer">
+        SELECT
+            COUNT(*)
+        FROM
+            DS_CONTR DC
+        WHERE
+                DC.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND DC.EZCANCELFLAG    = '0'
+            AND DC.DS_CONTR_CATG_CD &lt;&gt; #warranty#
+            AND EXISTS (
+                SELECT
+                    *
+                FROM
+                    DS_CONTR_DTL DCD
+                WHERE
+                        DCD.GLBL_CMPY_CD  = DC.GLBL_CMPY_CD
+                    AND DCD.CPO_ORD_NUM   = #cpoOrdNum#
+                    AND DCD.EZCANCELFLAG  = '0'
+                    AND DCD.DS_CONTR_PK   = DC.DS_CONTR_PK
+                )
+    </statement>
+
+    <statement id="getSummaryByModel" parameterClass="Map" resultClass="Map">
+        SELECT 
+             DM.MDL_DESC_TXT AS MODEL
+            ,SUM(CASE WHEN DCC.CONFIG_CATG_CD = #outbound# THEN 1 ELSE 0 END)      AS TOTAL_CONF
+            ,SUM(CASE WHEN DCC.CONFIG_CATG_CD = #inbound# THEN 1 ELSE 0 END)       AS TOTAL_RMA
+            ,(CASE CSCR_V.MDL_ID WHEN DM.MDL_ID THEN CSCR_V.CSCR_COUNT ELSE 0 END) AS TOTAL_SHELL
+        FROM
+             DS_CPO_CONFIG DCC
+            ,DS_MDL DM
+            ,(SELECT
+                  DCC2.MDL_ID AS MDL_ID
+                 ,COUNT(DISTINCT DC.DS_CONTR_PK) AS CSCR_COUNT
+             FROM 
+                  DS_CPO_CONFIG DCC2
+                 ,DS_CONTR_DTL DCD
+                 ,CPO_DTL CD
+                 ,DS_CONTR DC
+             WHERE
+                     DCC2.GLBL_CMPY_CD        = #glblCmpyCd#
+                 AND DCC2.CPO_ORD_NUM         = #cpoOrdNum#
+                 AND DCC2.EZCANCELFLAG        = '0'
+                 AND DCC2.CONFIG_CATG_CD      = #outbound#
+
+                 AND DCC2.GLBL_CMPY_CD        = CD.GLBL_CMPY_CD
+                 AND DCC2.CPO_ORD_NUM         = CD.CPO_ORD_NUM
+                 AND DCC2.DS_ORD_POSN_NUM     = CD.DS_ORD_POSN_NUM
+                 AND CD.EZCANCELFLAG          = '0'
+                 AND CD.ORD_LINE_STS_CD       &lt;&gt; '99'
+                 AND CD.GLBL_CMPY_CD          = DCD.GLBL_CMPY_CD
+                 AND CD.CPO_ORD_NUM           = DCD.CPO_ORD_NUM
+                 AND CD.CPO_DTL_LINE_NUM      = DCD.CPO_DTL_LINE_NUM
+                 AND CD.CPO_DTL_LINE_SUB_NUM  = DCD.CPO_DTL_LINE_SUB_NUM
+                 AND DCD.EZCANCELFLAG         = '0'
+
+                 AND DCD.GLBL_CMPY_CD         = DC.GLBL_CMPY_CD
+                 AND DCD.EZCANCELFLAG         = '0'
+                 AND DCD.DS_CONTR_PK          = DC.DS_CONTR_PK
+                 AND DC.DS_CONTR_CATG_CD      &lt;&gt; #warranty#
+             GROUP BY
+                 DCC2.MDL_ID
+             ) CSCR_V
+
+        WHERE
+                DCC.GLBL_CMPY_CD = #glblCmpyCd#
+            AND DCC.EZCANCELFLAG = '0'
+            AND DCC.CPO_ORD_NUM  = #cpoOrdNum#
+            AND DCC.GLBL_CMPY_CD = DM.GLBL_CMPY_CD
+            AND DCC.MDL_ID       = DM.MDL_ID
+            AND DM.EZCANCELFLAG  = '0'
+            AND DM.MDL_ID        = CSCR_V.MDL_ID (+)
+        GROUP BY
+             DM.MDL_ID
+            ,DM.MDL_DESC_TXT
+            <!-- 2023/10/13 CSA-QC#61971 Mod Start -->
+            <!-- ,CSCR_V.MDL_ID -->
+            ,CASE CSCR_V.MDL_ID WHEN DM.MDL_ID THEN CSCR_V.CSCR_COUNT ELSE 0 END
+            <!-- 2023/10/13 CSA-QC#61971 Mod End -->
+        ORDER BY
+             DM.MDL_DESC_TXT
+    </statement>
+
+</sqlMap>

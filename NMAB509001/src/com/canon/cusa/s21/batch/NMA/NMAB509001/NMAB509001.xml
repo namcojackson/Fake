@@ -1,0 +1,1070 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NMAB509001">
+
+    <statement id="getInterfaceData" parameterClass="Map">  <!-- (3) -->
+        SELECT
+                I.DS_ACCT_NUM
+                , I.LOC_NUM
+                , I.TRTY_ORG_CD
+                , I.LINE_BIZ_ROLE_TP_CD
+                , I.LAST_UPD_TS
+            FROM
+                NMAI5090_01     I
+            WHERE
+                I.INTERFACE_ID          = #interfaceId#
+                AND I.TRANSACTION_ID    = #transactionId#
+                AND I.EZCANCELFLAG      = '0'
+    </statement>
+
+    <statement id="getUpdateTerritory" parameterClass="Map">    <!-- (5)a -->
+        SELECT
+                  TTTU.TRTY_TRK_TRTY_UPD_PK
+                , TTTU.DS_ACCT_NUM
+                , TTTU.LOC_NUM
+                , TTTU.TRTY_ORG_CD
+                , TTTU.LINE_BIZ_ROLE_TP_CD
+                --
+                , TCVT.TRTY_CD_VAL_TP_CD
+                , TCVT.OUT_BIZ_TRTY_FLG
+                , TCVT.GEO_TRTY_FLG
+                , LBRT.LINE_BIZ_ROLE_TP_CD      AS ORIG_LINE_BIZ_ROLE_TP_CD
+            FROM
+                TRTY_TRK_TRTY_UPD       TTTU
+                , TRTY_CD_VAL_INFO      TCVI
+                , TRTY_CD_VAL_TP        TCVT
+                , LINE_BIZ_ROLE_TP      LBRT
+            WHERE
+                TTTU.GLBL_CMPY_CD               = #glblCmpyCd#
+                AND TTTU.TRTY_TRK_PROC_STS_CD   = #new#
+                AND TTTU.EZCANCELFLAG           = '0'
+                --
+                AND TTTU.GLBL_CMPY_CD           = TCVI.GLBL_CMPY_CD(+)
+                AND TTTU.TRTY_ORG_CD            = TCVI.TRTY_ORG_CD(+)
+                AND TCVI.EZCANCELFLAG(+)        = '0'
+                --
+                AND TCVI.GLBL_CMPY_CD           = TCVT.GLBL_CMPY_CD(+)
+                AND TCVI.TRTY_CD_VAL_TP_CD      = TCVT.TRTY_CD_VAL_TP_CD(+)
+                AND TCVT.EZCANCELFLAG(+)        = '0'
+                --
+                AND TTTU.GLBL_CMPY_CD           = LBRT.GLBL_CMPY_CD(+)
+                AND TTTU.LINE_BIZ_ROLE_TP_CD    = LBRT.LINE_BIZ_ROLE_TP_CD(+)
+                AND LBRT.EZCANCELFLAG(+)        = '0'
+            ORDER BY
+                TTTU.DS_ACCT_NUM
+                , TTTU.LOC_NUM
+                , TTTU.LINE_BIZ_ROLE_TP_CD      NULLS FIRST
+    </statement>
+
+    <statement id="getActiveAcct" parameterClass="Map" resultClass="Map">    <!-- (5)b-3 -->
+        SELECT
+                  TT_ACCT.DS_ACCT_TP_CD
+                , TT_ACCT.DS_ACCT_CLS_CD
+            FROM
+                (
+                    SELECT
+                              DAP.DS_ACCT_TP_CD
+                            , DAP.DS_ACCT_CLS_CD
+                        FROM
+                            DS_ACCT_PROS    DAP
+                        WHERE
+                            DAP.GLBL_CMPY_CD                = #glblCmpyCd#
+                            AND DAP.DS_ACCT_ACTV_CUST_FLG   = 'Y'
+                            AND DAP.DS_ACCT_NUM             = #dsAcctNum#
+                            AND DAP.EZCANCELFLAG            = '0'
+                    UNION 
+                    SELECT
+                              DAC.DS_ACCT_TP_CD
+                            , DAC.DS_ACCT_CLS_CD 
+                        FROM
+                            SELL_TO_CUST DAC 
+                        WHERE
+                            DAC.GLBL_CMPY_CD                = #glblCmpyCd#
+                            AND DAC.DS_ACCT_ACTV_CUST_FLG   = 'Y'
+                            AND DAC.SELL_TO_CUST_CD         = #dsAcctNum#
+                            AND DAC.EZCANCELFLAG            = '0'
+                ) TT_ACCT
+    </statement>
+
+    <statement id="getActiveLoc" parameterClass="Map" resultClass="Map">    <!-- (5)b-4 -->
+        SELECT
+                  PLW.LINE_BIZ_TP_CD
+            FROM
+                ACCT_LOC            AL
+                , PTY_LOC_WRK       PLW
+            WHERE
+                AL.GLBL_CMPY_CD         = #glblCmpyCd#
+                AND AL.DS_ACCT_NUM      = #dsAcctNum#
+                AND AL.LOC_NUM          = #locNum#
+                AND AL.RGTN_STS_CD     != #rgtnStsTerminated#
+                AND AL.EZCANCELFLAG     = '0'
+
+                AND AL.GLBL_CMPY_CD     = PLW.GLBL_CMPY_CD
+                AND AL.LOC_NUM          = PLW.LOC_NUM
+                AND PLW.RGTN_STS_CD     = #rgtnStsOrdTake#
+                AND PLW.EZCANCELFLAG    = '0'
+           UNION ALL
+
+           SELECT
+                 PPLW.LINE_BIZ_TP_CD
+           FROM
+                 DS_ACCT_PROS       DAP
+               , PROS_PTY_LOC_WRK   PPLW
+           WHERE
+               DAP.GLBL_CMPY_CD        = #glblCmpyCd#
+               AND DAP.DS_ACCT_NUM     = #dsAcctNum#
+               AND DAP.LOC_NUM         = #locNum#
+               AND DAP.RGTN_STS_CD    != #rgtnStsTerminated#
+               AND DAP.EZCANCELFLAG    = '0'
+
+               AND DAP.GLBL_CMPY_CD    = PPLW.GLBL_CMPY_CD
+               AND DAP.LOC_NUM         = PPLW.LOC_NUM
+               AND PPLW.RGTN_STS_CD    = #rgtnStsOrdTake#
+               AND PPLW.EZCANCELFLAG   = '0'
+              
+    </statement>
+
+    <statement id="getCountActiveTrty" parameterClass="Map" resultClass="Integer">    <!-- (5)b-5 -->
+        SELECT
+                  COUNT(DOU.GLBL_CMPY_CD)
+            FROM
+                DS_ORG_UNIT     DOU
+                , ORG_STRU_TP   OST
+            WHERE
+                DOU.GLBL_CMPY_CD        = #glblCmpyCd#
+                AND DOU.ORG_CD          = #orgCd#
+                AND DOU.GNRN_TP_CD     IN (#current#, #future#) 
+                AND DOU.EFF_FROM_DT    &lt;= #slsDt#
+                AND ( 
+                    DOU.EFF_THRU_DT    &gt;= #slsDt#
+                    OR DOU.EFF_THRU_DT IS NULL
+                ) 
+                AND DOU.EZCANCELFLAG    = '0'
+                                --
+                AND DOU.GLBL_CMPY_CD    = OST.GLBL_CMPY_CD
+                AND DOU.ORG_STRU_TP_CD  = OST.ORG_STRU_TP_CD
+                AND OST.TRTY_STRU_FLG   = 'Y'
+                AND OST.EZCANCELFLAG    = '0'
+    </statement>
+
+    <statement id="getLineBizRankNum" parameterClass="Map" resultClass="String">    <!-- (5)b-6-1 -->
+        SELECT
+                  R.LINE_BIZ_RANK_NUM
+            FROM
+                LINE_BIZ_ROLE_RANK_DECN R
+            WHERE
+                R.GLBL_CMPY_CD              = #glblCmpyCd#
+                AND R.DS_ACCT_TP_CD         = #dsAcctTpCd#
+                AND R.SRC_LINE_BIZ_TP_CD    = #srcLineBizTpCd#
+                AND R.LINE_BIZ_ROLE_TP_CD   = #lineBizRoleTpCd#
+                AND R.EZCANCELFLAG          = '0'
+                <!-- 2018/08/14 QC#27597 H.Kumagai Add Start -->
+                AND R.TRTY_GRP_TP_CD        = #trtyGrpTpCd#
+                <!-- 2018/08/14 QC#27597 H.Kumagai Add End -->
+    </statement>
+
+    <statement id="getCountResource" parameterClass="Map" resultClass="Integer">    <!-- (5)b-6-2 -->
+        SELECT
+                  COUNT(DOU.GLBL_CMPY_CD)
+            FROM
+                DS_ORG_UNIT             DOU
+                , ORG_STRU_TP           OST
+                , TRTY_TP               TT
+                , TRTY_GRP_TP           TGT
+                , DS_ORG_RESRC_RELN     DORR
+                , S21_PSN               P
+                , ORG_FUNC_ASG          OFA
+                , TOC                   T
+                , ORG_FUNC_ROLE_TP      OFRT
+            WHERE
+                DOU.GLBL_CMPY_CD            = #glblCmpyCd#
+                AND DOU.ORG_CD              = #orgCd#
+                AND DOU.GNRN_TP_CD         IN (#current#, #future#)
+                AND DOU.EFF_FROM_DT        &lt;= #slsDt#
+                AND ( 
+                    DOU.EFF_THRU_DT        &gt;= #slsDt#
+                    OR DOU.EFF_THRU_DT     IS NULL
+                ) 
+                AND DOU.EZCANCELFLAG        = '0'
+                                --
+                AND DOU.GLBL_CMPY_CD        = OST.GLBL_CMPY_CD
+                AND DOU.ORG_STRU_TP_CD      = OST.ORG_STRU_TP_CD
+                AND OST.TRTY_STRU_FLG       = 'Y'
+                AND OST.EZCANCELFLAG        = '0'
+                                --
+                AND DOU.GLBL_CMPY_CD        = TT.GLBL_CMPY_CD
+                AND DOU.TRTY_TP_CD          = TT.TRTY_TP_CD
+                AND TT.EZCANCELFLAG         = '0'
+                                 --
+                AND DOU.GLBL_CMPY_CD        = TGT.GLBL_CMPY_CD
+                AND DOU.TRTY_GRP_TP_CD      = TGT.TRTY_GRP_TP_CD
+                AND TGT.EZCANCELFLAG        = '0'
+                                --
+                AND DOU.GLBL_CMPY_CD        = DORR.GLBL_CMPY_CD
+                AND DOU.ORG_CD              = DORR.ORG_CD
+                AND DORR.EFF_FROM_DT       &lt;= #slsDt#
+                AND ( 
+                    DORR.EFF_THRU_DT       &gt;= #slsDt#
+                    OR DORR.EFF_THRU_DT    IS NULL
+                ) 
+                AND DORR.GNRN_TP_CD         = #current#
+              <isNotNull property="lineBizRankNum">
+                AND DORR.ACCT_TEAM_ROLE_TP_CD IS NULL
+              </isNotNull>
+                AND DORR.EZCANCELFLAG       = '0'
+                               --
+                AND DORR.GLBL_CMPY_CD       = P.GLBL_CMPY_CD
+                AND DORR.PSN_CD             = P.PSN_CD
+                AND P.EZCANCELFLAG          = '0'
+                                  --
+                AND P.GLBL_CMPY_CD          = OFA.GLBL_CMPY_CD
+                AND P.PSN_CD                = OFA.PSN_CD
+                AND OFA.EFF_FROM_DT        &lt;= #slsDt#
+                AND ( 
+                    OFA.EFF_THRU_DT        &gt;= #slsDt#
+                    OR OFA.EFF_THRU_DT     IS NULL
+                )
+                AND OFA.GNRN_TP_CD          = #current#
+                AND OFA.EZCANCELFLAG        = '0'
+                                --
+                AND OFA.GLBL_CMPY_CD        = T.GLBL_CMPY_CD
+                AND OFA.TOC_CD              = T.TOC_CD
+                AND T.EZCANCELFLAG          = '0'
+                                  --
+                AND T.GLBL_CMPY_CD          = OFRT.GLBL_CMPY_CD
+                AND T.ORG_FUNC_ROLE_TP_CD   = OFRT.ORG_FUNC_ROLE_TP_CD
+                AND OFRT.ACTV_FLG           = 'Y'
+              <isNotNull property="lineBizRankNum">
+                AND OFRT.SLS_REP_FLG        = 'Y'
+              </isNotNull>
+              <isNull property="lineBizRankNum">
+                AND OFRT.FIRST_ORG_CD       = #firstOrgCd#
+              </isNull>
+                AND OFRT.EZCANCELFLAG       = '0'
+    </statement>
+
+    <statement id="getAcctTrtyResrcAsg" parameterClass="Map" resultClass="Map">    <!-- (6)a-1 -->
+        SELECT
+                  ATRA.DS_ACCT_NUM
+                , ATRA.DS_ACCT_NM
+                , ATRA.LOC_NUM
+                , ATRA.DS_ACCT_TP_CD
+                , ATRA.ACCT_TRTY_ORG_CD_01
+                , ATRA.ACCT_TRTY_PSN_CD_01
+                , ATRA.ACCT_TRTY_TOC_CD_01
+                , ATRA.ACCT_TRTY_ORG_CD_02
+                , ATRA.ACCT_TRTY_PSN_CD_02
+                , ATRA.ACCT_TRTY_TOC_CD_02
+                , ATRA.ACCT_TRTY_ORG_CD_03
+                , ATRA.ACCT_TRTY_PSN_CD_03
+                , ATRA.ACCT_TRTY_TOC_CD_03
+                , ATRA.ACCT_TRTY_ORG_CD_04
+                , ATRA.ACCT_TRTY_PSN_CD_04
+                , ATRA.ACCT_TRTY_TOC_CD_04
+                , ATRA.ACCT_TRTY_ORG_CD_05
+                , ATRA.ACCT_TRTY_PSN_CD_05
+                , ATRA.ACCT_TRTY_TOC_CD_05
+                , ATRA.ACCT_TRTY_ORG_CD_06
+                , ATRA.ACCT_TRTY_PSN_CD_06
+                , ATRA.ACCT_TRTY_TOC_CD_06
+                , ATRA.ACCT_TRTY_ORG_CD_07
+                , ATRA.ACCT_TRTY_PSN_CD_07
+                , ATRA.ACCT_TRTY_TOC_CD_07
+                , ATRA.ACCT_TRTY_ORG_CD_08
+                , ATRA.ACCT_TRTY_PSN_CD_08
+                , ATRA.ACCT_TRTY_TOC_CD_08
+                , ATRA.ACCT_TRTY_ORG_CD_09
+                , ATRA.ACCT_TRTY_PSN_CD_09
+                , ATRA.ACCT_TRTY_TOC_CD_09
+                , ATRA.ACCT_TRTY_ORG_CD_10
+                , ATRA.ACCT_TRTY_PSN_CD_10
+                , ATRA.ACCT_TRTY_TOC_CD_10
+                , ATRA.ACCT_TRTY_ORG_CD_11
+                , ATRA.ACCT_TRTY_PSN_CD_11
+                , ATRA.ACCT_TRTY_TOC_CD_11
+                , ATRA.ACCT_TRTY_ORG_CD_12
+                , ATRA.ACCT_TRTY_PSN_CD_12
+                , ATRA.ACCT_TRTY_TOC_CD_12
+                , ATRA.ACCT_TRTY_ORG_CD_13
+                , ATRA.ACCT_TRTY_PSN_CD_13
+                , ATRA.ACCT_TRTY_TOC_CD_13
+                , ATRA.ACCT_TRTY_ORG_CD_14
+                , ATRA.ACCT_TRTY_PSN_CD_14
+                , ATRA.ACCT_TRTY_TOC_CD_14
+                , ATRA.ACCT_TRTY_ORG_CD_15
+                , ATRA.ACCT_TRTY_PSN_CD_15
+                , ATRA.ACCT_TRTY_TOC_CD_15
+                , ATRA.ACCT_TRTY_ORG_CD_16
+                , ATRA.ACCT_TRTY_PSN_CD_16
+                , ATRA.ACCT_TRTY_TOC_CD_16
+                , ATRA.ACCT_TRTY_ORG_CD_17
+                , ATRA.ACCT_TRTY_PSN_CD_17
+                , ATRA.ACCT_TRTY_TOC_CD_17
+                , ATRA.ACCT_TRTY_ORG_CD_18
+                , ATRA.ACCT_TRTY_PSN_CD_18
+                , ATRA.ACCT_TRTY_TOC_CD_18
+                , ATRA.ACCT_TRTY_ORG_CD_19
+                , ATRA.ACCT_TRTY_PSN_CD_19
+                , ATRA.ACCT_TRTY_TOC_CD_19
+                , ATRA.ACCT_TRTY_ORG_CD_20
+                , ATRA.ACCT_TRTY_PSN_CD_20
+                , ATRA.ACCT_TRTY_TOC_CD_20
+                , ATRA.LINE_BIZ_ROLE_TP_CD_01
+                , ATRA.LINE_BIZ_ROLE_TP_CD_02
+                , ATRA.LINE_BIZ_ROLE_TP_CD_03
+                , ATRA.LINE_BIZ_ROLE_TP_CD_04
+                , ATRA.LINE_BIZ_ROLE_TP_CD_05
+                , ATRA.LINE_BIZ_ROLE_TP_CD_06
+                , ATRA.LINE_BIZ_ROLE_TP_CD_07
+                , ATRA.LINE_BIZ_ROLE_TP_CD_08
+                , ATRA.LINE_BIZ_ROLE_TP_CD_09
+                , ATRA.LINE_BIZ_ROLE_TP_CD_10
+                , ATRA.LINE_BIZ_ROLE_TP_CD_11
+                , ATRA.LINE_BIZ_ROLE_TP_CD_12
+                , ATRA.LINE_BIZ_ROLE_TP_CD_13
+                , ATRA.LINE_BIZ_ROLE_TP_CD_14
+                , ATRA.LINE_BIZ_ROLE_TP_CD_15
+                , ATRA.LINE_BIZ_ROLE_TP_CD_16
+                , ATRA.LINE_BIZ_ROLE_TP_CD_17
+                , ATRA.LINE_BIZ_ROLE_TP_CD_18
+                , ATRA.LINE_BIZ_ROLE_TP_CD_19
+                , ATRA.LINE_BIZ_ROLE_TP_CD_20
+                , ATRA.MAN_ENTRY_FLG
+            FROM
+                ACCT_TRTY_RESRC_ASG     ATRA
+            WHERE
+                ATRA.GLBL_CMPY_CD       = #glblCmpyCd#
+                AND ATRA.DS_ACCT_NUM    = #dsAcctNum#
+                AND ATRA.LOC_NUM        = #locNum#
+                AND ATRA.EZCANCELFLAG   = '0'
+            ORDER BY
+                ATRA.DS_ACCT_NUM
+                , ATRA.LOC_NUM
+    </statement>
+
+    <statement id="getProsTrtyResrcAsg" parameterClass="Map" resultClass="Map">
+        SELECT
+                  PTRA.DS_ACCT_NUM
+                , PTRA.DS_ACCT_NM
+                , PTRA.LOC_NUM
+                , PTRA.DS_ACCT_TP_CD
+                , PTRA.ACCT_TRTY_ORG_CD_01
+                , PTRA.ACCT_TRTY_PSN_CD_01
+                , PTRA.ACCT_TRTY_TOC_CD_01
+                , PTRA.ACCT_TRTY_ORG_CD_02
+                , PTRA.ACCT_TRTY_PSN_CD_02
+                , PTRA.ACCT_TRTY_TOC_CD_02
+                , PTRA.ACCT_TRTY_ORG_CD_03
+                , PTRA.ACCT_TRTY_PSN_CD_03
+                , PTRA.ACCT_TRTY_TOC_CD_03
+                , PTRA.ACCT_TRTY_ORG_CD_04
+                , PTRA.ACCT_TRTY_PSN_CD_04
+                , PTRA.ACCT_TRTY_TOC_CD_04
+                , PTRA.ACCT_TRTY_ORG_CD_05
+                , PTRA.ACCT_TRTY_PSN_CD_05
+                , PTRA.ACCT_TRTY_TOC_CD_05
+                , PTRA.ACCT_TRTY_ORG_CD_06
+                , PTRA.ACCT_TRTY_PSN_CD_06
+                , PTRA.ACCT_TRTY_TOC_CD_06
+                , PTRA.ACCT_TRTY_ORG_CD_07
+                , PTRA.ACCT_TRTY_PSN_CD_07
+                , PTRA.ACCT_TRTY_TOC_CD_07
+                , PTRA.ACCT_TRTY_ORG_CD_08
+                , PTRA.ACCT_TRTY_PSN_CD_08
+                , PTRA.ACCT_TRTY_TOC_CD_08
+                , PTRA.ACCT_TRTY_ORG_CD_09
+                , PTRA.ACCT_TRTY_PSN_CD_09
+                , PTRA.ACCT_TRTY_TOC_CD_09
+                , PTRA.ACCT_TRTY_ORG_CD_10
+                , PTRA.ACCT_TRTY_PSN_CD_10
+                , PTRA.ACCT_TRTY_TOC_CD_10
+                , PTRA.ACCT_TRTY_ORG_CD_11
+                , PTRA.ACCT_TRTY_PSN_CD_11
+                , PTRA.ACCT_TRTY_TOC_CD_11
+                , PTRA.ACCT_TRTY_ORG_CD_12
+                , PTRA.ACCT_TRTY_PSN_CD_12
+                , PTRA.ACCT_TRTY_TOC_CD_12
+                , PTRA.ACCT_TRTY_ORG_CD_13
+                , PTRA.ACCT_TRTY_PSN_CD_13
+                , PTRA.ACCT_TRTY_TOC_CD_13
+                , PTRA.ACCT_TRTY_ORG_CD_14
+                , PTRA.ACCT_TRTY_PSN_CD_14
+                , PTRA.ACCT_TRTY_TOC_CD_14
+                , PTRA.ACCT_TRTY_ORG_CD_15
+                , PTRA.ACCT_TRTY_PSN_CD_15
+                , PTRA.ACCT_TRTY_TOC_CD_15
+                , PTRA.ACCT_TRTY_ORG_CD_16
+                , PTRA.ACCT_TRTY_PSN_CD_16
+                , PTRA.ACCT_TRTY_TOC_CD_16
+                , PTRA.ACCT_TRTY_ORG_CD_17
+                , PTRA.ACCT_TRTY_PSN_CD_17
+                , PTRA.ACCT_TRTY_TOC_CD_17
+                , PTRA.ACCT_TRTY_ORG_CD_18
+                , PTRA.ACCT_TRTY_PSN_CD_18
+                , PTRA.ACCT_TRTY_TOC_CD_18
+                , PTRA.ACCT_TRTY_ORG_CD_19
+                , PTRA.ACCT_TRTY_PSN_CD_19
+                , PTRA.ACCT_TRTY_TOC_CD_19
+                , PTRA.ACCT_TRTY_ORG_CD_20
+                , PTRA.ACCT_TRTY_PSN_CD_20
+                , PTRA.ACCT_TRTY_TOC_CD_20
+                , PTRA.LINE_BIZ_ROLE_TP_CD_01
+                , PTRA.LINE_BIZ_ROLE_TP_CD_02
+                , PTRA.LINE_BIZ_ROLE_TP_CD_03
+                , PTRA.LINE_BIZ_ROLE_TP_CD_04
+                , PTRA.LINE_BIZ_ROLE_TP_CD_05
+                , PTRA.LINE_BIZ_ROLE_TP_CD_06
+                , PTRA.LINE_BIZ_ROLE_TP_CD_07
+                , PTRA.LINE_BIZ_ROLE_TP_CD_08
+                , PTRA.LINE_BIZ_ROLE_TP_CD_09
+                , PTRA.LINE_BIZ_ROLE_TP_CD_10
+                , PTRA.LINE_BIZ_ROLE_TP_CD_11
+                , PTRA.LINE_BIZ_ROLE_TP_CD_12
+                , PTRA.LINE_BIZ_ROLE_TP_CD_13
+                , PTRA.LINE_BIZ_ROLE_TP_CD_14
+                , PTRA.LINE_BIZ_ROLE_TP_CD_15
+                , PTRA.LINE_BIZ_ROLE_TP_CD_16
+                , PTRA.LINE_BIZ_ROLE_TP_CD_17
+                , PTRA.LINE_BIZ_ROLE_TP_CD_18
+                , PTRA.LINE_BIZ_ROLE_TP_CD_19
+                , PTRA.LINE_BIZ_ROLE_TP_CD_20
+                , PTRA.MAN_ENTRY_FLG
+            FROM
+                PROS_TRTY_RESRC_ASG     PTRA
+            WHERE
+                PTRA.GLBL_CMPY_CD       = #glblCmpyCd#
+                AND PTRA.DS_ACCT_NUM    = #dsAcctNum#
+                AND PTRA.LOC_NUM        = #locNum#
+                AND PTRA.EZCANCELFLAG   = '0'
+            ORDER BY
+                PTRA.DS_ACCT_NUM
+                , PTRA.LOC_NUM
+    </statement>
+
+    <statement id="getTrtyRoleAssign" parameterClass="Map" resultClass="Map">    <!-- (6)b-1 -->
+        SELECT
+                  GLBL_CMPY_CD
+                , TRA.ACCT_TRTY_ROLE_ASG_PK
+                , TRA.DS_ACCT_NUM
+                , TRA.LOC_NUM
+                , TRA.ORG_CD
+                , TRA.LINE_BIZ_ROLE_TP_CD
+                , TRA.DS_ACCT_NM
+                , TRA.BILL_TO_CUST_CD
+                , TRA.SHIP_TO_CUST_CD
+                , TRA.DS_ACCT_TP_CD
+                , TRA.DS_ACCT_CLS_CD
+                , TRA.FIRST_DS_ACCT_GRP_TP_CD
+                , TRA.SCD_DS_ACCT_GRP_TP_CD
+                , TRA.THIRD_DS_ACCT_GRP_TP_CD
+                , TRA.FRTH_DS_ACCT_GRP_TP_CD
+                , TRA.FIFTH_DS_ACCT_GRP_TP_CD
+                , TRA.INDY_TP_CD
+                , TRA.FIRST_LINE_ADDR
+                , TRA.SCD_LINE_ADDR
+                , TRA.THIRD_LINE_ADDR
+                , TRA.FRTH_LINE_ADDR
+                , TRA.CTY_ADDR
+                , TRA.ST_CD
+                , TRA.PROV_NM
+                , TRA.CNTY_NM
+                , TRA.POST_CD
+                , TRA.DS_CUST_SIC_CD
+            FROM
+                $trtyRoleAsgTbl$    TRA
+            WHERE
+                TRA.GLBL_CMPY_CD        = #glblCmpyCd#
+                AND TRA.DS_ACCT_NUM     = #dsAcctNum#
+                AND TRA.LOC_NUM         = #locNum#
+              <isEqual property="isMoveToGeoFlg" compareValue="Y">
+                AND TRA.ORG_CD                  = #orgCd#
+              </isEqual>
+              <isEqual property="isReassignAccountFlg" compareValue="Y">
+                AND TRA.LINE_BIZ_ROLE_TP_CD     = #lineBizRoleTpCd#
+              </isEqual>
+                AND TRA.EZCANCELFLAG    = '0'
+    </statement>
+
+    <statement id="getTrtyRoleAsgFromDsAcct" parameterClass="Map" resultClass="Map">    <!-- (6)b-1-4 -->
+        SELECT
+                  DA.GLBL_CMPY_CD
+                , NULL                       AS ACCT_TRTY_ROLE_ASG_PK
+                , DA.SELL_TO_CUST_CD         AS DS_ACCT_NUM
+                , AL.LOC_NUM
+                <!-- 2017/08/29 QC#20384 Mod Start -->
+                <!-- , NULL                       AS ORG_CD -->
+                <!-- , #lineBizRoleTpCd#          AS LINE_BIZ_ROLE_TP_CD -->
+                <isNull property="orgCd">
+                , NULL                       AS ORG_CD
+                </isNull>
+                <isNotNull property="orgCd">
+                , #orgCd#                    AS ORG_CD
+                </isNotNull>
+                <isNull property="lineBizRoleTpCd">
+                , NULL                       AS LINE_BIZ_ROLE_TP_CD
+                </isNull>
+                <isNotNull property="lineBizRoleTpCd">
+                , #lineBizRoleTpCd#          AS LINE_BIZ_ROLE_TP_CD
+                </isNotNull>
+                <!-- 2017/08/29 QC#20384 Mod End -->
+                , DA.DS_ACCT_NM
+                , BTC.BILL_TO_CUST_CD        AS BILL_TO_CUST_CD
+                , STC.SHIP_TO_CUST_CD        AS SHIP_TO_CUST_CD
+                , DA.DS_ACCT_TP_CD
+                , DA.DS_ACCT_CLS_CD
+                , AG.FIRST_DS_ACCT_GRP_TP_CD AS FIRST_DS_ACCT_GRP_TP_CD
+                , AG.SCD_DS_ACCT_GRP_TP_CD   AS SCD_DS_ACCT_GRP_TP_CD
+                , AG.THIRD_DS_ACCT_GRP_TP_CD AS THIRD_DS_ACCT_GRP_TP_CD
+                , AG.FRTH_DS_ACCT_GRP_TP_CD  AS FRTH_DS_ACCT_GRP_TP_CD
+                , AG.FIFTH_DS_ACCT_GRP_TP_CD AS FIFTH_DS_ACCT_GRP_TP_CD
+                , NULL                       AS INDY_TP_CD
+                , PLW.FIRST_LINE_ADDR
+                , PLW.SCD_LINE_ADDR
+                , PLW.THIRD_LINE_ADDR
+                , PLW.FRTH_LINE_ADDR
+                , PLW.CTY_ADDR
+                , PLW.ST_CD
+                , PLW.PROV_NM
+                , (
+                    SELECT
+                              CNTY_NM
+                        FROM
+                            CNTY C
+                        WHERE
+                            C.GLBL_CMPY_CD      = PLW.GLBL_CMPY_CD
+                            AND C.CNTY_PK       = PLW.CNTY_PK
+                            AND C.EZCANCELFLAG  = '0'
+                ) CNTY_NM
+                , PLW.POST_CD
+                , PLW.DS_CUST_SIC_CD
+            FROM
+                  SELL_TO_CUST      DA
+                , ACCT_LOC          AL
+                , PTY_LOC_WRK       PLW
+                , BILL_TO_CUST      BTC
+                , SHIP_TO_CUST      STC
+                , ( 
+                    SELECT
+                              CONVT_LAST_ACCT_GRP.DS_ACCT_NUM
+                            , MAX(CONVT_LAST_ACCT_GRP.FIRST_DS_ACCT_GRP_TP_CD)  AS FIRST_DS_ACCT_GRP_TP_CD
+                            , MAX(CONVT_LAST_ACCT_GRP.SCD_DS_ACCT_GRP_TP_CD)    AS SCD_DS_ACCT_GRP_TP_CD
+                            , MAX(CONVT_LAST_ACCT_GRP.THIRD_DS_ACCT_GRP_TP_CD)  AS THIRD_DS_ACCT_GRP_TP_CD
+                            , MAX(CONVT_LAST_ACCT_GRP.FRTH_DS_ACCT_GRP_TP_CD)   AS FRTH_DS_ACCT_GRP_TP_CD
+                            , MAX(CONVT_LAST_ACCT_GRP.FIFTH_DS_ACCT_GRP_TP_CD)  AS FIFTH_DS_ACCT_GRP_TP_CD
+                        FROM
+                            (
+                                SELECT
+                                          DS_ACCT_NUM
+                                        , ROWNUMBER
+                                        , CASE ROWNUMBER
+                                            WHEN 1 THEN DS_ACCT_GRP_CD
+                                            ELSE NULL
+                                            END                                 AS FIRST_DS_ACCT_GRP_TP_CD
+                                        , CASE ROWNUMBER
+                                            WHEN 2 THEN DS_ACCT_GRP_CD
+                                            ELSE NULL
+                                            END                                 AS SCD_DS_ACCT_GRP_TP_CD
+                                        , CASE ROWNUMBER
+                                            WHEN 3 THEN DS_ACCT_GRP_CD
+                                            ELSE NULL
+                                            END                                 AS THIRD_DS_ACCT_GRP_TP_CD
+                                        , CASE ROWNUMBER
+                                            WHEN 4 THEN DS_ACCT_GRP_CD
+                                            ELSE NULL
+                                            END                                 AS FRTH_DS_ACCT_GRP_TP_CD
+                                        , CASE ROWNUMBER
+                                            WHEN 5 THEN DS_ACCT_GRP_CD
+                                            ELSE NULL
+                                            END                                 AS FIFTH_DS_ACCT_GRP_TP_CD
+                                    FROM
+                                        (
+                                            SELECT
+                                                      ROW_NUMBER() OVER (
+                                                        PARTITION BY
+                                                                DAGA.DS_ACCT_NUM
+                                                            ORDER BY
+                                                                DAGA.DS_ACCT_GRP_ASG_PK
+                                                    ) AS ROWNUMBER
+                                                    , DAGA.DS_ACCT_NUM
+                                                    , DAGA.DS_ACCT_GRP_CD
+                                                FROM
+                                                      DS_ACCT_GRP_ASG   DAGA
+                                                    , DS_ACCT_GRP       DAG
+                                                WHERE
+                                                        DAGA.GLBL_CMPY_CD       = #glblCmpyCd#
+                                                    AND DAGA.EFF_FROM_DT    &lt;= #slsDt#
+                                                    AND ( 
+                                                        DAGA.EFF_THRU_DT    &gt;= #slsDt#
+                                                        OR DAGA.EFF_THRU_DT    IS NULL
+                                                    ) 
+                                                    AND DAGA.EZCANCELFLAG       = '0'
+                                                    AND DAGA.GLBL_CMPY_CD       = DAG.GLBL_CMPY_CD
+                                                    AND DAGA.DS_ACCT_GRP_CD     = DAG.DS_ACCT_GRP_CD
+                                                    AND DAG.EZCANCELFLAG        = '0'
+                                        ) LAST_ACCT_GRP
+                            ) CONVT_LAST_ACCT_GRP
+                        GROUP BY
+                            DS_ACCT_NUM
+                ) AG
+            WHERE
+                    DA.GLBL_CMPY_CD             = #glblCmpyCd#
+                AND DA.SELL_TO_CUST_CD          = #dsAcctNum#
+                AND DA.DS_ACCT_ACTV_CUST_FLG    = 'Y'
+                AND DA.EZCANCELFLAG             = '0'
+                AND DA.GLBL_CMPY_CD             = AL.GLBL_CMPY_CD
+                AND DA.SELL_TO_CUST_CD          = AL.DS_ACCT_NUM
+                AND AL.LOC_NUM                  = #locNum#
+                AND AL.RGTN_STS_CD             != #terminated#
+                AND AL.EZCANCELFLAG             = '0'
+
+                AND AL.GLBL_CMPY_CD             = PLW.GLBL_CMPY_CD
+                AND AL.LOC_NUM                  = PLW.LOC_NUM 
+                AND PLW.RGTN_STS_CD             = #readyForOrderTaking#
+                AND PLW.EZCANCELFLAG            = '0'
+
+                AND PLW.GLBL_CMPY_CD            = BTC.GLBL_CMPY_CD(+)
+                AND PLW.PTY_LOC_PK              = BTC.PTY_LOC_PK(+)
+                AND BTC.RGTN_STS_CD(+)          = #readyForOrderTaking#
+                AND BTC.EZCANCELFLAG(+)         = '0'
+
+                AND PLW.GLBL_CMPY_CD            = STC.GLBL_CMPY_CD(+)
+                AND PLW.PTY_LOC_PK              = STC.PTY_LOC_PK(+)
+                AND STC.RGTN_STS_CD(+)          = #readyForOrderTaking#
+                AND STC.EZCANCELFLAG(+)         = '0'
+
+                AND DA.SELL_TO_CUST_CD          = AG.DS_ACCT_NUM(+)
+    </statement>
+
+    <statement id="getTrtyRoleAsgFromPros" parameterClass="Map" resultClass="Map">    <!-- (6)b-1-4 -->
+        SELECT
+                  DA.GLBL_CMPY_CD
+                , NULL                       AS ACCT_TRTY_ROLE_ASG_PK
+                , DA.DS_ACCT_NUM
+                , DA.LOC_NUM
+                <!-- 2017/08/29 QC#20384 Mod Start -->
+                <!-- , NULL                       AS ORG_CD -->
+                <!-- , #lineBizRoleTpCd#          AS LINE_BIZ_ROLE_TP_CD -->
+                <isNull property="orgCd">
+                , NULL                       AS ORG_CD
+                </isNull>
+                <isNotNull property="orgCd">
+                , #orgCd#                    AS ORG_CD
+                </isNotNull>
+                <isNull property="lineBizRoleTpCd">
+                , NULL                       AS LINE_BIZ_ROLE_TP_CD
+                </isNull>
+                <isNotNull property="lineBizRoleTpCd">
+                , #lineBizRoleTpCd#          AS LINE_BIZ_ROLE_TP_CD
+                </isNotNull>
+                <!-- 2017/08/29 QC#20384 Mod End -->
+                , DA.DS_ACCT_NM
+                , BTC.BILL_TO_CUST_CD        AS BILL_TO_CUST_CD
+                , STC.SHIP_TO_CUST_CD        AS SHIP_TO_CUST_CD
+                , DA.DS_ACCT_TP_CD
+                , DA.DS_ACCT_CLS_CD
+                , AG.FIRST_DS_ACCT_GRP_TP_CD AS FIRST_DS_ACCT_GRP_TP_CD
+                , AG.SCD_DS_ACCT_GRP_TP_CD   AS SCD_DS_ACCT_GRP_TP_CD
+                , AG.THIRD_DS_ACCT_GRP_TP_CD AS THIRD_DS_ACCT_GRP_TP_CD
+                , AG.FRTH_DS_ACCT_GRP_TP_CD  AS FRTH_DS_ACCT_GRP_TP_CD
+                , AG.FIFTH_DS_ACCT_GRP_TP_CD AS FIFTH_DS_ACCT_GRP_TP_CD
+                , NULL                       AS INDY_TP_CD
+                , PLW.FIRST_LINE_ADDR
+                , PLW.SCD_LINE_ADDR
+                , PLW.THIRD_LINE_ADDR
+                , PLW.FRTH_LINE_ADDR
+                , PLW.CTY_ADDR
+                , PLW.ST_CD
+                , PLW.PROV_NM
+                , (
+                    SELECT
+                              CNTY_NM
+                        FROM
+                            CNTY C
+                        WHERE
+                            C.GLBL_CMPY_CD      = PLW.GLBL_CMPY_CD
+                            AND C.CNTY_PK       = PLW.CNTY_PK
+                            AND C.EZCANCELFLAG  = '0'
+                ) CNTY_NM
+                , PLW.POST_CD
+                , PLW.DS_CUST_SIC_CD
+            FROM
+                  DS_ACCT_PROS      DA
+                , PROS_PTY_LOC_WRK  PLW
+                , BILL_TO_CUST      BTC
+                , SHIP_TO_CUST      STC
+                , ( 
+                    SELECT
+                              CONVT_LAST_ACCT_GRP.DS_ACCT_NUM
+                            , MAX(CONVT_LAST_ACCT_GRP.FIRST_DS_ACCT_GRP_TP_CD)  AS FIRST_DS_ACCT_GRP_TP_CD
+                            , MAX(CONVT_LAST_ACCT_GRP.SCD_DS_ACCT_GRP_TP_CD)    AS SCD_DS_ACCT_GRP_TP_CD
+                            , MAX(CONVT_LAST_ACCT_GRP.THIRD_DS_ACCT_GRP_TP_CD)  AS THIRD_DS_ACCT_GRP_TP_CD
+                            , MAX(CONVT_LAST_ACCT_GRP.FRTH_DS_ACCT_GRP_TP_CD)   AS FRTH_DS_ACCT_GRP_TP_CD
+                            , MAX(CONVT_LAST_ACCT_GRP.FIFTH_DS_ACCT_GRP_TP_CD)  AS FIFTH_DS_ACCT_GRP_TP_CD
+                        FROM
+                            (
+                                SELECT
+                                          DS_ACCT_NUM
+                                        , ROWNUMBER
+                                        , CASE ROWNUMBER
+                                            WHEN 1 THEN DS_ACCT_GRP_CD
+                                            ELSE NULL
+                                            END                                 AS FIRST_DS_ACCT_GRP_TP_CD
+                                        , CASE ROWNUMBER
+                                            WHEN 2 THEN DS_ACCT_GRP_CD
+                                            ELSE NULL
+                                            END                                 AS SCD_DS_ACCT_GRP_TP_CD
+                                        , CASE ROWNUMBER
+                                            WHEN 3 THEN DS_ACCT_GRP_CD
+                                            ELSE NULL
+                                            END                                 AS THIRD_DS_ACCT_GRP_TP_CD
+                                        , CASE ROWNUMBER
+                                            WHEN 4 THEN DS_ACCT_GRP_CD
+                                            ELSE NULL
+                                            END                                 AS FRTH_DS_ACCT_GRP_TP_CD
+                                        , CASE ROWNUMBER
+                                            WHEN 5 THEN DS_ACCT_GRP_CD
+                                            ELSE NULL
+                                            END                                 AS FIFTH_DS_ACCT_GRP_TP_CD
+                                    FROM
+                                        (
+                                            SELECT
+                                                      ROW_NUMBER() OVER (
+                                                        PARTITION BY
+                                                                DAGA.DS_ACCT_NUM
+                                                            ORDER BY
+                                                                DAGA.DS_ACCT_GRP_ASG_PK
+                                                    ) AS ROWNUMBER
+                                                    , DAGA.DS_ACCT_NUM
+                                                    , DAGA.DS_ACCT_GRP_CD
+                                                FROM
+                                                    DS_ACCT_GRP_ASG     DAGA
+                                                    , DS_ACCT_GRP       DAG
+                                                WHERE
+                                                    DAGA.GLBL_CMPY_CD           = #glblCmpyCd#
+                                                    AND DAGA.EFF_FROM_DT       &lt;= #slsDt#
+                                                    AND ( 
+                                                        DAGA.EFF_THRU_DT       &gt;= #slsDt#
+                                                        OR DAGA.EFF_THRU_DT    IS NULL
+                                                    ) 
+                                                    AND DAGA.EZCANCELFLAG       = '0'
+                                                    AND DAGA.GLBL_CMPY_CD       = DAG.GLBL_CMPY_CD
+                                                    AND DAGA.DS_ACCT_GRP_CD     = DAG.DS_ACCT_GRP_CD
+                                                    AND DAG.EZCANCELFLAG        = '0'
+                                        ) LAST_ACCT_GRP
+                            ) CONVT_LAST_ACCT_GRP
+                        GROUP BY
+                            DS_ACCT_NUM
+                ) AG
+            WHERE
+                    DA.GLBL_CMPY_CD             = #glblCmpyCd#
+                AND DA.DS_ACCT_NUM              = #dsAcctNum#
+                AND DA.DS_ACCT_ACTV_CUST_FLG    = 'Y'
+                AND DA.EZCANCELFLAG             = '0'
+                AND DA.LOC_NUM                  = #locNum#
+                AND DA.RGTN_STS_CD             != #terminated#
+
+                AND DA.GLBL_CMPY_CD             = PLW.GLBL_CMPY_CD
+                AND DA.LOC_NUM                  = PLW.LOC_NUM 
+                AND PLW.RGTN_STS_CD             = #readyForOrderTaking#
+                AND PLW.EZCANCELFLAG            = '0'
+
+                AND PLW.GLBL_CMPY_CD            = BTC.GLBL_CMPY_CD(+)
+                AND PLW.PTY_LOC_PK              = BTC.PTY_LOC_PK(+)
+                AND BTC.RGTN_STS_CD(+)          = #readyForOrderTaking#
+                AND BTC.EZCANCELFLAG(+)         = '0'
+
+                AND PLW.GLBL_CMPY_CD            = STC.GLBL_CMPY_CD(+)
+                AND PLW.PTY_LOC_PK              = STC.PTY_LOC_PK(+)
+                AND STC.RGTN_STS_CD(+)          = #readyForOrderTaking#
+                AND STC.EZCANCELFLAG(+)         = '0'
+
+                AND DA.DS_ACCT_NUM              = AG.DS_ACCT_NUM(+)
+    </statement>
+
+    <statement id="getLineBizRoleRankDecnInfo" parameterClass="Map" resultClass="Map">    <!-- (6)b-2 -->
+        SELECT
+                  RRD.ASG_TRTY_ATTRB_CD
+                , RRD.SRC_LINE_BIZ_TP_CD
+                , RRD.LINE_BIZ_RANK_NUM
+            FROM
+                LINE_BIZ_ROLE_RANK_DECN RRD
+            WHERE
+                RRD.GLBL_CMPY_CD            = #glblCmpyCd#
+                AND RRD.DS_ACCT_TP_CD       = #dsAcctTpCd#
+                AND RRD.SRC_LINE_BIZ_TP_CD  = #srcLineBizTpCd#
+                AND RRD.LINE_BIZ_ROLE_TP_CD = #lineBizRoleTpCd#
+                AND RRD.EZCANCELFLAG        = '0'
+    </statement>
+
+    <statement id="getTerritoryRule" parameterClass="Map" resultClass="BigDecimal">    <!-- (6)b-3 -->
+        SELECT
+                  TR.TRTY_RULE_PK
+            FROM
+                DS_ORG_UNIT     DOU
+                , ORG_STRU_TP   OST
+                , TRTY_RULE     TR
+            WHERE
+                DOU.GLBL_CMPY_CD                = #glblCmpyCd#
+                AND DOU.ORG_CD                  = #orgCd#
+                AND DOU.GNRN_TP_CD             IN (#current#, #future#) 
+                AND DOU.EFF_FROM_DT            &lt;= #slsDt#
+                AND ( 
+                    DOU.EFF_THRU_DT            &gt;= #slsDt#
+                    OR DOU.EFF_THRU_DT         IS NULL
+                ) 
+                AND DOU.EZCANCELFLAG            = '0'
+                                --
+                AND DOU.GLBL_CMPY_CD            = OST.GLBL_CMPY_CD 
+                AND OST.TRTY_STRU_FLG           = 'Y'
+                AND DOU.ORG_STRU_TP_CD          = OST.ORG_STRU_TP_CD
+                AND OST.EZCANCELFLAG            = '0'
+                                --
+                AND DOU.GLBL_CMPY_CD            = TR.GLBL_CMPY_CD 
+                AND DOU.ORG_CD                  = TR.ORG_CD 
+                AND TR.TRTY_RULE_TP_CD          = #tpLocNum#
+                AND TR.TRTY_RULE_FROM_VAL_TXT   = #locNum#
+                AND TR.TRTY_RULE_OPRD_TP_CD     = #tpEqual#
+                AND TR.TRTY_RULE_LOGIC_TP_CD    = #tpOr#
+                AND TR.EFF_FROM_DT             &lt;= #slsDt#
+                AND (
+                    TR.EFF_THRU_DT             &gt;= #slsDt#
+                    OR TR.EFF_THRU_DT          IS NULL
+                )
+                AND TR.EZCANCELFLAG             = '0'
+    </statement>
+
+    <statement id="getResourceData" parameterClass="Map" resultClass="Map">    <!-- (6)b-5 -->
+        SELECT
+                  DOU.ORG_NM
+                , OFA.TOC_CD
+                , P.PSN_CD
+                , TT.TRTY_TP_CD
+                , TGT.TRTY_GRP_TP_CD
+                , TGT.NON_SLS_REP_FLG
+        <!-- 2017/08/29 QC#20384 Add Start -->
+                , DORR.NON_SLS_REP_FLG  AS RESRC_NON_SLS_REP_FLG
+        <!-- 2017/08/29 QC#20384 Add End -->
+            FROM
+                DS_ORG_UNIT             DOU
+                , ORG_STRU_TP           OST
+                , TRTY_TP               TT
+                , TRTY_GRP_TP           TGT
+                , DS_ORG_RESRC_RELN     DORR
+                , S21_PSN               P
+                , ORG_FUNC_ASG          OFA
+                , TOC                   T
+                , ORG_FUNC_ROLE_TP      OFRT
+            WHERE
+                DOU.GLBL_CMPY_CD            = #glblCmpyCd#
+                AND DOU.ORG_CD              = #orgCd#
+                AND DOU.GNRN_TP_CD         IN (#current#, #future#)
+                AND DOU.EFF_FROM_DT        &lt;= #slsDt#
+                AND ( 
+                    DOU.EFF_THRU_DT        &gt;= #slsDt#
+                    OR DOU.EFF_THRU_DT     IS NULL
+                ) 
+                AND DOU.EZCANCELFLAG        = '0'
+                                --
+                AND DOU.GLBL_CMPY_CD        = OST.GLBL_CMPY_CD
+                AND DOU.ORG_STRU_TP_CD      = OST.ORG_STRU_TP_CD
+                AND OST.TRTY_STRU_FLG       = 'Y'
+                AND OST.EZCANCELFLAG        = '0'
+                                --
+                AND DOU.GLBL_CMPY_CD        = TT.GLBL_CMPY_CD
+                AND DOU.TRTY_TP_CD          = TT.TRTY_TP_CD
+                AND TT.EZCANCELFLAG         = '0'
+                                 --
+                AND DOU.GLBL_CMPY_CD        = TGT.GLBL_CMPY_CD
+                AND DOU.TRTY_GRP_TP_CD      = TGT.TRTY_GRP_TP_CD
+                AND TGT.EZCANCELFLAG        = '0'
+                                --
+                AND DOU.GLBL_CMPY_CD        = DORR.GLBL_CMPY_CD
+                AND DOU.ORG_CD              = DORR.ORG_CD
+                AND DORR.EFF_FROM_DT       &lt;= #slsDt#
+                AND ( 
+                    DORR.EFF_THRU_DT       &gt;= #slsDt#
+                    OR DORR.EFF_THRU_DT    IS NULL
+                ) 
+                AND DORR.GNRN_TP_CD         = #current#
+              <isNotNull property="lineBizRankNum">
+                AND DORR.ACCT_TEAM_ROLE_TP_CD IS NULL
+              </isNotNull>
+                AND DORR.EZCANCELFLAG       = '0'
+                               --
+                AND DORR.GLBL_CMPY_CD       = P.GLBL_CMPY_CD
+                AND DORR.PSN_CD             = P.PSN_CD
+                AND P.EZCANCELFLAG          = '0'
+                                  --
+                AND P.GLBL_CMPY_CD          = OFA.GLBL_CMPY_CD
+                AND P.PSN_CD                = OFA.PSN_CD
+                AND OFA.EFF_FROM_DT        &lt;= #slsDt#
+                AND ( 
+                    OFA.EFF_THRU_DT        &gt;= #slsDt#
+                    OR OFA.EFF_THRU_DT     IS NULL
+                ) 
+                AND OFA.GNRN_TP_CD          = #current#
+                AND OFA.EZCANCELFLAG        = '0'
+                                --
+                AND OFA.GLBL_CMPY_CD        = T.GLBL_CMPY_CD
+                AND OFA.TOC_CD              = T.TOC_CD
+                AND T.EZCANCELFLAG          = '0'
+                                  --
+                AND T.GLBL_CMPY_CD          = OFRT.GLBL_CMPY_CD
+                AND T.ORG_FUNC_ROLE_TP_CD   = OFRT.ORG_FUNC_ROLE_TP_CD
+                AND OFRT.ACTV_FLG           = 'Y'
+              <isNotNull property="lineBizRankNum">
+                AND OFRT.SLS_REP_FLG        = 'Y'
+              </isNotNull>
+              <isNull property="lineBizRankNum">
+                AND OFRT.FIRST_ORG_CD       = #firstOrgCd#
+              </isNull>
+                AND OFRT.EZCANCELFLAG       = '0'
+    </statement>
+
+    <statement id="getTrtyForResistTrtyRule" parameterClass="Map" resultClass="Map">    <!-- (6)b-6-1 -->
+        SELECT
+                  DOU.ORG_CD
+                , DOU.ORG_STRU_TP_CD
+                , DOU.ORG_TIER_CD
+                <!-- 2018/03/26 QC#23157 Add Start -->
+                , DOU.TRTY_TP_CD
+                <!-- 2018/03/26 QC#23157 Add End -->
+            FROM
+                DS_ORG_UNIT     DOU
+                , ORG_STRU_TP   OST
+            WHERE
+                DOU.GLBL_CMPY_CD        = #glblCmpyCd#
+                AND DOU.ORG_CD          = #orgCd#
+                AND DOU.GNRN_TP_CD     IN (#current#, #future#)
+                AND DOU.EFF_FROM_DT    &lt;= #slsDt#
+                AND (
+                    DOU.EFF_THRU_DT    &gt;= #slsDt#
+                    OR DOU.EFF_THRU_DT IS NULL
+                ) 
+                AND DOU.EZCANCELFLAG    = '0'
+                --
+                AND DOU.GLBL_CMPY_CD    = OST.GLBL_CMPY_CD
+                AND DOU.ORG_STRU_TP_CD  = OST.ORG_STRU_TP_CD
+                AND OST.TRTY_STRU_FLG   = 'Y'
+                AND OST.EZCANCELFLAG    = '0'
+    </statement>
+
+    <statement id="getCountLocNumInTrtyRule" parameterClass="Map" resultClass="Integer">    <!-- (6)b-6-2 -->
+        SELECT
+                  COUNT(GLBL_CMPY_CD)   CNT
+            FROM
+                TRTY_RULE   TR
+            WHERE
+                TR.GLBL_CMPY_CD         = #glblCmpyCd#
+                AND TR.TRTY_RULE_TP_CD  = #tpLocNum#
+                AND TR.ORG_STRU_TP_CD   = #orgStruTpCd#
+                AND TR.EFF_FROM_DT     &lt;= #slsDt#
+                AND (
+                    TR.EFF_THRU_DT     &gt;= #slsDt#
+                    OR TR.EFF_THRU_DT  IS NULL
+                )
+                AND TR.TRTY_RULE_FROM_VAL_TXT   = #locNum#
+                AND TR.ORG_CD                   = #orgCd#
+                AND TR.EZCANCELFLAG             = '0'
+    </statement>
+
+    <statement id="existsOrLogicInTrtyRule" parameterClass="Map" resultClass="Integer">    <!-- (6)b-6-3 -->
+        SELECT
+                  COUNT(GLBL_CMPY_CD)   CNT
+            FROM
+                TRTY_RULE   TR
+            WHERE
+                TR.GLBL_CMPY_CD                 = #glblCmpyCd#
+                AND TR.ORG_CD                   = #orgCd#
+                AND TR.ORG_STRU_TP_CD           = #orgStruTpCd#
+                AND TR.EFF_FROM_DT             &lt;= #slsDt#
+                AND (TR.EFF_THRU_DT            &gt;= #slsDt#
+                    OR TR.EFF_THRU_DT          IS NULL
+                )
+                AND (
+                    TR.TRTY_RULE_TP_CD          != #tpLocNum#
+                    OR TR.TRTY_RULE_LOGIC_TP_CD != #tpOr#
+                )
+                AND TR.EZCANCELFLAG             = '0'
+    </statement>
+    <!-- 2018/03/26 QC#23157 Add Start -->
+    <statement id="getOverlapPostalCode" parameterClass="Map" resultClass="Integer">
+        SELECT
+               COUNT(TR.TRTY_RULE_PK) CNT
+        FROM
+               TRTY_RULE TR
+        WHERE
+               TR.GLBL_CMPY_CD          = #glblCmpyCd#
+           AND TR.EFF_FROM_DT       &lt;= #slsDt#
+           AND (
+               TR.EFF_THRU_DT       &gt;= #slsDt#
+            OR TR.EFF_THRU_DT          IS NULL
+           )
+           AND TR.EZCANCELFLAG          = '0'
+
+           AND TR.ORG_CD                = #orgCd#
+           AND TR.ORG_STRU_TP_CD        = #orgStruTpCd#
+           AND TR.TRTY_RULE_TP_CD       = #trtyRuleTpCd#
+           AND TR.TRTY_RULE_LOGIC_TP_CD = #trtyRuleLogicTpCd#
+
+           AND (
+               (TR.TRTY_RULE_OPRD_TP_CD = #trtyRuleOprdTpCd_Eq#
+                  AND TR.TRTY_RULE_FROM_VAL_TXT = #postCd#)
+
+            <!-- START 2018/06/01 Hd.Sugawara [QC#24293,DEL] -->
+            <!-- OR (TR.TRTY_RULE_OPRD_TP_CD = #trtyRuleOprdTpCd_Lk# -->
+            <!--       AND #postCd# LIKE TR.TRTY_RULE_FROM_VAL_TXT) -->
+            <!-- END 2018/06/01 Hd.Sugawara [QC#24293,DEL] -->
+
+            OR (TR.TRTY_RULE_OPRD_TP_CD = #trtyRuleOprdTpCd_Bw#
+                  AND #postCd# BETWEEN TR.TRTY_RULE_FROM_VAL_TXT AND TR.TRTY_RULE_THRU_VAL_TXT)
+           )
+    </statement>
+    <!-- 2018/03/26 QC#23157 Add End -->
+    <!-- 2018/07/24 QC#26753 Add Start -->
+    <statement id="getOtherRuleThanPostalCode" parameterClass="Map" resultClass="Integer">
+        SELECT
+               COUNT(TR.TRTY_RULE_PK) CNT
+        FROM
+               TRTY_RULE TR
+        WHERE
+               TR.GLBL_CMPY_CD                 = #glblCmpyCd#
+           AND TR.EFF_FROM_DT              &lt;= #slsDt#
+           AND (
+               TR.EFF_THRU_DT              &gt;= #slsDt#
+            OR TR.EFF_THRU_DT                 IS NULL
+           )
+           AND TR.EZCANCELFLAG                 = '0'
+
+           AND TR.ORG_CD                       = #orgCd#
+           AND TR.ORG_STRU_TP_CD               = #orgStruTpCd#
+           AND TR.TRTY_RULE_TP_CD       &lt;&gt; #trtyRuleTpCd#
+           AND TR.TRTY_RULE_LOGIC_TP_CD        = #trtyRuleLogicTpCd#
+    </statement>
+    <!-- 2018/07/24 QC#26753 Add End -->
+
+    <!-- 2018/08/14 QC#27597 H.Kumagai Add Start -->
+    <statement id="getTrtyGrpTpCd" parameterClass="Map" resultClass="String">
+        SELECT
+                  DOU.TRTY_GRP_TP_CD
+            FROM
+                DS_ORG_UNIT     DOU
+                , ORG_STRU_TP   OST
+            WHERE
+                DOU.GLBL_CMPY_CD        = #glblCmpyCd#
+                AND DOU.ORG_CD          = #orgCd#
+                AND DOU.GNRN_TP_CD     IN (#current#, #future#) 
+                AND DOU.EFF_FROM_DT    &lt;= #slsDt#
+                AND ( 
+                    DOU.EFF_THRU_DT    &gt;= #slsDt#
+                    OR DOU.EFF_THRU_DT IS NULL
+                ) 
+                AND DOU.EZCANCELFLAG    = '0'
+                                --
+                AND DOU.GLBL_CMPY_CD    = OST.GLBL_CMPY_CD
+                AND DOU.ORG_STRU_TP_CD  = OST.ORG_STRU_TP_CD
+                AND OST.TRTY_STRU_FLG   = 'Y'
+                AND OST.EZCANCELFLAG    = '0'
+    </statement>
+    <!-- 2018/08/14 QC#27597 H.Kumagai Add End -->
+
+</sqlMap>

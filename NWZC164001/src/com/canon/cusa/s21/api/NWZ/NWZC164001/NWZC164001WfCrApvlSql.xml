@@ -1,0 +1,562 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NWZC164001WfCrApvlSql">
+
+    <statement id="WF_CREDIT_APPROVAL_CONDITION" parameterClass="Map" resultClass="Map">
+       WITH CR_RV_SVC AS
+        ( 
+            <isEqual property="ordProcNodePrflEquipFlg" compareValue="N">
+              (SELECT
+                  LEVEL AS PRIORITY
+             <!-- QC#11890 Delete Start
+                , A.CLT_PTFO_CD
+                <isEqual property="ordProcNodePrflEquipFlg" compareValue="Y">
+                , A.CLT_CR_ANLST_EQUIP_PSN_CD AS CR_ANLST_PSN_CD
+                </isEqual>
+                <isEqual property="ordProcNodePrflEquipFlg" compareValue="N">
+             QC#11890 Delete End -->
+                , A.CLT_CR_ANLST_SPLY_PSN_CD AS CR_ANLST_PSN_CD
+             <!-- QC#11890 Delete Start
+                </isEqual>
+                , A.REL_CLT_PTFO_PK AS NEXT_PTFO
+             QC#11890 Delete End -->
+              FROM
+                    CLT_PTFO A 
+              WHERE
+                    A.EZCANCELFLAG = '0'
+                AND A.GLBL_CMPY_CD = #glblCmpyCd#
+             START WITH A.CLT_PTFO_PK =
+                    NVL(
+                        (SELECT
+                            CLT_PTFO_PK
+                        FROM
+                             BILL_TO_CUST    BT
+                        WHERE
+                                BT.GLBL_CMPY_CD     = #glblCmpyCd#
+                            AND BT.BILL_TO_CUST_CD  = #billToCustCd#
+                            AND BT.EZCANCELFLAG     = '0'
+                       )
+                    ,  (
+                        SELECT
+                            CLT_PTFO_PK
+                        FROM
+                            SELL_TO_CUST
+                        WHERE
+                                GLBL_CMPY_CD    = #glblCmpyCd#
+                            AND SELL_TO_CUST_CD = #billToCustAcctCd#
+                            AND EZCANCELFLAG    = '0'
+                       )
+                    
+                    )
+             CONNECT BY PRIOR A.REL_CLT_PTFO_PK = CLT_PTFO_PK
+            )
+            <!-- QC#11890 Add Start -->
+                <isEqual property="ordProcNodePrflEquipFlg" compareValue="Y">
+                 UNION
+                </isEqual>
+            </isEqual>
+            <isEqual property="ordProcNodePrflEquipFlg" compareValue="Y">
+            (SELECT 
+                  LEVEL AS PRIORITY
+                , P.PSN_NUM AS CR_ANLST_PSN_CD
+             FROM
+                  S21_PSN  P
+             WHERE
+                  P.GLBL_CMPY_CD = #glblCmpyCd#
+             AND  P.EZCANCELFLAG = '0'
+             START WITH P.PSN_NUM = 
+                 (SELECT
+                     A.CLT_CR_ANLST_EQUIP_PSN_CD AS CR_ANLST_PSN_CD
+                  FROM
+                        CLT_PTFO A 
+                  WHERE
+                        A.EZCANCELFLAG = '0'
+                    AND A.GLBL_CMPY_CD = #glblCmpyCd#
+                    AND A.CLT_PTFO_PK =
+                        NVL(
+                             (SELECT
+                                 CLT_PTFO_PK
+                             FROM
+                                 BILL_TO_CUST    BT
+                             WHERE
+                                 BT.GLBL_CMPY_CD     = #glblCmpyCd#
+                             AND BT.BILL_TO_CUST_CD  = #billToCustCd#
+                             AND BT.EZCANCELFLAG     = '0'
+                            )
+                         ,  (
+                             SELECT
+                                 CLT_PTFO_PK
+                             FROM
+                                 SELL_TO_CUST
+                             WHERE
+                                 GLBL_CMPY_CD    = #glblCmpyCd#
+                             AND SELL_TO_CUST_CD = #billToCustAcctCd#
+                             AND EZCANCELFLAG    = '0'
+                            )
+                        )
+                  ) and P.EZCANCELFLAG = '0'
+           	 CONNECT BY PRIOR P.HR_SUPV_ID  = P.PSN_CD
+            )
+            </isEqual>
+            <!-- QC#11890 Add End -->
+        )
+        SELECT
+            'NWWP0001'                 AS COND_STR_1
+          <!-- QC#11890 Delete Start
+          , CR_RV_SVC.CLT_PTFO_CD
+               QC#11890 Delete End -->
+          , CR_RV_SVC.CR_ANLST_PSN_CD  AS VAL_STR_1
+          <!-- QC#11890 Delete Start
+          , CR_RV_SVC.NEXT_PTFO
+               QC#11890 Delete End -->
+          , B.CR_LIMIT_AMT
+          , B.GRACE_PER_DAYS_AOT
+          , B.RF_LIMIT_AMT
+          , B.RF_MGR_APVL_REQ_FLG
+          , B.RF_ENTRY_PMIT_FLG 
+        FROM
+            CR_RV_SVC
+          , AR_CR_RF_APVL_LIMIT B
+        WHERE
+                CR_RV_SVC.CR_ANLST_PSN_CD = B.AR_CR_APVL_USR_ID
+            AND B.GLBL_CMPY_CD            = #glblCmpyCd#
+            AND B.EZCANCELFLAG            = '0'
+            AND CR_RV_SVC.PRIORITY    &lt;=
+                     (
+                        SELECT
+                             MIN(CR_RV_SVC.PRIORITY)
+                        FROM
+                             AR_CR_RF_APVL_LIMIT ACR
+                          ,  CR_RV_SVC
+                        WHERE
+                             ACR.AR_CR_APVL_USR_ID     = CR_RV_SVC.CR_ANLST_PSN_CD
+                        AND  ACR.CR_LIMIT_AMT      &gt;= #ordTotAmt#
+                        AND  ACR.GLBL_CMPY_CD          = #glblCmpyCd#
+                        AND  ACR.EZCANCELFLAG          = '0'
+                     )
+        ORDER BY PRIORITY
+    </statement>
+    <!-- 2016/09/12 S21_NA#5394 Add Start -->
+    <statement id="WF_ORD_ADMIN_CONDITION" parameterClass="Map" resultClass="Map">
+        SELECT
+              #bizId#           AS BIZ_ID
+            , #userGroup#       AS USER_GROUP_NAME
+            , '000'             AS USER_GROUP_LEVEL
+            , C.ADMIN_PSN_CD    AS WF_USR_ID
+        FROM
+            CPO C
+        WHERE
+            C.GLBL_CMPY_CD      = #glblCmpyCd#
+            AND C.CPO_ORD_NUM   = #cpoOrdNum#
+            AND C.ADMIN_PSN_CD  IS NOT NULL
+            AND C.EZCANCELFLAG  = '0'
+        UNION
+        SELECT DISTINCT
+            #bizId# AS BIZ_ID
+            , #userGroup# AS USER_GROUP_NAME
+            , '000' AS USER_GROUP_LEVEL
+            , OTMD2.ORD_TEAM_ATTRB_VAL_TXT AS WF_USR_ID
+        FROM
+            CPO C
+            , ORD_TEAM_MSTR_DTL OTMD
+            , ORD_TEAM_MSTR_HDR OTMH
+            , ORD_TEAM_MSTR_DTL OTMD2
+            , (
+                SELECT
+                    GLBL_CMPY_CD
+                    , MGT_DT
+                FROM
+                    DT_MGT
+                WHERE
+                    DT_PROC_CD = 'S'
+                    AND DT_MGT_PGM_ID = '*'
+                    AND EZCANCELFLAG = '0'
+                    AND ROWNUM <![CDATA[<=]]> 1
+            ) DT_MGT
+        WHERE
+            C.GLBL_CMPY_CD = #glblCmpyCd#
+            AND C.CPO_ORD_NUM = #cpoOrdNum#
+            AND C.EZCANCELFLAG = '0'
+            AND C.GLBL_CMPY_CD = OTMD.GLBL_CMPY_CD
+            AND C.ADMIN_PSN_CD = OTMD.ORD_TEAM_ATTRB_VAL_TXT
+            AND OTMD.ORD_TEAM_ATTRB_TP_CD = '10'
+            AND OTMD.EZCANCELFLAG = '0'
+
+            AND OTMD.GLBL_CMPY_CD = OTMH.GLBL_CMPY_CD
+            AND OTMD.ORD_TEAM_MSTR_HDR_PK = OTMH.ORD_TEAM_MSTR_HDR_PK
+            AND OTMH.GLBL_CMPY_CD = DT_MGT.GLBL_CMPY_CD
+            AND OTMH.EFF_FROM_DT <![CDATA[<=]]> DT_MGT.MGT_DT
+            AND NVL(OTMH.EFF_THRU_DT, '99991231') <![CDATA[>=]]> DT_MGT.MGT_DT
+            AND OTMH.EZCANCELFLAG = '0'
+
+            AND OTMH.GLBL_CMPY_CD = OTMD2.GLBL_CMPY_CD
+            AND OTMH.ORD_TEAM_MSTR_HDR_PK = OTMD2.ORD_TEAM_MSTR_HDR_PK
+            AND OTMD2.ORD_TEAM_ATTRB_TP_CD = '10'
+            AND OTMD2.EZCANCELFLAG = '0'
+    </statement>
+    <!-- 2016/09/12 S21_NA#5394 Add End -->
+    <!-- 2018/03/02 QC#21934 Add Start -->
+    <!-- Mod Start 2018/04/19 QC#25549 -->
+    <statement id="WF_GRP_APVL_SUB_PSN" parameterClass="Map" resultClass="Map">
+    WITH CPPK AS (SELECT
+                      NVL(BILL.CLT_PTFO_PK, SELL.CLT_PTFO_PK) AS CLT_PTFO_PK
+                  FROM
+                      (SELECT
+                           BT.CLT_PTFO_PK
+                       FROM
+                           BILL_TO_CUST BT
+                       WHERE
+                           BT.GLBL_CMPY_CD     = #glblCmpyCd#
+                       AND
+                           <!-- BT.BILL_TO_CUST_CD  = #billToCustCd# -->
+                           BT.BILL_TO_CUST_CD  = (SELECT BILL_TO_CUST_CD FROM CPO WHERE CPO_ORD_NUM = #cpoOrdNum#)
+                       AND 
+                           BT.EZCANCELFLAG     = '0') BILL
+                     ,(SELECT
+                           ST.CLT_PTFO_PK
+                       FROM
+                           SELL_TO_CUST ST
+                       WHERE
+                           ST.GLBL_CMPY_CD     = #glblCmpyCd#
+                       AND
+                           <!-- ST.SELL_TO_CUST_CD = #billToCustAcctCd# -->
+                           ST.SELL_TO_CUST_CD = (SELECT BILL_TO_CUST_ACCT_CD FROM CPO WHERE CPO_ORD_NUM = #cpoOrdNum#)
+                       AND
+                           ST.EZCANCELFLAG    = '0') SELL
+                 )
+        ,EADT AS (SELECT
+                      #glblCmpyCd#       AS GLBL_CMPY_CD
+                     ,'NWWP0001'         AS BIZ_ID
+                     ,'GRP_APVL_SUB_PSN' AS USER_GROUP_NAME
+                     ,RPAD('00',3, A.LV) AS USER_GROUP_LEVEL
+                     ,P.PSN_NUM          AS WF_USR_ID
+                     ,A.CR_LIMIT_AMT     AS APVL_LIMIT
+                     ,(SELECT
+                           AP.CR_LIMIT_AMT
+                       FROM
+                           AR_CR_RF_APVL_LIMIT AP
+                       WHERE
+                           P.PSN_NUM = AP.AR_CR_APVL_USR_ID) AS SUB_APVL_LIMIT
+                  FROM
+                      S21_PSN P
+                     <isEqual property="ordProcNodePrflEquipFlg" compareValue="Y">
+                     ,(SELECT
+                       <!--     P.PSN_NUM -->
+                       <!--    ,P.LV -->
+                       <!--    ,CP.CLT_PTFO_PK -->
+                       <!-- FROM -->
+                       <!--     (SELECT -->
+                                SP.PSN_NUM AS PSN_NUM
+                               <!-- ,LEVEL      AS LV -->
+                               ,ROW_NUMBER() OVER(ORDER BY LEVEL) AS LV
+                               ,(SELECT
+                                     AL.CR_LIMIT_AMT
+                                 FROM
+                                     AR_CR_RF_APVL_LIMIT AL
+                                 WHERE AL.AR_CR_APVL_USR_ID = SP.PSN_NUM) AS CR_LIMIT_AMT
+                            FROM
+                                S21_PSN SP
+                            WHERE
+                                SP.GLBL_CMPY_CD = #glblCmpyCd#
+                            AND
+                                SP.EZCANCELFLAG = '0'
+                            AND
+                               EXISTS (SELECT
+                                           *
+                                       FROM 
+                                           AR_CR_RF_APVL_LIMIT AL
+                                       WHERE
+                                           AL.GLBL_CMPY_CD = #glblCmpyCd#
+                                       AND
+                                           AL.EZCANCELFLAG = '0' 
+                                       AND
+                                           AL.AR_CR_APVL_USR_ID = SP.PSN_NUM)
+                            START WITH SP.PSN_NUM IN (SELECT
+                                                          CP.CLT_CR_ANLST_EQUIP_PSN_CD 
+                                                      FROM
+                                                          CLT_PTFO CP 
+                                                      WHERE
+                                                          CP.GLBL_CMPY_CD = #glblCmpyCd#
+                                                      AND
+                                                          CP.EZCANCELFLAG = '0' 
+                                                      AND
+                                                          CP.CLT_PTFO_PK = (SELECT CLT_PTFO_PK FROM CPPK))
+                            CONNECT BY PRIOR SP.HR_SUPV_ID  = SP.PSN_CD
+                            <!-- AND -->
+                            <!--    EXISTS (SELECT -->
+                            <!--                * -->
+                            <!--            FROM  -->
+                            <!--                AR_CR_RF_APVL_LIMIT AL -->
+                            <!--            WHERE -->
+                            <!--                AL.GLBL_CMPY_CD = #glblCmpyCd# -->
+                            <!--            AND -->
+                            <!--                AL.EZCANCELFLAG = '0' --> 
+                            <!--            AND -->
+                            <!--                AL.AR_CR_APVL_USR_ID = SP.PSN_NUM) -->
+                       <!--     ) P -->
+                       <!--    ,CLT_PTFO CP -->
+                       <!-- WHERE -->
+                       <!--     CP.GLBL_CMPY_CD = #glblCmpyCd# -->
+                       <!-- AND -->
+                       <!--     CP.EZCANCELFLAG = '0'  -->
+                       <!-- AND -->
+                       <!--     CP.CLT_CR_ANLST_EQUIP_PSN_CD = P.PSN_NUM -->
+                      ) A
+                     </isEqual>
+                     <isEqual property="ordProcNodePrflEquipFlg" compareValue="N">
+                     ,(SELECT
+                           CP.CLT_CR_ANLST_SPLY_PSN_CD AS PSN_NUM
+                          <!-- ,LEVEL                       AS LV -->
+                          ,ROW_NUMBER() OVER(ORDER BY LEVEL) AS LV
+                          ,CP.CLT_PTFO_PK              AS CLT_PTFO_PK
+                          ,(SELECT
+                                AP.CR_LIMIT_AMT
+                            FROM
+                                AR_CR_RF_APVL_LIMIT AP
+                            WHERE
+                                CP.CLT_CR_ANLST_SPLY_PSN_CD = AP.AR_CR_APVL_USR_ID) AS CR_LIMIT_AMT
+                       FROM
+                           CLT_PTFO CP
+                       WHERE
+                           CP.GLBL_CMPY_CD = #glblCmpyCd#
+                       AND
+                           CP.EZCANCELFLAG = '0'
+                       AND
+                          EXISTS (SELECT
+                                      *
+                                  FROM 
+                                      AR_CR_RF_APVL_LIMIT AL
+                                  WHERE
+                                      AL.GLBL_CMPY_CD = #glblCmpyCd#
+                                  AND
+                                      AL.EZCANCELFLAG = '0' 
+                                  AND
+                                      AL.AR_CR_APVL_USR_ID = CP.CLT_CR_ANLST_SPLY_PSN_CD)
+                       <!-- START WITH CP.CLT_CR_ANLST_SPLY_PSN_CD IN (SELECT -->
+                       <!--                                                C.CLT_CR_ANLST_EQUIP_PSN_CD  -->
+                       START WITH CP.CLT_PTFO_PK IN (SELECT
+                                                         C.CLT_PTFO_PK 
+                                                     FROM
+                                                         CLT_PTFO C
+                                                     WHERE
+                                                         C.GLBL_CMPY_CD = #glblCmpyCd#
+                                                     AND
+                                                         C.EZCANCELFLAG = '0' 
+                                                     AND
+                                                         C.CLT_PTFO_PK = (SELECT CLT_PTFO_PK FROM CPPK))
+                       CONNECT BY PRIOR CP.REL_CLT_PTFO_PK  = CP.CLT_PTFO_PK
+                       <!-- AND -->
+                       <!--    EXISTS (SELECT -->
+                       <!--                * -->
+                       <!--            FROM  -->
+                       <!--                AR_CR_RF_APVL_LIMIT AL -->
+                       <!--            WHERE -->
+                       <!--                AL.GLBL_CMPY_CD = #glblCmpyCd# -->
+                       <!--            AND -->
+                       <!--                AL.EZCANCELFLAG = '0'  -->
+                       <!--            AND -->
+                       <!--                AL.AR_CR_APVL_USR_ID = CP.CLT_CR_ANLST_SPLY_PSN_CD) -->
+                      ) A
+                     </isEqual>
+                  WHERE
+                      P.GLBL_CMPY_CD = #glblCmpyCd#
+                  AND
+                      P.EZCANCELFLAG = '0'
+                  AND
+                      EXISTS (SELECT
+                                  *
+                              FROM
+                                  AR_CR_RF_APVL_LIMIT AL1
+                                 ,AR_CR_RF_APVL_LIMIT AL2
+                              WHERE
+                                  AL1.GLBL_CMPY_CD = #glblCmpyCd#
+                              AND
+                                  AL1.EZCANCELFLAG = '0'
+                              AND
+                                  AL1.AR_CR_APVL_USR_ID IN A.PSN_NUM
+                                  <!-- AL1.AR_CR_APVL_USR_ID IN (SELECT -->
+                                  <!--                               CP.CLT_CR_ANLST_EQUIP_PSN_CD  -->
+                                  <!--                           FROM -->
+                                  <!--                               CLT_PTFO CP  -->
+                                  <!--                           WHERE -->
+                                  <!--                               CP.GLBL_CMPY_CD = #glblCmpyCd# -->
+                                  <!--                           AND -->
+                                  <!--                               CP.EZCANCELFLAG = '0'  -->
+                                  <!--                           AND -->
+                                  <!--                               CP.CLT_PTFO_PK = A.CLT_PTFO_PK) -->
+                              AND
+                                  AL1.CR_LIMIT_AMT <![CDATA[<=]]> AL2.CR_LIMIT_AMT
+                              AND
+                                  AL1.GLBL_CMPY_CD = AL2.GLBL_CMPY_CD
+                              AND
+                                  AL1.EZCANCELFLAG = AL2.EZCANCELFLAG
+                              AND
+                                  AL2.AR_CR_APVL_USR_ID = P.PSN_NUM)
+                  ORDER BY A.LV, P.PSN_NUM
+                 )
+        SELECT
+            *
+        FROM
+            EADT
+        <!-- UNION ALL -->
+        <!-- SELECT -->
+        <!--     #glblCmpyCd#       AS GLBL_CMPY_CD -->
+        <!--    ,'NWWP0001'         AS BIZ_ID -->
+        <!--    ,'GRP_APVL_SUB_PSN' AS USER_GROUP_NAME -->
+        <!--    ,'001'              AS USER_GROUP_LEVEL -->
+        <!--    ,P.PSN_NUM          AS WF_USR_ID -->
+        <!-- FROM -->
+        <!--     S21_PSN  P -->
+        <!-- WHERE -->
+        <!--     P.GLBL_CMPY_CD = #glblCmpyCd# -->
+        <!-- AND -->
+        <!--     P.EZCANCELFLAG = '0' -->
+        <!-- AND -->
+        <!--     EXISTS (SELECT -->
+        <!--                 * -->
+        <!--             FROM -->
+        <!--                 AR_CR_RF_APVL_LIMIT AL1 -->
+        <!--                ,AR_CR_RF_APVL_LIMIT AL2 -->
+        <!--             WHERE -->
+        <!--                 AL1.GLBL_CMPY_CD = #glblCmpyCd# -->
+        <!--             AND -->
+        <!--                 AL1.EZCANCELFLAG = '0' -->
+        <!--             AND -->
+        <!--                 AL1.AR_CR_APVL_USR_ID IN (SELECT -->
+        <!--                                               CP.CLT_CR_ANLST_EQUIP_PSN_CD --> 
+        <!--                                           FROM -->
+        <!--                                               CLT_PTFO CP --> 
+        <!--                                           WHERE -->
+        <!--                                               CP.GLBL_CMPY_CD = #glblCmpyCd# -->
+        <!--                                           AND -->
+        <!--                                               CP.EZCANCELFLAG = '0' --> 
+        <!--                                           AND -->
+        <!--                                               CP.CLT_PTFO_PK = (SELECT CLT_PTFO_PK FROM CPPK)) -->
+        <!--             AND -->
+        <!--                 AL1.CR_LIMIT_AMT <![CDATA[<=]]> AL2.CR_LIMIT_AMT -->
+        <!--             AND -->
+        <!--                 AL1.GLBL_CMPY_CD = AL2.GLBL_CMPY_CD -->
+        <!--             AND  -->
+        <!--                 AL1.EZCANCELFLAG = AL2.EZCANCELFLAG -->
+        <!--             AND -->
+        <!--                 AL2.AR_CR_APVL_USR_ID = P.PSN_NUM) -->
+        <!-- AND -->
+        <!--     NOT EXISTS (SELECT * FROM EADT) -->
+        WHERE EADT.USER_GROUP_LEVEL <![CDATA[<=]]>
+            (SELECT
+                MIN(EADT.USER_GROUP_LEVEL)
+             FROM
+                 EADT
+             WHERE
+                 EADT.APVL_LIMIT <![CDATA[>=]]> (SELECT CPO_TOT_DEAL_NET_AMT FROM CPO WHERE CPO_ORD_NUM = #cpoOrdNum#)
+            )
+        ORDER BY
+             USER_GROUP_LEVEL
+            ,WF_USR_ID
+    </statement>
+    <!-- Mod End 2018/04/19 QC#25549 -->
+    <!-- 2018/03/02 QC#21934 Add End -->
+    <!-- 2018/03/06 QC#24464 Add Start -->
+    <statement id="WF_CREDIT_REASSIGN" parameterClass="Map" resultClass="Map">
+     SELECT DISTINCT
+         #glblCmpyCd#       AS GLBL_CMPY_CD
+        ,'NWWP0001'         AS BIZ_ID
+        ,'CREDIT_REASSIGN'  AS USER_GROUP_NAME
+        ,'000'              AS USER_GROUP_LEVEL
+        <!-- START 2023/08/21 S.Fujita [QC#61722, MOD] -->
+        <!-- <isEqual property="ordProcNodePrflEquipFlg" compareValue="Y"> -->
+        ,PS.PSN_NUM         AS WF_USR_ID
+        <!-- </isEqual> -->
+        <!-- <isEqual property="ordProcNodePrflEquipFlg" compareValue="N"> -->
+        <!-- ,PS.CLT_CR_ANLST_SPLY_PSN_CD AS WF_USR_ID -->
+        <!-- </isEqual> -->
+     FROM
+         S21_PSN PS
+        ,DS_COND_CONST DCC
+     WHERE
+         PS.GLBL_CMPY_CD          = #glblCmpyCd#
+     AND PS.EZCANCELFLAG          = '0'
+     AND DCC.GLBL_CMPY_CD         = PS.GLBL_CMPY_CD
+     AND DCC.EZCANCELFLAG         = '0'
+     AND DCC.DS_COND_CONST_NM     = PS.HR_TTL_NM
+     AND DCC.DS_COND_CONST_GRP_ID = 'CR_RVW_REASSIGN_USR'
+     <!-- <isEqual property="ordProcNodePrflEquipFlg" compareValue="Y"> -->
+         <!-- (SELECT -->
+              <!-- P.PSN_NUM -->
+          <!-- FROM --> -->
+              <!-- S21_PSN  P -->
+          <!-- WHERE -->
+              <!-- P.GLBL_CMPY_CD = #glblCmpyCd# -->
+          <!-- AND -->
+              <!-- P.EZCANCELFLAG = '0' -->
+          <!-- START WITH P.PSN_NUM IN (SELECT -->
+                                       <!-- CP.CLT_CR_ANLST_EQUIP_PSN_CD -->
+                                   <!-- FROM -->
+                                       <!-- CLT_PTFO CP  -->
+                                   <!-- WHERE -->
+                                       <!-- CP.GLBL_CMPY_CD = #glblCmpyCd# -->
+                                   <!-- AND -->
+                                       <!-- CP.EZCANCELFLAG = '0') -->
+          <!-- CONNECT BY PRIOR P.HR_SUPV_ID  = P.PSN_CD -->
+          <!-- AND -->
+              <!-- EXISTS (SELECT -->
+                          <!-- *  -->
+                      <!-- FROM -->
+                          <!-- AR_CR_RF_APVL_LIMIT AL  -->
+                      <!-- WHERE -->
+                          <!-- AL.GLBL_CMPY_CD = #glblCmpyCd# -->
+                      <!-- AND -->
+                          <!-- AL.EZCANCELFLAG = '0' -->
+                      <!-- AND -->
+                          <!-- AL.AR_CR_APVL_USR_ID = P.PSN_NUM) -->
+         <!-- ) PS -->
+     <!-- </isEqual> -->
+     <!-- <isEqual property="ordProcNodePrflEquipFlg" compareValue="N"> -->
+         <!-- (SELECT -->
+              <!-- P.CLT_CR_ANLST_SPLY_PSN_CD -->
+         <!-- FROM -->
+              <!-- CLT_PTFO  P -->
+          <!-- WHERE -->
+              <!-- P.GLBL_CMPY_CD = #glblCmpyCd# -->
+          <!-- AND -->
+              <!-- P.EZCANCELFLAG = '0' -->
+          <!-- START WITH P.CLT_CR_ANLST_SPLY_PSN_CD IN (SELECT -->
+                                                        <!-- CP.CLT_CR_ANLST_SPLY_PSN_CD  -->
+                                                    <!-- FROM -->
+                                                        <!-- CLT_PTFO CP  -->
+                                                    <!-- WHERE -->
+                                                        <!-- CP.GLBL_CMPY_CD = #glblCmpyCd# -->
+                                                    <!-- AND  -->
+                                                        <!-- CP.EZCANCELFLAG = '0') -->
+          <!-- CONNECT BY PRIOR P.REL_CLT_PTFO_PK  = P.CLT_PTFO_PK -->
+          <!-- AND  -->
+              <!-- EXISTS (SELECT -->
+                          <!-- *  -->
+                      <!-- FROM -->
+                          <!-- AR_CR_RF_APVL_LIMIT AL  -->
+                      <!-- WHERE -->
+                          <!-- AL.GLBL_CMPY_CD = #glblCmpyCd# -->
+                      <!-- AND  -->
+                          <!-- AL.EZCANCELFLAG = '0'  -->
+                      <!-- AND  -->
+                          <!-- AL.AR_CR_APVL_USR_ID = P.CLT_CR_ANLST_SPLY_PSN_CD) -->
+         <!-- ) PS -->
+    <!--  </isEqual> -->
+    <!-- END 2023/08/21 S.Fujita [QC#61722, MOD] -->
+    </statement>
+    <!-- 2018/04/25 QC#20149 Add Start -->
+    <statement id="WF_REJ_NTFY_COND" parameterClass="Map" resultClass="Map">
+        SELECT
+              #bizId#           AS BIZ_ID
+            , #userGroup#       AS USER_GROUP_NAME
+            , '000'             AS USER_GROUP_LEVEL
+            , C.ADMIN_PSN_CD    AS WF_USR_ID
+        FROM
+            CPO C
+        WHERE
+            C.GLBL_CMPY_CD      = #glblCmpyCd#
+            AND C.CPO_ORD_NUM   = #cpoOrdNum#
+            AND C.ADMIN_PSN_CD  IS NOT NULL
+            AND C.EZCANCELFLAG  = '0'
+    </statement>
+    <!-- 2018/04/25 QC#20149 Add End -->
+</sqlMap>

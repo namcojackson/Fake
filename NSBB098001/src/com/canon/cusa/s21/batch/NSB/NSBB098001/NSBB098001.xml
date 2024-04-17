@@ -1,0 +1,463 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sqlMap namespace="NSBB098001">
+
+    <!-- #################### Type Alias #################### -->
+
+    <!-- #################### Statement #################### -->
+    <statement id="getSvcTaskRqst" parameterClass="Map">
+        SELECT
+             RQST.GLBL_CMPY_CD
+            ,RQST.SVC_TASK_RQST_DUP_PK
+            ,RQST.SVC_TASK_RQST_ORIG_PK
+            ,RQST.RQST_MODE_TXT
+            ,RQST.RQST_MODE_DESC_TXT
+            ,RQST.SVC_CALL_SRC_TP_CD
+            ,RQST.CRAT_TS
+            ,RQST.SLS_DT
+            ,RQST.SER_NUM
+            ,RQST.FSR_NUM
+            ,RQST.CTAC_PSN_EML_ADDR
+            ,RQST.CTAC_PSN_CELL_PHO_NUM
+            ,RQST.SVC_CUST_ATTN_TXT
+            ,RQST.SVC_CMNT_TXT
+            ,RQST.CUST_CLOSE_CATG_TXT
+            ,RQST.CUST_CLOSE_DESC_TXT
+            ,RQST.CUST_MEMO_TXT
+            ,RQST.SVC_TASK_RCV_DT
+            ,RQST.SVC_TASK_RCV_TM
+            ,RQST.CUST_SYS_ID
+            ,RQST.CUST_CALL_ID
+            ,RQST.SVC_RQST_PROC_STS_CD
+            ,RQST.INTFC_ID
+            ,RQST.ERR_INFO_TXT
+            ,ORIG.RCV_TM_DESC_TXT
+        FROM
+             SVC_TASK_RQST_DUP    RQST
+            ,SVC_TASK_RQST_ORIG   ORIG
+        WHERE
+                 RQST.GLBL_CMPY_CD          = #glblCmpyCd#
+             <iterate property="svcRqstProcStsCdList" var="svcRqstProcStsCd[]" open="AND RQST.SVC_RQST_PROC_STS_CD IN (" close=")" conjunction=",">
+                 #svcRqstProcStsCd[]#
+             </iterate>
+             AND RQST.EZCANCELFLAG          = '0'
+             AND RQST.GLBL_CMPY_CD          = ORIG.GLBL_CMPY_CD
+             AND RQST.SVC_TASK_RQST_ORIG_PK = ORIG.SVC_TASK_RQST_ORIG_PK
+             AND ORIG.EZCANCELFLAG          = '0'
+        ORDER BY 
+             RQST.CRAT_TS ASC
+    </statement>
+
+    <statement id="getDuplicateWithPrevIfCount" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+             COUNT(*)
+        FROM
+             SVC_TASK_RQST_DUP    RQST
+        WHERE
+                 RQST.GLBL_CMPY_CD = #glblCmpyCd#
+             AND RQST.EZCANCELFLAG = '0'
+             <iterate property="svcRqstProcStsCdList" var="svcRqstProcStsCd[]" open="AND RQST.SVC_RQST_PROC_STS_CD NOT IN (" close=")" conjunction=",">
+                 #svcRqstProcStsCd[]#
+             </iterate>
+             AND RQST.FSR_NUM      IS NOT NULL
+             <isNotNull property="custCallId">
+             AND RQST.CUST_CALL_ID = #custCallId#
+             </isNotNull>
+             <iterate property="rqstModeList" var="rqstModeTxt[]" open="AND RQST.RQST_MODE_TXT IN (" close=")" conjunction=",">
+                #rqstModeTxt[]#
+             </iterate>
+    </statement>
+
+    <statement id="findSvcMachMstr" parameterClass="Map" resultClass="Map">
+        SELECT
+             SMM.SVC_MACH_MSTR_PK
+            ,SMM.CUR_LOC_ACCT_NUM
+            ,SMM.CUR_LOC_NUM
+            ,SMM.CTRY_CD
+            ,SMM.POST_CD
+        FROM
+             SVC_MACH_MSTR SMM
+        WHERE
+                 SMM.GLBL_CMPY_CD   = #glblCmpyCd#
+             <isNotNull property="serNum">
+             AND SMM.SER_NUM        = #serNum#
+             </isNotNull>
+             <iterate property="svcMachMstrStsCdList" var="svcMachMstrStsCd[]" open="AND SMM.SVC_MACH_MSTR_STS_CD IN (" close=")" conjunction=",">
+                 #svcMachMstrStsCd[]#
+             </iterate>
+             AND SMM.SVC_MACH_TP_CD = #svcMachTpCd#
+             AND
+                EXISTS(
+                    SELECT
+                         1
+                    FROM
+                         SVC_LOC_TRGT SLT
+                    WHERE
+                             SLT.GLBL_CMPY_CD     = SMM.GLBL_CMPY_CD
+                         AND SLT.EZCANCELFLAG     = '0'
+                         AND SMM.CUR_LOC_ACCT_NUM = SLT.SELL_TO_CUST_CD
+                         AND SMM.IND_CUR_LOC_NUM  = SLT.LOC_NUM
+                )
+             AND SMM.EZCANCELFLAG  = '0'
+             AND ROWNUM            = 1
+    </statement>
+
+    <statement id="getFsrVisit" parameterClass="Map" resultClass="Map">
+<!-- START 2023/08/03 K.Kitachi [QC#60012, MOD] -->
+<!--    SELECT -->
+<!--         FSR.SVC_TASK_NUM -->
+<!--    FROM -->
+<!--         FSR_VISIT FSR -->
+<!--    WHERE -->
+<!--             FSR.GLBL_CMPY_CD   = #glblCmpyCd# -->
+<!--         <isNotNull property="fsrNum"> -->
+<!--         AND FSR.FSR_NUM        = #fsrNum# -->
+<!--         </isNotNull> -->
+<!--         <iterate property="fsrVisitStsCdList" var="fsrVisitStsCd[]" open="AND FSR.FSR_VISIT_STS_CD NOT IN (" close=")" conjunction=","> -->
+<!--             #fsrVisitStsCd[]# -->
+<!--         </iterate> -->
+<!--         AND FSR.EZCANCELFLAG   = '0' -->
+        SELECT
+             F.FSR_NUM
+            ,ST.SVC_TASK_NUM
+            ,ST.DS_SVC_CALL_TP_CD
+            ,ST.CRS_SVC_SR_NUM
+            ,FV.FSR_VISIT_STS_CD
+            ,FV.TECH_CD
+            ,SP.PSN_CD
+            ,SP.PSN_FIRST_NM
+            ,SP.PSN_LAST_NM
+            ,SP.PSN_TP_CD
+            ,SMM.SVC_BY_LINE_BIZ_TP_CD
+            ,SMM.FLD_SVC_BR_CD
+            ,STC.CTRY_CD
+            ,STC.POST_CD
+        FROM
+             FSR           F
+            ,SVC_TASK      ST
+            ,FSR_VISIT     FV
+            ,SVC_MACH_MSTR SMM
+            ,SHIP_TO_CUST  STC
+            ,S21_PSN       SP
+        WHERE
+                F.GLBL_CMPY_CD      = #glblCmpyCd#
+            AND F.FSR_NUM           = #fsrNum#
+            AND F.EZCANCELFLAG      = '0'
+            AND F.GLBL_CMPY_CD      = ST.GLBL_CMPY_CD
+            AND F.FSR_NUM           = ST.FSR_NUM
+            AND ST.EZCANCELFLAG     = '0'
+            AND ST.GLBL_CMPY_CD     = FV.GLBL_CMPY_CD
+            AND ST.SVC_TASK_NUM     = FV.SVC_TASK_NUM
+            <iterate property="fsrVisitStsCdList" var="fsrVisitStsCd[]" open="AND FV.FSR_VISIT_STS_CD NOT IN (" close=")" conjunction=",">
+                #fsrVisitStsCd[]#
+            </iterate>
+            AND FV.EZCANCELFLAG     = '0'
+            AND ST.GLBL_CMPY_CD     = SMM.GLBL_CMPY_CD
+            AND ST.SVC_MACH_MSTR_PK = SMM.SVC_MACH_MSTR_PK
+            AND SMM.EZCANCELFLAG    = '0'
+            AND F.GLBL_CMPY_CD      = STC.GLBL_CMPY_CD
+            AND NVL(F.SHIP_TO_UPD_CUST_CD, F.SHIP_TO_CUST_CD)
+                                    = STC.SHIP_TO_CUST_CD
+            AND STC.EZCANCELFLAG    = '0'
+            AND FV.GLBL_CMPY_CD     = SP.GLBL_CMPY_CD (+)
+            AND FV.TECH_CD          = SP.PSN_CD (+)
+            AND SP.DEL_FLG (+)      = 'N'
+            AND SP.EZCANCELFLAG (+) = '0'
+        ORDER BY
+            ST.SVC_TASK_NUM
+<!-- END   2023/08/03 K.Kitachi [QC#60012, MOD] -->
+    </statement>
+
+    <statement id="getOrig" parameterClass="Map" resultClass="Map">
+        SELECT
+              GLBL_CMPY_CD
+             ,SVC_TASK_RQST_ORIG_PK
+             ,RQST_MODE_TXT
+             ,SVC_CALL_SRC_TP_CD
+             ,CRAT_TS
+             ,SER_NUM_LONG_TXT
+             ,RQST_MODE_DESC_TXT
+             ,FSR_LONG_TXT
+             ,CTAC_PSN_EML_ADDR
+             ,CTAC_PSN_CELL_PHO_TXT
+             ,SVC_CUST_ATTN_TXT
+             ,SVC_CMNT_TXT
+             ,CUST_CLOSE_CATG_TXT
+             ,CUST_CLOSE_DESC_TXT
+             ,CUST_MEMO_TXT
+             ,RCV_TM_DESC_TXT
+             ,CUST_SYS_ID
+             ,CUST_CALL_ID
+        FROM
+             SVC_TASK_RQST_ORIG ORIG
+        WHERE
+                 ORIG.GLBL_CMPY_CD = #glblCmpyCd#
+             AND ORIG.EZCANCELFLAG = '0'
+             AND
+                 NOT EXISTS(
+                     SELECT
+                        1
+                     FROM
+                        SVC_TASK_RQST_DUP DUP
+                     WHERE
+                            ORIG.GLBL_CMPY_CD          = DUP.GLBL_CMPY_CD
+                        AND ORIG.SVC_TASK_RQST_ORIG_PK = DUP.SVC_TASK_RQST_ORIG_PK
+                        AND DUP.EZCANCELFLAG           = '0'
+                 )
+    </statement>
+
+    <statement id="getWbhkRgtnFld" parameterClass="Map" resultClass="Map">
+        SELECT
+             A.WBHK_WATCH_FLD_TXT
+            ,A.WBHK_RTRN_FLD_TXT
+        FROM
+             WBHK_RGTN_FLD A
+        WHERE
+                 A.GLBL_CMPY_CD         = #glblCmpyCd#
+             AND A.SVC_CALL_SRC_TP_CD   = #svcCallSrcTpCd#
+             AND A.SVC_RQST_PROC_STS_CD = #svcRqstProcStsCd#
+             AND A.EZCANCELFLAG         = '0'
+    </statement>
+
+    <statement id="getDupWithRegisterError" parameterClass="Map" resultClass="Map">
+        SELECT
+             A.SVC_TASK_RQST_DUP_PK
+        FROM
+             SVC_TASK_RQST_DUP A
+        WHERE
+                 A.GLBL_CMPY_CD         = #glblCmpyCd#
+             <iterate property="svcRqstProcStsCdList" var="svcRqstProcStsCd[]" open="AND A.SVC_RQST_PROC_STS_CD IN (" close=")" conjunction=",">
+                 #svcRqstProcStsCd[]#
+             </iterate>
+             <iterate property="rqstModeRegisterList" var="rqstModeTxt[]" open="AND RQST_MODE_TXT IN (" close=")" conjunction=",">
+                 #rqstModeTxt[]#
+             </iterate>
+             AND A.FSR_NUM              IS NULL
+             AND A.CUST_CALL_ID         = #custCallId#
+             AND A.EZCANCELFLAG         = '0'
+    </statement>
+
+    <statement id="getUnSubscribeTarget" parameterClass="Map" resultClass="Map">
+        SELECT
+            <!-- START 2023/07/10 N.Takatsu [QC#60012, ADD] -->
+            DISTINCT
+            <!-- END   2023/07/10 N.Takatsu [QC#60012, ADD] -->
+            A.CUST_WBHK_ID
+           ,A.CUST_TBL_NM
+           ,A.CUST_SYS_ID
+        FROM
+           SVC_TASK_OTBD_MSG  A
+        WHERE
+            A.GLBL_CMPY_CD              = #glblCmpyCd#
+        AND A.EZCANCELFLAG              = '0'
+        AND A.CUST_SYS_ID               = #custSysId#
+        AND A.INTFC_ID                  = #intfcId#
+        AND A.SVC_RQST_PROC_STS_CD   NOT IN <iterate property="rqstModeRegisterList" var="rqstModeRegisterList[]" open=" (" close=")" conjunction=",">
+                                        #rqstModeRegisterList[]#
+                                           </iterate>
+    </statement>
+
+<!-- START 2023/08/03 K.Kitachi [QC#60012, ADD] -->
+    <statement id="getZoneByTech" parameterClass="Map" resultClass="String">
+        SELECT
+            DISTINCT
+            ORG.FRTH_ORG_NM
+        FROM
+             TECH_MSTR    TM
+            ,S21_PSN      PSN
+            ,ORG_FUNC_ASG OFA
+            ,TOC          TOC
+            ,S21_ORG      ORG
+        WHERE
+                TM.GLBL_CMPY_CD  = #glblCmpyCd#
+            AND TM.TECH_TOC_CD   = #techCd#
+            AND TM.EZCANCELFLAG  = '0'
+            AND TM.GLBL_CMPY_CD  = PSN.GLBL_CMPY_CD
+            AND TM.TECH_TOC_CD   = PSN.PSN_CD
+            AND PSN.PSN_TP_CD    = #employee#
+            AND PSN.EZCANCELFLAG = '0'
+            AND PSN.GLBL_CMPY_CD = OFA.GLBL_CMPY_CD
+            AND PSN.PSN_CD       = OFA.PSN_CD
+            AND OFA.EFF_FROM_DT  &lt;= #slsDt#
+            AND NVL(OFA.EFF_THRU_DT, #slsDt#)
+                                 &gt;= #slsDt#
+            AND OFA.EZCANCELFLAG = '0'
+            AND OFA.GLBL_CMPY_CD = TOC.GLBL_CMPY_CD
+            AND OFA.TOC_CD       = TOC.TOC_CD
+            AND TOC.EZCANCELFLAG = '0'
+            AND TOC.GLBL_CMPY_CD = ORG.GLBL_CMPY_CD
+            AND TOC.TOC_CD       = ORG.TOC_CD
+            AND ORG.FIRST_ORG_CD = #service#
+            AND ORG.EZCANCELFLAG = '0'
+    </statement>
+
+    <statement id="getZoneByDealer" parameterClass="Map" resultClass="String">
+        WITH WRK AS (
+            SELECT
+                DISTINCT
+                 ORG.FRTH_ORG_NM
+                ,ORG.SIXTH_ORG_NM
+            FROM
+                S21_ORG ORG
+            WHERE
+                    ORG.GLBL_CMPY_CD = #glblCmpyCd#
+                AND ORG.FIRST_ORG_CD = #service#
+                AND ORG.SIXTH_ORG_NM IS NOT NULL
+                AND ORG.RGTN_STS_CD  = #rgtnStsCd#
+                AND ORG.EZCANCELFLAG = '0'
+        )
+        SELECT
+            G.FRTH_ORG_NM
+        FROM
+             FSR              A
+            ,SVC_TASK         B
+            ,SVC_MACH_MSTR    C
+            ,SHIP_TO_CUST     D
+            ,SVC_BR_POST_XREF E
+            ,SVC_BR_POST_XREF F
+            ,WRK              G
+        WHERE
+                A.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND A.EZCANCELFLAG          = '0'
+            AND A.GLBL_CMPY_CD          = B.GLBL_CMPY_CD
+            AND A.FSR_NUM               = B.FSR_NUM
+            AND B.SVC_TASK_NUM          = #svcTaskNum#
+            AND B.EZCANCELFLAG          = '0'
+            AND B.GLBL_CMPY_CD          = C.GLBL_CMPY_CD
+            AND B.SVC_MACH_MSTR_PK      = C.SVC_MACH_MSTR_PK
+            AND C.EZCANCELFLAG          = '0'
+            AND A.GLBL_CMPY_CD          = D.GLBL_CMPY_CD
+            AND NVL(A.SHIP_TO_UPD_CUST_CD, A.SHIP_TO_CUST_CD)
+                                        = D.SHIP_TO_CUST_CD
+            AND D.EZCANCELFLAG          = '0'
+            AND C.GLBL_CMPY_CD          = E.GLBL_CMPY_CD (+)
+            AND C.SVC_BY_LINE_BIZ_TP_CD = E.SVC_LINE_BIZ_CD (+)
+            AND C.FLD_SVC_BR_CD         = E.SVC_BR_CD (+)
+            AND D.POST_CD               = E.POST_CD (+)
+            AND E.EZCANCELFLAG (+)      = '0'
+            AND C.GLBL_CMPY_CD          = F.GLBL_CMPY_CD (+)
+            AND C.SVC_BY_LINE_BIZ_TP_CD = F.SVC_LINE_BIZ_CD (+)
+            AND C.FLD_SVC_BR_CD         = F.SVC_BR_CD (+)
+            AND SUBSTR(D.POST_CD, 0, 5) = F.POST_CD (+)
+            AND F.EZCANCELFLAG (+)      = '0'
+            AND NVL(E.SVC_BR_CD_DESC_TXT, F.SVC_BR_CD_DESC_TXT)
+                                        = G.SIXTH_ORG_NM
+    </statement>
+
+    <statement id="getVendorInfo" parameterClass="Map" resultClass="Map">
+        WITH CTAC AS (
+            SELECT
+                 VD.PRNT_VND_PK          AS PRNT_VND_PK
+                ,VD.VND_CD               AS VND_CD
+                ,CP.CTAC_PSN_PK          AS CTAC_PSN_PK
+                ,CP.CTAC_PSN_LAST_NM     AS CTAC_PSN_LAST_NM
+                ,CP.CTAC_PSN_FIRST_NM    AS CTAC_PSN_FIRST_NM
+                ,DCR.CTAC_TP_CD          AS CTAC_TP_CD
+                ,DECODE(DCR.EFF_THRU_DT, NULL, NULL, #maxDate#, DCR.EFF_THRU_DT, TO_CHAR(TO_DATE(DCR.EFF_THRU_DT, #dtFmt#) + 1, #dtFmt#))
+                                         AS INAC_DT
+                ,CP.DS_CTAC_PSN_DEPT_CD  AS DS_CTAC_PSN_DEPT_CD
+                ,CP.DS_CTAC_PSN_TTL_CD   AS DS_CTAC_PSN_TTL_CD
+                ,P_T.DS_CTAC_PNT_PK      AS DS_CTAC_PNT_PK_TEL
+                ,P_T.DS_CTAC_PNT_VAL_TXT AS CTAC_PSN_TEL
+                ,P_F.DS_CTAC_PNT_PK      AS DS_CTAC_PNT_PK_FAX
+                ,P_F.DS_CTAC_PNT_VAL_TXT AS CTAC_PSN_FAX
+                ,P_E.DS_CTAC_PNT_PK      AS DS_CTAC_PNT_PK_EML
+                ,P_E.DS_CTAC_PNT_VAL_TXT AS CTAC_PSN_EML
+                ,DCR.LOC_NUM             AS LOC_NUM
+            FROM
+                 VND              VD
+                ,DS_CTAC_PSN_RELN DCR
+                ,CTAC_PSN         CP
+                ,DS_CTAC_PNT      P_T
+                ,DS_CTAC_PNT      P_F
+                ,DS_CTAC_PNT      P_E
+            WHERE
+                    VD.GLBL_CMPY_CD           = DCR.GLBL_CMPY_CD
+                AND VD.LOC_NUM                = DCR.LOC_NUM
+                AND DCR.GLBL_CMPY_CD          = CP.GLBL_CMPY_CD
+                AND DCR.CTAC_PSN_PK           = CP.CTAC_PSN_PK
+                AND DCR.CTAC_TP_CD            &lt;&gt; #deliveryInstall#
+                AND CP.GLBL_CMPY_CD           = P_T.GLBL_CMPY_CD (+)
+                AND CP.CTAC_PSN_PK            = P_T.CTAC_PSN_PK (+)
+                AND CP.GLBL_CMPY_CD           = P_F.GLBL_CMPY_CD (+)
+                AND CP.CTAC_PSN_PK            = P_F.CTAC_PSN_PK (+)
+                AND CP.GLBL_CMPY_CD           = P_E.GLBL_CMPY_CD (+)
+                AND CP.CTAC_PSN_PK            = P_E.CTAC_PSN_PK (+)
+                AND VD.GLBL_CMPY_CD           = #glblCmpyCd#
+                AND CP.CTAC_PSN_ACTV_FLG      = 'Y'
+                AND P_T.DS_CTAC_PNT_TP_CD (+) = #phoneWork#
+                AND P_F.DS_CTAC_PNT_TP_CD (+) = #faxWork#
+                AND P_E.DS_CTAC_PNT_TP_CD (+) = #emailWork#
+                AND VD.EZCANCELFLAG           = '0'
+                AND DCR.EZCANCELFLAG          = '0'
+                AND CP.EZCANCELFLAG           = '0'
+                AND P_T.EZCANCELFLAG (+)      = '0'
+                AND P_F.EZCANCELFLAG (+)      = '0'
+                AND P_E.EZCANCELFLAG (+)      = '0'
+        )
+        SELECT
+            DISTINCT
+             PV.PRNT_VND_NM VND_NM
+            ,CTAC.CTAC_PSN_LAST_NM || ' ' || CTAC.CTAC_PSN_FIRST_NM VND_CTAC_NM
+            ,CTAC.CTAC_PSN_TEL VND_TEL_NUM
+            ,CTAC.CTAC_PSN_EML VND_EML_ADDR
+        FROM
+             DS_CONTR     D
+            ,DS_CONTR_DTL DD
+            ,FSR          FSR
+            ,DS_SUB_CONTR DSC
+            ,BLLG_CYCLE   BC
+            ,VND          V
+            ,PRNT_VND     PV
+            ,TECH_MSTR    TM
+            ,CTAC         CTAC
+            ,S21_PSN      PSN
+            ,FSR_VISIT    VISIT
+            ,SVC_TASK     TASK
+        WHERE
+                D.EZCANCELFLAG           = '0'
+            AND DD.EZCANCELFLAG          = '0'
+            AND FSR.EZCANCELFLAG         = '0'
+            AND DSC.EZCANCELFLAG         = '0'
+            AND BC.EZCANCELFLAG          = '0'
+            AND V.EZCANCELFLAG           = '0'
+            AND PV.EZCANCELFLAG          = '0'
+            AND TM.EZCANCELFLAG          = '0'
+            AND D.GLBL_CMPY_CD           = DD.GLBL_CMPY_CD
+            AND D.DS_CONTR_PK            = DD.DS_CONTR_PK
+            AND DD.GLBL_CMPY_CD          = FSR.GLBL_CMPY_CD
+            AND DD.SVC_MACH_MSTR_PK      = FSR.SVC_MACH_MSTR_PK
+            AND DD.GLBL_CMPY_CD          = DSC.GLBL_CMPY_CD
+            AND DD.DS_CONTR_DTL_PK       = DSC.DS_CONTR_DTL_PK
+            AND DSC.GLBL_CMPY_CD         = BC.GLBL_CMPY_CD
+            AND DSC.BLLG_CYCLE_CD        = BC.BLLG_CYCLE_CD
+            AND DSC.GLBL_CMPY_CD         = V.GLBL_CMPY_CD
+            AND VISIT.GLBL_CMPY_CD       = DSC.GLBL_CMPY_CD
+            AND VISIT.EZCANCELFLAG       = '0'
+            AND VISIT.GLBL_CMPY_CD       = TASK.GLBL_CMPY_CD
+            AND TASK.EZCANCELFLAG        = '0'
+            AND DSC.VND_CD               = V.VND_CD
+            AND (   NVL(DD.CONTR_EFF_THRU_DT, #slsDt# + 1) &gt;= #slsDt#
+                AND NVL(DD.CONTR_EFF_FROM_DT, #slsDt#)     &lt;= #slsDt#)
+                AND (   (   DD.DS_CONTR_DTL_STS_CD = #terminated#
+                        AND DD.CONTR_CLO_DT        &gt;= #slsDt#)
+                     OR (DD.DS_CONTR_DTL_STS_CD NOT IN (#cancelled#, #expired#)))
+            AND NVL(PV.INAC_DT, #slsDt#) &gt;= #slsDt#
+            AND (   NVL(DSC.EFF_THRU_DT, #slsDt# + 1)      &gt;= #slsDt#
+                AND NVL(DSC.EFF_FROM_DT, #slsDt#)          &lt;= #slsDt#)
+            AND V.PRNT_VND_PK            = PV.PRNT_VND_PK
+            AND DSC.GLBL_CMPY_CD         = TM.GLBL_CMPY_CD
+            AND DSC.TECH_TOC_CD          = TM.TECH_TOC_CD
+            AND PV.PRNT_VND_PK           = CTAC.PRNT_VND_PK (+)
+            AND V.VND_CD                 = CTAC.VND_CD (+)
+            AND FSR.FSR_NUM              = VISIT.FSR_NUM
+            AND VISIT.SVC_TASK_NUM       = TASK.SVC_TASK_NUM
+            AND TASK.SVC_TASK_NUM        = #svcTaskNum#
+            AND TM.GLBL_CMPY_CD          = PSN.GLBL_CMPY_CD (+)
+            AND PSN.EZCANCELFLAG (+)     = '0'
+            AND TM.TECH_TOC_CD           = PSN.PSN_CD (+)
+            AND PSN.CTAC_PSN_PK          = CTAC.CTAC_PSN_PK (+)
+            AND VISIT.TECH_CD            = PSN.PSN_CD
+            AND ROWNUM = 1
+    </statement>
+<!-- END   2023/08/03 K.Kitachi [QC#60012, ADD] -->
+</sqlMap>

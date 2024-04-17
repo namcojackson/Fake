@@ -1,0 +1,248 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<sqlMap namespace="NLZC215001">
+
+    <statement id="getMdseCatgInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+            MDSE.MDSE_CATG_CD      AS MDSE_CATG_CD
+           ,MDSE.MDSE_ITEM_ACTV_DT AS MDSE_ITEM_ACTV_DT
+        FROM
+            MDSE         MDSE
+        WHERE
+            MDSE.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND MDSE.MDSE_CD     = #mdseCd#
+            AND MDSE.RGTN_STS_CD IN
+                <iterate property="rgtnStsCdList" var="rgtnStsCd[]" open="(" close=")" conjunction=",">
+                    #rgtnStsCd[]#
+                </iterate>
+            AND MDSE.EZCANCELFLAG = '0'
+    </statement>
+
+    <statement id="getMtrCntInfoList" parameterClass="Map" resultClass="BigDecimal">
+            SELECT
+	            CASE WHEN EXISTS (
+	                SELECT
+	                    1
+	                FROM
+	                    SVC_PHYS_MTR_READ MTR
+	                    ,MTR_LB            MRL
+	                WHERE
+	                    MTR.GLBL_CMPY_CD             = #glblCmpyCd#
+	                AND MTR.SVC_PHYS_MTR_READ_GRP_SQ = SPM.SVC_PHYS_MTR_READ_GRP_SQ
+	                AND MTR.GLBL_CMPY_CD             = MRL.GLBL_CMPY_CD
+	                AND MTR.MTR_LB_CD                = MRL.MTR_LB_CD
+	                AND MRL.TOT_MTR_FLG              = #flgY#
+	                AND MTR.EZCANCELFLAG             = '0'
+	                AND MRL.EZCANCELFLAG             = '0'
+	            )
+	            THEN
+	            (
+	                SELECT
+	                    SUM(MTR.READ_MTR_CNT)
+	                FROM
+	                    SVC_PHYS_MTR_READ MTR
+	                   ,MTR_LB            MRL
+	                WHERE
+	                    MTR.GLBL_CMPY_CD             = #glblCmpyCd#
+	                AND MTR.SVC_PHYS_MTR_READ_GRP_SQ = SPM.SVC_PHYS_MTR_READ_GRP_SQ
+	                AND MTR.GLBL_CMPY_CD             = MRL.GLBL_CMPY_CD
+	                AND MTR.MTR_LB_CD                = MRL.MTR_LB_CD
+	                AND MRL.TOT_MTR_FLG              = #flgY#
+	                AND MTR.EZCANCELFLAG             = '0'
+	                AND MRL.EZCANCELFLAG             = '0'
+	            )
+	            ELSE
+	            (
+	                SELECT
+	                    SUM(MTR.READ_MTR_CNT)
+	                FROM
+	                    SVC_PHYS_MTR_READ MTR
+	                   ,MTR_LB            MRL
+	                WHERE
+	                    MTR.GLBL_CMPY_CD             = #glblCmpyCd#
+	                AND MTR.SVC_PHYS_MTR_READ_GRP_SQ = SPM.SVC_PHYS_MTR_READ_GRP_SQ
+	                AND MTR.GLBL_CMPY_CD             = MRL.GLBL_CMPY_CD
+	                AND MTR.MTR_LB_CD                = MRL.MTR_LB_CD
+	                AND MRL.TOT_MTR_FLG              = #flgN#
+	                AND MTR.EZCANCELFLAG             = '0'
+	                AND MRL.EZCANCELFLAG             = '0'
+	            )
+	            END AS MTR_CNT
+	        FROM
+	            SVC_PHYS_MTR_READ SPM
+	        WHERE
+	            SPM.GLBL_CMPY_CD                     = #glblCmpyCd#
+	        AND SPM.SVC_MACH_MSTR_PK                 = #svcMachMstrPk#
+	        AND SPM.SVC_PHYS_MTR_READ_GRP_SQ IN (
+	            SELECT
+	                MAX(SVC_PHYS_MTR_READ_GRP_SQ)
+	            FROM
+	                SVC_PHYS_MTR_READ SPR
+	            WHERE
+	                SPR.GLBL_CMPY_CD                 = #glblCmpyCd#
+	                AND SPR.SVC_MACH_MSTR_PK         = #svcMachMstrPk#
+	                AND SPR.VLD_MTR_FLG              = #flgY#
+	                AND SPR.EZCANCELFLAG             = '0'
+	        )
+	        AND SPM.EZCANCELFLAG                     = '0'
+	        AND ROWNUM = 1
+    </statement>
+
+    <statement id="getMdlId" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            SCM.MDL_ID
+        FROM
+            SVC_MACH_MSTR   SMM
+           ,SVC_CONFIG_MSTR SCM
+        WHERE
+            SMM.GLBL_CMPY_CD           = #glblCmpyCd#
+            <isNotNull property="svcConfigMstrPk">
+            AND SMM.SVC_CONFIG_MSTR_PK = #svcConfigMstrPk#
+            AND SMM.SVC_MACH_TP_CD     = #svcMachTpCd#
+            </isNotNull>
+            <isNull property="svcConfigMstrPk">
+            AND SMM.SVC_MACH_MSTR_PK   = #svcMachMstrPk#
+            </isNull>
+            AND SMM.EZCANCELFLAG       = '0'
+            AND SMM.GLBL_CMPY_CD       = SCM.GLBL_CMPY_CD
+            AND SMM.SVC_MACH_MSTR_PK   = SCM.SVC_MACH_MSTR_PK
+            AND SCM.EZCANCELFLAG       = '0'
+            ORDER BY
+                SMM.SVC_MACH_SQ_NUM ASC
+    </statement>
+
+    <statement id="getRtlWhCatgCd" parameterClass="Map" resultClass="String">
+        SELECT
+            RWC.RTL_WH_CATG_CD
+        FROM
+            RTL_WH      RW
+           ,RTL_WH_CATG RWC
+        WHERE
+            RW.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND RW.RTL_WH_CD    = #rtlWhCd#
+            AND RW.EFF_FROM_DT  &lt;= #slsDt#
+            AND NVL(RW.EFF_THRU_DT, '99991231') &gt;= #slsDt#
+            AND RW.EZCANCELFLAG = '0'
+            AND RW.GLBL_CMPY_CD   = RWC.GLBL_CMPY_CD
+            AND RW.RTL_WH_CATG_CD = RWC.RTL_WH_CATG_CD
+            AND RWC.EZCANCELFLAG  = '0'
+    </statement>
+
+    <statement id="getWarehouseCategory" parameterClass="Map" resultClass="Map">
+        SELECT
+            RW.INVTY_OWNR_CD
+        FROM
+            RTL_WH RW
+        WHERE
+            RW.GLBL_CMPY_CD     = #glblCmpyCd#
+        AND RW.RTL_WH_CD        = #rtlWhCd#
+        AND RW.EFF_FROM_DT  &lt;= #slsDt#
+        AND NVL(RW.EFF_THRU_DT, '99991231') &gt;= #slsDt#
+        AND RW.EZCANCELFLAG     = '0'
+    </statement>
+
+    <statement id="getRtlSubWhCdByMtrCntOfMdl" parameterClass="Map" resultClass="Map">
+        SELECT
+            DSBM.SQ_ID
+           ,DSBM.DEST_RTL_SWH_CD
+           ,DSBM.THIRD_PTY_DSP_TP_CD
+        FROM
+            DEF_SWH_BY_MDL DSBM
+        WHERE
+            DSBM.GLBL_CMPY_CD           = #glblCmpyCd#
+        AND DSBM.MDL_ID                 = #mdlId#
+        AND DSBM.FROM_MTR_CNT       &lt;= #fromMtrCnt01#
+        AND DSBM.TO_MTR_CNT         &gt;= #toMtrCnt01#
+        AND DSBM.EFF_FROM_DT        &lt;= #effFromDt#
+        AND NVL(DSBM.EFF_THRU_DT, '99991231') &gt;= #effThruDt#
+        <isNotNull property="invtyOwnrCd">
+        AND DSBM.INVTY_OWNR_CD          = #invtyOwnrCd#
+        </isNotNull>
+        <isNull property="invtyOwnrCd">
+        AND DSBM.INVTY_OWNR_CD         IS NULL
+        </isNull>
+        AND DSBM.EZCANCELFLAG           = '0'
+        ORDER BY
+            DSBM.SQ_ID ASC
+    </statement>
+
+    <statement id="getRtlSubWhCdByElpsMthAotOfMdl" parameterClass="Map" resultClass="Map">
+        SELECT
+            DSBM.SQ_ID
+           ,DSBM.DEST_RTL_SWH_CD
+           ,DSBM.THIRD_PTY_DSP_TP_CD
+        FROM
+            DEF_SWH_BY_MDL DSBM
+        WHERE
+            DSBM.GLBL_CMPY_CD           = #glblCmpyCd#
+        AND DSBM.MDL_ID                 = #mdlId#
+        AND DSBM.FROM_ELPS_MTH_AOT  &lt;= #fromElpsMthAot#
+        AND DSBM.TO_ELPS_MTH_AOT    &gt;= #toElpsMthAot#
+        AND DSBM.EFF_FROM_DT        &lt;= #effFromDt#
+        AND NVL(DSBM.EFF_THRU_DT, '99991231') &gt;= #effThruDt#
+        <isNotNull property="invtyOwnrCd">
+        AND DSBM.INVTY_OWNR_CD          = #invtyOwnrCd#
+        </isNotNull>
+        <isNull property="invtyOwnrCd">
+        AND DSBM.INVTY_OWNR_CD         IS NULL
+        </isNull>
+        AND DSBM.EZCANCELFLAG           = '0'
+        ORDER BY
+            DSBM.SQ_ID ASC
+    </statement>
+
+<!-- START   2018/05/16 T.Hakodate [QC#25814,ADD] -->
+    <statement id="getDefaultSwhByCategory" parameterClass="Map" resultClass="Map">
+        SELECT
+            CATG.DEST_RTL_SWH_CD
+        FROM
+            DEF_SWH_BY_WH_CATG   CATG
+        WHERE 1=1 
+        AND CATG.GLBL_CMPY_CD                     = #glblCmpyCd#
+        AND CATG.SRC_RTL_WH_CATG_CD               = #srcRtlWhCatgCd#
+        AND CATG.DEST_RTL_WH_CATG_CD              = #destRtlWhCatgCd#
+        AND CATG.FROM_ELPS_MTH_AOT            &lt;= #fromElpsMthAot#
+        AND CATG.TO_ELPS_MTH_AOT              &gt;= #toElpsMthAot#
+        AND NVL(CATG.EFF_THRU_DT, '99991231') &gt;= #effThruDt#
+        AND CATG.EFF_FROM_DT                  &lt;= #effFromDt#
+        AND CATG.EZCANCELFLAG                     = '0'
+       <isNotNull property="mdlGrpId">
+        AND CATG.MDL_GRP_ID                       = #mdlGrpId#
+       </isNotNull>
+        ORDER BY
+            CATG.SQ_ID ASC
+    </statement>
+
+    <statement id="getMdlGrpId" parameterClass="Map" resultClass="Map">
+        SELECT
+             DM.MDL_GRP_ID
+        FROM
+             SVC_MACH_MSTR   SMM
+            ,SVC_CONFIG_MSTR SCM
+            ,DS_MDL          DM
+        WHERE 1=1 
+        AND SMM.GLBL_CMPY_CD       = #glblCmpyCd#
+        AND SMM.SVC_MACH_MSTR_PK   = #svcMachMstrPk#
+        AND SMM.EZCANCELFLAG       = '0'
+        AND SMM.GLBL_CMPY_CD       = SCM.GLBL_CMPY_CD(+)
+        AND SMM.SVC_MACH_MSTR_PK   = SCM.SVC_MACH_MSTR_PK(+)
+        AND SCM.EZCANCELFLAG(+)    = '0'
+        AND DM.EZCANCELFLAG(+)     = '0'
+        AND SCM.MDL_ID             = DM.MDL_ID(+)
+        AND SCM.GLBL_CMPY_CD       = DM.GLBL_CMPY_CD(+)
+    </statement>
+    
+    <statement id="getPrchGrpCd" parameterClass="Map" resultClass="Map">
+        SELECT
+             PRCH_GRP_CD
+        FROM
+             MDSE
+        WHERE 1=1 
+        AND GLBL_CMPY_CD       = #glblCmpyCd#
+        AND EZCANCELFLAG       = '0'
+        AND MDSE_CD            = #mdseCd#
+    </statement>
+
+<!-- END     2018/05/16 T.Hakodate [QC#25814,ADD] -->
+
+</sqlMap>

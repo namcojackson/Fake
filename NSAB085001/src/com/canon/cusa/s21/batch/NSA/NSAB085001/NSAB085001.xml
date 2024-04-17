@@ -1,0 +1,335 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NSAB085001">
+    <statement id="getMailSendingTarget" parameterClass="Map" resultClass="Map">
+        WITH TARGET AS (
+                SELECT
+                    DISTINCT
+                    DCD.GLBL_CMPY_CD
+                    ,DCD.EZCANCELFLAG
+                    ,DC.DS_CONTR_PK
+                    ,DC.DS_CONTR_NUM
+                    ,DCD.DS_CONTR_DTL_PK
+                    ,SMM.SVC_MACH_MSTR_PK
+                    ,SMM.SER_NUM
+                    ,SMM.SVC_CONFIG_MSTR_PK
+                    ,DCB.BLLG_SCHD_THRU_DT
+                    ,TO_CHAR(TO_DATE(#salesDate#, #dateFormat#) + (DECODE(DCBL.BLLG_MTR_BLLG_CYCLE_CD, #months#, COALESCE(DWD.MTR_READ_WIN_MLY_DAYS_AOT, DWD2.MTR_READ_WIN_MLY_DAYS_AOT, #mtrReadWinMlyDaysAot#, #defBefDays#), COALESCE(DWD.MTR_READ_WIN_OTH_DAYS_AOT, DWD2.MTR_READ_WIN_OTH_DAYS_AOT, #mtrReadWinOthDaysAot#, #defBefDays#))), #dateFormat#) AS SEND_DT
+                FROM
+                    DS_CONTR_BLLG_SCHD      DCB
+                    ,DS_CONTR_DTL           DCD
+                    ,DS_CONTR_DTL_STS_V     DDS
+                    ,SVC_MACH_MSTR          SMM
+                    ,DS_CONTR               DC
+                    ,DS_WIN_DAYS            DWD
+                    ,DS_WIN_DAYS            DWD2
+                    ,DS_CONTR_BLLG_MTR      DCBL
+                WHERE
+                        DCB.GLBL_CMPY_CD                        =   #glblCmpyCd#
+                    AND DCB.BLLG_SCHD_THRU_DT                   =   TO_CHAR(TO_DATE(#salesDate#, #dateFormat#) + (DECODE(DCBL.BLLG_MTR_BLLG_CYCLE_CD, #months#, COALESCE(DWD.MTR_READ_WIN_MLY_DAYS_AOT, DWD2.MTR_READ_WIN_MLY_DAYS_AOT, #mtrReadWinMlyDaysAot#, #defBefDays#), COALESCE(DWD.MTR_READ_WIN_OTH_DAYS_AOT, DWD2.MTR_READ_WIN_OTH_DAYS_AOT, #mtrReadWinOthDaysAot#, #defBefDays#))), #dateFormat#)
+                    AND DCB.SVC_CR_REBIL_PK                     IS NULL
+                    AND DCB.GLBL_CMPY_CD                        =   DCD.GLBL_CMPY_CD
+                    AND DCB.DS_CONTR_DTL_PK                     =   DCD.DS_CONTR_DTL_PK
+                    AND DCD.MTR_READ_METH_CD                    =   #mtrReadMeth#
+                    AND DCD.GLBL_CMPY_CD                        =   DDS.GLBL_CMPY_CD
+                    AND DCD.DS_CONTR_DTL_PK                     =   DDS.DS_CONTR_DTL_PK
+                    AND DDS.MTR_READ_AVAL_FLG                   =   #mtreReadAvalFlg#
+                    AND DCD.GLBL_CMPY_CD                        =   SMM.GLBL_CMPY_CD
+                    AND DCD.SVC_MACH_MSTR_PK                    =   SMM.SVC_MACH_MSTR_PK
+                    AND DCD.GLBL_CMPY_CD                        =   DC.GLBL_CMPY_CD
+                    AND DCD.DS_CONTR_PK                         =   DC.DS_CONTR_PK
+                    AND DCB.GLBL_CMPY_CD                        =   DCBL.GLBL_CMPY_CD
+                    AND DCB.DS_CONTR_BLLG_MTR_PK                =   DCBL.DS_CONTR_BLLG_MTR_PK
+                    AND DCB.MTR_ENTRY_CPLT_FLG                  =   #mtrEntryCptlFlg#
+                    AND SMM.SVC_MACH_MSTR_STS_CD         &lt;&gt;   #svcMachMstrStsCd#
+                    AND DCB.SKIP_RECOV_TP_CD             &lt;&gt;   #skipReconvTpCd#
+                    AND DCB.GLBL_CMPY_CD                        =   DWD.GLBL_CMPY_CD(+)
+                    AND SUBSTR(DCB.BLLG_SCHD_THRU_DT, 0, 6)     =   DWD.DS_WIN_DAYS_TRGT_PER_TXT(+)
+                    AND DC.SVC_LINE_BIZ_CD                      =   DWD.SVC_LINE_BIZ_CD(+)
+                    AND DCB.GLBL_CMPY_CD                        =   DWD2.GLBL_CMPY_CD(+)
+                    AND SUBSTR(DCB.BLLG_SCHD_THRU_DT, 0, 6)     =   DWD2.DS_WIN_DAYS_TRGT_PER_TXT(+)
+                    AND DWD2.SVC_LINE_BIZ_CD(+)                 =   '*'
+                    AND DCB.EZCANCELFLAG                        =   '0'
+                    AND DCD.EZCANCELFLAG                        =   '0'
+                    AND DDS.EZCANCELFLAG                        =   '0'
+                    AND SMM.EZCANCELFLAG                        =   '0'
+                    AND DC.EZCANCELFLAG                         =   '0'
+                    AND DCBL.EZCANCELFLAG                       =   '0'
+                    AND DWD.EZCANCELFLAG(+)                     =   '0'
+                    AND DWD2.EZCANCELFLAG(+)                    =   '0'
+                    AND NOT EXISTS (
+                        SELECT
+                            1
+                        FROM
+                            MTR_READ_NTFY_DTL X
+                        WHERE
+                            X.GLBL_CMPY_CD          = DCD.GLBL_CMPY_CD
+                        AND X.DS_CONTR_DTL_PK       =   DCD.DS_CONTR_DTL_PK
+                        AND X.BLLG_SCHD_THRU_DT     = DCB.BLLG_SCHD_THRU_DT
+                        AND X.EZCANCELFLAG          = '0'
+                    )
+        )
+        ,CTAC_EMAIL AS (
+            SELECT
+                A.SVC_MACH_MSTR_PK
+                ,B.DS_CTAC_PNT_VAL_TXT  AS CTAC_PSN_EML_ADDR
+                ,C.CTAC_PSN_FIRST_NM
+                ,C.CTAC_PSN_MID_NM
+                ,C.CTAC_PSN_LAST_NM
+                ,C.CTAC_PSN_PK
+            FROM
+                SVC_MACH_CTAC_PSN   A
+                ,DS_CTAC_PNT        B
+                ,CTAC_PSN           C
+                ,TARGET             T
+            WHERE
+                    T.GLBL_CMPY_CD                      =   A.GLBL_CMPY_CD
+                AND T.SVC_MACH_MSTR_PK                  =   A.SVC_MACH_MSTR_PK
+                AND A.SVC_CTAC_TP_CD                    =   #svcCtacTpCd#
+                AND A.EFF_FROM_DT                   &lt;=   T.SEND_DT
+                AND NVL(A.EFF_THRU_DT, T.SEND_DT)   &gt;=   T.SEND_DT
+                AND A.EZCANCELFLAG                      =   '0'
+                AND A.GLBL_CMPY_CD                      =   B.GLBL_CMPY_CD
+                AND A.DS_CTAC_PNT_PK                    =   B.DS_CTAC_PNT_PK
+                AND B.DS_CTAC_PNT_TP_CD                 =   #dsCtacTpEmail#
+                AND B.DS_CTAC_PNT_ACTV_FLG              =   #dsCtacPntActvFlg#
+                AND B.EZCANCELFLAG                      =   '0'
+                AND B.GLBL_CMPY_CD                      =   C.GLBL_CMPY_CD
+                AND B.CTAC_PSN_PK                       =   C.CTAC_PSN_PK
+                AND C.EZCANCELFLAG                      =   '0'
+        )
+        ,CTAC_TEL AS (
+            SELECT 
+                * 
+            FROM (  
+                SELECT
+                    A.SVC_MACH_MSTR_PK
+                    ,NVL(B.DS_CTAC_PNT_VAL_TXT, NULL)  AS CTAC_PSN_TEL_NUM
+                    ,C.CTAC_PSN_FIRST_NM
+                    ,C.CTAC_PSN_MID_NM
+                    ,C.CTAC_PSN_LAST_NM
+                    ,C.CTAC_PSN_PK
+                    ,RANK() OVER(PARTITION BY C.CTAC_PSN_PK ORDER BY A.SVC_CTAC_TP_CD, CASE WHEN B.CTAC_PSN_PK IS NOT NULL THEN 1 ELSE 2 END ASC, A.DS_PRIM_LOC_FLG DESC, B.CTAC_PSN_PK, B.DS_CTAC_PNT_TP_CD ASC) AS RANK
+                FROM
+                    SVC_MACH_CTAC_PSN   A
+                    ,DS_CTAC_PNT        B
+                    ,CTAC_PSN           C
+                    ,CTAC_EMAIL         D
+                    ,TARGET             T
+                WHERE
+                        T.GLBL_CMPY_CD                      =   A.GLBL_CMPY_CD
+                    AND T.SVC_MACH_MSTR_PK                  =   A.SVC_MACH_MSTR_PK
+                    AND A.SVC_CTAC_TP_CD                    =   #svcCtacTpCd#
+                    AND A.EFF_FROM_DT                   &lt;=   T.SEND_DT
+                    AND NVL(A.EFF_THRU_DT, T.SEND_DT)   &gt;=   T.SEND_DT
+                    AND A.EZCANCELFLAG                      =   '0'
+                    AND A.GLBL_CMPY_CD                      =   B.GLBL_CMPY_CD
+                    AND A.DS_CTAC_PNT_PK                    =   B.DS_CTAC_PNT_PK
+                    AND B.DS_CTAC_PNT_TP_CD                 IN  (#phone01#,#phone02#,#phone03#)
+                    AND B.DS_CTAC_PNT_ACTV_FLG              =   #dsCtacPntActvFlg#
+                    AND B.EZCANCELFLAG                      =   '0'
+                    AND B.GLBL_CMPY_CD                      =   C.GLBL_CMPY_CD
+                    AND B.CTAC_PSN_PK                       =   C.CTAC_PSN_PK
+                    AND C.EZCANCELFLAG                      =   '0'
+                    AND B.CTAC_PSN_PK                       =   C.CTAC_PSN_PK
+                    AND B.CTAC_PSN_PK                       =   D.CTAC_PSN_PK
+            )
+            WHERE
+                RANK = 1
+        )
+        ,CTAC_FAX AS (
+            SELECT 
+                * 
+            FROM ( 
+                SELECT
+                    A.SVC_MACH_MSTR_PK
+                    ,NVL(B.DS_CTAC_PNT_VAL_TXT, NULL)  AS CTAC_PSN_FAX_NUM
+                    ,C.CTAC_PSN_FIRST_NM
+                    ,C.CTAC_PSN_MID_NM
+                    ,C.CTAC_PSN_LAST_NM
+                    ,C.CTAC_PSN_PK
+                    ,RANK() OVER(PARTITION BY C.CTAC_PSN_PK ORDER BY A.SVC_CTAC_TP_CD, CASE WHEN B.CTAC_PSN_PK IS NOT NULL THEN 1 ELSE 2 END ASC, A.DS_PRIM_LOC_FLG DESC, B.CTAC_PSN_PK, B.DS_CTAC_PNT_TP_CD ASC) AS RANK
+                FROM
+                    SVC_MACH_CTAC_PSN   A
+                    ,DS_CTAC_PNT        B
+                    ,CTAC_PSN           C
+                    ,CTAC_EMAIL         D
+                    ,TARGET             T
+                WHERE
+                        T.GLBL_CMPY_CD                      =   A.GLBL_CMPY_CD
+                    AND T.SVC_MACH_MSTR_PK                  =   A.SVC_MACH_MSTR_PK
+                    AND A.SVC_CTAC_TP_CD                    =   #svcCtacTpCd#
+                    AND A.EFF_FROM_DT                   &lt;=   T.SEND_DT
+                    AND NVL(A.EFF_THRU_DT, T.SEND_DT)   &gt;=   T.SEND_DT
+                    AND A.EZCANCELFLAG                      =   '0'
+                    AND A.GLBL_CMPY_CD                      =   B.GLBL_CMPY_CD
+                    AND A.DS_CTAC_PNT_PK                    =   B.DS_CTAC_PNT_PK
+                    AND B.DS_CTAC_PNT_TP_CD                 =   #fax#
+                    AND B.DS_CTAC_PNT_ACTV_FLG              =   #dsCtacPntActvFlg#
+                    AND B.EZCANCELFLAG                      =   '0'
+                    AND B.GLBL_CMPY_CD                      =   C.GLBL_CMPY_CD
+                    AND B.CTAC_PSN_PK                       =   C.CTAC_PSN_PK
+                    AND C.EZCANCELFLAG                      =   '0'
+                    AND B.CTAC_PSN_PK                       =   C.CTAC_PSN_PK
+                    AND B.CTAC_PSN_PK                       =   D.CTAC_PSN_PK
+            )
+            WHERE
+                RANK = 1
+        )
+        ,MTR_READ AS (
+            SELECT
+                * 
+            FROM (
+                SELECT
+                    TARGET.SVC_MACH_MSTR_PK
+                    ,A.SVC_PHYS_MTR_READ_PK
+                    ,B.MTR_LB_CD
+                    ,B.MTR_LB_DESC_TXT
+                    ,A.READ_MTR_CNT
+                    ,E.DS_CONTR_BLLG_SCHD_PK
+                    ,RANK() OVER(PARTITION BY A.SVC_MACH_MSTR_PK ORDER BY A.READ_MTR_CNT DESC, A.SVC_PHYS_MTR_READ_GRP_SQ DESC) AS RANK
+                FROM
+                    SVC_PHYS_MTR_READ A
+                    ,MTR_LB B
+                    ,DS_CONTR_BLLG_MTR  C
+                    ,CONTR_PHYS_BLLG_MTR_RELN D
+                    ,DS_CONTR_BLLG_SCHD E
+                    ,TARGET TARGET
+                WHERE
+                        A.EZCANCELFLAG                      =   '0'
+                    AND B.EZCANCELFLAG                      =   '0'
+                    AND C.EZCANCELFLAG                      =   '0'
+                    AND D.EZCANCELFLAG                      =   '0'
+                    AND E.EZCANCELFLAG                      =   '0'
+                    AND A.GLBL_CMPY_CD                      =   #glblCmpyCd#
+                    AND A.GLBL_CMPY_CD                      =   B.GLBL_CMPY_CD
+                    AND A.GLBL_CMPY_CD                      =   C.GLBL_CMPY_CD
+                    AND A.GLBL_CMPY_CD                      =   D.GLBL_CMPY_CD
+                    AND A.GLBL_CMPY_CD                      =   E.GLBL_CMPY_CD
+                    AND A.MTR_LB_CD                         =   B.MTR_LB_CD
+                    AND A.SVC_MACH_MSTR_PK                  =   TARGET.SVC_MACH_MSTR_PK
+                    AND C.DS_CONTR_DTL_PK                   =   TARGET.DS_CONTR_DTL_PK
+                    AND C.DS_CONTR_BLLG_MTR_PK              =   D.DS_CONTR_BLLG_MTR_PK
+                    AND C.DS_CONTR_BLLG_MTR_PK              =   E.DS_CONTR_BLLG_MTR_PK
+                    AND A.SVC_PHYS_MTR_READ_GRP_SQ          =   E.SVC_PHYS_MTR_READ_GRP_SQ
+                    AND D.SVC_PHYS_MTR_PK                   =   A.SVC_PHYS_MTR_PK
+            )
+            WHERE
+                RANK = 1
+        )
+        ,START_READ AS (
+            SELECT
+                TARGET.SVC_MACH_MSTR_PK
+                ,A.SVC_PHYS_MTR_READ_PK
+                ,B.MTR_LB_CD
+                ,B.MTR_LB_DESC_TXT
+                ,A.READ_MTR_CNT
+                ,NULL AS DS_CONTR_BLLG_SCHD_PK
+            FROM
+                SVC_PHYS_MTR_READ A
+                ,MTR_LB B
+                ,TARGET TARGET
+            WHERE
+                    A.EZCANCELFLAG                      =   '0'
+                AND B.EZCANCELFLAG                      =   '0'
+                AND A.GLBL_CMPY_CD                      =   #glblCmpyCd#
+                AND A.GLBL_CMPY_CD                      =   B.GLBL_CMPY_CD
+                AND A.SVC_MACH_MSTR_PK                  =   TARGET.SVC_MACH_MSTR_PK
+                AND A.DS_CONTR_DTL_PK                   =   TARGET.DS_CONTR_DTL_PK
+                AND A.MTR_LB_CD                         =   B.MTR_LB_CD
+                AND NOT EXISTS (
+                        SELECT
+                            1
+                        FROM
+                            MTR_READ X
+                        WHERE
+                                 X.SVC_MACH_MSTR_PK         =   TARGET.SVC_MACH_MSTR_PK
+                             AND X.SVC_MACH_MSTR_PK         =   A.SVC_MACH_MSTR_PK
+                    )
+        )
+        ,MDL AS (
+            SELECT
+                TARGET.SVC_MACH_MSTR_PK
+                ,A.T_MDL_ID AS MDL_ID
+                ,A.T_MDL_NM
+                ,B.SVC_CONFIG_MSTR_PK
+                FROM 
+                    MDL_NM A
+                    ,SVC_CONFIG_MSTR B
+                    ,SVC_MACH_MSTR C
+                    ,TARGET TARGET
+                WHERE
+                       A.EZCANCELFLAG                       =   '0'
+                   AND B.EZCANCELFLAG                       =   '0'
+                   AND C.EZCANCELFLAG                       =   '0'
+                   AND A.T_GLBL_CMPY_CD                     =   #glblCmpyCd#
+                   AND A.T_GLBL_CMPY_CD                     =   B.GLBL_CMPY_CD
+                   AND A.T_GLBL_CMPY_CD                     =   C.GLBL_CMPY_CD
+                   AND A.T_MDL_ID                           =   B.MDL_ID
+                   AND C.SVC_MACH_MSTR_PK                   =   TARGET.SVC_MACH_MSTR_PK
+                   AND B.SVC_CONFIG_MSTR_PK                 =   C.SVC_CONFIG_MSTR_PK
+        )
+        SELECT
+            DISTINCT
+            J.CTAC_PSN_FIRST_NM
+            ,J.CTAC_PSN_MID_NM
+            ,J.CTAC_PSN_LAST_NM
+            ,I.CTAC_PSN_TEL_NUM
+            ,K.CTAC_PSN_FAX_NUM
+            ,J.CTAC_PSN_EML_ADDR
+            ,T.DS_CONTR_PK
+            ,T.DS_CONTR_NUM
+            ,T.DS_CONTR_DTL_PK
+            ,T.SVC_MACH_MSTR_PK
+            ,T.SER_NUM
+            ,H.SVC_CONFIG_MSTR_PK
+            ,H.MDL_ID
+            ,H.T_MDL_NM
+            ,NVL(N.SVC_PHYS_MTR_READ_PK,  L.SVC_PHYS_MTR_READ_PK) AS SVC_PHYS_MTR_READ_PK
+            ,NVL(N.MTR_LB_CD, L.MTR_LB_CD) AS MTR_LB_CD
+            ,NVL(N.MTR_LB_DESC_TXT, L.MTR_LB_DESC_TXT) AS MTR_LB_DESC_TXT
+            ,NVL(N.READ_MTR_CNT, L.READ_MTR_CNT) AS READ_MTR_CNT
+            ,NVL(N.DS_CONTR_BLLG_SCHD_PK, L.DS_CONTR_BLLG_SCHD_PK) AS DS_CONTR_BLLG_SCHD_PK
+            ,T.BLLG_SCHD_THRU_DT
+        FROM
+            TARGET T
+            ,CTAC_TEL I
+            ,CTAC_EMAIL J
+            ,CTAC_FAX K   
+            ,MTR_READ N 
+            ,MDL H
+            ,START_READ L
+        WHERE
+                J.CTAC_PSN_PK                               =   I.CTAC_PSN_PK(+)
+            AND J.CTAC_PSN_PK                               =   K.CTAC_PSN_PK(+)
+            AND T.SVC_MACH_MSTR_PK                          =   I.SVC_MACH_MSTR_PK(+)
+            AND T.SVC_MACH_MSTR_PK                          =   J.SVC_MACH_MSTR_PK(+)
+            AND T.SVC_MACH_MSTR_PK                          =   K.SVC_MACH_MSTR_PK(+)
+            AND T.SVC_MACH_MSTR_PK                          =   N.SVC_MACH_MSTR_PK(+)
+            AND T.SVC_MACH_MSTR_PK                          =   H.SVC_MACH_MSTR_PK(+)
+            AND T.SVC_MACH_MSTR_PK                          =   L.SVC_MACH_MSTR_PK(+)
+    </statement>
+
+    <statement id="getMeterReadingNotification" parameterClass="Map" resultClass="Map">
+        SELECT
+            DISTINCT
+            A.MTR_READ_NTFY_PK
+            ,C.DS_BLLG_SCHD_STS_CD
+        FROM
+            MTR_READ_NTFY A
+            ,MTR_READ_NTFY_DTL B
+            ,DS_CONTR_BLLG_SCHD C
+        WHERE
+                A.GLBL_CMPY_CD          =   #glblCmpyCd# 
+            AND A.EZCANCELFLAG          =   '0'
+            AND MAN_SEND_FLG            =   #manualSendFlag#
+            AND A.GLBL_CMPY_CD          =   B.GLBL_CMPY_CD
+            AND B.EZCANCELFLAG          =   '0'
+            AND A.MTR_READ_NTFY_PK      =   B.MTR_READ_NTFY_PK
+            AND C.EZCANCELFLAG          =   '0'
+            AND A.GLBL_CMPY_CD          =   C.GLBL_CMPY_CD
+            AND B.DS_CONTR_DTL_PK       =   C.DS_CONTR_DTL_PK
+            AND B.BLLG_SCHD_THRU_DT     =   C.BLLG_SCHD_THRU_DT
+            AND C.USG_CHRG_FLG          =   #usgChrgFlg#
+            AND C.SVC_CR_REBIL_PK       IS NULL
+    </statement>
+</sqlMap>

@@ -1,0 +1,460 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sqlMap namespace="NFBCommonBusiness">
+
+   	<statement id="getCcy" parameterClass="Map" resultClass="Map">
+			SELECT
+				 CCY.ACCT_ARTH_TP_CD
+				,AER.STD_EXCH_RATE
+				,AER.AVG_EXCH_RATE
+			FROM
+				 CCY CCY
+				,ACCT_EXCH_RATES AER
+			WHERE
+				    CCY.EZCANCELFLAG = '0'
+				AND AER.EZCANCELFLAG = '0'
+				AND CCY.GLBL_CMPY_CD = #glblCmpyCd#
+				AND AER.GLBL_CMPY_CD = #glblCmpyCd#
+				AND	CCY.CCY_CD       = #ccyCd#
+				AND AER.CCY_CD       = CCY.CCY_CD
+				AND AER.APPL_YR_MTH  = #applYrMth#
+    </statement>
+
+	<statement id="getVendorInfo" parameterClass="Map" resultClass="Map">
+	
+            SELECT
+				VND_CD
+			,	LOC_NM
+        	FROM
+                ACCT_VND_V
+	        WHERE
+                EZCANCELFLAG                                           = '0' 
+	        AND GLBL_CMPY_CD                                           = #glblCmpyCd# 
+            AND VND_CD                                  			   = #vndCd# 
+                
+    	<isNotEqual property="vndCd" compareValue="17071">                
+    		AND 
+    			(
+    				CM_VND_TP_CD									   = #vndTpCd06#
+    			OR	CM_VND_TP_CD									   = #vndTpCd08#
+    			OR	CM_VND_TP_CD									   = #vndTpCd09#
+    			OR	CM_VND_TP_CD									   = #vndTpCd10#
+    			)
+    	</isNotEqual>
+			 
+	</statement>
+	
+	<statement id="getContainerInfo" parameterClass="Map" resultClass="Map">	
+            WITH V_VIEW AS
+               (SELECT 
+               		DISTINCT
+                     #cmCntnrBolNum#                	IMPT_CNTNR_NUM
+                    ,II.IMPT_VND_CD                     IMPT_VND_CD
+                    ,II.IMPT_INV_NUM                    IMPT_INV_NUM
+                    ,II.IMPT_INV_GRS_MEAS               DETAIL
+                 FROM
+                     IMPT_PACK_SLP      IPS
+                    ,IMPT_INV           II
+                    ,(
+	                    SELECT   IMPT_CNTNR_NUM
+		                        ,MAX(SUBSTR(EZINTIME,1,8))     INDATE
+	                    		,GLBL_CMPY_CD
+	                    		,EZCANCELFLAG
+	                    FROM	IMPT_PACK_SLP
+	                    WHERE   1=1
+	                    AND     ((IMPT_CNTNR_NUM  = #cmCntnrBolNum#)
+						OR   	 (REPLACE(REPLACE(IMPT_CNTNR_NUM,'-',''),' ','') LIKE '%'||#cmCntnrBolNum#||'%'))
+	                    GROUP BY IMPT_CNTNR_NUM
+                    )					IPS_1
+                WHERE 	1=1
+                AND 	IPS.IMPT_CNTNR_NUM			= IPS_1.IMPT_CNTNR_NUM 
+                AND 	SUBSTR(IPS.EZINTIME,1,8)	= IPS_1.INDATE
+                AND 	II.GLBL_CMPY_CD     		= IPS_1.GLBL_CMPY_CD
+                AND 	II.EZCANCELFLAG     		= IPS_1.EZCANCELFLAG
+                AND 	II.IMPT_INV_PK     			= IPS.IMPT_INV_PK
+                AND 	II.GLBL_CMPY_CD     		= IPS.GLBL_CMPY_CD
+                AND 	II.EZCANCELFLAG     		= IPS.EZCANCELFLAG
+                AND 	IPS.GLBL_CMPY_CD    		= #glblCmpyCd#
+                AND 	IPS.EZCANCELFLAG    		= '0'
+            )                            
+            
+            SELECT 
+                 DETAIL.IMPT_CNTNR_NUM         		CM_CNTNR_BOL_NUM
+                ,DETAIL.IMPT_VND_CD					VND_CD
+                ,DETAIL.IMPT_INV_NUM				VND_INV_NUM
+                ,CIH.VND_INV_NUM                    INV_CHK
+                ,NVL(CIH.FRT_PRCH_PMT_TERM_CD,'C')  FRT_PRCH_PMT_TERM_CD
+                ,ROUND(DECODE(SUMMARY, 0, 0, DETAIL / SUMMARY),6)
+                									RATIO
+                ,DETAIL
+                ,SUMMARY
+            FROM
+             V_VIEW						DETAIL
+            ,(SELECT
+                    IMPT_CNTNR_NUM                     
+                   ,SUM(DETAIL)         SUMMARY
+               FROM
+                   V_VIEW
+              GROUP BY
+                   IMPT_CNTNR_NUM
+            )                           SUMMARY
+            ,CM_INV_HDR         		CIH
+            WHERE	DETAIL.IMPT_CNTNR_NUM 	= SUMMARY.IMPT_CNTNR_NUM
+            AND 	DETAIL.IMPT_VND_CD    	= CIH.VND_CD(+)
+            AND 	DETAIL.IMPT_INV_NUM   	= CIH.VND_INV_NUM(+)
+            AND 	#glblCmpyCd#          	= CIH.GLBL_CMPY_CD(+)
+            AND 	'0'                 	= CIH.EZCANCELFLAG(+)
+            ORDER BY
+              DETAIL.IMPT_VND_CD
+             ,DETAIL.IMPT_INV_NUM
+	</statement>
+	
+	<statement id="getAirBolInfo" parameterClass="Map" resultClass="Map">	
+        WITH V_VIEW AS
+        (
+       		SELECT
+				 #cmCntnrBolNum#				IMPT_INV_BOL_NUM
+                ,IMPT_VND_CD					IMPT_VND_CD
+                ,IMPT_INV_NUM					IMPT_INV_NUM
+				,IMPT_INV_GRS_WT				DETAIL_WT
+				,IMPT_INV_GRS_MEAS*1000/6		DETAIL_VOL
+			FROM IMPT_INV II
+		 	WHERE (IMPT_INV_NUM, IMPT_INV_VER_NUM, EZCANCELFLAG, GLBL_CMPY_CD) IN 
+		 	(
+                /* pick latest Version for each Invoice Mo. */
+				SELECT
+						 II.IMPT_INV_NUM
+						,MAX(II.IMPT_INV_VER_NUM)
+						,II.EZCANCELFLAG
+						,II.GLBL_CMPY_CD
+				FROM	 IMPT_INV  II
+				WHERE	1=1
+				AND 	((II.IMPT_INV_BOL_NUM	= #cmCntnrBolNum#)
+				OR   	 (REPLACE(REPLACE(II.IMPT_INV_BOL_NUM,'-',''),' ','') LIKE '%'||#cmCntnrBolNum#||'%'))
+			    AND 	II.IMPT_INV_SLP_CLS_CD 							= 'A1'
+                AND 	II.GLBL_CMPY_CD     							= #glblCmpyCd#
+                AND 	II.EZCANCELFLAG     							= '0'
+				GROUP BY II.IMPT_INV_NUM
+                        ,II.EZCANCELFLAG
+                        ,II.GLBL_CMPY_CD
+			)
+        )
+
+        SELECT 
+             DETAIL.IMPT_INV_BOL_NUM    		CM_CNTNR_BOL_NUM
+            ,DETAIL.IMPT_VND_CD					VND_CD
+            ,DETAIL.IMPT_INV_NUM				VND_INV_NUM
+            ,CIH.VND_INV_NUM            		INV_CHK
+            ,NVL(CIH.FRT_PRCH_PMT_TERM_CD,'C')  FRT_PRCH_PMT_TERM_CD
+            ,CASE WHEN
+                    SUMMARY_WT > SUMMARY_VOL
+             THEN
+                    ROUND(
+                        DECODE(SUMMARY_WT, 0, 0,
+                            DETAIL_WT / SUMMARY_WT),6)
+             ELSE
+                    ROUND(
+                        DECODE(SUMMARY_VOL, 0, 0,
+                            DETAIL_VOL / SUMMARY_VOL),6)
+             END                        		RATIO
+            ,DETAIL_WT							DETAIL_WT
+            ,DETAIL_VOL							DETAIL_VOL
+            ,SUMMARY_WT							SUMMARY_WT
+            ,SUMMARY_VOL						SUMMARY_VOL
+        FROM
+           V_VIEW           DETAIL
+          ,(SELECT 
+                 IMPT_INV_BOL_NUM            	IMPT_INV_BOL_NUM
+                ,SUM(DETAIL_WT)                 SUMMARY_WT
+                ,SUM(DETAIL_VOL)                SUMMARY_VOL
+            FROM
+                 V_VIEW
+            GROUP BY IMPT_INV_BOL_NUM
+            )               SUMMARY
+           ,CM_INV_HDR      CIH
+        WHERE   DETAIL.IMPT_INV_BOL_NUM = SUMMARY.IMPT_INV_BOL_NUM
+        AND     '0'                     = CIH.EZCANCELFLAG(+)
+        AND     #glblCmpyCd#            = CIH.GLBL_CMPY_CD(+)
+        AND     DETAIL.IMPT_VND_CD      = CIH.VND_CD(+)
+        AND     DETAIL.IMPT_INV_NUM     = CIH.VND_INV_NUM(+)
+        ORDER BY
+          DETAIL.IMPT_VND_CD
+         ,DETAIL.IMPT_INV_NUM
+	</statement>
+	
+	<statement id="getBolInfo" parameterClass="Map" resultClass="Map">	
+           WITH V_VIEW AS
+              (
+                  SELECT
+                      DISTINCT
+                       #cmCntnrBolNum#              IMPT_CNTNR_NUM
+                      ,II.IMPT_VND_CD               IMPT_VND_CD
+                      ,II.IMPT_INV_NUM              IMPT_INV_NUM
+                      ,II.IMPT_INV_GRS_MEAS         DETAIL
+                   FROM
+                       (SELECT DISTINCT
+                               IMPT_INV_PK
+                        FROM   IMPT_PACK_SLP IPS
+	                          ,(SELECT DISTINCT
+	                                   IPS.IMPT_CNTNR_NUM
+	                                  ,IPS.IMPT_CNTNR_LOT_NUM
+	                            FROM   IMPT_PACK_SLP                IPS
+	                                  ,IMPT_INV                     II
+	                            WHERE      1=1
+	                            AND     ((II.IMPT_INV_BOL_NUM       = #cmCntnrBolNum#)
+	                            OR        (REPLACE(REPLACE(II.IMPT_INV_BOL_NUM,'-',''),' ','') LIKE '%'||#cmCntnrBolNum#||'%'))
+                                AND     II.IMPT_INV_SLP_CLS_CD      = 'A1'
+                                AND     IPS.IMPT_INV_PK             = II.IMPT_INV_PK
+                                AND     IPS.EZCANCELFLAG            = II.EZCANCELFLAG
+                                AND     IPS.GLBL_CMPY_CD            = II.GLBL_CMPY_CD
+	                            AND     IPS.GLBL_CMPY_CD            = #glblCmpyCd#
+	                            AND     IPS.EZCANCELFLAG            = '0'
+	                            AND    (IPS.IMPT_CNTNR_NUM, SUBSTR(IPS.EZINTIME,1,8)) IN
+	                                        (
+	                                            SELECT  IPS_1.IMPT_CNTNR_NUM, MAX(SUBSTR(IPS_1.EZINTIME,1,8))
+	                                            FROM    IMPT_PACK_SLP            IPS_1
+	                                            WHERE   1=1
+	                                            AND     GLBL_CMPY_CD             = #glblCmpyCd#
+	                                            AND     EZCANCELFLAG             = '0'
+	                                            GROUP BY IMPT_CNTNR_NUM
+	                                        )
+	                              )                                 II_1
+                        WHERE   1=1
+                        AND     II_1.IMPT_CNTNR_NUM     = IPS.IMPT_CNTNR_NUM
+                        AND     II_1.IMPT_CNTNR_LOT_NUM = IPS.IMPT_CNTNR_LOT_NUM
+                        AND     IPS.GLBL_CMPY_CD        = #glblCmpyCd#
+                        AND     IPS.EZCANCELFLAG        = '0'
+                       )                                IPS
+                      ,IMPT_INV                         II
+                      /* pick all container which inculuding one BOL */
+                  WHERE     1=1
+                  AND         IPS.IMPT_INV_PK     = II.IMPT_INV_PK
+                  AND       II.GLBL_CMPY_CD     = #glblCmpyCd#
+                  AND       II.EZCANCELFLAG     = '0'
+           )
+           
+           SELECT 
+                DETAIL.IMPT_CNTNR_NUM         		CM_CNTNR_BOL_NUM
+               ,DETAIL.IMPT_VND_CD					VND_CD
+               ,DETAIL.IMPT_INV_NUM					VND_INV_NUM
+               ,CIH.VND_INV_NUM                    	INV_CHK
+               ,NVL(CIH.FRT_PRCH_PMT_TERM_CD,'C')  	FRT_PRCH_PMT_TERM_CD
+               ,ROUND(DECODE(SUMMARY, 0, 0, DETAIL / SUMMARY),6)
+               										RATIO
+               ,DETAIL
+               ,SUMMARY
+           FROM
+            V_VIEW						DETAIL
+           ,(SELECT
+                   IMPT_CNTNR_NUM                     
+                  ,SUM(DETAIL)         SUMMARY
+              FROM
+                  V_VIEW
+             GROUP BY
+                  IMPT_CNTNR_NUM
+           )                           SUMMARY
+           ,CM_INV_HDR         		CIH
+           WHERE	DETAIL.IMPT_CNTNR_NUM 	= SUMMARY.IMPT_CNTNR_NUM
+           AND 	DETAIL.IMPT_VND_CD    	= CIH.VND_CD(+)
+           AND 	DETAIL.IMPT_INV_NUM   	= CIH.VND_INV_NUM(+)
+           AND 	#glblCmpyCd#          	= CIH.GLBL_CMPY_CD(+)
+           AND 	'0'                 	= CIH.EZCANCELFLAG(+)
+           ORDER BY
+             DETAIL.IMPT_VND_CD
+            ,DETAIL.IMPT_INV_NUM
+	</statement>
+	
+	<statement id="getOtherCarrierInvoice" parameterClass="Map" resultClass="Map">
+	
+            SELECT
+				ACTL_DTL.AP_VND_CD
+           	,	ACTL_DTL.AP_VND_INV_NUM
+           	,	ACTL_DTL.INV_DT
+           	,	NVL(ACTL_DTL.INV_OC_ORIG_COST_AMT, 0)			INV_OC_ORIG_COST_AMT
+           	,	NVL(ACTL_LGSC_DTL.AC_OC_INTL_FRT_COST_AMT, 0)	AC_OC_INTL_FRT_COST_AMT
+           	,	NVL(ACTL_LGSC_DTL.AC_OC_INS_COST_AMT, 0)		AC_OC_INS_COST_AMT
+           	,	NVL(ACTL_LGSC_DTL.AC_OC_DTY_COST_AMT, 0)		AC_OC_DTY_COST_AMT
+           	,	NVL(ACTL_LGSC_DTL.AC_OC_DETN_COST_AMT, 0)		AC_OC_DETN_COST_AMT
+           	,	NVL(ACTL_LGSC_DTL.AC_OC_DEMG_COST_AMT, 0)		AC_OC_DEMG_COST_AMT
+           	,	NVL(ACTL_LGSC_DTL.AC_OC_XD_OPS_COST_AMT, 0)		AC_OC_XD_OPS_COST_AMT
+           	,	NVL(ACTL_LGSC_DTL.AC_OC_XD_DELY_COST_AMT, 0)	AC_OC_XD_DELY_COST_AMT
+           	,	NVL(ACTL_LGSC_DTL.AC_OC_DOM_FRT_COST_AMT, 0)	AC_OC_DOM_FRT_COST_AMT
+           	,	NVL(ACTL_LGSC_DTL.AC_OC_HMF_COST_AMT, 0)		AC_OC_HMF_COST_AMT
+           	,	NVL(ACTL_LGSC_DTL.AC_OC_MPF_COST_AMT, 0)		AC_OC_MPF_COST_AMT
+           	,	NVL(ACTL_LGSC_DTL.AC_OC_ISF_COST_AMT, 0)		AC_OC_ISF_COST_AMT
+           	,	NVL(ACTL_LGSC_DTL.AC_OC_ISF_HDLG_COST_AMT, 0)	AC_OC_ISF_HDLG_COST_AMT
+           	,	NVL(ACTL_LGSC_DTL.AC_OC_TMF_COST_AMT, 0)		AC_OC_TMF_COST_AMT
+           	,	NVL(ACTL_LGSC_DTL.AC_OC_CTP_COST_AMT, 0)		AC_OC_CTP_COST_AMT
+           	,	NVL(ACTL_LGSC_DTL.AC_OC_CTP_HDLG_COST_AMT, 0)	AC_OC_CTP_HDLG_COST_AMT
+           	,	NVL(ACTL_LGSC_DTL.AC_OC_ENTRY_COST_AMT, 0)		AC_OC_ENTRY_COST_AMT
+           	,	NVL(ACTL_LGSC_DTL.AC_OC_ANTI_DUMP_COST_AMT, 0)	AC_OC_ANTI_DUMP_COST_AMT
+           	,	NVL(ACTL_LGSC_DTL.AC_OC_ADD_LINE_COST_AMT, 0)	AC_OC_ADD_LINE_COST_AMT
+           	,	NVL(ACTL_LGSC_DTL.AC_OC_HDLG_COST_AMT, 0)		AC_OC_HDLG_COST_AMT
+           	,	NVL(ACTL_LGSC_DTL.AC_OC_TRM_COST_AMT, 0)		AC_OC_TRM_COST_AMT
+           	,	NVL(ACTL_LGSC_DTL.AC_OC_STORE_COST_AMT, 0)		AC_OC_STORE_COST_AMT
+           	,	NVL(ACTL_LGSC_DTL.AC_OC_DELY_COST_AMT, 0)		AC_OC_DELY_COST_AMT
+           	,	NVL(ACTL_LGSC_DTL.AC_OC_OTH_COST_AMT, 0)		AC_OC_OTH_COST_AMT
+            FROM
+            	CM_INV_ACTL_DTL			ACTL_DTL
+            ,	CM_INV_ACTL_LGSC_DTL	ACTL_LGSC_DTL
+			WHERE
+            	ACTL_DTL.GLBL_CMPY_CD			=	#glblCmpyCd#
+            AND ACTL_DTL.EZCANCELFLAG			=	'0'
+            AND ACTL_DTL.VND_CD					=	#vndCd#
+            AND	ACTL_DTL.VND_INV_NUM			=	#vndInvNum#	
+            AND	ACTL_DTL.VND_INV_SQ_NUM			=	#vndInvSqNum#
+            AND	ACTL_LGSC_DTL.GLBL_CMPY_CD		=	ACTL_DTL.GLBL_CMPY_CD
+            AND ACTL_LGSC_DTL.EZCANCELFLAG		=	ACTL_DTL.EZCANCELFLAG
+            AND ACTL_LGSC_DTL.AP_VND_CD			=	ACTL_DTL.AP_VND_CD
+            AND ACTL_LGSC_DTL.AP_VND_INV_NUM	=	ACTL_DTL.AP_VND_INV_NUM                        
+            AND ACTL_LGSC_DTL.AP_VND_INV_SQ_NUM	=	ACTL_DTL.AP_VND_INV_SQ_NUM                        
+            AND ACTL_LGSC_DTL.REM_SQ_NUM		=	ACTL_DTL.REM_SQ_NUM                        
+            AND ACTL_LGSC_DTL.VND_CD			=	ACTL_DTL.VND_CD                        
+            AND ACTL_LGSC_DTL.VND_INV_NUM		=	ACTL_DTL.VND_INV_NUM                        
+            AND ACTL_LGSC_DTL.VND_INV_SQ_NUM	=	ACTL_DTL.VND_INV_SQ_NUM                        
+            AND 
+            	(
+            		ACTL_DTL.AP_VND_CD			!=	ACTL_DTL.VND_CD
+            	OR	ACTL_DTL.AP_VND_INV_NUM		!=	ACTL_DTL.VND_INV_NUM
+            	OR	ACTL_DTL.AP_VND_INV_SQ_NUM	!=	ACTL_DTL.VND_INV_SQ_NUM
+            	)
+            AND 
+            	(
+            		ACTL_DTL.AP_VND_CD			!=	#apVndCd#
+            	OR	ACTL_DTL.AP_VND_INV_NUM		!=	#apVndInvNum#
+            	OR	ACTL_DTL.AP_VND_INV_SQ_NUM	!=	#apVndInvSqNum#
+            	OR	ACTL_DTL.REM_SQ_NUM			!=	#remSqNum#            		            		
+            	)
+			ORDER BY
+           		ACTL_DTL.AP_VND_CD
+           	,	ACTL_DTL.AP_VND_INV_NUM
+           	,	ACTL_DTL.AP_VND_INV_SQ_NUM
+			,	ACTL_DTL.REM_SQ_NUM
+	</statement>
+
+	<statement id="getCostManagementInfo" parameterClass="Map" resultClass="Map">
+	
+            SELECT
+				CM_COST_ELMNT_CD    
+        	FROM
+                CM_LGSC_COST_ELMNT
+	        WHERE
+                EZCANCELFLAG                                           = '0' 
+	        AND GLBL_CMPY_CD                                           = #glblCmpyCd# 
+            AND CM_LGSC_COST_ELMNT_CD                                  = #cmLgscCostElmntCd# 
+                
+           	<isNotNull property="cmLgscCostElmntFromDt">
+            AND to_number(CM_LGSC_COST_ELMNT_FROM_DT)                   &lt;= to_number(#cmLgscCostElmntFromDt#)
+           	</isNotNull>
+           		
+          	<isNotNull property="cmLgscCostElmntThruDt">
+            AND to_number(nvl(CM_LGSC_COST_ELMNT_THRU_DT, '29991231'))  &gt; to_number(#cmLgscCostElmntThruDt#)
+            </isNotNull>
+			 
+	</statement>
+	
+	<statement id="getInlandWorkOrder" parameterClass="Map" resultClass="Map">
+	
+            SELECT
+                1 
+            FROM
+				 IMPT_INV 			  II
+                ,LGSC_SCP_ORD_DTL	  LSOD
+			WHERE
+			    II.IMPT_INV_PK        = LSOD.IMPT_INV_PK
+			AND II.IMPT_VND_CD        = #vndCd#
+			AND II.IMPT_INV_NUM       = #vndInvNum#
+            AND II.GLBL_CMPY_CD       = #glblCmpyCd#
+            AND LSOD.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND II.EZCANCELFLAG       = '0'
+            AND LSOD.EZCANCELFLAG     = '0'
+			 
+	</statement>
+	
+	<statement id="getCmProcDt" parameterClass="Map" resultClass="String">
+	
+            SELECT
+				CM_PROC_DT
+        	FROM
+                CM_PROC_DT
+	        WHERE
+			    GLBL_CMPY_CD        =            #glblCmpyCd#
+    		AND	EZCANCELFLAG        =            '0'
+            AND ROWNUM   <![CDATA[ <= ]]>        1
+			 
+	</statement>
+
+	<statement id="getCmVndConvCd" parameterClass="Map" resultClass="String">
+	
+            SELECT
+				MAX(CM_VND_CONV_CD) CM_VND_CONV_CD
+        	FROM
+                CM_VND_CONV
+	        WHERE
+			    GLBL_CMPY_CD        =            #glblCmpyCd#
+    		AND	AP_VND_CD           =            #apVndCd#
+    		AND	EZCANCELFLAG        =            '0'
+			 
+	</statement>
+
+	<statement id="getCmVndConvCdArr" parameterClass="Map" resultClass="String">
+	
+            SELECT
+				CM_VND_CONV_CD
+        	FROM
+                CM_VND_CONV
+	        WHERE
+			    GLBL_CMPY_CD        =            #glblCmpyCd#
+    		AND	AP_VND_CD           =            #apVndCd#
+    		AND	EZCANCELFLAG        =            '0'
+			 
+	</statement>
+	
+	<statement id="getMaxCmHistTs" parameterClass="Map" resultClass="String">
+	
+    		SELECT 
+        	    NVL(MAX(CM_HIST_TS),'0')	     CM_HIST_TS
+   		    FROM 
+			    CM_INV_IMPT_TRK
+		    WHERE
+		        GLBL_CMPY_CD        =	         #glblCmpyCd#
+		    AND CM_PGM_ID           =            #cmPgmId#
+		    AND EZCANCELFLAG		= 	         '0'
+			 
+	</statement>
+
+	<statement id="getStdCcyCd" parameterClass="Map" resultClass="String">
+
+            SELECT
+				STD_CCY_CD
+        	FROM
+                GLBL_CMPY
+	        WHERE
+			    GLBL_CMPY_CD        =            #glblCmpyCd#
+    		AND	EZCANCELFLAG        =            '0'
+
+	</statement>
+
+    <statement id="getAcctDlyActlExchRates" parameterClass="Map" resultClass="Map">
+        SELECT
+            ACTL_EXCH_RATE
+        FROM
+             ACCT_DLY_ACTL_EXCH_RATES   A
+            ,(
+                SELECT
+                    MAX(ACTL_EXCH_RATE_ENT_DT)  ACTL_EXCH_RATE_ENT_DT
+                FROM
+                    ACCT_DLY_ACTL_EXCH_RATES
+                WHERE
+                        GLBL_CMPY_CD              = #glblCmpyCd#
+                    AND CCY_CD                    = #ccyCd#
+                    AND ACTL_EXCH_RATE_ENT_DT &lt;= #actlExchRateEntDt#
+                    AND EZCANCELFLAG              = '0'
+            ) B
+        WHERE
+                A.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND A.CCY_CD                = #ccyCd#
+            AND A.ACTL_EXCH_RATE_ENT_DT = B.ACTL_EXCH_RATE_ENT_DT
+            AND A.EZCANCELFLAG          = '0'
+    </statement>
+
+</sqlMap>

@@ -1,0 +1,589 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sqlMap namespace="NSZC078001">
+    <statement id="getContrInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+            SI.GLBL_CMPY_CD       AS GLBL_CMPY_CD
+            ,SI.DS_CONTR_PK       AS DS_CONTR_PK
+            ,SI.DS_CONTR_DTL_PK   AS DS_CONTR_DTL_PK
+            ,SI.SVC_PGM_MDSE_CD   AS SVC_PGM_MDSE_CD
+            ,SI.SELL_TO_CUST_CD   AS SELL_TO_CUST_CD
+            ,SI.SVC_CONTR_BR_CD   AS SVC_CONTR_BR_CD
+            ,SI.MTR_BLLG_CYCLE_CD AS MTR_BLLG_CYCLE_CD
+            ,SI.DS_CONTR_EDI_CD   AS DS_CONTR_EDI_CD
+            ,SI.SVC_RG_PK         AS SVC_RG_PK
+        FROM
+            (
+                SELECT
+                    CNTR.GLBL_CMPY_CD       AS GLBL_CMPY_CD
+                    ,CNTR.DS_CONTR_PK       AS DS_CONTR_PK
+                    ,CNTR.DS_CONTR_DTL_PK   AS DS_CONTR_DTL_PK
+                    ,CNTR.SVC_PGM_MDSE_CD   AS SVC_PGM_MDSE_CD
+                    ,CNTR.SELL_TO_CUST_CD   AS SELL_TO_CUST_CD
+                    ,CNTR.SVC_CONTR_BR_CD   AS SVC_CONTR_BR_CD
+                    ,CNTR.MTR_BLLG_CYCLE_CD AS MTR_BLLG_CYCLE_CD
+                    ,CNTR.DS_CONTR_EDI_CD   AS DS_CONTR_EDI_CD
+                    ,CNTR.SVC_RG_PK         AS SVC_RG_PK 
+                    ,CNTR.SVC_MACH_MSTR_PK  AS SVC_MACH_MSTR_PK
+                    ,CNTR.CONTR_EFF_THRU_DT AS CONTR_EFF_THRU_DT
+                    ,CNTR.DS_CONTR_CRAT_DT  AS DS_CONTR_CRAT_DT
+                    ,ROW_NUMBER() OVER (PARTITION BY CNTR.SVC_MACH_MSTR_PK ORDER BY CNTR.CONTR_EFF_THRU_DT DESC,  CNTR.DS_CONTR_CRAT_DT ASC, CNTR.DS_CONTR_PK ASC) AS ROW_NUM 
+                FROM
+                    (
+                        SELECT
+                            DCT.GLBL_CMPY_CD       AS GLBL_CMPY_CD
+                            ,DCT.DS_CONTR_PK       AS DS_CONTR_PK
+                            ,DCD.DS_CONTR_DTL_PK   AS DS_CONTR_DTL_PK
+                            ,DCD.SVC_PGM_MDSE_CD   AS SVC_PGM_MDSE_CD
+                            ,STC.SELL_TO_CUST_CD   AS SELL_TO_CUST_CD
+                            ,DCT.SVC_CONTR_BR_CD   AS SVC_CONTR_BR_CD
+                            ,DCD.MTR_BLLG_CYCLE_CD AS MTR_BLLG_CYCLE_CD
+                            ,DCT.DS_CONTR_EDI_CD   AS DS_CONTR_EDI_CD
+                            ,SRBR.SVC_RG_PK        AS SVC_RG_PK
+                            ,SMM.SVC_MACH_MSTR_PK  AS SVC_MACH_MSTR_PK
+                            ,DCD.CONTR_EFF_THRU_DT AS CONTR_EFF_THRU_DT
+                            ,DCT.DS_CONTR_CRAT_DT  AS DS_CONTR_CRAT_DT
+                        FROM
+                            SVC_MACH_MSTR       SMM
+                            ,DS_CONTR_DTL       DCD
+                            ,DS_CONTR           DCT
+                            ,SVC_RG_BR_RELN     SRBR
+                            ,SVC_RG             SR <!-- QC#28954 -->
+                            ,SHIP_TO_CUST       STC
+                            ,DS_CONTR_STS_V     DCSV
+                            ,DS_CONTR_DTL_STS_V DCDSV
+                        WHERE
+                            SMM.GLBL_CMPY_CD     = #glblCmpyCd#
+                        AND SMM.SVC_MACH_MSTR_PK = #svcMachMstrPk#
+                        AND SMM.GLBL_CMPY_CD     = DCD.GLBL_CMPY_CD
+                        AND SMM.SVC_MACH_MSTR_PK = DCD.SVC_MACH_MSTR_PK
+                        <isNotNull property="dsContrPk">    <!-- QC#28954 -->
+                        AND DCD.DS_CONTR_PK      = #dsContrPk#
+                        </isNotNull>
+                        AND DCD.CONTR_EFF_FROM_DT  &lt;= #procDt#
+                        AND (DCD.CONTR_EFF_THRU_DT &gt;= #procDt#
+                         OR  DCD.CONTR_EFF_THRU_DT IS NULL)
+                        AND DCD.GLBL_CMPY_CD     = DCT.GLBL_CMPY_CD
+                        AND DCD.DS_CONTR_PK      = DCT.DS_CONTR_PK
+                        AND DCT.CONTR_VRSN_EFF_FROM_DT   &lt;= #procDt#
+                        AND (DCT.CONTR_VRSN_EFF_THRU_DT  &gt;= #procDt#
+                         OR  DCT.CONTR_VRSN_EFF_THRU_DT  IS NULL)
+                        AND DCT.DS_CONTR_CATG_CD &lt;&gt; #dsContrCatgWty#
+                        AND DCT.DS_CONTR_CATG_CD &lt;&gt; #dsContrCatgFlt#
+                        AND DCT.GLBL_CMPY_CD     = SRBR.GLBL_CMPY_CD
+                        AND DCT.SVC_CONTR_BR_CD  = SRBR.SVC_CONTR_BR_CD
+                        <!-- QC#28954 -->
+                        AND SR.GLBL_CMPY_CD      = SRBR.GLBL_CMPY_CD
+                        AND SR.SVC_RG_PK         = SRBR.SVC_RG_PK
+                        AND SR.SVC_LINE_BIZ_CD   = DCT.SVC_LINE_BIZ_CD
+                        <!-- QC#28954 -->
+                        AND SMM.GLBL_CMPY_CD     = STC.GLBL_CMPY_CD
+                        AND SMM.CUR_LOC_NUM      = STC.SHIP_TO_CUST_CD
+                        AND DCT.GLBL_CMPY_CD     = DCSV.GLBL_CMPY_CD
+                        AND DCT.DS_CONTR_PK      = DCSV.DS_CONTR_PK
+                        AND DCSV.ETTL_AVAL_FLG   = #flgY# 
+                        AND DCD.GLBL_CMPY_CD     = DCDSV.GLBL_CMPY_CD
+                        AND DCD.DS_CONTR_DTL_PK  = DCDSV.DS_CONTR_DTL_PK
+                        AND DCDSV.ETTL_AVAL_FLG  = #flgY#
+                        AND SMM.EZCANCELFLAG     = '0'
+                        AND DCD.EZCANCELFLAG     = '0'
+                        AND DCT.EZCANCELFLAG     = '0'
+                        AND SRBR.EZCANCELFLAG    = '0'
+                        AND SR.EZCANCELFLAG      = '0' <!-- QC#28954 -->
+                        AND STC.EZCANCELFLAG     = '0'
+                        AND DCSV.EZCANCELFLAG    = '0'
+                        AND DCDSV.EZCANCELFLAG   = '0'
+                        UNION ALL
+                        SELECT
+                            DCT.GLBL_CMPY_CD        AS GLBL_CMPY_CD
+                            ,DCT.DS_CONTR_PK        AS DS_CONTR_PK
+                            ,DCD.DS_CONTR_DTL_PK    AS DS_CONTR_DTL_PK
+                            ,DCDP.SVC_PGM_MDSE_CD   AS SVC_PGM_MDSE_CD
+                            ,STC.SELL_TO_CUST_CD    AS SELL_TO_CUST_CD
+                            ,DCT.SVC_CONTR_BR_CD    AS SVC_CONTR_BR_CD
+                            ,DCDP.MTR_BLLG_CYCLE_CD AS MTR_BLLG_CYCLE_CD
+                            ,DCT.DS_CONTR_EDI_CD    AS DS_CONTR_EDI_CD
+                            ,SRBR.SVC_RG_PK         AS SVC_RG_PK
+                            ,SMM.SVC_MACH_MSTR_PK   AS SVC_MACH_MSTR_PK
+                            ,DCD.CONTR_EFF_THRU_DT  AS CONTR_EFF_THRU_DT
+                            ,DCT.DS_CONTR_CRAT_DT   AS DS_CONTR_CRAT_DT
+                        FROM
+                            SVC_MACH_MSTR       SMM
+                            ,DS_CONTR_DTL       DCD
+                            ,DS_CONTR_DTL       DCDP
+                            ,DS_CONTR           DCT
+                            ,SVC_RG_BR_RELN     SRBR
+                            ,SVC_RG             SR <!-- QC#28954 -->
+                            ,SHIP_TO_CUST       STC
+                            ,DS_CONTR_STS_V     DCSV
+                            ,DS_CONTR_DTL_STS_V DCDSV
+                        WHERE
+                            SMM.GLBL_CMPY_CD             = #glblCmpyCd#
+                        AND SMM.SVC_MACH_MSTR_PK         = #svcMachMstrPk#
+                        AND SMM.GLBL_CMPY_CD             = DCD.GLBL_CMPY_CD
+                        AND SMM.SVC_MACH_MSTR_PK         = DCD.SVC_MACH_MSTR_PK
+                        <isNotNull property="dsContrPk">    <!-- QC#28954 -->
+                        AND DCD.DS_CONTR_PK              = #dsContrPk#
+                        </isNotNull>
+                        AND DCD.CONTR_EFF_FROM_DT        &lt;= #procDt#
+                        AND (DCD.CONTR_EFF_THRU_DT       &gt;= #procDt#
+                         OR  DCD.CONTR_EFF_THRU_DT       IS NULL)
+                        AND DCD.GLBL_CMPY_CD             = DCDP.GLBL_CMPY_CD
+                        AND DCD.PRNT_DS_CONTR_DTL_PK     = DCDP.DS_CONTR_DTL_PK
+                        AND DCDP.GLBL_CMPY_CD            = DCT.GLBL_CMPY_CD
+                        AND DCDP.DS_CONTR_PK             = DCT.DS_CONTR_PK
+                        AND DCT.CONTR_VRSN_EFF_FROM_DT   &lt;= #procDt#
+                        AND (DCT.CONTR_VRSN_EFF_THRU_DT  &gt;= #procDt#
+                         OR  DCT.CONTR_VRSN_EFF_THRU_DT  IS NULL)
+                        AND DCT.DS_CONTR_CATG_CD         &lt;&gt; #dsContrCatgWty#
+                        AND DCT.DS_CONTR_CATG_CD = #dsContrCatgFlt#
+                        AND DCT.GLBL_CMPY_CD     = SRBR.GLBL_CMPY_CD
+                        AND DCT.SVC_CONTR_BR_CD  = SRBR.SVC_CONTR_BR_CD
+                        <!-- QC#28954 -->
+                        AND SR.GLBL_CMPY_CD      = SRBR.GLBL_CMPY_CD
+                        AND SR.SVC_RG_PK         = SRBR.SVC_RG_PK
+                        AND SR.SVC_LINE_BIZ_CD   = DCT.SVC_LINE_BIZ_CD
+                        <!-- QC#28954 -->
+                        AND SMM.GLBL_CMPY_CD     = STC.GLBL_CMPY_CD
+                        AND SMM.CUR_LOC_NUM      = STC.SHIP_TO_CUST_CD
+                        AND DCT.GLBL_CMPY_CD     = DCSV.GLBL_CMPY_CD
+                        AND DCT.DS_CONTR_PK      = DCSV.DS_CONTR_PK
+                        AND DCSV.ETTL_AVAL_FLG   = #flgY# 
+                        AND DCD.GLBL_CMPY_CD     = DCDSV.GLBL_CMPY_CD
+                        AND DCD.DS_CONTR_DTL_PK  = DCDSV.DS_CONTR_DTL_PK
+                        AND DCDSV.ETTL_AVAL_FLG  = #flgY# 
+                        AND SMM.EZCANCELFLAG     = '0'
+                        AND DCD.EZCANCELFLAG     = '0'
+                        AND DCDP.EZCANCELFLAG    = '0'
+                        AND DCT.EZCANCELFLAG     = '0'
+                        AND SRBR.EZCANCELFLAG    = '0'
+                        AND SR.EZCANCELFLAG      = '0' <!-- QC#28954 -->
+                        AND STC.EZCANCELFLAG     = '0'
+                        AND DCSV.EZCANCELFLAG    = '0'
+                        AND DCDSV.EZCANCELFLAG   = '0'
+                        AND ROWNUM               = 1
+                    ) CNTR
+                    ,MDSE             MDSE
+                    ,SVC_COV_TMPL_TP  SCTT
+                    ,SVC_COV_TMPL_DTL SCTD
+                WHERE
+                    CNTR.GLBL_CMPY_CD         = MDSE.GLBL_CMPY_CD
+                AND CNTR.SVC_PGM_MDSE_CD      = MDSE.MDSE_CD
+                AND MDSE.EZCANCELFLAG         = '0'
+                AND MDSE.GLBL_CMPY_CD         = SCTT.GLBL_CMPY_CD
+                AND MDSE.SVC_COV_TMPL_TP_CD   = SCTT.SVC_COV_TMPL_TP_CD
+                AND SCTT.EZCANCELFLAG         = '0'
+                AND SCTT.GLBL_CMPY_CD         = SCTD.GLBL_CMPY_CD
+                AND SCTT.SVC_COV_TMPL_TP_CD   = SCTD.SVC_COV_TMPL_TP_CD
+                AND SCTD.EZCANCELFLAG         = '0'
+                AND SCTD.SVC_COV_DTL_VAL_TXT  = 'Y'
+                AND SCTD.SVC_COV_FEAT_CD      = #svcCovFeatSplyIncl#
+            ) SI
+        WHERE
+            SI.ROW_NUM = 1
+    </statement>
+
+    <statement id="getSupplyMdseInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+             DMS.CUST_STK_QTY              AS CUST_STK_QTY
+            ,MDS.IMG_SPLY_YIELD_CNT        AS STD_YIELD_CNT
+            ,NVL(DMS.SPLY_TOL_PCT,5)       AS SPLY_TOL_PCT
+            ,MDS.THIS_MTH_TOT_STD_COST_AMT AS THIS_MTH_TOT_STD_COST_AMT
+        FROM
+             SVC_CONFIG_MSTR  SCM
+            ,DS_MDL_SPLY_RELN DMS
+            ,MDSE             MDS
+        WHERE
+                SCM.GLBL_CMPY_CD         = #glblCmpyCd#
+            AND SCM.SVC_MACH_MSTR_PK     = #svcMachMstrPk#
+            AND SCM.GLBL_CMPY_CD         = DMS.GLBL_CMPY_CD
+            AND SCM.MDL_ID               = DMS.MDL_ID
+            AND DMS.GLBL_CMPY_CD         = MDS.GLBL_CMPY_CD
+            AND DMS.MDSE_CD              = MDS.MDSE_CD
+            AND MDS.IMG_SPLY_COLOR_TP_CD = #imgSplyColorTpCd#
+            AND SCM.EZCANCELFLAG         = '0'
+            AND DMS.EZCANCELFLAG         = '0'
+            AND MDS.EZCANCELFLAG         = '0'
+        UNION 
+        SELECT
+             DMS.CUST_STK_QTY              AS CUST_STK_QTY
+            ,MDS.IMG_SPLY_YIELD_CNT        AS STD_YIELD_CNT
+            ,NVL(DMS.SPLY_TOL_PCT,5)       AS SPLY_TOL_PCT
+            ,MDS.THIS_MTH_TOT_STD_COST_AMT AS THIS_MTH_TOT_STD_COST_AMT
+        FROM
+             SVC_CONFIG_MSTR  SCM
+            ,DS_MDL_SPLY_RELN DMS
+            ,MDSE             MDS
+            ,ORD_TAKE_MDSE    OTM
+        WHERE
+                SCM.GLBL_CMPY_CD         = #glblCmpyCd#
+            AND SCM.SVC_MACH_MSTR_PK     = #svcMachMstrPk#
+            AND SCM.GLBL_CMPY_CD         = DMS.GLBL_CMPY_CD
+            AND SCM.MDL_ID               = DMS.MDL_ID
+            AND DMS.GLBL_CMPY_CD         = OTM.GLBL_CMPY_CD
+            AND DMS.ORD_TAKE_MDSE_CD     = OTM.ORD_TAKE_MDSE_CD
+            AND OTM.GLBL_CMPY_CD         = MDS.GLBL_CMPY_CD
+            AND OTM.MDSE_CD              = MDS.MDSE_CD
+            AND MDS.IMG_SPLY_COLOR_TP_CD = #imgSplyColorTpCd#
+            AND SCM.EZCANCELFLAG         = '0'
+            AND DMS.EZCANCELFLAG         = '0'
+            AND MDS.EZCANCELFLAG         = '0'
+            AND OTM.EZCANCELFLAG         = '0'
+    </statement>
+
+    <!-- START 2018/09/07 K.Kojima [QC#28130,ADD] -->
+    <statement id="getLogicalRemoveSvcSplyMachAllw" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            SSMA.SVC_SPLY_MACH_ALLW_PK
+        FROM
+            SVC_SPLY_MACH_ALLW SSMA
+        WHERE
+                SSMA.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND SSMA.PROC_DT          = #procDt#
+            AND SSMA.DS_CONTR_PK      = #dsContrPk#
+            AND SSMA.SVC_MACH_MSTR_PK = #svcMachMstrPk#
+            AND SSMA.EZCANCELFLAG     = '0'
+    </statement>
+    <!-- END 2018/09/07 K.Kojima [QC#28130,ADD] -->
+
+    <statement id="getSvcSplyMachAllwPk" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            SVC_SPLY_MACH_ALLW_PK
+        FROM
+            SVC_SPLY_MACH_ALLW
+        WHERE
+                GLBL_CMPY_CD     = #glblCmpyCd#
+            AND DS_CONTR_PK      = #dsContrPk#
+            AND SVC_MACH_MSTR_PK = #svcMachMstrPk#
+            AND FRZ_FLG          = #flgN#
+            AND EZCANCELFLAG     = '0'
+            <!-- START 2018/09/07 K.Kojima [QC#28130,DEL] -->
+            <!-- AND ROWNUM           = 1 -->
+            <!-- END 2018/09/07 K.Kojima [QC#28130,DEL] -->
+    </statement>
+
+    <statement id="getStartMtrInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+             SUM(NVL(SPMR.READ_MTR_CNT, 0))     AS READ_MTR_CNT
+            ,MIN(SPMR.MTR_READ_DT)              AS MTR_READ_DT
+            ,MIN(SPMR.SVC_PHYS_MTR_READ_GRP_SQ) AS SVC_PHYS_MTR_READ_GRP_SQ
+        FROM
+             SVC_PHYS_MTR_READ  SPMR
+            ,SVC_PHYS_MTR       SPM
+            ,MTR_LB             ML
+        WHERE
+                SPMR.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND SPMR.DS_CONTR_DTL_PK = #dsContrDtlPk#
+            AND SPMR.GLBL_CMPY_CD    = SPM.GLBL_CMPY_CD
+            AND SPMR.SVC_PHYS_MTR_PK = SPM.SVC_PHYS_MTR_PK
+            AND SPM.GLBL_CMPY_CD     = ML.GLBL_CMPY_CD
+            AND SPM.MDL_MTR_LB_CD    = ML.MTR_LB_CD
+            <isNotNull property="bwMtrflgY">
+            AND ML.BW_MTR_FLG        = #bwMtrflgY#
+            </isNotNull>
+            <isNotNull property="colorMtrflgY">
+            AND ML.COLOR_MTR_FLG     = #colorMtrflgY#
+            </isNotNull>
+            AND SPMR.EZCANCELFLAG    = '0'
+            AND SPM.EZCANCELFLAG     = '0'
+            AND ML.EZCANCELFLAG      = '0'
+        GROUP BY
+             SPMR.DS_CONTR_DTL_PK
+    </statement>
+
+    <statement id="getBllgMtrList" parameterClass="Map" resultClass="Map">
+        SELECT
+             SUM(NVL(SPMR.READ_MTR_CNT, 0)) AS READ_MTR_CNT
+            ,MIN(SPMR.MTR_READ_DT)          AS MTR_READ_DT
+            ,DCB.BLLG_SCHD_THRU_DT          AS BLLG_SCHD_THRU_DT
+            ,DCB.SVC_PHYS_MTR_READ_GRP_SQ
+        FROM
+            (
+                SELECT
+                     DCB2.SVC_PHYS_MTR_READ_GRP_SQ
+                    ,DCB2.BLLG_SCHD_THRU_DT
+                FROM
+                    (
+                        SELECT
+                             DCB0.SVC_PHYS_MTR_READ_GRP_SQ
+                            ,MIN(DCB0.BLLG_SCHD_THRU_DT)     AS BLLG_SCHD_THRU_DT
+                        FROM
+                            (
+                                SELECT
+                                     DCB1.SVC_PHYS_MTR_READ_GRP_SQ   AS SVC_PHYS_MTR_READ_GRP_SQ
+                                    ,DCB1.BLLG_SCHD_THRU_DT     AS BLLG_SCHD_THRU_DT
+                                    ,RANK() OVER(PARTITION BY DCB1.BLLG_SCHD_THRU_DT ORDER BY DCB1.DS_BLLG_SCHD_TP_CD DESC) AS RUNK
+                                FROM
+                                    DS_CONTR_BLLG_SCHD DCB1
+                                WHERE
+                                        DCB1.GLBL_CMPY_CD             = #glblCmpyCd#
+                                    AND DCB1.DS_CONTR_DTL_PK          = #dsContrDtlPk#
+                                    AND DCB1.USG_CHRG_FLG             = #flgY#
+                                    AND DCB1.MTR_ENTRY_CPLT_FLG       = #flgY#
+                                    AND DCB1.SVC_PHYS_MTR_READ_GRP_SQ IS NOT NULL
+                                    AND DCB1.BLLG_SCHD_THRU_DT        IS NOT NULL
+                                    AND DCB1.EZCANCELFLAG             = '0'
+                            ) DCB0
+                        WHERE
+                            DCB0.RUNK = 1
+                        GROUP BY
+                            DCB0.SVC_PHYS_MTR_READ_GRP_SQ
+                        ORDER BY
+                            BLLG_SCHD_THRU_DT DESC
+                     ) DCB2
+                WHERE
+                    ROWNUM &lt;= #getNum#
+            )                  DCB
+           ,SVC_PHYS_MTR_READ  SPMR
+           ,SVC_PHYS_MTR       SPM
+           ,MTR_LB             ML
+        WHERE
+                SPMR.GLBL_CMPY_CD             = #glblCmpyCd#
+            AND SPMR.SVC_PHYS_MTR_READ_GRP_SQ = DCB.SVC_PHYS_MTR_READ_GRP_SQ
+            AND SPMR.GLBL_CMPY_CD             = SPM.GLBL_CMPY_CD
+            AND SPMR.SVC_PHYS_MTR_PK          = SPM.SVC_PHYS_MTR_PK
+            AND SPM.GLBL_CMPY_CD              = ML.GLBL_CMPY_CD
+            AND SPM.MDL_MTR_LB_CD             = ML.MTR_LB_CD
+            <isNotNull property="bwMtrflgY">
+            AND ML.BW_MTR_FLG                 = #bwMtrflgY#
+            </isNotNull>
+            <isNotNull property="colorMtrflgY">
+            AND ML.COLOR_MTR_FLG              = #colorMtrflgY#
+            </isNotNull>
+            AND SPMR.EZCANCELFLAG             = '0'
+            AND SPM.EZCANCELFLAG              = '0'
+            AND ML.EZCANCELFLAG               = '0'
+        GROUP BY
+             DCB.SVC_PHYS_MTR_READ_GRP_SQ
+            ,DCB.BLLG_SCHD_THRU_DT
+        ORDER BY
+            BLLG_SCHD_THRU_DT DESC
+    </statement>
+
+    <statement id="getMtrReadInfoList" parameterClass="Map" resultClass="Map">
+        SELECT
+             SPMR.SVC_PHYS_MTR_READ_PK
+            ,SPMR.SVC_PHYS_MTR_PK
+            ,SPMR.MTR_READ_DT
+            ,SPMR.READ_MTR_CNT
+        FROM
+             SVC_PHYS_MTR_READ  SPMR
+            ,SVC_PHYS_MTR       SPM
+            ,MTR_LB             ML
+        WHERE
+                SPMR.GLBL_CMPY_CD             = #glblCmpyCd#
+            AND SPMR.SVC_PHYS_MTR_READ_GRP_SQ = #svcPhysMtrReadGrpSq#
+            AND SPMR.GLBL_CMPY_CD             = SPM.GLBL_CMPY_CD
+            AND SPMR.SVC_PHYS_MTR_PK          = SPM.SVC_PHYS_MTR_PK
+            AND SPM.GLBL_CMPY_CD              = ML.GLBL_CMPY_CD
+            AND SPM.MDL_MTR_LB_CD             = ML.MTR_LB_CD
+            <isNotNull property="bwMtrflgY">
+            AND ML.BW_MTR_FLG                 = #bwMtrflgY#
+            </isNotNull>
+            <isNotNull property="colorMtrflgY">
+            AND ML.COLOR_MTR_FLG              = #colorMtrflgY#
+            </isNotNull>
+            AND SPMR.EZCANCELFLAG             = '0'
+            AND SPM.EZCANCELFLAG              = '0'
+            AND ML.EZCANCELFLAG               = '0'
+        ORDER BY
+             SPMR.SVC_PHYS_MTR_PK
+    </statement>
+
+    <!-- START 2018/09/07 K.Kojima [QC#28130,ADD] -->
+    <statement id="getLogicalRemoveSvcSplyMachUsed" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            SSMU.SVC_SPLY_MACH_USED_PK
+        FROM
+            SVC_SPLY_MACH_USED SSMU
+        WHERE
+                SSMU.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND SSMU.PROC_DT          = #procDt#
+            AND SSMU.DS_CONTR_PK      = #dsContrPk#
+            AND SSMU.SVC_MACH_MSTR_PK = #svcMachMstrPk#
+            AND SSMU.EZCANCELFLAG     = '0'
+    </statement>
+    <!-- END 2018/09/07 K.Kojima [QC#28130,ADD] -->
+
+    <statement id="getSvcSplyMachUsedPk" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            SVC_SPLY_MACH_USED_PK
+        FROM
+            SVC_SPLY_MACH_USED
+        WHERE
+                GLBL_CMPY_CD     = #glblCmpyCd#
+            AND DS_CONTR_PK      = #dsContrPk#
+            AND SVC_MACH_MSTR_PK = #svcMachMstrPk#
+            AND FRZ_FLG          = #flgN#
+            AND EZCANCELFLAG     = '0'
+            <!-- START 2018/09/07 K.Kojima [QC#28130,DEL] -->
+            <!-- AND ROWNUM           = 1 -->
+            <!-- END 2018/09/07 K.Kojima [QC#28130,DEL] -->
+    </statement>
+
+    <statement id="getUsedQty" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            NVL(SUM(SHIP_QTY),0) AS SHIP_QTY
+        FROM
+            (
+                SELECT
+                    DATD.SHIP_QTY AS SHIP_QTY
+                FROM
+                     DS_ACPO          DA
+                    ,DS_ACPO_TRGT_DTL DATD
+                    ,MDSE             MDS
+                WHERE
+                     DA.GLBL_CMPY_CD              = #glblCmpyCd#
+                     AND DA.DS_CONTR_DTL_PK       = #dsContrDtlPk#
+                     AND DA.GLBL_CMPY_CD          = DATD.GLBL_CMPY_CD
+                     AND DA.DS_ACPO_NUM           = DATD.DS_ACPO_NUM
+                     AND DATD.GLBL_CMPY_CD        = MDS.GLBL_CMPY_CD
+                     AND DATD.MDSE_CD             = MDS.MDSE_CD
+                     AND MDS.IMG_SPLY_COLOR_TP_CD = #imgSplyColorTpCd#
+                     AND DA.EZCANCELFLAG = '0'
+                     AND DATD.EZCANCELFLAG = '0'
+                     AND MDS.EZCANCELFLAG = '0'
+                UNION
+                SELECT
+                    DATD.SHIP_QTY AS SHIP_QTY
+                FROM
+                     DS_ACPO          DA
+                    ,DS_ACPO_TRGT_DTL DATD
+                    ,ORD_TAKE_MDSE    OTM
+                    ,MDSE             MDS
+                WHERE
+                     DA.GLBL_CMPY_CD              = #glblCmpyCd#
+                     AND DA.DS_CONTR_DTL_PK       = #dsContrDtlPk#
+                     AND DA.GLBL_CMPY_CD          = DATD.GLBL_CMPY_CD
+                     AND DA.DS_ACPO_NUM           = DATD.DS_ACPO_NUM
+                     AND DATD.GLBL_CMPY_CD        = OTM.GLBL_CMPY_CD
+                     AND DATD.MDSE_CD             = OTM.ORD_TAKE_MDSE_CD
+                     AND OTM.GLBL_CMPY_CD         = MDS.GLBL_CMPY_CD
+                     AND OTM.MDSE_CD              = MDS.MDSE_CD
+                     AND MDS.IMG_SPLY_COLOR_TP_CD = #imgSplyColorTpCd#
+                     AND DA.EZCANCELFLAG          = '0'
+                     AND DATD.EZCANCELFLAG        = '0'
+                     AND OTM.EZCANCELFLAG         = '0'
+                     AND MDS.EZCANCELFLAG         = '0'
+            ) TAB
+    </statement>
+
+    <!-- START 2018/09/07 K.Kojima [QC#28130,ADD] -->
+    <statement id="getLogicalRemoveSvcSplyAbuseStage" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            SVC_SPLY_ABUSE_STAGE_PK
+        FROM
+            SVC_SPLY_ABUSE_STAGE
+        WHERE
+                GLBL_CMPY_CD     = #glblCmpyCd#
+            AND PROC_DT          = #procDt#
+            AND DS_CONTR_PK      = #dsContrPk#
+            AND SVC_PGM_MDSE_CD  = #svcPgmMdseCd#
+            AND EZCANCELFLAG     = '0'
+    </statement>
+    <!-- END 2018/09/07 K.Kojima [QC#28130,ADD] -->
+
+    <statement id="getSvcSplyAbuseStagePk" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            SVC_SPLY_ABUSE_STAGE_PK
+        FROM
+            SVC_SPLY_ABUSE_STAGE
+        WHERE
+                GLBL_CMPY_CD     = #glblCmpyCd#
+            AND DS_CONTR_PK      = #dsContrPk#
+            AND SVC_PGM_MDSE_CD  = #svcPgmMdseCd#
+            AND FRZ_FLG          = #flgN#
+            AND EZCANCELFLAG     = '0'
+            <!-- START 2018/09/07 K.Kojima [QC#28130,DEL] -->
+            <!-- AND ROWNUM           = 1 -->
+            <!-- END 2018/09/07 K.Kojima [QC#28130,DEL] -->
+    </statement>
+
+    <statement id="getAllwQtySum" parameterClass="Map" resultClass="Map">
+        SELECT
+             SUM(NVL(BW_ALLW_QTY,0))        AS BW_ALLW_QTY
+            ,SUM(NVL(COLOR_ALLW_QTY,0))     AS COLOR_ALLW_QTY
+            ,SUM(NVL(BW_PRRT_QTY,0))        AS BW_PRRT_QTY
+            ,SUM(NVL(COLOR_PRRT_QTY,0))     AS COLOR_PRRT_QTY
+            ,SUM(NVL(BW_TOT_COST_AMT,0))    AS BW_TOT_COST_AMT
+            ,SUM(NVL(COLOR_TOT_COST_AMT,0)) AS COLOR_TOT_COST_AMT
+        FROM
+            SVC_SPLY_MACH_ALLW
+        WHERE
+                GLBL_CMPY_CD    = #glblCmpyCd#
+            AND DS_CONTR_PK     = #dsContrPk#
+            AND SVC_PGM_MDSE_CD = #svcPgmMdseCd#
+            AND FRZ_FLG         = #flgN#
+            AND EZCANCELFLAG    = '0'
+        GROUP BY
+            DS_CONTR_PK
+    </statement>
+
+    <statement id="getAllwTopOne" parameterClass="Map" resultClass="Map">
+        SELECT
+             SHIP_TO_CUST_ACCT_CD
+            ,MTR_BLLG_CYCLE_CD
+        FROM
+            SVC_SPLY_MACH_ALLW
+        WHERE
+                GLBL_CMPY_CD    = #glblCmpyCd#
+            AND DS_CONTR_PK     = #dsContrPk#
+            AND SVC_PGM_MDSE_CD = #svcPgmMdseCd#
+            AND EZCANCELFLAG    = '0'
+            AND ROWNUM          = 1
+        ORDER BY
+            PROC_DT DESC NULLS LAST
+    </statement>
+
+    <statement id="getUsedQtySum" parameterClass="Map" resultClass="Map">
+        SELECT
+             SUM(NVL(BW_USED_QTY,0))         AS BW_USED_QTY
+            ,SUM(NVL(COLOR_USED_QTY,0))      AS COLOR_USED_QTY
+            ,SUM(NVL(BW_USED_COST_AMT,0))    AS BW_USED_COST_AMT
+            ,SUM(NVL(COLOR_USED_COST_AMT,0)) AS COLOR_USED_COST_AMT
+        FROM
+            SVC_SPLY_MACH_USED
+        WHERE
+                GLBL_CMPY_CD    = #glblCmpyCd#
+            AND DS_CONTR_PK     = #dsContrPk#
+            AND SVC_PGM_MDSE_CD = #svcPgmMdseCd#
+            AND FRZ_FLG         = #flgN#
+            AND EZCANCELFLAG    = '0'
+        GROUP BY
+            DS_CONTR_PK
+    </statement>
+
+    <statement id="getAbuseBckt" parameterClass="Map" resultClass="Map">
+        SELECT
+             ABUSE_BCKT_CD
+            ,ABUSE_FLG
+        FROM
+            ABUSE_BCKT
+        WHERE
+                GLBL_CMPY_CD    = #glblCmpyCd#
+            AND BCKT_FROM_QTY   &lt;= #totalUsedQty#
+            AND BCKT_TO_QTY     &gt;= #totalUsedQty#
+            AND EZCANCELFLAG    = '0'
+    </statement>
+
+    <statement id="getNoMainUnitCnt" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            COUNT(*) AS NO_MAIN_UNIT_CNT
+        FROM
+             DS_CONTR_DTL  DCD
+            ,SVC_MACH_MSTR SMM
+            ,MDSE          MDS
+        WHERE
+            DCD.GLBL_CMPY_CD         = #glblCmpyCd#
+            AND DCD.DS_CONTR_PK      = #dsContrPk#
+            AND DCD.SVC_PGM_MDSE_CD  = #svcPgmMdseCd#
+            AND DCD.GLBL_CMPY_CD     = SMM.GLBL_CMPY_CD
+            AND DCD.SVC_MACH_MSTR_PK = SMM.SVC_MACH_MSTR_PK
+            AND SMM.GLBL_CMPY_CD     = MDS.GLBL_CMPY_CD
+            AND SMM.MDSE_CD          = MDS.MDSE_CD
+            AND MDS.MAIN_MACH_FLG    = #flgN#
+            AND DCD.EZCANCELFLAG     = '0'
+            AND SMM.EZCANCELFLAG     = '0'
+            AND MDS.EZCANCELFLAG     = '0'
+    </statement>
+
+</sqlMap>

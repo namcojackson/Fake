@@ -1,0 +1,1009 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NMAB271001">
+    <statement id="deleteDupCandiLocWrk" parameterClass="Map">
+        DELETE
+            FROM
+                DUP_CANDI_LOC_WRK DCLW
+        WHERE
+            DCLW.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND DCLW.EZCANCELFLAG = '0'
+            AND DCLW.DS_LOC_TP_CD = #dsLocTpCd#
+    </statement>
+
+    <statement id="deleteCandiTrtyLocWrk" parameterClass="Map">
+        DELETE
+            FROM
+                CANDI_TRTY_LOC_WRK CTLW
+        WHERE
+                CTLW.GLBL_CMPY_CD = #glblCmpyCd#
+            AND CTLW.EZCANCELFLAG = '0'
+            AND CTLW.DS_LOC_TP_CD = #dsLocTpCd#
+    </statement>
+
+    <statement id="getDsAcctRvwPros" parameterClass="Map" resultClass="Map">
+        SELECT
+            TO_CHAR(DARP.DS_ACCT_RVW_PROS_PK) DS_ACCT_RVW_PROS_PK_STR
+            ,DARP.DS_ACCT_RVW_PROS_PK
+            ,DARP.RVW_PROS_NUM
+            ,DARP.BEF_LOC_FIRST_LINE_ADDR  <!-- 2017/12/15 QC#22246 Mod-->
+            ,DARP.BEF_SHIP_TO_CTY_ADDR     <!-- 2017/12/15 QC#22246 Mod-->
+            ,DARP.BEF_SHIP_TO_ST_NM        <!-- 2017/12/15 QC#22246 Mod-->
+            ,DARP.BEF_SHIP_TO_POST_CD      <!-- 2017/12/15 QC#22246 Mod-->
+            ,DARP.BEF_CTRY_NM
+            ,DARP.BEF_DS_ACCT_NM
+            ,DARP.BEF_DUNS_NUM
+            ,DARP.AFT_GLN_NUM
+            ,DARP.BEF_DS_CUST_SIC_CD
+        FROM
+            DS_ACCT_RVW_PROS DARP
+        WHERE
+            DARP.GLBL_CMPY_CD           = #glblCmpyCd#
+            AND DARP.EZCANCELFLAG       = '0'
+            AND DARP.PROS_RVW_STS_CD    IS NULL
+        <isNotNull property="mode01Flg">
+            AND DARP.MATCH_ACCT_LOC_NUM IS NULL
+        </isNotNull>
+    </statement>
+
+    <statement id="getDupLoc" parameterClass="Map" resultClass="Map">
+        SELECT
+            PLW.LOC_NUM
+            ,AL.DS_ACCT_NUM
+            ,''       AS RVW_PROS_NUM
+            ,#tableNmDac# AS TBL_NM
+            <!-- START 2018/04/11 Hd.Sugawara [QC#23142-2,ADD] -->
+            ,PLW.FIRST_LINE_ADDR
+            ,PLW.POST_CD
+            ,STC.DS_ACCT_NM
+            <!-- END 2018/04/11 Hd.Sugawara [QC#23142-2,ADD] -->
+        FROM
+            PTY_LOC_WRK PLW
+            ,ACCT_LOC AL
+            ,SELL_TO_CUST STC
+        WHERE
+            PLW.GLBL_CMPY_CD      = #glblCmpyCd#
+            AND PLW.EZCANCELFLAG  = '0'
+            AND PLW.RGTN_STS_CD   = #rgtnStsCd#
+        <isNotNull property="firstLineAddr">
+
+            <isEqual property="exactFlg" compareValue="Y">
+                AND UPPER(PLW.FIRST_LINE_ADDR) = UPPER(#firstLineAddr#)
+            </isEqual>
+            <isEqual property="exactFlg" compareValue="N">
+                AND UPPER(PLW.FIRST_LINE_ADDR) LIKE SUBSTR(UPPER(#firstLineAddr#), 1, #lineSubstrLength#) || '%'
+            </isEqual>
+                AND UPPER(PLW.CTY_ADDR) = UPPER(#ctyAddr#)
+                
+            <isNotNull property="stCd">
+                AND PLW.ST_CD        = #stCd#
+            </isNotNull>
+            <isNull property="stCd">
+                AND PLW.ST_CD        IS NULL
+            </isNull>
+            <!-- QC#23142 mod Start -->
+                <!-- AND PLW.POST_CD      = #postCd# -->
+            <isEqual property="exactFlg" compareValue="Y">
+                AND PLW.POST_CD      = #postCd#
+            </isEqual>
+            <isEqual property="exactFlg" compareValue="N">
+                <!-- START 2018/04/11 Hd.Sugawara [QC#23142-2,MOD] -->
+                <!-- AND SUBSTR(PLW.POST_CD, 1, 5) = SUBSTR(#postCd#, 1, 5) -->
+                AND PLW.POST_CD      LIKE SUBSTR(#postCd#, 1, 5) || '%'
+                <!-- END 2018/04/11 Hd.Sugawara [QC#23142-2,MOD] -->
+            </isEqual>
+            <!-- QC#23142 mod End -->
+                AND PLW.CTRY_CD      = #ctryCd#
+        </isNotNull>
+            
+            <isNotNull property="dunsNum">
+                AND PLW.DUNS_NUM     = #dunsNum#
+            </isNotNull>
+            
+            <isNotNull property="glnNum">
+                AND PLW.GLN_NUM      = #glnNum#
+            </isNotNull>
+        
+            AND PLW.GLBL_CMPY_CD = AL.GLBL_CMPY_CD
+            AND PLW.EZCANCELFLAG = AL.EZCANCELFLAG
+            AND AL.RGTN_STS_CD   = #rgtnStsCd#
+            AND PLW.LOC_NUM      = AL.LOC_NUM
+        
+            AND AL.GLBL_CMPY_CD  = STC.GLBL_CMPY_CD
+            AND AL.EZCANCELFLAG  = STC.EZCANCELFLAG
+            AND STC.DS_ACCT_ACTV_CUST_FLG = 'Y'
+            AND AL.DS_ACCT_NUM   = STC.SELL_TO_CUST_CD
+            <isNotNull property="dsAcctNm">
+            
+                <isEqual property="exactFlg" compareValue="Y">
+                AND UPPER(STC.DS_ACCT_NM) = #dsAcctNm#
+                </isEqual>
+                <isEqual property="exactFlg" compareValue="N">
+                AND UPPER(STC.DS_ACCT_NM) LIKE SUBSTR(UPPER(#dsAcctNm#), 1, #nmSubstrLength#) || '%'
+                </isEqual>
+            
+            </isNotNull>
+        
+        UNION ALL
+        
+        SELECT
+            <!-- START 2018/05/28 QC#25871 ADD -->
+            <isNotNull property="firstLineAddr">
+            /*+ NO_INDEX(PLW PROS_PTY_LOC_WRK_I7) */
+            </isNotNull>
+            <!-- END 2018/05/28 QC#25871 ADD -->
+            PLW.LOC_NUM
+            ,DAP.DS_ACCT_NUM
+            ,''       AS RVW_PROS_NUM
+            ,#tableNmDap# AS TBL_NM
+            <!-- START 2018/04/11 Hd.Sugawara [QC#23142-2,ADD] -->
+            ,PLW.FIRST_LINE_ADDR
+            ,PLW.POST_CD
+            ,DAP.DS_ACCT_NM
+            <!-- END 2018/04/11 Hd.Sugawara [QC#23142-2,ADD] -->
+        FROM
+            PROS_PTY_LOC_WRK PLW
+            ,DS_ACCT_PROS    DAP
+        WHERE
+                PLW.GLBL_CMPY_CD = #glblCmpyCd#
+            AND PLW.EZCANCELFLAG = '0'
+            AND PLW.RGTN_STS_CD  = #rgtnStsCd#
+            <isNotNull property="firstLineAddr">
+            
+                <isEqual property="exactFlg" compareValue="Y">
+                AND UPPER(PLW.FIRST_LINE_ADDR) = UPPER(#firstLineAddr#)
+                </isEqual>
+                <isEqual property="exactFlg" compareValue="N">
+                AND UPPER(PLW.FIRST_LINE_ADDR) LIKE SUBSTR(UPPER(#firstLineAddr#), 1, #lineSubstrLength#) || '%'
+                </isEqual>
+                AND UPPER(PLW.CTY_ADDR) = UPPER(#ctyAddr#)
+                <isNotNull property="stCd">
+                AND PLW.ST_CD        = #stCd#
+                </isNotNull>
+                <isNull property="stCd">
+                AND PLW.ST_CD        IS NULL
+                </isNull>
+            <!-- QC#23142 mod Start -->
+                <!-- AND PLW.POST_CD      = #postCd# -->
+            <isEqual property="exactFlg" compareValue="Y">
+                AND PLW.POST_CD      = #postCd#
+            </isEqual>
+            <isEqual property="exactFlg" compareValue="N">
+                <!-- START 2018/04/11 Hd.Sugawara [QC#23142-2,MOD] -->
+                <!-- AND SUBSTR(PLW.POST_CD, 1, 5) = SUBSTR(#postCd#, 1, 5) -->
+                AND PLW.POST_CD      LIKE SUBSTR(#postCd#, 1, 5) || '%'
+                <!-- END 2018/04/11 Hd.Sugawara [QC#23142-2,MOD] -->
+            </isEqual>
+            <!-- QC#23142 mod End -->
+                AND PLW.CTRY_CD      = #ctryCd#
+            </isNotNull>
+            
+            <isNotNull property="dunsNum">
+                AND PLW.DUNS_NUM     = #dunsNum#
+            </isNotNull>
+            
+            <isNotNull property="glnNum">
+                AND PLW.GLN_NUM      = #glnNum#
+            </isNotNull>
+            
+            AND DAP.LOC_NUM      = PLW.LOC_NUM
+            AND DAP.GLBL_CMPY_CD = #glblCmpyCd#
+            AND DAP.EZCANCELFLAG = '0'
+            <!-- START 2018/05/23 Hd.Sugawara [QC#23142-3,QC#23150-2,MOD] -->
+            <!-- AND DAP.RGTN_STS_CD  = #rgtnStsCd# -->
+            AND DAP.RGTN_STS_CD  = #rgtnStsCd_PC#
+            <!-- END 2018/05/23 Hd.Sugawara [QC#23142-3,QC#23150-2,MOD] -->
+            AND DAP.DS_ACCT_ACTV_CUST_FLG = 'Y'
+
+            <isNotNull property="dsAcctProsPk">
+            AND DAP.DS_ACCT_PROS_PK &lt;&gt; #dsAcctProsPk#
+            </isNotNull>
+            <isNotNull property="dsAcctNm">
+            
+                <isEqual property="exactFlg" compareValue="Y">
+                AND UPPER(DAP.DS_ACCT_NM) = #dsAcctNm#
+                </isEqual>
+                <isEqual property="exactFlg" compareValue="N">
+                AND UPPER(DAP.DS_ACCT_NM) LIKE SUBSTR(UPPER(#dsAcctNm#), 1, #nmSubstrLength#) || '%'
+                </isEqual>
+            
+            </isNotNull>
+        <isEqual property="isMode01" compareValue="Y">
+        UNION ALL
+        
+        SELECT
+            PLW.LOC_NUM
+            ,DAP.DS_ACCT_NUM
+            ,DARP.RVW_PROS_NUM  <!-- QC#23150 add -->
+            ,#tableNmDarp# AS TBL_NM
+            <!-- START 2018/04/11 Hd.Sugawara [QC#23142-2,ADD] -->
+            ,PLW.FIRST_LINE_ADDR
+            ,PLW.POST_CD
+            ,DARP.BEF_DS_ACCT_NM AS DS_ACCT_NM
+            <!-- END 2018/04/11 Hd.Sugawara [QC#23142-2,ADD] -->
+        FROM
+             PROS_PTY_LOC_WRK PLW
+            ,DS_ACCT_PROS     DAP
+            ,DS_ACCT_RVW_PROS DARP
+        WHERE
+                PLW.GLBL_CMPY_CD = #glblCmpyCd#
+            AND PLW.EZCANCELFLAG = '0'
+            AND PLW.RGTN_STS_CD  = #rgtnStsCd#
+            <isNotNull property="firstLineAddr">
+            
+                <isEqual property="exactFlg" compareValue="Y">
+                AND UPPER(PLW.FIRST_LINE_ADDR) = UPPER(#firstLineAddr#)
+                </isEqual>
+                <isEqual property="exactFlg" compareValue="N">
+                AND UPPER(PLW.FIRST_LINE_ADDR) LIKE SUBSTR(UPPER(#firstLineAddr#), 1, #lineSubstrLength#) || '%'
+                </isEqual>
+                AND UPPER(PLW.CTY_ADDR) = UPPER(#ctyAddr#)
+                <isNotNull property="stCd">
+                AND PLW.ST_CD        = #stCd#
+                </isNotNull>
+                <isNull property="stCd">
+                AND PLW.ST_CD        IS NULL
+                </isNull>
+            <!-- QC#23142 mod Start -->
+                <!-- AND PLW.POST_CD      = #postCd# -->
+            <isEqual property="exactFlg" compareValue="Y">
+                AND PLW.POST_CD      = #postCd#
+            </isEqual>
+            <isEqual property="exactFlg" compareValue="N">
+                <!-- START 2018/04/11 Hd.Sugawara [QC#23142-2,MOD] -->
+                <!-- AND SUBSTR(PLW.POST_CD, 1, 5) = SUBSTR(#postCd#, 1, 5) -->
+                AND PLW.POST_CD      LIKE SUBSTR(#postCd#, 1, 5) || '%'
+                <!-- END 2018/04/11 Hd.Sugawara [QC#23142-2,MOD] -->
+            </isEqual>
+            <!-- QC#23142 mod End -->
+                AND PLW.CTRY_CD      = #ctryCd#
+            </isNotNull>
+            
+            <isNotNull property="dunsNum">
+                AND PLW.DUNS_NUM     = #dunsNum#
+            </isNotNull>
+            
+            <isNotNull property="glnNum">
+                AND PLW.GLN_NUM      = #glnNum#
+            </isNotNull>
+          
+            AND DAP.LOC_NUM      = PLW.LOC_NUM
+            AND DAP.GLBL_CMPY_CD = #glblCmpyCd#
+            AND DAP.EZCANCELFLAG = '0'
+            <!-- START 2018/05/23 Hd.Sugawara [QC#23142-3,QC#23150-2,MOD] -->
+            <!-- AND DAP.RGTN_STS_CD  = #rgtnStsCd# -->
+            AND DAP.RGTN_STS_CD  = #rgtnStsCd_PC#
+            <!-- END 2018/05/23 Hd.Sugawara [QC#23142-3,QC#23150-2,MOD] -->
+            AND DARP.GLBL_CMPY_CD  = #glblCmpyCd#
+            AND DARP.EZCANCELFLAG = '0'
+            AND DARP.DS_ACCT_NUM   = DAP.DS_ACCT_NUM
+           
+            AND DARP.PROS_RVW_STS_CD IS NULL
+            AND DARP.DS_ACCT_RVW_PROS_PK &lt;&gt; #dsAcctRvwProsPk#
+            <isNotNull property="dsAcctNm">
+            
+                <isEqual property="exactFlg" compareValue="Y">
+                AND UPPER(DARP.BEF_DS_ACCT_NM) = #dsAcctNm#
+                </isEqual>
+                <isEqual property="exactFlg" compareValue="N">
+                AND UPPER(DARP.BEF_DS_ACCT_NM) LIKE SUBSTR(UPPER(#dsAcctNm#), 1, #nmSubstrLength#) || '%'
+                </isEqual>
+            
+            </isNotNull>
+        </isEqual>
+    </statement>
+    
+    <statement id="getDupLocOnlyRvw" parameterClass="Map" resultClass="Map">
+        SELECT
+            PLW.LOC_NUM
+            ,DAP.DS_ACCT_NUM
+            ,DARP.RVW_PROS_NUM  <!-- QC#23150 add -->
+            ,#tableNmDarp# AS TBL_NM
+        FROM
+            PROS_PTY_LOC_WRK  PLW
+            ,DS_ACCT_PROS     DAP
+            ,DS_ACCT_RVW_PROS DARP
+        WHERE
+                PLW.GLBL_CMPY_CD = #glblCmpyCd#
+            AND PLW.EZCANCELFLAG = '0'
+            AND PLW.RGTN_STS_CD  = #rgtnStsCd#
+            <isNotNull property="firstLineAddr">
+            
+                <isEqual property="exactFlg" compareValue="Y">
+                AND UPPER(PLW.FIRST_LINE_ADDR) = UPPER(#firstLineAddr#)
+                </isEqual>
+                <isEqual property="exactFlg" compareValue="N">
+                AND UPPER(PLW.FIRST_LINE_ADDR) LIKE SUBSTR(UPPER(#firstLineAddr#), 1, #lineSubstrLength#) || '%'
+                </isEqual>
+            </isNotNull>
+            <isNull property="firstLineAddr">
+            AND PLW.FIRST_LINE_ADDR IS NULL
+            </isNull>
+            
+            <isNotNull property="ctyAddr">
+            AND UPPER(PLW.CTY_ADDR) = UPPER(#ctyAddr#)
+            </isNotNull>
+            <isNull property="ctyAddr">
+            AND PLW.CTY_ADDR IS NULL
+            </isNull>
+            
+            <isNotNull property="stCd">
+            AND PLW.ST_CD = #stCd#
+            </isNotNull>
+            <isNull property="stCd">
+            AND PLW.ST_CD IS NULL
+            </isNull>
+            
+            <isNotNull property="postCd">
+            <!-- QC#23142 mod Start -->
+            <!-- AND PLW.POST_CD = #postCd# -->
+                <isEqual property="exactFlg" compareValue="Y">
+                AND PLW.POST_CD = #postCd#
+                </isEqual>
+                <isEqual property="exactFlg" compareValue="N">
+                <!-- START 2018/04/11 Hd.Sugawara [QC#23142-2,MOD] -->
+                <!-- AND SUBSTR(PLW.POST_CD, 1, 5) = SUBSTR(#postCd#, 1, 5) -->
+                AND PLW.POST_CD LIKE SUBSTR(#postCd#, 1, 5) || '%'
+                <!-- END 2018/04/11 Hd.Sugawara [QC#23142-2,MOD] -->
+                </isEqual>
+            <!-- QC#23142 mod End -->
+            </isNotNull>
+            <isNull property="postCd">
+            AND PLW.POST_CD IS NULL
+            </isNull>
+            
+            <isNotNull property="ctryCd">
+            AND PLW.CTRY_CD = #ctryCd#
+            </isNotNull>
+            <isNull property="ctryCd">
+            AND PLW.CTRY_CD IS NULL
+            </isNull>
+            
+
+            AND PLW.GLBL_CMPY_CD = DAP.GLBL_CMPY_CD
+            AND PLW.EZCANCELFLAG = DAP.EZCANCELFLAG
+            <!-- START 2018/05/23 Hd.Sugawara [QC#23142-3,QC#23150-2,MOD] -->
+            <!-- AND DAP.RGTN_STS_CD  = #rgtnStsCd# -->
+            AND DAP.RGTN_STS_CD  = #rgtnStsCd_PC#
+            <!-- END 2018/05/23 Hd.Sugawara [QC#23142-3,QC#23150-2,MOD] -->
+            AND PLW.LOC_NUM      = DAP.LOC_NUM
+        
+            AND DAP.GLBL_CMPY_CD  = DARP.GLBL_CMPY_CD
+            AND DAP.EZCANCELFLAG  = DARP.EZCANCELFLAG
+            AND DAP.DS_ACCT_NUM   = DARP.DS_ACCT_NUM
+            AND DARP.PROS_RVW_STS_CD IS NULL
+            AND DARP.DS_ACCT_RVW_PROS_PK &lt;&gt; #dsAcctRvwProsPk#
+            <isNotNull property="dsAcctNm">
+            
+                <isEqual property="exactFlg" compareValue="Y">
+                AND UPPER(DARP.BEF_DS_ACCT_NM) = #dsAcctNm#
+                </isEqual>
+                <isEqual property="exactFlg" compareValue="N">
+                AND UPPER(DARP.BEF_DS_ACCT_NM) LIKE SUBSTR(UPPER(#dsAcctNm#), 1, #nmSubstrLength#) || '%'
+                </isEqual>
+            
+            </isNotNull>
+            <isNull property="dsAcctNm">
+            AND DARP.BEF_DS_ACCT_NM IS NULL
+            </isNull>
+    </statement>
+    
+    <statement id="getPros" parameterClass="Map" resultClass="Map">
+        SELECT
+            PLW.LOC_NUM
+            ,PLW.FIRST_LINE_ADDR
+            ,PLW.CTY_ADDR
+            ,PLW.ST_CD
+            ,PLW.POST_CD
+            ,PLW.CTRY_CD
+            ,PLW.DUNS_NUM
+            ,PLW.GLN_NUM
+            ,DAP.DS_ACCT_PROS_PK
+            ,DAP.DS_ACCT_NUM
+            ,DAP.DS_ACCT_NM
+        FROM
+             DS_ACCT_PROS        DAP
+            ,PROS_PTY_LOC_WRK    PLW
+        WHERE
+                DAP.GLBL_CMPY_CD = #glblCmpyCd#
+            AND DAP.EZCANCELFLAG = '0'
+            AND DAP.DS_ACCT_ACTV_CUST_FLG ='Y'
+            <!-- START 2018/05/23 Hd.Sugawara [QC#23142-3,QC#23150-2,ADD] -->
+            AND DAP.RGTN_STS_CD  = #rgtnStsCd_PC#
+            <!-- END 2018/05/23 Hd.Sugawara [QC#23142-3,QC#23150-2,ADD] -->
+            AND DAP.GLBL_CMPY_CD = PLW.GLBL_CMPY_CD
+            AND DAP.EZCANCELFLAG = PLW.EZCANCELFLAG
+            AND PLW.RGTN_STS_CD  = #rgtnStsCd#
+            AND DAP.LOC_NUM      = PLW.LOC_NUM
+
+    </statement>
+
+    <!-- Add Start 2018/07/11 QC#25871 -->
+    <statement id="truncateCandiMatchWrk">
+        TRUNCATE TABLE DUP_CANDI_MATCH_WRK
+    </statement>
+    <!-- Add End 2018/07/11 QC#25871 -->
+
+    <!-- Add Start 2018/07/11 QC#25871 -->
+    <statement id="truncateProsCandiMatchWrk">
+        TRUNCATE TABLE DUP_PROS_CANDI_MATCH_WRK
+    </statement>
+    <!-- Add End 2018/07/11 QC#25871 -->
+   
+    <!-- Add Start 2018/07/11 QC#25871 -->
+    <statement id="insertCandiMatchWrk" parameterClass="Map">
+        INSERT 
+        INTO DUP_CANDI_MATCH_WRK(
+          EZTABLEID
+          , EZCANCELFLAG
+          , EZINTIME
+          , EZINTIMEZONE
+          , EZINCOMPANYCODE
+          , EZINUSERID
+          , EZINAPLID
+          , EZUPTIME
+          , EZUPTIMEZONE
+          , EZUPCOMPANYCODE
+          , EZUPUSERID
+          , EZUPAPLID
+          , GLBL_CMPY_CD 
+          , DS_ACCT_NUM
+          , PTY_LOC_PK
+          , LOC_NUM
+          , RVW_PROS_NUM
+          , FIRST_LINE_ADDR
+          , POST_CD
+          , DS_ACCT_NM
+          , PRTL_FIRST_LINE_ADDR
+          , CTY_ADDR
+          , ST_CD
+          , PRTL_POST_CD
+          , CTRY_CD
+          , PRTL_DS_ACCT_NM
+          , DUNS_NUM
+          , GLN_NUM
+        ) 
+        SELECT
+          'DUP_CANDI_MATCH_WRK'
+          , '0'
+          , #nowTime#
+          , #timeZone#
+          , #upCmpyCd#
+          , #userId#
+          , #aplId#
+          , #nowTime#
+          , #timeZone#
+          , #upCmpyCd#
+          , #userId#
+          , #aplId#
+          , #glblCmpyCd#
+          , AL.DS_ACCT_NUM
+          , PLW.PTY_LOC_PK
+          , PLW.LOC_NUM
+          , '' AS RVW_PROS_NUM
+          , UPPER(PLW.FIRST_LINE_ADDR)
+          , UPPER(PLW.POST_CD)
+          , UPPER(STC.DS_ACCT_NM)
+          , SUBSTR(UPPER(PLW.FIRST_LINE_ADDR), 1, #lineSubstrLength#) AS PRTL_FIRST_LINE_ADDR
+          , UPPER(PLW.CTY_ADDR)
+          , PLW.ST_CD
+          , SUBSTR(UPPER(PLW.POST_CD), 1, 5) AS PRTL_POST_CD
+          , PLW.CTRY_CD
+          , SUBSTR(UPPER(STC.DS_ACCT_NM), 1, #nmSubstrLength#) AS PRTL_DS_ACCT_NM
+          , PLW.DUNS_NUM
+          , PLW.GLN_NUM 
+        FROM
+          PTY_LOC_WRK PLW
+          , ACCT_LOC AL
+          , SELL_TO_CUST STC 
+        WHERE
+          PLW.GLBL_CMPY_CD = #glblCmpyCd# 
+          AND PLW.EZCANCELFLAG = '0' 
+          AND PLW.RGTN_STS_CD = #rgtnStsCd# 
+          AND PLW.GLBL_CMPY_CD = AL.GLBL_CMPY_CD 
+          AND PLW.EZCANCELFLAG = AL.EZCANCELFLAG 
+          AND AL.RGTN_STS_CD = #rgtnStsCd#
+          AND PLW.LOC_NUM = AL.LOC_NUM 
+          AND AL.GLBL_CMPY_CD = STC.GLBL_CMPY_CD 
+          AND AL.EZCANCELFLAG = STC.EZCANCELFLAG 
+          AND STC.DS_ACCT_ACTV_CUST_FLG = 'Y' 
+          AND AL.DS_ACCT_NUM = STC.SELL_TO_CUST_CD
+    </statement>
+    <!-- Add End 2018/07/11 QC#25871 -->
+
+    <!-- Add Start 2018/07/11 QC#25871 -->
+    <statement id="insertProsCandiMatchWrk" parameterClass="Map">
+        INSERT 
+        INTO DUP_PROS_CANDI_MATCH_WRK(
+          EZTABLEID
+          , EZCANCELFLAG
+          , EZINTIME
+          , EZINTIMEZONE
+          , EZINCOMPANYCODE
+          , EZINUSERID
+          , EZINAPLID
+          , EZUPTIME
+          , EZUPTIMEZONE
+          , EZUPCOMPANYCODE
+          , EZUPUSERID
+          , EZUPAPLID
+          , GLBL_CMPY_CD
+          , DS_ACCT_NUM
+          , PTY_LOC_PK
+          , LOC_NUM
+          , RVW_PROS_NUM
+          , FIRST_LINE_ADDR
+          , POST_CD
+          , DS_ACCT_NM
+          , PRTL_FIRST_LINE_ADDR
+          , CTY_ADDR
+          , ST_CD
+          , PRTL_POST_CD
+          , CTRY_CD
+          , PRTL_DS_ACCT_NM
+          , DUNS_NUM
+          , GLN_NUM
+        ) 
+        SELECT
+          'DUP_PROS_CANDI_MATCH_WRK'
+          , '0'
+          , #nowTime#
+          , #timeZone#
+          , #upCmpyCd#
+          , #userId#
+          , #aplId#
+          , #nowTime#
+          , #timeZone#
+          , #upCmpyCd#
+          , #userId#
+          , #aplId#
+          , #glblCmpyCd#
+          , DAP.DS_ACCT_NUM
+          , PLW.PTY_LOC_PK
+          , PLW.LOC_NUM
+          , '' AS RVW_PROS_NUM
+          , UPPER(PLW.FIRST_LINE_ADDR)
+          , UPPER(PLW.POST_CD)
+          , UPPER(DAP.DS_ACCT_NM)
+          , SUBSTR(UPPER(PLW.FIRST_LINE_ADDR), 1, #lineSubstrLength#) AS PRTL_FIRST_LINE_ADDR
+          , UPPER(PLW.CTY_ADDR)
+          , PLW.ST_CD
+          , SUBSTR(UPPER(PLW.POST_CD), 1, 5) AS PRTL_POST_CD
+          , PLW.CTRY_CD
+          , SUBSTR(UPPER(DAP.DS_ACCT_NM), 1, #nmSubstrLength#) AS PRTL_DS_ACCT_NM
+          , PLW.DUNS_NUM
+          , PLW.GLN_NUM 
+        FROM
+          PROS_PTY_LOC_WRK PLW
+          , DS_ACCT_PROS DAP 
+        WHERE
+          PLW.GLBL_CMPY_CD = #glblCmpyCd# 
+          AND PLW.EZCANCELFLAG = '0' 
+          AND PLW.RGTN_STS_CD = #rgtnStsCd# 
+          AND DAP.LOC_NUM = PLW.LOC_NUM 
+          AND DAP.GLBL_CMPY_CD = #glblCmpyCd# 
+          AND DAP.EZCANCELFLAG = '0' 
+          AND DAP.RGTN_STS_CD = #rgtnStsCd_PC#
+          AND DAP.DS_ACCT_ACTV_CUST_FLG = 'Y'
+    </statement>
+    <!-- Add End 2018/07/11 QC#25871 -->
+
+    <!-- Add Start 2018/07/11 QC#25871 -->
+    <statement id="dupChkAcctLocPros2Pros" parameterClass="Map"  resultClass="Map">
+        <!-- 3.1.PROS 2 PROS  -->
+        SELECT
+            PRTL_FIRST_LINE_ADDR
+          , CTY_ADDR
+          , ST_CD
+          , PRTL_POST_CD
+          , CTRY_CD
+          , PRTL_DS_ACCT_NM
+        FROM
+          (
+            SELECT
+                DMW.PRTL_FIRST_LINE_ADDR
+              , DMW.CTY_ADDR
+              , DMW.ST_CD
+              , DMW.PRTL_POST_CD
+              , DMW.CTRY_CD
+              , DMW.PRTL_DS_ACCT_NM
+              , COUNT(DMW.PRTL_FIRST_LINE_ADDR) CNT
+            FROM
+              DUP_PROS_CANDI_MATCH_WRK DMW
+            WHERE
+              DMW.EZCANCELFLAG='0'
+              AND DMW.GLBL_CMPY_CD = #glblCmpyCd#
+            GROUP BY
+              DMW.PRTL_FIRST_LINE_ADDR
+              , DMW.CTY_ADDR
+              , DMW.ST_CD
+              , DMW.PRTL_POST_CD
+              , DMW.CTRY_CD
+              , DMW.PRTL_DS_ACCT_NM
+          )
+        WHERE
+          CNT &gt;= 2
+    </statement>
+    <!-- Add End 2018/07/11 QC#25871 -->
+
+    <!-- Add Start 2018/07/11 QC#25871 -->
+    <statement id="dupChkAcctLocPros2Cust" parameterClass="Map"  resultClass="Map">
+        <!-- 3.2.PROS 2 CUST -->
+        SELECT
+            PRTL_FIRST_LINE_ADDR
+            , CTY_ADDR
+            , ST_CD
+            , PRTL_POST_CD
+            , CTRY_CD
+            , PRTL_DS_ACCT_NM
+        FROM
+          (
+            SELECT
+                PRTL_FIRST_LINE_ADDR
+              , CTY_ADDR
+              , ST_CD
+              , PRTL_POST_CD
+              , CTRY_CD
+              , PRTL_DS_ACCT_NM
+              , COUNT(PRTL_FIRST_LINE_ADDR) CNT
+            FROM
+              (
+                SELECT
+                    DMW.PRTL_FIRST_LINE_ADDR
+                  , DMW.CTY_ADDR
+                  , DMW.ST_CD
+                  , DMW.PRTL_POST_CD
+                  , DMW.CTRY_CD
+                  , DMW.PRTL_DS_ACCT_NM
+                FROM
+                  DUP_PROS_CANDI_MATCH_WRK DMW
+                WHERE
+                  DMW.EZCANCELFLAG='0'
+                  AND DMW.GLBL_CMPY_CD = #glblCmpyCd#
+                GROUP BY
+                  DMW.PRTL_FIRST_LINE_ADDR
+                  , DMW.CTY_ADDR
+                  , DMW.ST_CD
+                  , DMW.PRTL_POST_CD
+                  , DMW.CTRY_CD
+                  , DMW.PRTL_DS_ACCT_NM
+                UNION ALL
+                SELECT
+                    DMW_P.PRTL_FIRST_LINE_ADDR
+                  , DMW_P.CTY_ADDR
+                  , DMW_P.ST_CD
+                  , DMW_P.PRTL_POST_CD
+                  , DMW_P.CTRY_CD
+                  , DMW_P.PRTL_DS_ACCT_NM
+                FROM
+                  DUP_CANDI_MATCH_WRK DMW_P
+                WHERE
+                  DMW_P.EZCANCELFLAG='0'
+                  AND DMW_P.GLBL_CMPY_CD = #glblCmpyCd#
+                GROUP BY
+                  DMW_P.PRTL_FIRST_LINE_ADDR
+                  , DMW_P.CTY_ADDR
+                  , DMW_P.ST_CD
+                  , DMW_P.PRTL_POST_CD
+                  , DMW_P.CTRY_CD
+                  , DMW_P.PRTL_DS_ACCT_NM
+              )
+            GROUP BY
+              PRTL_FIRST_LINE_ADDR
+              , CTY_ADDR
+              , ST_CD
+              , PRTL_POST_CD
+              , CTRY_CD
+              , PRTL_DS_ACCT_NM
+          )
+        WHERE
+          CNT &gt;= 2
+    </statement>
+    <!-- Add End 2018/07/11 QC#25871 -->
+
+    <!-- Add Start 2018/07/11 QC#25871 -->
+    <statement id="toDupCandiLocWrkForAccNmLoc" parameterClass="Map"  resultClass="Map">
+        <!--3.1.1,3.2.1 FULL CHECK -->
+        WITH A AS (
+          SELECT
+              DMW_P.DS_ACCT_NUM
+              , DMW_P.LOC_NUM
+              , DMW_P.PTY_LOC_PK
+              , #tableNmDap# AS DS_LOC_TP_CD
+              , DMW_P.FIRST_LINE_ADDR
+              , DMW_P.POST_CD
+              , DMW_P.DS_ACCT_NM
+          FROM
+            DUP_PROS_CANDI_MATCH_WRK DMW_P
+          WHERE
+            DMW_P.PRTL_FIRST_LINE_ADDR = #patlFirstLineAddr#
+            AND DMW_P.CTY_ADDR = #ctyAddr#
+            AND DMW_P.ST_CD = #stCd#
+            AND DMW_P.PRTL_POST_CD = #prtlPostCd#
+            AND DMW_P.CTRY_CD = #ctryCd#
+            AND DMW_P.PRTL_DS_ACCT_NM = #prtlDsAcctNm#
+            AND DMW_P.EZCANCELFLAG='0'
+            AND DMW_P.GLBL_CMPY_CD = #glblCmpyCd#
+          <isNotNull property="chkCustomer">
+          UNION ALL
+          SELECT
+              DMW.DS_ACCT_NUM
+              , DMW.LOC_NUM
+              , DMW.PTY_LOC_PK
+              , #tableNmDac# AS DS_LOC_TP_CD
+              , DMW.FIRST_LINE_ADDR
+              , DMW.POST_CD
+              , DMW.DS_ACCT_NM
+          FROM
+            DUP_CANDI_MATCH_WRK DMW
+          WHERE
+            DMW.PRTL_FIRST_LINE_ADDR = #patlFirstLineAddr#
+            AND DMW.CTY_ADDR = #ctyAddr#
+            AND DMW.ST_CD = #stCd#
+            AND DMW.PRTL_POST_CD = #prtlPostCd#
+            AND DMW.CTRY_CD = #ctryCd#
+            AND DMW.PRTL_DS_ACCT_NM = #prtlDsAcctNm#
+            AND DMW.EZCANCELFLAG='0'
+            AND DMW.GLBL_CMPY_CD = #glblCmpyCd#
+          </isNotNull>
+        )
+        SELECT
+            A1.DS_ACCT_NUM
+          , A1.LOC_NUM
+          , A1.DS_LOC_TP_CD
+          , A2.DS_ACCT_NUM AS DUP_CANDI_DS_ACCT_NUM
+          , A2.LOC_NUM AS DUP_CANDI_LOC_NUM
+          , A2.DS_LOC_TP_CD AS DUP_CANDI_LOC_TP_CD
+          , CASE WHEN A1.FIRST_LINE_ADDR = A2.FIRST_LINE_ADDR AND A1.POST_CD = A2.POST_CD AND A1.DS_ACCT_NM = A2.DS_ACCT_NM THEN 'Y'
+            ELSE 'N'
+            END AS NM_ADDR_EXACT_COND_FLG
+        FROM
+          A A1
+          , A A2
+        WHERE
+          (
+          A1.DS_ACCT_NUM &lt;&gt; A2.DS_ACCT_NUM
+            OR A1.PTY_LOC_PK &lt;&gt; A2.PTY_LOC_PK
+            OR A1.LOC_NUM &lt;&gt; A2.LOC_NUM
+          )
+          <isNotNull property="chkCustomer">
+          AND A1.DS_LOC_TP_CD = #tableNmDap#
+          AND A2.DS_LOC_TP_CD = #tableNmDac#
+          </isNotNull>
+    </statement>
+    <!-- Add End 2018/07/11 QC#25871 -->
+
+    <!-- Add Start 2018/07/11 QC#25871 -->
+    <statement id="dupChkDunsNumPros2Pros" parameterClass="Map"  resultClass="Map">
+        <!--4.1.PROS 2 PROS -->
+        SELECT
+            DUNS_NUM
+        FROM
+          (
+            SELECT
+              DMW_P.DUNS_NUM
+              , COUNT(DMW_P.DUNS_NUM) CNT
+            FROM
+              DUP_PROS_CANDI_MATCH_WRK DMW_P
+            WHERE
+              DMW_P.EZCANCELFLAG='0'
+              AND DMW_P.GLBL_CMPY_CD = #glblCmpyCd#
+            GROUP BY
+              DMW_P.DUNS_NUM
+          )
+        WHERE
+          CNT &gt;= 2
+    </statement>
+    <!-- Add End 2018/07/11 QC#25871 -->
+
+    <!-- Add Start 2018/07/11 QC#25871 -->
+    <statement id="dupChkDunsNumPros2Cust" parameterClass="Map"  resultClass="Map">
+        <!--4.2.PROS 2 CUST -->
+        SELECT
+            DUNS_NUM
+        FROM
+          (
+            SELECT
+                DUNS_NUM
+                , COUNT(DUNS_NUM) CNT
+            FROM
+              (
+                SELECT
+                  DMW_P.DUNS_NUM
+                FROM
+                  DUP_PROS_CANDI_MATCH_WRK DMW_P
+                WHERE
+                  DMW_P.EZCANCELFLAG='0'
+                  AND DMW_P.GLBL_CMPY_CD = #glblCmpyCd#
+                GROUP BY
+                  DMW_P.DUNS_NUM
+                UNION ALL
+                SELECT
+                  DMW.DUNS_NUM
+                FROM
+                  DUP_CANDI_MATCH_WRK DMW
+                WHERE
+                  DMW.EZCANCELFLAG='0'
+                  AND DMW.GLBL_CMPY_CD = #glblCmpyCd#
+                GROUP BY
+                  DMW.DUNS_NUM
+              )
+            GROUP BY
+              DUNS_NUM
+          )
+        WHERE
+          CNT &gt;= 2
+    </statement>
+    <!-- Add End 2018/07/11 QC#25871 -->
+
+    <!-- Add Start 2018/07/11 QC#25871 -->
+    <statement id="toDupCandiLocWrkForDunsNum" parameterClass="Map"  resultClass="Map">
+        WITH A AS (
+          SELECT
+              DMW_P.DS_ACCT_NUM
+              , DMW_P.LOC_NUM
+              , DMW_P.PTY_LOC_PK
+              , #tableNmDap# AS DS_LOC_TP_CD
+              , DMW_P.DUNS_NUM
+          FROM
+            DUP_PROS_CANDI_MATCH_WRK DMW_P
+          WHERE
+            DMW_P.DUNS_NUM = #dunsNum#
+            AND DMW_P.EZCANCELFLAG='0'
+            AND DMW_P.GLBL_CMPY_CD = #glblCmpyCd#
+          <isNotNull property="chkCustomer">
+          UNION ALL
+          SELECT
+              DMW.DS_ACCT_NUM
+              , DMW.LOC_NUM
+              , DMW.PTY_LOC_PK
+              , #tableNmDac# AS DS_LOC_TP_CD
+              , DMW.DUNS_NUM
+          FROM
+            DUP_CANDI_MATCH_WRK DMW
+          WHERE
+            DMW.DUNS_NUM = #dunsNum#
+            AND DMW.EZCANCELFLAG='0'
+            AND DMW.GLBL_CMPY_CD = #glblCmpyCd#
+          </isNotNull>
+        )
+        SELECT
+            A1.DS_ACCT_NUM
+          , A1.LOC_NUM
+          , A1.DS_LOC_TP_CD
+          , A2.DS_ACCT_NUM AS DUP_CANDI_DS_ACCT_NUM
+          , A2.LOC_NUM AS DUP_CANDI_LOC_NUM
+          , A2.DS_LOC_TP_CD AS DUP_CANDI_LOC_TP_CD
+        FROM
+          A A1
+          , A A2
+        WHERE
+          (
+          A1.DS_ACCT_NUM &lt;&gt; A2.DS_ACCT_NUM
+            OR A1.PTY_LOC_PK &lt;&gt; A2.PTY_LOC_PK
+            OR A1.LOC_NUM &lt;&gt; A2.LOC_NUM
+          )
+          <isNotNull property="chkCustomer">
+          AND A1.DS_LOC_TP_CD = #tableNmDap#
+          AND A2.DS_LOC_TP_CD = #tableNmDac#
+          </isNotNull>
+    </statement>
+    <!-- Add End 2018/07/11 QC#25871 -->
+
+    <!-- Add Start 2018/07/11 QC#25871 -->
+    <statement id="dupChkGlnNumPros2Pros" parameterClass="Map"  resultClass="Map">
+        <!--5.1.PROS 2 PROS -->
+        SELECT
+            GLN_NUM
+        FROM
+          (
+            SELECT
+              DMW_P.GLN_NUM
+              ,COUNT(DMW_P.GLN_NUM) CNT
+            FROM
+              DUP_PROS_CANDI_MATCH_WRK DMW_P
+            WHERE
+              DMW_P.EZCANCELFLAG='0'
+              AND DMW_P.GLBL_CMPY_CD = #glblCmpyCd#
+            GROUP BY
+              DMW_P.GLN_NUM
+          )
+        WHERE
+          CNT &gt;= 2
+    </statement>
+    <!-- Add End 2018/07/11 QC#25871 -->
+
+    <!-- Add Start 2018/07/11 QC#25871 -->
+    <statement id="dupChkGlnNumPros2Cust" parameterClass="Map"  resultClass="Map">
+        <!--5.2. PROS 2 CUST -->
+        SELECT
+            GLN_NUM
+        FROM
+          (
+            SELECT
+                GLN_NUM
+                , COUNT(GLN_NUM) CNT
+            FROM
+              (
+                SELECT
+                  DMW_P.GLN_NUM
+                FROM
+                  DUP_PROS_CANDI_MATCH_WRK DMW_P
+                WHERE
+                  DMW_P.EZCANCELFLAG='0'
+                  AND DMW_P.GLBL_CMPY_CD = #glblCmpyCd#
+                GROUP BY
+                  DMW_P.GLN_NUM
+                UNION ALL
+                SELECT
+                  DMW.GLN_NUM
+                FROM
+                  DUP_CANDI_MATCH_WRK DMW
+                WHERE
+                  DMW.EZCANCELFLAG='0'
+                  AND DMW.GLBL_CMPY_CD = #glblCmpyCd#
+                GROUP BY
+                  DMW.GLN_NUM
+              )
+            GROUP BY
+              GLN_NUM
+          )
+        WHERE
+          CNT &gt;= 2
+    </statement>
+    <!-- Add End 2018/07/11 QC#25871 -->
+
+    <!-- Add Start 2018/07/11 QC#25871 -->
+    <statement id="toDupCandiLocWrkForGlnNum" parameterClass="Map"  resultClass="Map">
+        WITH A AS (
+          SELECT
+              DMW_P.DS_ACCT_NUM
+              , DMW_P.LOC_NUM
+              , DMW_P.PTY_LOC_PK
+              , #tableNmDap# AS DS_LOC_TP_CD
+              , DMW_P.GLN_NUM
+          FROM
+            DUP_PROS_CANDI_MATCH_WRK DMW_P
+          WHERE
+            DMW_P.GLN_NUM = #glnNum#
+            AND DMW_P.EZCANCELFLAG='0'
+            AND DMW_P.GLBL_CMPY_CD = #glblCmpyCd#
+          <isNotNull property="chkCustomer">
+          UNION ALL
+          SELECT
+              DMW.DS_ACCT_NUM
+              , DMW.LOC_NUM
+              , DMW.PTY_LOC_PK
+              , #tableNmDac# AS DS_LOC_TP_CD
+              , DMW.GLN_NUM
+          FROM
+            DUP_CANDI_MATCH_WRK DMW
+          WHERE
+            DMW.GLN_NUM = #glnNum#
+            AND DMW.EZCANCELFLAG='0'
+            AND DMW.GLBL_CMPY_CD = #glblCmpyCd#
+          </isNotNull>
+        )
+        SELECT
+            A1.DS_ACCT_NUM
+          , A1.LOC_NUM
+          , A1.DS_LOC_TP_CD
+          , A2.DS_ACCT_NUM AS DUP_CANDI_DS_ACCT_NUM
+          , A2.LOC_NUM AS DUP_CANDI_LOC_NUM
+          , A2.DS_LOC_TP_CD AS DUP_CANDI_LOC_TP_CD
+        FROM
+          A A1
+          , A A2
+        WHERE
+          (
+            A1.DS_ACCT_NUM &lt;&gt; A2.DS_ACCT_NUM
+            OR A1.PTY_LOC_PK &lt;&gt; A2.PTY_LOC_PK
+            OR A1.LOC_NUM &lt;&gt; A2.LOC_NUM
+          )
+          <isNotNull property="chkCustomer">
+          AND A1.DS_LOC_TP_CD = #tableNmDap#
+          AND A2.DS_LOC_TP_CD = #tableNmDac#
+          </isNotNull>
+    </statement>
+    <!-- Add End 2018/07/11 QC#25871 -->
+
+</sqlMap>

@@ -1,0 +1,152 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+
+<sqlMap namespace="NSZC052001">
+    <statement id="getContrInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+                A.DS_ACCT_NUM
+               ,B.DS_CONTR_DTL_PK
+               ,B.SVC_MACH_MSTR_PK
+               ,B.CONTR_EFF_FROM_DT
+               ,B.CONTR_EFF_THRU_DT
+               ,CASE
+<!-- START 2017/10/03 U.Kim [QC#21516,MOD] -->
+               <!-- WHEN V.DS_CONTR_CTRL_STS_CD IN -->
+                    WHEN B.DS_CONTR_DTL_STS_CD IN
+<!-- END 2017/10/03 U.Kim [QC#21516,MOD] -->
+                    <iterate property="subContrAvalStsList" var="subContrAvalStsList[]" open="(" close=")" conjunction=",">
+                        #subContrAvalStsList[]#
+                    </iterate>
+                        THEN 'Y'
+                    ELSE 'N'
+                END AS SUB_CONTR_AVAL_FLG
+               ,CASE
+<!-- START 2017/10/03 U.Kim [QC#21516,MOD] -->
+               <!-- WHEN V.DS_CONTR_CTRL_STS_CD IN -->
+                    WHEN B.DS_CONTR_DTL_STS_CD IN
+<!-- END 2017/10/03 U.Kim [QC#21516,MOD] -->
+                    <iterate property="subContrTrmnStsList" var="subContrTrmnStsList[]" open="(" close=")" conjunction=",">
+                        #subContrTrmnStsList[]#
+                    </iterate>
+                        THEN 'Y'
+                    ELSE 'N'
+                END AS SUB_CONTR_TRMN_FLG
+        FROM
+                DS_CONTR            A
+               ,DS_CONTR_DTL        B
+               ,SVC_MACH_MSTR       C
+               ,DS_CONTR_DTL_STS_V  V 
+        WHERE
+                A.GLBL_CMPY_CD      = #glblCmpyCd#
+            AND A.DS_CONTR_NUM      = #dsContrNum#
+            AND A.EZCANCELFLAG      = '0'
+            AND A.GLBL_CMPY_CD      = B.GLBL_CMPY_CD
+            AND A.DS_CONTR_PK       = B.DS_CONTR_PK
+            AND B.EZCANCELFLAG      = '0'
+            AND B.GLBL_CMPY_CD      = C.GLBL_CMPY_CD
+            AND B.SVC_MACH_MSTR_PK  = C.SVC_MACH_MSTR_PK
+            AND C.SER_NUM           = #serNum#
+            AND C.EZCANCELFLAG      = '0'
+            AND B.GLBL_CMPY_CD      = V.GLBL_CMPY_CD
+            AND B.DS_CONTR_DTL_PK   = V.DS_CONTR_DTL_PK
+            AND V.EZCANCELFLAG      = '0'
+            AND ROWNUM              = 1
+    </statement>
+
+    <!-- add start 2017/03/01 CSA QC#17575 -->
+    <statement id="getVndNm" parameterClass="Map" resultClass="String">
+        SELECT
+             PV.PRNT_VND_NM AS PRNT_VND_NM
+        FROM
+             VND            V
+            ,VND_TP_RELN    VTR
+            ,PRNT_VND       PV
+        WHERE
+            V.GLBL_CMPY_CD              = #glblCmpyCd#
+        AND V.VND_CD                    = #vndCd#
+        AND V.RGTN_STS_CD               = #rgtnStsCdIsReadyForOrder#
+        AND NVL(V.EFF_THRU_DT,#slsDt#)  &gt;= #slsDt#
+        AND V.EZCANCELFLAG              = '0'
+        AND V.GLBL_CMPY_CD              = VTR.GLBL_CMPY_CD
+        AND V.VND_CD                    = VTR.VND_CD
+        AND VTR.EZCANCELFLAG            = '0'
+        AND PV.GLBL_CMPY_CD             = V.GLBL_CMPY_CD
+        AND PV.PRNT_VND_PK              = V.PRNT_VND_PK
+        AND (PV.INAC_DT IS NULL
+                OR PV.INAC_DT &gt; #slsDt#)
+        AND PV.EZCANCELFLAG             = '0'
+        AND ROWNUM                      = 1
+    </statement>
+
+    <statement id="getTechMstr" parameterClass="Map" resultClass="String">
+        SELECT
+            TM.TECH_TOC_CD
+        FROM
+             TECH_MSTR TM
+        WHERE
+                TM.GLBL_CMPY_CD                   = #glblCmpyCd#
+            AND TM.TECH_TOC_CD                    = #techTocCd#
+            AND TM.EZCANCELFLAG                   = '0'
+            AND EXISTS(
+                SELECT
+                    1
+                FROM
+                     ORG_FUNC_ASG     OFA
+                    ,TOC              T
+                    ,ORG_FUNC_ROLE_TP OFRT
+                WHERE
+                        OFA.GLBL_CMPY_CD                  = TM.GLBL_CMPY_CD
+                    AND OFA.PSN_CD                        = TM.TECH_TOC_CD
+                    AND OFA.EFF_FROM_DT               &lt;= #slsDt#
+                    AND NVL(OFA.EFF_THRU_DT, #maxDt#) &gt;= #slsDt#
+                    AND OFA.GLBL_CMPY_CD                  = T.GLBL_CMPY_CD
+                    AND OFA.TOC_CD                        = T.TOC_CD
+                    AND T.GLBL_CMPY_CD                    = OFRT.GLBL_CMPY_CD
+                    AND T.ORG_FUNC_ROLE_TP_CD             = OFRT.ORG_FUNC_ROLE_TP_CD
+                    AND OFRT.TECH_MSTR_REQ_FLG            = #flgY#
+                    AND OFRT.ACTV_FLG                     = #flgY#
+                    AND OFA.EZCANCELFLAG                  = '0'
+                    AND T.EZCANCELFLAG                    = '0'
+                    AND OFRT.EZCANCELFLAG                 = '0'
+            )
+    </statement>
+
+    <statement id="get3rdPartyTech" parameterClass="Map" resultClass="String">
+        SELECT
+            SP.PSN_CD
+        FROM
+             VND              V
+            ,DS_CTAC_PSN_RELN DCPR
+            ,S21_PSN          SP
+<!-- START 2018/01/15 U.Kim [QC#22920, ADD] -->
+            ,CTAC_PSN         CP
+            ,CTAC_TP          CT
+<!-- END 2018/01/15 U.Kim [QC#22920, ADD] -->
+        WHERE
+                V.GLBL_CMPY_CD               = #glblCmpyCd#
+            AND V.VND_CD                     = #vndCd#
+            AND V.EZCANCELFLAG               = '0'
+            AND V.GLBL_CMPY_CD               = DCPR.GLBL_CMPY_CD
+            AND V.LOC_NUM                    = DCPR.LOC_NUM
+            AND DCPR.EZCANCELFLAG            = '0'
+<!-- START 2018/01/15 U.Kim [QC#22920, MOD] -->
+<!--        AND DCPR.GLBL_CMPY_CD            = SP.GLBL_CMPY_CD -->
+<!--        AND DCPR.CTAC_PSN_PK             = SP.CTAC_PSN_PK -->
+            AND DCPR.GLBL_CMPY_CD            = CP.GLBL_CMPY_CD
+            AND DCPR.CTAC_PSN_PK             = CP.CTAC_PSN_PK
+            AND CP.EZCANCELFLAG              = '0'
+            AND DCPR.GLBL_CMPY_CD            = CT.GLBL_CMPY_CD
+            AND DCPR.CTAC_TP_CD              = CT.CTAC_TP_CD
+            AND CT.SPLY_IND_FLG              = #splyIndFlg#
+            AND CT.ACTV_FLG                  = #actvFlg#
+            AND CT.EZCANCELFLAG              = '0'
+            AND CP.GLBL_CMPY_CD              = SP.GLBL_CMPY_CD
+            AND CP.CTAC_PSN_PK               = SP.CTAC_PSN_PK
+<!-- END 2018/01/15 U.Kim [QC#22920, MOD] -->
+            AND SP.EZCANCELFLAG              = '0'
+            AND SP.PSN_TP_CD                 &lt;&gt; #psnTpCd#
+            AND SP.PSN_CD                    = #techTocCd#
+            AND SP.EFF_FROM_DT               &lt;= #slsDt#
+            AND NVL(SP.EFF_THRU_DT, #maxDt#) &gt;= #slsDt#
+    </statement>
+    <!-- add end 2017/03/01 CSA QC#17575 -->
+</sqlMap>

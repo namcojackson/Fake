@@ -1,0 +1,164 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NLBB020001">
+    <!-- QC#50528 Update SQL -->
+    <statement id="getPodData" parameterClass="Map" resultClass="Map">
+        SELECT
+             NLB.INTERFACE_ID
+            ,NLB.TRANSACTION_ID
+            ,NLB.SEGMENT_ID
+            ,NLB.UNIT_ID
+            ,NLB.SEQ_NUMBER
+            ,NLB.EDI_CMPY_CD
+            ,NLB.EDI_ACCT_NUM
+            ,NLB.EDI_AFRT_NUM
+            ,NLB.EDI_SHIP_DT_TXT
+            ,CASE
+                WHEN NLB.EDI_CMTE_DT_TXT IS NULL OR NLB.EDI_CMTE_DT_TXT = #dummyDt#
+                    THEN
+                        CASE 
+                            WHEN NLB.EDI_SCAN_DT_TXT IS NULL OR NLB.EDI_SCAN_DT_TXT = #dummyDt# 
+                                THEN #salesDt#
+                            ELSE NLB.EDI_SCAN_DT_TXT
+                        END
+                    ELSE
+                        NLB.EDI_CMTE_DT_TXT
+                END EDI_CMTE_DT_TXT
+            ,NLB.EDI_CMTE_TS
+            ,NLB.EDI_TRK_IND
+            ,NLB.EDI_SHPPR_NM
+            ,NLB.EDI_SHPPR_CMPY_TXT
+            ,NLB.EDI_SHPPR_ADDR
+            ,NLB.EDI_SHPPR_CTY_NM
+            ,NLB.EDI_SHPPR_ST_CD
+            ,NLB.EDI_SHPPR_POST_CD
+            ,NLB.EDI_SHPPR_CTRY_CD
+            ,NLB.EDI_RCPNT_NM
+            ,NLB.EDI_RCPNT_CMPY_TXT
+            ,NLB.EDI_RCPNT_ADDR
+            ,NLB.EDI_RCPNT_CTY_NM
+            ,NLB.EDI_RCPNT_ST_CD
+            ,NLB.EDI_RCPNT_POST_CD
+            ,NLB.EDI_RCPNT_CTRY_CD
+            ,NLB.EDI_SVC_CD
+            ,NLB.EDI_WT_UOM_TXT
+            ,NLB.EDI_WT_PKG_TXT
+            ,NLB.EDI_REF_TXT
+            ,NLB.EDI_CR_REF_TXT
+            ,NLB.EDI_SHPPR_REF_TXT
+            ,NLB.EDI_SCAN_TP_TXT
+            ,NLB.EDI_SCAN_CTY_TXT
+            ,NLB.EDI_SCAN_CTY_ZIP_CD
+            ,NLB.EDI_SCAN_ST_TXT
+            ,CASE 
+                WHEN NLB.EDI_SCAN_DT_TXT IS NULL OR NLB.EDI_SCAN_DT_TXT = #dummyDt# 
+                    THEN #salesDt#
+                    ELSE NLB.EDI_SCAN_DT_TXT
+                END EDI_SCAN_DT_TXT
+            ,NLB.EDI_SCAN_TS
+            ,NLB.EDI_SCAN_STS_TXT
+            ,NLB.EDI_SCAN_ATA_CD
+            ,NLB.EDI_SCAN_CTRY_CD
+            ,NLB.EDI_SIGNA_DELY_TXT
+            ,NLB.EDI_DELY_ADDR
+        FROM
+            NLBI1310_01 NLB
+        WHERE
+            NLB.INTERFACE_ID   = #interfaceId#
+        AND NLB.TRANSACTION_ID = #transactionId#
+        <!-- START 2017/01/16 S.Katsuma [QC#23056,ADD] -->
+        <isEqual property="isPodWrk" compareValue="Y">
+        <!-- START 2018/02/02 T.Hakodate [QC#23921,MOD] -->
+	        <iterate property="ediScanTpTxt" var="elem[]" open=" AND NVL ( NLB.EDI_SCAN_TP_TXT , ' ' ) NOT IN (" close=")" conjunction=",">
+        <!-- START 2018/02/02 T.Hakodate [QC#23921,MOD] -->
+	            #elem[]#
+	        </iterate>
+        </isEqual>
+        <isEqual property="isPodWrk" compareValue="N">
+	        <iterate property="ediScanTpTxt" var="elem[]" open=" AND NLB.EDI_SCAN_TP_TXT IN (" close=")" conjunction=",">
+	            #elem[]#
+	        </iterate>
+        </isEqual>
+        <!-- END 2017/01/16 S.Katsuma [QC#23056,ADD] -->
+        AND NLB.EZCANCELFLAG   = '0'
+        ORDER BY 
+            NLB.EDI_AFRT_NUM
+
+    </statement>
+
+    <!-- START 2017/01/16 S.Katsuma [QC#23056,ADD] -->
+    <statement id="getSoNumByTrackingNum" parameterClass="Map" resultClass="Map">
+        SELECT
+            SOCD.SO_NUM     TRX_HDR_NUM
+           ,SOCD.SO_SLP_NUM TRX_LINE_NUM
+        FROM
+            SHPG_ORD_CONF_DTL SOCD
+        WHERE
+            SOCD.GLBL_CMPY_CD = #glblCmpyCd#
+        AND SOCD.EZCANCELFLAG = '0'
+        AND SOCD.PRO_NUM      = #proNum#
+        AND EXISTS(
+            SELECT
+               1
+            FROM
+                 VND VN
+                ,CARR_TP CT
+            WHERE
+                VN.GLBL_CMPY_CD  = SOCD.GLBL_CMPY_CD
+            AND VN.VND_CD        = SOCD.VND_CD
+            AND VN.GLBL_CMPY_CD  = CT.GLBL_CMPY_CD
+            AND VN.CARR_TP_CD    = CT.CARR_TP_CD
+            AND CT.CARR_TP_CD    = #carrTpCd#
+            AND VN.EZCANCELFLAG  = '0'
+            AND CT.EZCANCELFLAG  = '0'
+        )
+        ORDER BY
+            SOCD.SO_NUM
+           ,SOCD.SO_SLP_NUM
+    </statement>
+
+<!--
+    <statement id="getRWSNumByTrackingNum" parameterClass="Map" resultClass="Map">
+        SELECT
+            RH.RWS_NUM          TRX_HDR_NUM
+           ,RD.RWS_DTL_LINE_NUM TRX_LINE_NUM
+        FROM
+            RWS_HDR RH
+           ,RWS_DTL RD
+        WHERE
+            RH.GLBL_CMPY_CD = #glblCmpyCd#
+        AND RH.EZCANCELFLAG = '0'
+        AND RH.GLBL_CMPY_CD = RD.GLBL_CMPY_CD
+        AND RH.RWS_NUM      = RD.RWS_NUM
+        AND RD.EZCANCELFLAG = '0'
+        AND RH.RWS_REF_NUM IN (
+                SELECT
+                    SOCD.SO_NUM
+                FROM
+                    SHPG_ORD_CONF_DTL SOCD
+                WHERE
+                    SOCD.GLBL_CMPY_CD = #glblCmpyCd#
+                AND SOCD.EZCANCELFLAG = '0'
+                AND SOCD.PRO_NUM      = #proNum#
+                AND EXISTS(
+                    SELECT
+                        1
+                    FROM
+                        VND VN
+                       ,CARR_TP CT
+                    WHERE
+                        VN.GLBL_CMPY_CD  = SOCD.GLBL_CMPY_CD
+                    AND VN.VND_CD        = SOCD.VND_CD
+                    AND VN.GLBL_CMPY_CD  = CT.GLBL_CMPY_CD
+                    AND VN.CARR_TP_CD    = CT.CARR_TP_CD
+                    AND CT.CARR_TP_CD    = #carrTpCd#
+                    AND VN.EZCANCELFLAG  = '0'
+                    AND CT.EZCANCELFLAG  = '0'
+               )
+        )
+        ORDER BY
+            RH.RWS_NUM
+           ,RD.RWS_DTL_LINE_NUM
+    </statement>
+-->
+    <!-- END 2017/01/16 S.Katsuma [QC#23056,ADD] -->
+</sqlMap>

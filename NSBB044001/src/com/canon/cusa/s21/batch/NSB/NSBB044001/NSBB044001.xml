@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NSBB044001">
+    <statement id="getSvcMachMstr" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+             MM.SVC_MACH_MSTR_PK        AS SVC_MACH_MSTR_PK
+        FROM
+             SVC_MACH_MSTR   MM
+        WHERE
+                MM.GLBL_CMPY_CD         = #glblCmpyCd#
+            AND MM.IWR_COND_CD          = #iwrCondNotCommu#
+<!-- START 2017/01/18 K.Kitachi [QC#15818, ADD] -->
+            AND (
+                MM.SVC_MACH_TP_CD &lt;&gt; #svcMachTpIsAcc#
+             OR MM.SVC_MACH_TP_CD IS NULL
+            )
+<!-- END 2017/01/18 K.Kitachi [QC#15818, ADD] -->
+            AND MM.EZCANCELFLAG         = '0'
+            AND NOT EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        SVC_TASK   TA
+                    WHERE
+                            TA.GLBL_CMPY_CD       =  MM.GLBL_CMPY_CD
+                        AND TA.SVC_MACH_MSTR_PK   =  MM.SVC_MACH_MSTR_PK
+                        AND TA.DS_SVC_CALL_TP_CD  =  #dsSvcCallTpSystems#
+                        AND TA.SVC_TASK_STS_CD    IN (#svcTaskStsOpen#, #svcTaskStsInProcess#)
+                        AND TA.EZCANCELFLAG       = '0')
+        ORDER BY
+             MM.SVC_MACH_MSTR_PK        ASC
+    </statement>
+    <statement id="getCtacPsn" parameterClass="Map" resultClass="Map">
+        WITH TG_CTAC_PNT AS (
+            SELECT
+                 A.SVC_MACH_MSTR_PK      AS SVC_MACH_MSTR_PK
+                ,A.SVC_CTAC_TP_CD        AS SVC_CTAC_TP_CD
+                ,B.DS_CTAC_PNT_TP_CD     AS DS_CTAC_PNT_TP_CD
+                ,B.DS_CTAC_PNT_VAL_TXT   AS DS_CTAC_PNT_VAL_TXT
+                ,SUBSTR((C.CTAC_PSN_FIRST_NM || NVL2(C.CTAC_PSN_MID_NM, ' ' || C.CTAC_PSN_MID_NM, '') || ' ' || C.CTAC_PSN_LAST_NM), 1, #length60#)
+                                         AS CTAC_PSN_NM
+            FROM 
+                 SVC_MACH_CTAC_PSN   A
+                ,DS_CTAC_PNT         B
+                ,CTAC_PSN            C
+            WHERE
+                    A.GLBL_CMPY_CD       =  #glblCmpyCd#
+                AND A.EZCANCELFLAG       =  '0'
+                AND A.SVC_MACH_MSTR_PK   =  #svcMachMstrPk#
+                AND A.EFF_FROM_DT        &lt;= #salesDate#
+                AND NVL(A.EFF_THRU_DT, #maxEffThruDt#)
+                                         &gt;= #salesDate#
+                AND A.GLBL_CMPY_CD       =  B.GLBL_CMPY_CD
+                AND A.DS_CTAC_PNT_PK     =  B.DS_CTAC_PNT_PK
+                AND B.EZCANCELFLAG       =  '0'
+                AND B.GLBL_CMPY_CD       = C.GLBL_CMPY_CD
+                AND B.CTAC_PSN_PK        = C.CTAC_PSN_PK
+                AND C.EZCANCELFLAG       = '0'
+            ORDER BY
+                 A.SVC_CTAC_TP_CD        ASC
+                ,B.DS_CTAC_PNT_TP_CD     DESC
+        )
+        SELECT
+             MM.SVC_MACH_MSTR_PK        AS SVC_MACH_MSTR_PK
+            ,MD.FIRST_PROD_CTRL_CD      AS FIRST_PROD_CTRL_CD
+            ,NVL(DELIVERY_TEL.TEL_NUM, NVL(NOT_DELIVERY_TEL.TEL_NUM, #defaultTelNum#))
+                                        AS TEL_NUM
+            ,NVL(DELIVERY_ADDR.EML_ADDR, NVL(NOT_DELIVERY_ADDR.EML_ADDR, #defaultEmlAddr#))
+                                        AS EML_ADDR
+            ,NVL(DELIVERY_TEL.CTAC_PSN_NM, NVL(DELIVERY_ADDR.CTAC_PSN_NM, NVL(NOT_DELIVERY_TEL.CTAC_PSN_NM, NOT_DELIVERY_ADDR.CTAC_PSN_NM)))
+                                        AS CTAC_PSN_NM
+        FROM
+             SVC_MACH_MSTR      MM
+            ,MDSE               MD
+            ,(
+              SELECT
+                   SVC_MACH_MSTR_PK
+                  ,TEL_NUM
+                  ,CTAC_PSN_NM
+              FROM
+                  (
+                  SELECT
+                       TG_CTAC_PNT.SVC_MACH_MSTR_PK      AS SVC_MACH_MSTR_PK
+                      ,TG_CTAC_PNT.DS_CTAC_PNT_VAL_TXT   AS TEL_NUM
+                      ,TG_CTAC_PNT.CTAC_PSN_NM           AS CTAC_PSN_NM
+                  FROM 
+                       TG_CTAC_PNT
+                  WHERE
+                          TG_CTAC_PNT.SVC_MACH_MSTR_PK   =  #svcMachMstrPk#
+                      AND TG_CTAC_PNT.SVC_CTAC_TP_CD     =  #svcCtacTpDelivery#
+                      AND TG_CTAC_PNT.DS_CTAC_PNT_TP_CD  IN (#dsCtacPntTpMobile#, #dsCtacPntTpWork#)
+                  ORDER BY
+                       TG_CTAC_PNT.SVC_CTAC_TP_CD        ASC
+                      ,TG_CTAC_PNT.DS_CTAC_PNT_TP_CD     DESC
+                  )
+              WHERE
+                  ROWNUM = 1
+             ) DELIVERY_TEL
+            ,(
+              SELECT
+                   SVC_MACH_MSTR_PK
+                  ,EML_ADDR
+                  ,CTAC_PSN_NM
+              FROM
+                  (
+                  SELECT
+                       TG_CTAC_PNT.SVC_MACH_MSTR_PK      AS SVC_MACH_MSTR_PK
+                      ,TG_CTAC_PNT.DS_CTAC_PNT_VAL_TXT   AS EML_ADDR
+                      ,TG_CTAC_PNT.CTAC_PSN_NM           AS CTAC_PSN_NM
+                  FROM 
+                       TG_CTAC_PNT
+                  WHERE
+                          TG_CTAC_PNT.SVC_MACH_MSTR_PK   =  #svcMachMstrPk#
+                      AND TG_CTAC_PNT.SVC_CTAC_TP_CD     =  #svcCtacTpDelivery#
+                      AND TG_CTAC_PNT.DS_CTAC_PNT_TP_CD  =  #dsCtacPntTpEMail#
+                  ORDER BY
+                       TG_CTAC_PNT.SVC_CTAC_TP_CD        ASC
+                      ,TG_CTAC_PNT.DS_CTAC_PNT_TP_CD     DESC
+                  )
+              WHERE
+                  ROWNUM = 1
+             ) DELIVERY_ADDR
+            ,(
+              SELECT
+                   SVC_MACH_MSTR_PK
+                  ,TEL_NUM
+                  ,CTAC_PSN_NM
+              FROM
+                  (
+                  SELECT
+                       TG_CTAC_PNT.SVC_MACH_MSTR_PK      AS SVC_MACH_MSTR_PK
+                      ,TG_CTAC_PNT.DS_CTAC_PNT_VAL_TXT   AS TEL_NUM
+                      ,TG_CTAC_PNT.CTAC_PSN_NM           AS CTAC_PSN_NM
+                  FROM 
+                       TG_CTAC_PNT
+                  WHERE
+                          TG_CTAC_PNT.SVC_MACH_MSTR_PK   =  #svcMachMstrPk#
+                      AND TG_CTAC_PNT.SVC_CTAC_TP_CD     &lt;&gt;  #svcCtacTpDelivery#
+                      AND TG_CTAC_PNT.DS_CTAC_PNT_TP_CD  IN (#dsCtacPntTpMobile#, #dsCtacPntTpWork#)
+                  ORDER BY
+                       TG_CTAC_PNT.SVC_CTAC_TP_CD        ASC
+                      ,TG_CTAC_PNT.DS_CTAC_PNT_TP_CD     DESC
+                  )
+              WHERE
+                  ROWNUM = 1
+             ) NOT_DELIVERY_TEL
+            ,(
+              SELECT
+                   SVC_MACH_MSTR_PK
+                  ,EML_ADDR
+                  ,CTAC_PSN_NM
+              FROM
+                  (
+                  SELECT
+                       TG_CTAC_PNT.SVC_MACH_MSTR_PK      AS SVC_MACH_MSTR_PK
+                      ,TG_CTAC_PNT.DS_CTAC_PNT_VAL_TXT   AS EML_ADDR
+                      ,TG_CTAC_PNT.CTAC_PSN_NM           AS CTAC_PSN_NM
+                  FROM 
+                       TG_CTAC_PNT
+                  WHERE
+                          TG_CTAC_PNT.SVC_MACH_MSTR_PK   =  #svcMachMstrPk#
+                      AND TG_CTAC_PNT.SVC_CTAC_TP_CD     &lt;&gt;  #svcCtacTpDelivery#
+                      AND TG_CTAC_PNT.DS_CTAC_PNT_TP_CD  =  #dsCtacPntTpEMail#
+                  ORDER BY
+                       TG_CTAC_PNT.SVC_CTAC_TP_CD        ASC
+                      ,TG_CTAC_PNT.DS_CTAC_PNT_TP_CD     DESC
+                  )
+              WHERE
+                  ROWNUM = 1
+             ) NOT_DELIVERY_ADDR
+        WHERE
+                MM.GLBL_CMPY_CD       =  #glblCmpyCd#
+            AND MM.EZCANCELFLAG       =  '0'
+            AND MM.SVC_MACH_MSTR_PK   =  #svcMachMstrPk#
+            AND MM.GLBL_CMPY_CD       =  MD.GLBL_CMPY_CD
+            AND MM.MDSE_CD            =  MD.MDSE_CD
+            AND MD.EZCANCELFLAG       =  '0'
+            AND MM.SVC_MACH_MSTR_PK   =  DELIVERY_TEL.SVC_MACH_MSTR_PK (+)
+            AND MM.SVC_MACH_MSTR_PK   =  DELIVERY_ADDR.SVC_MACH_MSTR_PK (+)
+            AND MM.SVC_MACH_MSTR_PK   =  NOT_DELIVERY_TEL.SVC_MACH_MSTR_PK (+)
+            AND MM.SVC_MACH_MSTR_PK   =  NOT_DELIVERY_ADDR.SVC_MACH_MSTR_PK (+)
+    </statement>
+</sqlMap>

@@ -1,0 +1,132 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NWBB401001">
+
+    <statement id="getBookedReturn" parameterClass="Map">
+        SELECT
+            DCRD.CPO_ORD_NUM                 AS CPO_ORD_NUM                 -- CPO Order Number
+            , DCRD.DS_ORD_POSN_NUM           AS DS_ORD_POSN_NUM             -- DS Order Position Number
+            , DCRD.RTL_WH_CD                 AS RTL_WH_CD                   -- Retail Warehouse Code
+            , DCRD.DS_CPO_RTRN_LINE_NUM      AS DS_CPO_RTRN_LINE_NUM        -- DS Order Return Line Number
+            , DCRD.DS_CPO_RTRN_LINE_SUB_NUM  AS DS_CPO_RTRN_LINE_SUB_NUM    -- DS Order Return Line Sub Number
+            , DCRD.ORD_QTY                   AS ORD_QTY                     -- Order Quantity
+            , DCRD.SER_NUM                   AS SER_NUM                     -- Serial Number
+            <!-- 2017/09/21 S21_NA#21151 Add Start-->
+            , DCRD.SVC_MACH_MSTR_PK          AS SVC_MACH_MSTR_PK            -- Service Machine Master PK
+            , DCRD.STK_STS_CD                AS STK_STS_CD                  -- Stock Status Code
+            , DCRD.INVTY_LOC_CD              AS INVTY_LOC_CD                -- Inventory Location Code
+            , DCRD.DS_CPO_LINE_NUM           AS DS_CPO_LINE_NUM             -- DS CPO Line Number
+            , DCRD.DS_CPO_LINE_SUB_NUM       AS DS_CPO_LINE_SUB_NUM         -- DS CPO Line Sub number
+            <!-- 2017/09/21 S21_NA#21151 Add End-->
+            <!-- 2018/05/28 S21_NA#25854 Add Start-->
+            , DCRD.SVC_CONFIG_MSTR_PK        AS SVC_CONFIG_MSTR_PK          -- Service Config Master PK
+            <!-- 2018/05/28 S21_NA#25854 Add End-->
+            <!-- 2018/09/13 S21_NA#28182 Add Start-->
+            , AMV.INSTL_BASE_CTRL_FLG        AS INSTL_BASE_CTRL_FLG         -- Install Base Control Flag
+            <!-- 2018/09/13 S21_NA#28182 Add End-->
+            , DCRD.DS_CONTR_NUM              AS DS_CONTR_NUM                -- DS Contract Number <!-- 2019/03/12 S21_NA#30713 Add-->
+            <!-- 2023/12/12 K.Watanabe QC#61300 Add Start -->
+            , DCII.ISTL_BY_SVC_PRVD_PTY_CD   AS ISTL_BY_SVC_PRVD_PTY_CD     -- To Be Deinstalled By
+            <!-- 2023/12/12 K.Watanabe QC#61300 Add End -->
+        FROM
+            CPO                 CP
+            , DS_CPO_RTRN_DTL   DCRD
+            , ALL_MDSE_V        AMV
+            <!-- 2023/12/12 K.Watanabe QC#61300 Add Start -->
+            , DS_CPO_ISTL_INFO  DCII
+            <!-- 2023/12/12 K.Watanabe QC#61300 Add End -->
+        WHERE
+            CP.GLBL_CMPY_CD                     = #glblCmpyCd#     -- GLBL_CMPY_CD
+            AND CP.EZCANCELFLAG                 = '0'
+            AND AMV.GLBL_CMPY_CD                = #glblCmpyCd#     -- GLBL_CMPY_CD
+            AND AMV.EZCANCELFLAG                = '0'
+            AND CP.ORD_HDR_STS_CD               = #ordHdrSts#      -- Validated
+            AND CP.ORD_BOOK_FLG                 = 'Y'
+            AND NOT EXISTS (SELECT '1' FROM HLD a, HLD_PROC_DFN b WHERE
+                    a.CPO_ORD_NUM                = CP.CPO_ORD_NUM
+                    AND a.CPO_DTL_LINE_NUM       IS NULL
+                    AND a.CPO_DTL_LINE_SUB_NUM   IS NULL
+<!-- QC#10908 delete -->
+<!--                AND a.TRX_SRC_TP_CD          = #trxSrcTpCd# -->        -- Whole Sales Return
+                    AND a.REL_FLG                = 'N'
+                    <!-- Add Start 2019/02/25 QC#30483 -->
+                    AND a.GLBL_CMPY_CD           = CP.GLBL_CMPY_CD
+                    AND a.EZCANCELFLAG           = '0'
+                    AND a.GLBL_CMPY_CD           = b.GLBL_CMPY_CD
+                    AND b.EZCANCELFLAG           = '0'
+                    <!-- Add End 2019/02/25 QC#30483 -->
+                    AND a.HLD_RSN_CD             = b.HLD_RSN_CD
+                    AND b.REL_PNT_SO_CRAT_FLG    = 'Y'
+                    AND b.WH_TP_CD               = #whTpCommon#)        -- Common
+            AND DCRD.GLBL_CMPY_CD     = CP.GLBL_CMPY_CD  
+            AND DCRD.CPO_ORD_NUM = CP.CPO_ORD_NUM    
+            AND DCRD.RTRN_LINE_STS_CD = #rtrnLnStsBooked#    -- Booked   
+            AND DCRD.DS_CPO_RTRN_LINE_SUB_NUM <![CDATA[<>]]> #parentSubNum#   
+            AND NOT EXISTS (SELECT '1' FROM DS_CPO_RTRN_DTL a,  
+                    HLD b, HLD_PROC_DFN c WHERE 
+                    a.CPO_ORD_NUM                = DCRD.CPO_ORD_NUM
+                    AND a.DS_ORD_POSN_NUM        = DCRD.DS_ORD_POSN_NUM
+                    AND a.RTRN_LINE_STS_CD       = #rtrnLnStsBooked#    -- Booked
+                    AND a.BASE_CMPT_FLG          = 'Y'
+                    AND a.CPO_ORD_NUM            = b.CPO_ORD_NUM
+                    AND a.DS_CPO_RTRN_LINE_NUM   = b.CPO_DTL_LINE_NUM
+                    AND a.DS_CPO_RTRN_LINE_SUB_NUM = b.CPO_DTL_LINE_SUB_NUM
+                    <!-- Add Start 2019/02/25 QC#30483 -->
+                    AND a.GLBL_CMPY_CD           = DCRD.GLBL_CMPY_CD
+                    AND a.EZCANCELFLAG           = '0'
+                    AND a.GLBL_CMPY_CD           = b.GLBL_CMPY_CD
+                    AND b.EZCANCELFLAG           = '0'
+                    AND b.GLBL_CMPY_CD           = c.GLBL_CMPY_CD
+                    AND c.EZCANCELFLAG           = '0'
+                    <!-- Add End 2019/02/25 QC#30483 -->
+                    AND b.REL_FLG                = 'N'
+                    AND b.TRX_SRC_TP_CD          = #trxSrcTpCd#     -- Whole Sales Return
+                    AND b.HLD_RSN_CD             = c.HLD_RSN_CD
+                    AND c.REL_PNT_SO_CRAT_FLG    = 'Y'
+                    AND c.WH_TP_CD               = #whTpCommon#)    -- Common
+            AND NOT EXISTS (SELECT '1' FROM DS_CPO_RTRN_DTL a
+                     WHERE 
+                    a.CPO_ORD_NUM                = DCRD.CPO_ORD_NUM
+                    <!-- Add Start 2019/02/25 QC#30483 -->
+                    AND a.GLBL_CMPY_CD           = DCRD.GLBL_CMPY_CD
+                    AND a.EZCANCELFLAG           = '0'
+                    <!-- Add End 2019/02/25 QC#30483 -->
+                    AND a.DS_ORD_POSN_NUM        = DCRD.DS_ORD_POSN_NUM
+                    AND a.RTRN_LINE_STS_CD       = #rtrnLnStsEnted#     -- Entered
+                    AND a.BASE_CMPT_FLG          = 'Y')
+            AND NOT EXISTS (SELECT '1' FROM HLD a, HLD_PROC_DFN b WHERE
+                    <!-- Mod Start 2019/02/25 QC#30483 -->
+                    <!-- a.CPO_ORD_NUM                = CP.CPO_ORD_NUM -->
+                    a.CPO_ORD_NUM                = DCRD.CPO_ORD_NUM
+                    <!-- Mod End 2019/02/25 QC#30483 -->
+                    AND a.CPO_DTL_LINE_NUM       = DCRD.DS_CPO_RTRN_LINE_NUM
+                    AND a.CPO_DTL_LINE_SUB_NUM   = DCRD.DS_CPO_RTRN_LINE_SUB_NUM
+                    AND a.TRX_SRC_TP_CD          = #trxSrcTpCd#     -- Whole Sales Return
+                    AND a.REL_FLG                = 'N'
+                    <!-- Add Start 2019/02/25 QC#30483 -->
+                    AND a.GLBL_CMPY_CD           = DCRD.GLBL_CMPY_CD
+                    AND a.EZCANCELFLAG           = '0'
+                    AND a.GLBL_CMPY_CD           = b.GLBL_CMPY_CD
+                    AND b.EZCANCELFLAG           = '0'
+                    <!-- Add End 2019/02/25 QC#30483 -->
+                    AND a.HLD_RSN_CD             = b.HLD_RSN_CD
+                    AND b.REL_PNT_SO_CRAT_FLG    = 'Y'
+                    AND b.WH_TP_CD               = #whTpCommon#)    -- Common
+            AND DCRD.EZCANCELFLAG                = '0'
+            <!-- 2023/12/12 K.Watanabe QC#61300 Add Start -->
+            AND DCRD.GLBL_CMPY_CD         = DCII.GLBL_CMPY_CD (+)
+            AND DCRD.CPO_ORD_NUM          = DCII.CPO_ORD_NUM (+)
+            AND DCRD.DS_CPO_CONFIG_PK     = DCII.DS_CPO_CONFIG_PK (+)
+            AND DCII.EZCANCELFLAG (+)     = '0'
+            <!-- 2023/12/12 K.Watanabe QC#61300 Add End -->
+            AND AMV.GLBL_CMPY_CD          = DCRD.GLBL_CMPY_CD
+            AND AMV.MDSE_CD               = DCRD.MDSE_CD
+            AND AMV.INVTY_CTRL_FLG        = 'Y'
+
+        ORDER BY
+            DCRD.CPO_ORD_NUM
+            ,DCRD.DS_ORD_POSN_NUM
+            ,DCRD.DS_CPO_RTRN_LINE_NUM
+            ,DCRD.DS_CPO_RTRN_LINE_SUB_NUM
+
+    </statement>
+</sqlMap>

@@ -1,0 +1,266 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NWZC218001">
+
+    <statement id="getShpgPln" parameterClass="Map" resultClass="Map">
+        SELECT SP.SHPG_PLN_NUM     SHPG_PLN_NUM
+              ,SP.TRX_HDR_NUM      TRX_HDR_NUM
+              ,SP.TRX_LINE_NUM     TRX_LINE_NUM
+              ,SP.TRX_LINE_SUB_NUM TRX_LINE_SUB_NUM
+              ,SP.SET_SHPG_PLN_NUM SET_SHPG_PLN_NUM
+              ,SP.AVAL_SO_QTY      AVAL_SO_QTY
+              ,SP.AVAL_PO_QTY      AVAL_PO_QTY
+              ,SP.SHPG_STS_CD      SHPG_STS_CD
+              ,SP.ORD_QTY          ORD_QTY
+              ,SP.PO_REQ_FLG       PO_REQ_FLG
+              ,SP.TRX_SRC_TP_CD    TRX_SRC_TP_CD
+              ,SP.SHIP_CPLT_CD     SHIP_CPLT_CD
+              ,M.MDSE_TP_CD        MDSE_TP_CD
+              ,M.INVTY_CTRL_FLG    INVTY_CTRL_FLG
+          FROM SHPG_PLN      SP
+              ,MDSE          M
+         WHERE SP.GLBL_CMPY_CD     =  #glblCmpyCd#
+           AND SP.EZCANCELFLAG     =  '0'
+           AND SP.TRX_HDR_NUM      =  #trxHdrNum#
+           AND SP.TRX_SRC_TP_CD    =  #trxSrcTp010#
+           AND SP.REV_RECOG_FLG    =  'N'
+           AND SP.SO_CLOSE_FLG     =  'N'
+           AND SP.SHPG_STS_CD      IN (#shpgStsCd10#, #shpgStsCd25#)
+           AND M.GLBL_CMPY_CD      =  #glblCmpyCd#
+           AND M.EZCANCELFLAG      =  '0'
+           AND M.MDSE_CD           =  NVL((SELECT OTM.MDSE_CD
+                                             FROM ORD_TAKE_MDSE OTM
+                                            WHERE OTM.GLBL_CMPY_CD     = #glblCmpyCd#
+                                              AND OTM.EZCANCELFLAG     = '0'
+                                              AND OTM.ORD_TAKE_MDSE_CD = SP.MDSE_CD
+                                          ), SP.MDSE_CD)
+           AND M.MDSE_TP_CD        NOT IN (#mdseTpCd2#, #mdseTpCd5#)
+        ORDER BY SP.SHPG_PLN_NUM
+    </statement>
+
+    <statement id="cntHldInSameSC" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+                 COUNT(SP.SHPG_PLN_NUM)
+          FROM
+                 HLD H
+                ,HLD_RSN HR
+                ,HLD_PROC_DFN HPD
+                ,(SELECT
+                        GLBL_CMPY_CD
+                      , TRX_HDR_NUM
+                      , TRX_LINE_NUM
+                      , TRX_LINE_SUB_NUM
+                      , SHPG_PLN_NUM
+                  FROM
+                        SHPG_PLN
+                  WHERE
+                        GLBL_CMPY_CD        = #glblCmpyCd#
+                    AND TRX_HDR_NUM         = #trxHdrNum#
+                    AND SHIP_CPLT_CD        = #shipCpltCd# 
+                    AND TRX_SRC_TP_CD       = #trxSrcTpCd#
+                    AND EZCANCELFLAG        = '0'
+                 ) SP
+         WHERE
+                 H.EZCANCELFLAG             = '0'
+           AND   HPD.EZCANCELFLAG           = '0'
+           AND   H.GLBL_CMPY_CD             = SP.GLBL_CMPY_CD
+           AND   H.REL_FLG                  = 'N'
+           AND   H.GLBL_CMPY_CD             = HR.GLBL_CMPY_CD
+           AND   H.HLD_RSN_CD               = HR.HLD_RSN_CD
+           AND   HR.EZCANCELFLAG            = '0'
+<!-- QC#12234 Del Start
+           AND (
+                    (H.CPO_ORD_NUM          = SP.TRX_HDR_NUM 
+                 AND HR.HLD_LVL_CD          = #hldLvlCd01# )
+               OR   (H.CPO_ORD_NUM          = SP.TRX_HDR_NUM
+                 AND H.CPO_DTL_LINE_NUM     = SP.TRX_LINE_NUM
+                 AND H.CPO_DTL_LINE_SUB_NUM = SP.TRX_LINE_SUB_NUM
+                 AND HR.HLD_LVL_CD          = #hldLvlCd02# )
+               OR   (H.SHPG_PLN_NUM         = SP.SHPG_PLN_NUM
+                 AND HR.HLD_LVL_CD          = #hldLvlCd03# )
+               )
+     QC#12234 Del End -->
+<!-- QC#12234 Add Start -->
+           AND H.CPO_ORD_NUM          = SP.TRX_HDR_NUM 
+           AND (
+                    (HR.HLD_LVL_CD          = #hldLvlCd01# )
+               OR   (HR.HLD_LVL_CD          = #hldLvlCd02#
+                 AND H.CPO_DTL_LINE_NUM     = SP.TRX_LINE_NUM
+                 AND H.CPO_DTL_LINE_SUB_NUM = SP.TRX_LINE_SUB_NUM )
+               OR   (HR.HLD_LVL_CD          = #hldLvlCd03#
+                 AND H.CPO_DTL_LINE_NUM     = SP.TRX_LINE_NUM
+                 AND H.CPO_DTL_LINE_SUB_NUM = SP.TRX_LINE_SUB_NUM 
+                 AND H.SHPG_PLN_NUM         = SP.SHPG_PLN_NUM  )
+               )
+<!-- QC#12234 Add End -->
+           AND   H.GLBL_CMPY_CD             = HPD.GLBL_CMPY_CD
+           AND   H.HLD_RSN_CD               = HPD.HLD_RSN_CD
+           AND   HPD.REL_PNT_SO_CRAT_FLG    = 'Y'
+
+    </statement>
+
+    <statement id="cntShpgPlnInSameSC" parameterClass="Map" resultClass="BigDecimal">
+        SELECT COUNT(SP.SHPG_PLN_NUM)
+          FROM SHPG_PLN SP
+              ,MDSE     M
+         WHERE SP.GLBL_CMPY_CD     = #glblCmpyCd#
+           AND SP.EZCANCELFLAG     = '0'
+           AND SP.TRX_HDR_NUM      = #trxHdrNum#
+           AND SP.SHIP_CPLT_CD     = #shipCpltCd#
+           AND SP.SHPG_STS_CD      = #shpgStsCd10#
+           AND M.MDSE_CD           = NVL((SELECT OTM.MDSE_CD
+                                            FROM ORD_TAKE_MDSE OTM
+                                           WHERE OTM.GLBL_CMPY_CD     = #glblCmpyCd#
+                                             AND OTM.EZCANCELFLAG     = '0'
+                                             AND OTM.ORD_TAKE_MDSE_CD = SP.MDSE_CD
+                                        ), SP.MDSE_CD)
+           AND M.GLBL_CMPY_CD      = #glblCmpyCd#
+           AND M.EZCANCELFLAG      = '0'
+           AND M.INVTY_CTRL_FLG    = 'Y'
+    </statement>
+
+    <statement id="cntHldInSameSet" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+                COUNT(SP.SHPG_PLN_NUM)
+          FROM
+                 HLD H
+                ,HLD_RSN HR
+                ,HLD_PROC_DFN HPD
+                ,(SELECT
+                         GLBL_CMPY_CD
+                       , TRX_HDR_NUM
+                       , TRX_LINE_NUM
+                       , TRX_LINE_SUB_NUM
+                       , SHPG_PLN_NUM
+                   FROM
+                         SHPG_PLN
+                   WHERE
+                         GLBL_CMPY_CD  = #glblCmpyCd#
+                     AND TRX_HDR_NUM   = #trxHdrNum#
+                     AND TRX_LINE_NUM  = #trxLineNum#
+                     AND TRX_SRC_TP_CD = #trxSrcTpCd#
+                     AND EZCANCELFLAG  = '0'
+                     AND (
+                             SET_SHPG_PLN_NUM  = #setShpgPlnNum#
+                             OR
+                             SHPG_PLN_NUM      = #setShpgPlnNum#
+                         )
+                  ) SP
+         WHERE
+                 H.EZCANCELFLAG             = '0'
+           AND   HPD.EZCANCELFLAG           = '0'
+           AND   H.GLBL_CMPY_CD             = SP.GLBL_CMPY_CD
+           AND   H.REL_FLG                  = 'N'
+           AND   H.GLBL_CMPY_CD             = HR.GLBL_CMPY_CD
+           AND   H.HLD_RSN_CD               = HR.HLD_RSN_CD
+           AND   HR.EZCANCELFLAG            = '0'
+<!-- QC#12234 Del Start
+           AND (
+                    (H.CPO_ORD_NUM          = SP.TRX_HDR_NUM 
+                 AND HR.HLD_LVL_CD          = #hldLvlCd01# )
+               OR   (H.CPO_ORD_NUM          = SP.TRX_HDR_NUM
+                 AND H.CPO_DTL_LINE_NUM     = SP.TRX_LINE_NUM
+                 AND H.CPO_DTL_LINE_SUB_NUM = SP.TRX_LINE_SUB_NUM
+                 AND HR.HLD_LVL_CD          = #hldLvlCd02# )
+               OR   (H.SHPG_PLN_NUM         = SP.SHPG_PLN_NUM
+                 AND HR.HLD_LVL_CD          = #hldLvlCd03# )
+               )
+     QC#12234 Del End -->
+<!-- QC#12234 Add Start -->
+           AND H.CPO_ORD_NUM          = SP.TRX_HDR_NUM 
+           AND (
+                    (HR.HLD_LVL_CD          = #hldLvlCd01# )
+               OR   (HR.HLD_LVL_CD          = #hldLvlCd02#
+                 AND H.CPO_DTL_LINE_NUM     = SP.TRX_LINE_NUM
+                 AND H.CPO_DTL_LINE_SUB_NUM = SP.TRX_LINE_SUB_NUM
+                 AND H.TRX_SRC_TP_CD        &lt;&gt; #trxSrcTp#  )  <!-- QC#11306 Add-->
+               OR   (HR.HLD_LVL_CD          = #hldLvlCd03#
+                 AND H.CPO_DTL_LINE_NUM     = SP.TRX_LINE_NUM
+                 AND H.CPO_DTL_LINE_SUB_NUM = SP.TRX_LINE_SUB_NUM 
+                 AND H.SHPG_PLN_NUM         = SP.SHPG_PLN_NUM  )
+               )
+<!-- QC#12234 Add End -->
+           AND   H.GLBL_CMPY_CD             = HPD.GLBL_CMPY_CD
+           AND   H.HLD_RSN_CD               = HPD.HLD_RSN_CD
+           AND   HPD.REL_PNT_SO_CRAT_FLG    = 'Y'
+    </statement>
+
+    <statement id="cntShpgPlnInSameSet" parameterClass="Map" resultClass="BigDecimal">
+        SELECT COUNT(SP.SHPG_PLN_NUM)
+          FROM SHPG_PLN SP
+              ,MDSE     M
+         WHERE SP.GLBL_CMPY_CD     = #glblCmpyCd#
+           AND SP.EZCANCELFLAG     = '0'
+           AND SP.SET_SHPG_PLN_NUM = #setShpgPlnNum#
+           AND SP.SHPG_STS_CD      = #shpgStsCd10#
+           AND M.MDSE_CD           = NVL((SELECT OTM.MDSE_CD
+                                            FROM ORD_TAKE_MDSE OTM
+                                           WHERE OTM.GLBL_CMPY_CD     = #glblCmpyCd#
+                                             AND OTM.EZCANCELFLAG     = '0'
+                                             AND OTM.ORD_TAKE_MDSE_CD = SP.MDSE_CD
+                                        ), SP.MDSE_CD)
+           AND M.GLBL_CMPY_CD      = #glblCmpyCd#
+           AND M.EZCANCELFLAG      = '0'
+           AND M.INVTY_CTRL_FLG    = 'Y'
+    </statement>
+
+    <statement id="cntHldRg" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+                COUNT(SP.SHPG_PLN_NUM)
+          FROM
+                 HLD H
+                ,HLD_RSN HR
+                ,HLD_PROC_DFN HPD
+                ,(SELECT
+                         GLBL_CMPY_CD
+                       , TRX_HDR_NUM
+                       , TRX_LINE_NUM
+                       , TRX_LINE_SUB_NUM
+                       , SHPG_PLN_NUM
+                   FROM
+                         SHPG_PLN
+                   WHERE
+                         GLBL_CMPY_CD       = #glblCmpyCd#
+                     AND TRX_HDR_NUM        = #trxHdrNum#
+                     AND TRX_LINE_NUM       = #trxLineNum#
+                     AND TRX_LINE_SUB_NUM   = #trxLineSubNum#
+                     AND TRX_SRC_TP_CD      = #trxSrcTpCd#
+                  ) SP
+         WHERE
+                 H.EZCANCELFLAG             = '0'
+           AND   HPD.EZCANCELFLAG           = '0'
+           AND   H.GLBL_CMPY_CD             = SP.GLBL_CMPY_CD
+           AND   H.REL_FLG                  = 'N'
+           AND   H.GLBL_CMPY_CD             = HR.GLBL_CMPY_CD
+           AND   H.HLD_RSN_CD               = HR.HLD_RSN_CD
+           AND   HR.EZCANCELFLAG            = '0'
+<!-- QC#12234 Del Start
+           AND (
+                    (H.CPO_ORD_NUM          = SP.TRX_HDR_NUM 
+                 AND HR.HLD_LVL_CD          = #hldLvlCd01# )
+               OR   (H.CPO_ORD_NUM          = SP.TRX_HDR_NUM
+                 AND H.CPO_DTL_LINE_NUM     = SP.TRX_LINE_NUM
+                 AND H.CPO_DTL_LINE_SUB_NUM = SP.TRX_LINE_SUB_NUM
+                 AND HR.HLD_LVL_CD          = #hldLvlCd02# )
+               OR   (H.SHPG_PLN_NUM         = SP.SHPG_PLN_NUM
+                 AND HR.HLD_LVL_CD          = #hldLvlCd03# )
+               )
+     QC#12234 Del End -->
+<!-- QC#12234 Add Start -->
+           AND H.CPO_ORD_NUM          = SP.TRX_HDR_NUM 
+           AND (
+                    (HR.HLD_LVL_CD          = #hldLvlCd01# )
+               OR   (HR.HLD_LVL_CD          = #hldLvlCd02#
+                 AND H.CPO_DTL_LINE_NUM     = SP.TRX_LINE_NUM
+                 AND H.CPO_DTL_LINE_SUB_NUM = SP.TRX_LINE_SUB_NUM 
+                 AND ( H.TRX_SRC_TP_CD IS NULL OR H.TRX_SRC_TP_CD &lt;&gt; #trxSrcTp# )) <!-- QC#11306 Add-->
+               OR   (HR.HLD_LVL_CD          = #hldLvlCd03#
+                 AND H.CPO_DTL_LINE_NUM     = SP.TRX_LINE_NUM
+                 AND H.CPO_DTL_LINE_SUB_NUM = SP.TRX_LINE_SUB_NUM 
+                 AND H.SHPG_PLN_NUM         = SP.SHPG_PLN_NUM  )
+               )
+<!-- QC#12234 Add End -->
+           AND   H.GLBL_CMPY_CD             = HPD.GLBL_CMPY_CD
+           AND   H.HLD_RSN_CD               = HPD.HLD_RSN_CD
+           AND   HPD.REL_PNT_SO_CRAT_FLG    = 'Y'
+    </statement>
+</sqlMap>

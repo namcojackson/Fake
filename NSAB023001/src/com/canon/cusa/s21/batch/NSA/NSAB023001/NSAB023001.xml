@@ -1,0 +1,207 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NSAB023001">
+    <statement id="getIFData" parameterClass="Map" resultClass="Map">
+        SELECT
+             A.TRANSACTION_ID
+            ,A.SEGMENT_ID
+            ,A.UNIT_ID
+            ,A.SEQ_NUMBER
+            ,A.UGW_CTRY_CD
+            ,A.UGW_CMPY_CD
+            ,A.CRAT_DT_TM_TS
+            ,B.LOCAL_MTR_RCV_DT_TM_TS
+            ,B.GMT_MTR_RCV_DT_TM_TS
+            ,B.IWR_MDL_NM
+            ,B.SER_NUM
+            ,B.MTR_CNTR_ID
+            ,B.READ_MTR_CNT
+        FROM
+             NSAI0230_01 A
+            ,NSAI0230_02 B
+        WHERE
+                A.INTERFACE_ID   = #interfaceId#
+            AND A.TRANSACTION_ID = #transactionId#
+            AND A.EZCANCELFLAG   = '0'
+            AND A.INTERFACE_ID   = B.INTERFACE_ID
+            AND A.TRANSACTION_ID = B.TRANSACTION_ID
+            AND A.SEGMENT_ID     = B.SEGMENT_ID
+            <!-- del start 2017/11/21 QC#22701 -->
+            <!-- AND A.UNIT_ID        = B.UNIT_ID -->
+            <!-- del end 2017/11/21 QC#22701 -->
+            AND B.EZCANCELFLAG   = '0'
+        <!-- START 2018/03/02 U.Kim [QC#23112, ADD] -->
+        AND EXISTS(
+                SELECT
+                    1
+                FROM
+                     IWR_RGTN_COND IRC
+                    ,SVC_PHYS_MTR  SPM
+                    ,MTR_LB        ML
+                WHERE
+                        IRC.GLBL_CMPY_CD     = #glblCmpyCd#
+                    AND (IRC.CHILD_SER_NUM   = B.SER_NUM
+                        OR IRC.SER_NUM       = B.SER_NUM)
+                    AND IRC.EZCANCELFLAG     = '0'
+                    AND IRC.GLBL_CMPY_CD     = SPM.GLBL_CMPY_CD
+                    AND IRC.SVC_MACH_MSTR_PK = SPM.SVC_MACH_MSTR_PK
+                    AND SPM.EZCANCELFLAG     = '0'
+                    AND SPM.GLBL_CMPY_CD     = ML.GLBL_CMPY_CD
+                    AND SPM.MDL_MTR_LB_CD    = ML.MTR_LB_CD
+                    AND ML.MTR_CNTR_ID       = B.MTR_CNTR_ID
+                    AND ML.EZCANCELFLAG      = '0'
+        )
+        <!-- END 2018/03/02 U.Kim [QC#23112, ADD] -->
+        ORDER BY
+             A.INTERFACE_ID
+            ,A.TRANSACTION_ID
+            ,A.SEGMENT_ID
+            ,A.UNIT_ID
+            ,A.SEQ_NUMBER
+            ,B.SEQ_NUMBER
+    </statement>
+
+    <statement id="getMachInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+             A.IWR_RGTN_COND_PK
+            ,A.SVC_MACH_MSTR_PK
+            ,A.SER_NUM
+            ,A.CHILD_SVC_MACH_MSTR_PK
+            ,A.CHILD_SER_NUM
+            ,B.IWR_COND_CD
+            ,C.POST_CD
+            ,C.CTRY_CD
+        FROM
+             IWR_RGTN_COND A
+            ,SVC_MACH_MSTR B
+            ,SHIP_TO_CUST  C
+        WHERE
+                A.EZCANCELFLAG     = '0'
+            AND A.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND (A.CHILD_SER_NUM   = #serNum#
+                OR A.SER_NUM       = #serNum#)
+            AND A.IWR_RGTN_DT      IS NOT NULL
+            AND A.IWR_DEINS_DT     IS NULL
+            AND B.EZCANCELFLAG     = '0'
+            AND A.GLBL_CMPY_CD     = B.GLBL_CMPY_CD
+            AND A.SVC_MACH_MSTR_PK = B.SVC_MACH_MSTR_PK
+            AND C.EZCANCELFLAG     = '0'
+            AND B.GLBL_CMPY_CD     = C.GLBL_CMPY_CD
+            AND B.CUR_LOC_NUM      = C.SHIP_TO_CUST_CD
+    </statement>
+
+    <statement id="getMtrInfo" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+             A.SVC_PHYS_MTR_PK
+        FROM
+             SVC_PHYS_MTR A
+            ,MTR_LB       B
+        WHERE
+                A.EZCANCELFLAG     = '0'
+            AND A.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND A.SVC_MACH_MSTR_PK = #svcMachMstrPk#
+            AND B.EZCANCELFLAG     = '0'
+            AND A.GLBL_CMPY_CD     = B.GLBL_CMPY_CD
+            AND A.MDL_MTR_LB_CD    = B.MTR_LB_CD
+            AND B.MTR_CNTR_ID      = #mtrCntrId#
+    </statement>
+
+    <statement id="getDsContrDtlPk" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            A.DS_CONTR_DTL_PK
+        FROM
+            DS_CONTR_DTL A
+            ,DS_CONTR_DTL_TP B
+        WHERE
+                A.EZCANCELFLAG        = '0'
+            AND A.GLBL_CMPY_CD        = #glblCmpyCd#
+            AND A.DS_CONTR_DTL_STS_CD &lt;&gt; #dsContrDtlStsCdCanc#
+            AND A.CONTR_EFF_FROM_DT   &lt;= #slsDt#
+            AND (
+                    (A.CONTR_CLO_DT   IS NULL     AND A.CONTR_EFF_THRU_DT &gt;= #slsDt#)
+                OR  (A.CONTR_CLO_DT   IS NOT NULL AND A.CONTR_CLO_DT      &gt;= #slsDt#)
+                )
+            AND A.SVC_MACH_MSTR_PK    = #svcMachMstrPk#
+            AND (
+                    (A.MTR_READ_METH_CD IS NULL)
+                OR  (A.MTR_READ_METH_CD &lt;&gt; #mtrReadMethCd#)
+                )
+            AND B.EZCANCELFLAG       = '0'
+            AND A.GLBL_CMPY_CD       = B.GLBL_CMPY_CD
+            AND A.DS_CONTR_DTL_TP_CD = B.DS_CONTR_DTL_TP_CD
+            AND B.USG_CHRG_FLG       = 'Y'
+    </statement>
+
+    <statement id="getIwrMtrReadHdrWrkPkForDel" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            A.IWR_MTR_READ_HDR_WRK_PK
+        FROM
+            IWR_MTR_READ_HDR_WRK A
+        WHERE
+                A.EZCANCELFLAG = '0'
+            AND A.GLBL_CMPY_CD = #glblCmpyCd#
+            AND NOT EXISTS (
+                SELECT
+                    1
+                FROM
+                    IWR_MTR_READ_DTL_WRK X
+                WHERE
+                        X.EZCANCELFLAG            = '0'
+                    AND A.GLBL_CMPY_CD            = X.GLBL_CMPY_CD
+                    AND A.IWR_MTR_READ_HDR_WRK_PK = X.IWR_MTR_READ_HDR_WRK_PK)
+    </statement>
+
+    <statement id="getIwrMtrReadDtlWrkPkForDel" parameterClass="Map" resultClass="BigDecimal">
+        WITH MTR_READ_HIST AS (
+            SELECT
+                 B.SVC_MACH_MSTR_PK
+                ,B.MTR_READ_DT
+                ,ROW_NUMBER() OVER(PARTITION BY  B.SVC_MACH_MSTR_PK
+                                        ORDER BY B.MTR_READ_DT DESC) AS RANK
+            FROM
+                (SELECT
+                     A.SVC_MACH_MSTR_PK
+                    ,A.MTR_READ_DT
+                FROM
+                    IWR_MTR_READ_DTL_WRK A
+                WHERE
+                        A.EZCANCELFLAG = '0'
+                    AND A.GLBL_CMPY_CD = #glblCmpyCd#
+                GROUP BY
+                     A.SVC_MACH_MSTR_PK
+                    ,A.MTR_READ_DT) B
+        )
+        SELECT
+            C.IWR_MTR_READ_DTL_WRK_PK
+        FROM
+             IWR_MTR_READ_DTL_WRK C
+            ,MTR_READ_HIST        D
+        WHERE
+                C.EZCANCELFLAG     = '0'
+            AND C.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND C.SVC_MACH_MSTR_PK = D.SVC_MACH_MSTR_PK
+            AND C.MTR_READ_DT      = D.MTR_READ_DT
+            AND D.RANK             &gt; #mtrHistCnt#
+    </statement>
+
+    <statement id="getMaxMtrRcvDt" parameterClass="Map" resultClass="Map">
+        SELECT
+             A.IWR_RGTN_COND_PK
+            ,MAX(B.MTR_RCV_DT_TM_TS) AS MTR_RCV_DT_TM_TS
+        FROM
+             IWR_RGTN_COND        A
+            ,IWR_MTR_READ_DTL_WRK B
+        WHERE
+                A.EZCANCELFLAG              = '0'
+            AND A.GLBL_CMPY_CD              = #glblCmpyCd#
+            AND (A.SVC_MACH_MSTR_PK         = #svcMachMstrPk#
+                OR A.CHILD_SVC_MACH_MSTR_PK = #svcMachMstrPk#)
+            AND B.EZCANCELFLAG              = '0'
+            AND A.GLBL_CMPY_CD              = B.GLBL_CMPY_CD
+            AND A.SVC_MACH_MSTR_PK          = B.SVC_MACH_MSTR_PK
+            AND B.IWR_PROC_STS_CD           = #iwrProcStsCdNewRecord#
+        GROUP BY
+            A.IWR_RGTN_COND_PK
+    </statement>
+
+</sqlMap>

@@ -1,0 +1,942 @@
+<sqlMap namespace="NFXC308001Query">
+
+<!-- #################### Type Alias #################### -->
+<typeAlias alias="WrtOffTargetTrxBal"    type="com.canon.cusa.s21.common.NFX.NFXC308001.WrtOffTargetTrxBal"/>
+
+<!-- #################### Statement #################### -->
+    <statement id="getArRcptTrxTpList" parameterClass="Map" resultClass="Map">	
+        SELECT 
+            AR_RCPT_TRX_TP_CD
+          , AR_RCPT_TRX_TP_NM	
+        FROM 
+            AR_RCPT_TRX_TP 
+        WHERE 
+            EZCANCELFLAG        =   '0' 
+        AND GLBL_CMPY_CD        =   #glblCmpyCd#
+        AND AR_RCPT_TRX_TP_CD  IN ($arRcptTrxTpCd$)
+        ORDER BY 
+            AR_RCPT_TRX_TP_SORT_NUM
+    </statement>
+
+	<statement id="getArRcptTpList" parameterClass="Map" resultClass="Map">	
+		SELECT 
+			AR_RCPT_TP_CD
+		,	AR_RCPT_TP_NM
+		FROM 
+			AR_RCPT_TP 
+		WHERE 
+			EZCANCELFLAG = '0' 
+		AND GLBL_CMPY_CD = #glblCmpyCd#
+        AND AR_RCPT_TP_CD  IN ($arRcptTpCd$)
+		ORDER BY 
+			AR_RCPT_TP_SORT_NUM
+	</statement>
+
+	<statement id="getArBankAcctList" parameterClass="Map" resultClass="Map">	
+		SELECT 
+			AR_BANK_ACCT_CD
+		,	AR_BANK_ACCT_NM
+		FROM 
+			AR_BANK_ACCT 
+		WHERE 
+			EZCANCELFLAG = '0' 
+		AND GLBL_CMPY_CD = #glblCmpyCd#
+        AND AR_BANK_ACCT_CD  IN ($arBankAcctCd$)
+	    AND CCY_CD = #ccyCd#
+		ORDER BY 
+			AR_BANK_ACCT_SORT_NUM
+	</statement>
+	
+	<statement id="getWrtOffTargetData" parameterClass="Map" resultMap="result.WrtOffTargetTrxBal">
+	
+	    SELECT ATB.GLBL_CMPY_CD
+	          ,ATB.AR_TRX_BAL_PK
+	          ,ATB.AR_TRX_NUM
+	          ,ATB.AR_TRX_TP_CD
+	          ,ATB.BILL_TO_CUST_CD
+	          ,ATB.SELL_TO_CUST_CD
+	          ,ATB.PAYER_CUST_CD
+	          ,ATB.EZUPTIME
+	          ,ATB.EZUPTIMEZONE
+	          ,ATB.DEAL_ORIG_GRS_AMT
+	          ,ATB.FUNC_ORIG_GRS_AMT
+	          ,ATB.DEAL_APPLY_ADJ_RSVD_AMT
+	          ,ATB.DEAL_RMNG_BAL_GRS_AMT
+	          ,ATB.FUNC_RMNG_BAL_GRS_AMT
+	          ,ATB.DEAL_CCY_CD
+	          ,ATB.FUNC_CCY_CD
+	          ,ATB.BILL_TO_CUST_ACCT_CD
+	          ,ATB.AR_TRX_DT
+	          ,ATB.INV_DUE_DT
+        <!--  ,DACP.CR_MGR_PSN_CD -->
+	          ,ATB.TOC_CD
+	          ,ATB.COA_PROD_CD
+	          ,RD.INV_TRX_BAL_LAST_UPD_TS
+	          ,RD.INV_TRX_BAL_TZ
+	          ,AEC.AR_ADJ_EXCL_CUST_CD
+	          ,SI.DS_CONTR_NUM
+	          ,SI.BLLG_PER_FROM_DT
+	          ,SI.BLLG_PER_TO_DT
+              ,RD.DEAL_RMNG_BAL_GRS_AMT AS WRT_OFF_GRS_AMT
+	      FROM AR_TRX_BAL          ATB
+	          ,AR_ADJ_EXCL_CUST    AEC
+	          ,DS_ACCT_CR_PRFL     DACP
+	          ,AR_WRT_OFF_RQST_DTL RD
+	          ,SVC_INV             SI
+	    WHERE ATB.EZCANCELFLAG           = '0'
+	      AND ATB.GLBL_CMPY_CD           = #glblCmpyCd#
+	      AND ATB.EZCANCELFLAG           = AEC.EZCANCELFLAG(+)
+	      AND ATB.GLBL_CMPY_CD           = AEC.GLBL_CMPY_CD(+)
+	      AND ATB.BILL_TO_CUST_ACCT_CD   = AEC.AR_ADJ_EXCL_CUST_CD(+)
+	      AND DACP.EZCANCELFLAG          = '0'
+	      AND ATB.GLBL_CMPY_CD           = DACP.GLBL_CMPY_CD
+	      AND ATB.BILL_TO_CUST_ACCT_CD   = DACP.DS_ACCT_NUM 
+	      AND ATB.EZCANCELFLAG           = RD.EZCANCELFLAG(+)
+	      AND ATB.GLBL_CMPY_CD           = RD.GLBL_CMPY_CD(+)
+	      AND ATB.AR_TRX_BAL_PK          = RD.AR_TRX_BAL_PK(+)
+	      AND RD.AR_WRT_OFF_RQST_PK(+)   = #rqstPk#
+	      AND ATB.GLBL_CMPY_CD           = SI.GLBL_CMPY_CD(+)
+	      AND ATB.EZCANCELFLAG           = SI.EZCANCELFLAG(+)
+	      AND ATB.AR_TRX_NUM             = SI.SVC_INV_NUM(+)
+	      
+	      <!-- Remaining Amount -->
+	      <isNull property="lowRmngAmt">
+	         <isNotNull property="highRmngAmt">
+	         <!-- mod 2016/04/07 missing reserved amount -->
+	         AND (ATB.DEAL_RMNG_BAL_GRS_AMT - ATB.DEAL_APPLY_ADJ_RSVD_AMT) &lt;= #highRmngAmt#
+	         <!-- end 2016/04/07 -->
+	         </isNotNull>
+	      </isNull>
+	      <isNull property="highRmngAmt">
+	        <isNotNull property="lowRmngAmt">
+	        <!-- mod 2016/04/07 missing reserved amount -->
+	        AND (ATB.DEAL_RMNG_BAL_GRS_AMT - ATB.DEAL_APPLY_ADJ_RSVD_AMT) &gt;= #lowRmngAmt#
+	        <!-- end 2016/04/07 -->
+	        </isNotNull>
+	      </isNull>
+	      <isNotNull property="lowRmngAmt">
+	        <isNotNull property="highRmngAmt">
+	        <!-- mod 2016/04/07 missing reserved amount -->
+	        AND (ATB.DEAL_RMNG_BAL_GRS_AMT - ATB.DEAL_APPLY_ADJ_RSVD_AMT) BETWEEN #lowRmngAmt# AND #highRmngAmt#
+	        <!-- end 2016/04/07 -->
+	        </isNotNull>
+	      </isNotNull>
+	      
+	      <!-- AR_TRX_NUM -->
+	      <isNull property="lowInvNum">
+	        <isNotNull property="highInvNum">
+	        AND ATB.AR_TRX_NUM &lt;= #highInvNum#
+	        </isNotNull>
+	      </isNull>
+	      <isNull property="highInvNum">
+	        <isNotNull property="lowInvNum">
+	        AND ATB.AR_TRX_NUM &gt;= #lowInvNum#
+	        </isNotNull>
+	      </isNull>
+	      <isNotNull property="lowInvNum">
+	        <isNotNull property="highInvNum">
+	        AND ATB.AR_TRX_NUM BETWEEN #lowInvNum# AND #highInvNum#
+	        </isNotNull>
+	      </isNotNull>
+	      
+	      <!-- INV_DUE_DT -->
+	      <isNull property="lowInvDueDt">
+	        <isNotNull property="highInvDueDt">
+	        AND ATB.INV_DUE_DT &lt;= #highInvDueDt#
+	        </isNotNull>
+	      </isNull>
+	      <isNull property="highInvDueDt">
+	        <isNotNull property="lowInvDueDt">
+	        AND ATB.INV_DUE_DT &gt;= #lowInvDueDt#
+	        </isNotNull>
+	      </isNull>
+	      <isNotNull property="lowInvDueDt">
+	        <isNotNull property="highInvDueDt">
+	        AND ATB.INV_DUE_DT BETWEEN #lowInvDueDt# AND #highInvDueDt#
+	        </isNotNull>
+	      </isNotNull>
+	      
+	      <!-- BILL_TO_CUST_ACCT_CD -->
+	       <isNull property="lowDsAcctNum">
+	         <isNotNull property="highDsAcctNum">
+	        AND ATB.BILL_TO_CUST_ACCT_CD &lt;= #highDsAcctNum#
+	         </isNotNull>
+	      </isNull>
+	      <isNull property="highDsAcctNum">
+	        <isNotNull property="lowDsAcctNum">
+	        AND ATB.BILL_TO_CUST_ACCT_CD &gt;= #lowDsAcctNum#
+	        </isNotNull>
+	      </isNull>
+	      <isNotNull property="lowDsAcctNum">
+	        <isNotNull property="highDsAcctNum">
+	        AND ATB.BILL_TO_CUST_ACCT_CD BETWEEN #lowDsAcctNum# AND #highDsAcctNum#
+	        </isNotNull>
+	      </isNotNull>
+	      
+	      <!-- BILL_TO_CUST_CD -->
+	       <isNull property="lowBillToCustCd">
+	         <isNotNull property="highBillToCustCd">
+	         AND ATB.BILL_TO_CUST_CD &lt;= #highBillToCustCd#
+	         </isNotNull>
+	      </isNull>
+	      <isNull property="highBillToCustCd">
+	        <isNotNull property="lowBillToCustCd">
+	        AND ATB.BILL_TO_CUST_CD &gt;= #lowBillToCustCd#
+	        </isNotNull>
+	      </isNull>
+	      <isNotNull property="lowBillToCustCd">
+	        <isNotNull property="highBillToCustCd">
+	        AND ATB.BILL_TO_CUST_CD BETWEEN #lowBillToCustCd# AND #highBillToCustCd#
+	        </isNotNull>
+	      </isNotNull>
+	      
+	      <!-- AR_TRX_TP_CD -->
+	      <isNotNull property="invTp">
+	      AND ATB.AR_TRX_TP_CD IN
+	      <iterate property="arTrxTpList" var="arTrxTp[]" open="(" close=")" conjunction=",">
+             #arTrxTp[]#
+           </iterate>
+           </isNotNull>
+           <isNull property="invTp">
+           <!-- START 2018/11/05 [QC#29122, MOD] -->
+           <!-- AND ATB.AR_TRX_TP_CD &lt;&gt; #arTrxTpRCP# -->
+           AND ATB.AR_TRX_TP_CD IN (#arTrxTpINV#, #arTrxTpCRM#)
+           <!-- END   2018/11/05 [QC#29122, MOD] -->
+           </isNull>
+           
+           AND ATB.AR_CASH_APPLY_STS_CD IN (#cashAppStsU#, #cashAppStsP#)
+            
+           <isNotNull property="consChk"> 
+           AND ATB.GRP_INV_NUM IS NULL
+           AND NOT EXISTS
+             ( SELECT '*'
+                 FROM INV_PRT_CTRL IRC
+                WHERE IRC.EZCANCELFLAG                                 = '0'
+                  AND IRC.GLBL_CMPY_CD                                 = #glblCmpyCd#
+                  AND IRC.INV_NUM||DECODE(IRC.ISTL_PMT_TERM_DTL_NUM, NULL, '', '-'||IRC.ISTL_PMT_TERM_DTL_NUM) = ATB.AR_TRX_NUM
+                  AND IRC.CONSL_BILL_FLG                               = #flgY#
+                  AND IRC.INV_OTPT_REQ_FLG                             = #flgN#
+              )
+              </isNotNull>
+              
+          ORDER BY ATB.BILL_TO_CUST_CD
+	</statement>
+
+    <resultMap id="result.WrtOffTargetTrxBal" class="WrtOffTargetTrxBal">
+        <result property="glblCmpyCd"                   column="GLBL_CMPY_CD"                  javaType="String"/>
+        <result property="arTrxBalPk"                   column="AR_TRX_BAL_PK"                 javaType="BigDecimal"/>
+        <result property="arTrxNum"                     column="AR_TRX_NUM"                    javaType="String"/>
+        <result property="arTrxTpCd"                    column="AR_TRX_TP_CD"                  javaType="String"/>
+        <result property="ezUpTime"                     column="EZUPTIME"                      javaType="String"/>
+        <result property="ezUpTimeZone"                 column="EZUPTIMEZONE"                  javaType="String"/>
+        <result property="billToCustCd"                 column="BILL_TO_CUST_CD"               javaType="String"/>
+        <result property="sellToCustCd"                 column="SELL_TO_CUST_CD"               javaType="String"/>
+        <result property="payerCustCd"                  column="PAYER_CUST_CD"                 javaType="String"/>
+        <result property="dealOrigGrsAmt"               column="DEAL_ORIG_GRS_AMT"             javaType="BigDecimal"/>
+        <result property="funcOrigGrsAmt"               column="FUNC_ORIG_GRS_AMT"             javaType="BigDecimal"/>
+        <result property="dealApplyAdjRsvdAmt"          column="DEAL_APPLY_ADJ_RSVD_AMT"       javaType="BigDecimal"/>
+        <result property="dealRmngBalGrsAmt"            column="DEAL_RMNG_BAL_GRS_AMT"         javaType="BigDecimal"/>
+        <result property="funcRmngBalGrsAmt"            column="FUNC_RMNG_BAL_GRS_AMT"         javaType="BigDecimal"/>
+        <result property="dealCcyCd"                    column="DEAL_CCY_CD"                   javaType="String"/>
+        <result property="funcCcyCd"                    column="FUNC_CCY_CD"                   javaType="String"/>
+        <result property="billToCustAcctCd"             column="BILL_TO_CUST_ACCT_CD"          javaType="String"/>
+<!--    <result property="crMgrPsnCd"                   column="CR_MGR_PSN_CD"                 javaType="String"/> -->
+        <result property="tocCd"                        column="TOC_CD"                        javaType="String"/>
+        <result property="coaProdCd"                    column="COA_PROD_CD"                   javaType="String"/>
+        <result property="invTrxBalLastUpdTs"           column="INV_TRX_BAL_LAST_UPD_TS"       javaType="String"/>
+        <result property="invTrxBalTz"                  column="INV_TRX_BAL_TZ"                javaType="String"/>
+        <result property="arAdjExclCustCd"              column="AR_ADJ_EXCL_CUST_CD"           javaType="String"/>
+        <result property="arTrxDt"                      column="AR_TRX_DT"                     javaType="String"/>
+        <result property="invDueDt"                     column="INV_DUE_DT"                    javaType="String"/>
+        <result property="dsContrNum"                   column="DS_CONTR_NUM"                  javaType="String"/>
+        <result property="bllgPerFromDt"                column="BLLG_PER_FROM_DT"              javaType="String"/>
+        <result property="bllgPerToDt"                  column="BLLG_PER_TO_DT"                javaType="String"/>
+        <result property="wrtOffGrsAmt"                 column="WRT_OFF_GRS_AMT"               javaType="BigDecimal"/>
+    </resultMap>
+
+   <statement id="getWrtOffTargetDataForCons" parameterClass="Map" resultMap="result.WrtOffTargetTrxBal">
+	
+	    SELECT TB.GLBL_CMPY_CD
+	          ,TB.AR_TRX_BAL_PK
+	          ,TB.AR_TRX_NUM
+	          ,TB.AR_TRX_TP_CD
+	          ,TB.BILL_TO_CUST_CD
+	          ,TB.SELL_TO_CUST_CD
+	          ,TB.PAYER_CUST_CD
+	          ,TB.EZUPTIME
+	          ,TB.EZUPTIMEZONE
+	          ,TB.DEAL_ORIG_GRS_AMT
+	          ,TB.FUNC_ORIG_GRS_AMT
+	          ,TB.DEAL_APPLY_ADJ_RSVD_AMT
+	          ,TB.DEAL_RMNG_BAL_GRS_AMT
+	          ,TB.FUNC_RMNG_BAL_GRS_AMT
+	          ,TB.DEAL_CCY_CD
+	          ,TB.FUNC_CCY_CD
+	          ,TB.BILL_TO_CUST_ACCT_CD
+	          ,TB.AR_TRX_DT
+	          ,TB.INV_DUE_DT
+	    <!--  ,DACP.CR_MGR_PSN_CD  DEL2017/01/04 [QC#16867] -->
+	          ,TB.TOC_CD
+	          ,TB.COA_PROD_CD
+	          ,RD.INV_TRX_BAL_LAST_UPD_TS
+	          ,RD.INV_TRX_BAL_TZ
+	          ,AEC.AR_ADJ_EXCL_CUST_CD
+	          ,SI.DS_CONTR_NUM
+	          ,SI.BLLG_PER_FROM_DT
+	          ,SI.BLLG_PER_TO_DT
+              ,RD.DEAL_RMNG_BAL_GRS_AMT AS WRT_OFF_GRS_AMT
+	      FROM 
+	    (SELECT ATB.GRP_INV_NUM
+	           ,SUM(DEAL_RMNG_BAL_GRS_AMT) - SUM(DEAL_APPLY_ADJ_RSVD_AMT) AMT
+	      FROM AR_TRX_BAL          ATB
+	    WHERE ATB.EZCANCELFLAG           = '0'
+	      AND ATB.GLBL_CMPY_CD           = #glblCmpyCd#
+	      	      
+	      <!-- AR_TRX_NUM -->
+	      <isNull property="lowInvNum">
+	        <isNotNull property="highInvNum">
+	        AND ATB.AR_TRX_NUM &lt;= #highInvNum#
+	        </isNotNull>
+	      </isNull>
+	      <isNull property="highInvNum">
+	        <isNotNull property="lowInvNum">
+	        AND ATB.AR_TRX_NUM &gt;= #lowInvNum#
+	        </isNotNull>
+	      </isNull>
+	      <isNotNull property="lowInvNum">
+	        <isNotNull property="highInvNum">
+	        AND ATB.AR_TRX_NUM BETWEEN #lowInvNum# AND #highInvNum#
+	        </isNotNull>
+	      </isNotNull>
+	      
+	      <!-- INV_DUE_DT -->
+	      <isNull property="lowInvDueDt">
+	        <isNotNull property="highInvDueDt">
+	        AND ATB.INV_DUE_DT &lt;= #highInvDueDt#
+	        </isNotNull>
+	      </isNull>
+	      <isNull property="highInvDueDt">
+	        <isNotNull property="lowInvDueDt">
+	        AND ATB.INV_DUE_DT &gt;= #lowInvDueDt#
+	        </isNotNull>
+	      </isNull>
+	      <isNotNull property="lowInvDueDt">
+	        <isNotNull property="highInvDueDt">
+	        AND ATB.INV_DUE_DT BETWEEN #lowInvDueDt# AND #highInvDueDt#
+	        </isNotNull>
+	      </isNotNull>
+	      
+	      <!-- BILL_TO_CUST_ACCT_CD -->
+	       <isNull property="lowDsAcctNum">
+	         <isNotNull property="highDsAcctNum">
+	         AND ATB.BILL_TO_CUST_ACCT_CD &lt;= #highDsAcctNum#
+	         </isNotNull>
+	      </isNull>
+	      <isNull property="highDsAcctNum">
+	        <isNotNull property="lowDsAcctNum">
+	        AND ATB.BILL_TO_CUST_ACCT_CD &gt;= #lowDsAcctNum#
+	        </isNotNull>
+	      </isNull>
+	      <isNotNull property="lowDsAcctNum">
+	        <isNotNull property="highDsAcctNum">
+	        AND ATB.BILL_TO_CUST_ACCT_CD BETWEEN #lowDsAcctNum# AND #highDsAcctNum#
+	        </isNotNull>
+	      </isNotNull>
+	      
+	      <!-- BILL_TO_CUST_CD -->
+	       <isNull property="lowBillToCustCd">
+	         <isNotNull property="highBillToCustCd">
+	         AND ATB.BILL_TO_CUST_CD &lt;= #highBillToCustCd#
+	         </isNotNull>
+	      </isNull>
+	      <isNull property="highBillToCustCd">
+	        <isNotNull property="lowBillToCustCd">
+	        AND ATB.BILL_TO_CUST_CD &gt;= #lowBillToCustCd#
+	        </isNotNull>
+	      </isNull>
+	      <isNotNull property="lowBillToCustCd">
+	        <isNotNull property="highBillToCustCd">
+	        AND ATB.BILL_TO_CUST_CD BETWEEN #lowBillToCustCd# AND #highBillToCustCd#
+	        </isNotNull>
+	      </isNotNull>
+	      
+	      <!-- AR_TRX_TP_CD -->
+	      <isNotNull property="invTp">
+	      AND ATB.AR_TRX_TP_CD IN
+	      <iterate property="arTrxTpList" var="arTrxTp[]" open="(" close=")" conjunction=",">
+             #arTrxTp[]#
+           </iterate>
+           </isNotNull>
+           <isNull property="invTp">
+           <!-- START 2018/11/05 [QC#29122, MOD] -->
+           <!-- AND ATB.AR_TRX_TP_CD &lt;&gt; #arTrxTpRCP# -->
+           AND ATB.AR_TRX_TP_CD IN (#arTrxTpINV#, #arTrxTpCRM#)
+           <!-- END   2018/11/05 [QC#29122, MOD] -->
+           </isNull>
+           
+           AND ATB.AR_CASH_APPLY_STS_CD IN (#cashAppStsU#, #cashAppStsP#) 
+           AND ATB.GRP_INV_NUM IS NOT NULL
+        GROUP BY ATB.GRP_INV_NUM
+        ) AMT_WRK
+        , AR_TRX_BAL TB
+        , AR_ADJ_EXCL_CUST    AEC
+	    , DS_ACCT_CR_PRFL     DACP
+	    , AR_WRT_OFF_RQST_DTL RD
+	    , SVC_INV             SI 
+       WHERE TB.EZCANCELFLAG           = '0'
+         AND TB.GLBL_CMPY_CD           = #glblCmpyCd#
+         AND TB.EZCANCELFLAG           = AEC.EZCANCELFLAG(+)
+	     AND TB.GLBL_CMPY_CD           = AEC.GLBL_CMPY_CD(+)
+	     AND TB.BILL_TO_CUST_ACCT_CD   = AEC.AR_ADJ_EXCL_CUST_CD(+)
+	     AND DACP.EZCANCELFLAG         = '0'
+	     AND TB.GLBL_CMPY_CD           = DACP.GLBL_CMPY_CD
+	     AND TB.BILL_TO_CUST_ACCT_CD   = DACP.DS_ACCT_NUM 
+	     AND TB.EZCANCELFLAG           = RD.EZCANCELFLAG(+)
+	     AND TB.GLBL_CMPY_CD           = RD.GLBL_CMPY_CD(+)
+	     AND TB.AR_TRX_BAL_PK          = RD.AR_TRX_BAL_PK(+)
+	     AND RD.AR_WRT_OFF_RQST_PK(+)  = #rqstPk#
+	     AND TB.GRP_INV_NUM            = AMT_WRK.GRP_INV_NUM 
+	     AND TB.GLBL_CMPY_CD           = SI.GLBL_CMPY_CD(+)
+	     AND TB.EZCANCELFLAG           = SI.EZCANCELFLAG(+)
+	     AND TB.AR_TRX_NUM             = SI.SVC_INV_NUM(+)      
+         
+        <isNull property="lowRmngAmt" >
+          <isNotNull property="highRmngAmt" >
+          AND AMT_WRK.AMT &lt;= #highRmngAmt#
+          </isNotNull>
+        </isNull>
+        <isNull property="highRmngAmt" >
+          <isNotNull property="lowRmngAmt" >
+          AND AMT_WRK.AMT &gt;= #lowRmngAmt#
+          </isNotNull>
+        </isNull>
+        <isNotNull property="lowRmngAmt" >
+          <isNotNull property="highRmngAmt" >
+          AND AMT_WRK.AMT BETWEEN #lowRmngAmt# AND #highRmngAmt#
+          </isNotNull>
+        </isNotNull>
+        
+        <!-- AR_TRX_NUM -->
+        <isNull property="lowInvNum">
+          <isNotNull property="highInvNum">
+          AND TB.AR_TRX_NUM &lt;= #highInvNum#
+          </isNotNull>
+        </isNull>
+        <isNull property="highInvNum">
+          <isNotNull property="lowInvNum">
+          AND TB.AR_TRX_NUM &gt;= #lowInvNum#
+          </isNotNull>
+        </isNull>
+        <isNotNull property="lowInvNum">
+          <isNotNull property="highInvNum">
+          AND TB.AR_TRX_NUM BETWEEN #lowInvNum# AND #highInvNum#
+          </isNotNull>
+        </isNotNull>
+
+        <!-- INV_DUE_DT -->
+       <isNull property="lowInvDueDt">
+         <isNotNull property="highInvDueDt">
+         AND TB.INV_DUE_DT &lt;= #highInvDueDt#
+         </isNotNull>
+       </isNull>
+       <isNull property="highInvDueDt">
+         <isNotNull property="lowInvDueDt">
+         AND TB.INV_DUE_DT &gt;= #lowInvDueDt#
+         </isNotNull>
+       </isNull>
+       <isNotNull property="lowInvDueDt">
+         <isNotNull property="highInvDueDt">
+         AND TB.INV_DUE_DT BETWEEN #lowInvDueDt# AND #highInvDueDt#
+         </isNotNull>
+       </isNotNull>
+
+       <!-- BILL_TO_CUST_ACCT_CD -->
+       <isNull property="lowDsAcctNum">
+         <isNotNull property="highDsAcctNum">
+         AND TB.BILL_TO_CUST_ACCT_CD &lt;= #highDsAcctNum#
+         </isNotNull>
+       </isNull>
+       <isNull property="highDsAcctNum">
+         <isNotNull property="lowDsAcctNum">
+         AND TB.BILL_TO_CUST_ACCT_CD &gt;= #lowDsAcctNum#
+         </isNotNull>
+       </isNull>
+       <isNotNull property="lowDsAcctNum">
+         <isNotNull property="highDsAcctNum">
+         AND TB.BILL_TO_CUST_ACCT_CD BETWEEN #lowDsAcctNum# AND #highDsAcctNum#
+         </isNotNull>
+       </isNotNull>
+
+       <!-- BILL_TO_CUST_CD -->
+       <isNull property="lowBillToCustCd">
+         <isNotNull property="highBillToCustCd">
+         AND TB.BILL_TO_CUST_CD &lt;= #highBillToCustCd#
+         </isNotNull>
+       </isNull>
+       <isNull property="highBillToCustCd">
+         <isNotNull property="lowBillToCustCd">
+         AND TB.BILL_TO_CUST_CD &gt;= #lowBillToCustCd#
+         </isNotNull>
+       </isNull>
+       <isNotNull property="lowBillToCustCd">
+         <isNotNull property="highBillToCustCd">
+         AND TB.BILL_TO_CUST_CD BETWEEN #lowBillToCustCd# AND #highBillToCustCd#
+         </isNotNull>
+       </isNotNull>
+
+       <!-- AR_TRX_TP_CD -->
+       <isNotNull property="invTp">
+       AND TB.AR_TRX_TP_CD IN
+         <iterate property="arTrxTpList" var="arTrxTp[]" open="(" close=")" conjunction=",">
+         #arTrxTp[]#
+         </iterate>
+       </isNotNull>
+       
+       <isNull property="invTp">
+       <!-- START 2018/11/05 [QC#29122, MOD] -->
+       <!-- AND TB.AR_TRX_TP_CD &lt;&gt; #arTrxTpRCP# -->
+       AND TB.AR_TRX_TP_CD IN (#arTrxTpINV#, #arTrxTpCRM#)
+       <!-- END   2018/11/05 [QC#29122, MOD] -->
+       </isNull>
+           
+       AND TB.AR_CASH_APPLY_STS_CD IN (#cashAppStsU#, #cashAppStsP#)
+           
+     ORDER BY TB.BILL_TO_CUST_CD
+	</statement>
+	
+	<statement id="getWrtOffTargetDataResrc" parameterClass="Map" resultMap="result.WrtOffTargetTrxBal">
+	
+	    SELECT ATB.GLBL_CMPY_CD
+	          ,ATB.AR_TRX_BAL_PK
+	          ,ATB.AR_TRX_NUM
+	          ,ATB.AR_TRX_TP_CD
+	          ,ATB.BILL_TO_CUST_CD
+	          ,ATB.SELL_TO_CUST_CD
+	          ,ATB.PAYER_CUST_CD
+	          ,ATB.EZUPTIME
+	          ,ATB.EZUPTIMEZONE
+	          ,ATB.DEAL_ORIG_GRS_AMT
+	          ,ATB.FUNC_ORIG_GRS_AMT
+	          ,ATB.DEAL_APPLY_ADJ_RSVD_AMT
+	          ,ATB.DEAL_RMNG_BAL_GRS_AMT
+	          ,ATB.FUNC_RMNG_BAL_GRS_AMT
+	          ,ATB.DEAL_CCY_CD
+	          ,ATB.FUNC_CCY_CD
+	          ,ATB.BILL_TO_CUST_ACCT_CD
+	          ,ATB.AR_TRX_DT
+	          ,ATB.INV_DUE_DT
+	 <!--     ,DACP.CR_MGR_PSN_CD  DEL 2017/01/05 [QC#16867] -->
+	          ,ATB.TOC_CD
+	          ,ATB.COA_PROD_CD
+	          ,RD.INV_TRX_BAL_LAST_UPD_TS
+	          ,RD.INV_TRX_BAL_TZ
+	          ,AEC.AR_ADJ_EXCL_CUST_CD
+	          ,SI.DS_CONTR_NUM
+	          ,SI.BLLG_PER_FROM_DT
+	          ,SI.BLLG_PER_TO_DT
+              ,RD.DEAL_RMNG_BAL_GRS_AMT AS WRT_OFF_GRS_AMT
+	      FROM AR_TRX_BAL          ATB
+	          ,AR_ADJ_EXCL_CUST    AEC
+	          ,DS_ACCT_CR_PRFL     DACP
+	          ,AR_WRT_OFF_RQST_DTL RD
+	          ,SVC_INV             SI
+	    WHERE ATB.EZCANCELFLAG           = '0'
+	      AND ATB.GLBL_CMPY_CD           = #glblCmpyCd#
+	      AND ATB.EZCANCELFLAG           = AEC.EZCANCELFLAG(+)
+	      AND ATB.GLBL_CMPY_CD           = AEC.GLBL_CMPY_CD(+)
+	      AND ATB.BILL_TO_CUST_ACCT_CD   = AEC.AR_ADJ_EXCL_CUST_CD(+)
+	      AND DACP.EZCANCELFLAG          = '0'
+	      AND ATB.GLBL_CMPY_CD           = DACP.GLBL_CMPY_CD
+	      AND ATB.BILL_TO_CUST_ACCT_CD   = DACP.DS_ACCT_NUM 
+	      AND ATB.EZCANCELFLAG           = RD.EZCANCELFLAG(+)
+	      AND ATB.GLBL_CMPY_CD           = RD.GLBL_CMPY_CD(+)
+	      AND ATB.AR_TRX_BAL_PK          = RD.AR_TRX_BAL_PK(+)
+	      AND RD.AR_WRT_OFF_RQST_PK(+)   = #rqstPk#
+	      AND ATB.GLBL_CMPY_CD           = SI.GLBL_CMPY_CD(+)
+	      AND ATB.EZCANCELFLAG           = SI.EZCANCELFLAG(+)
+	      AND ATB.AR_TRX_NUM             = SI.SVC_INV_NUM(+)
+	      
+	      <!-- Remaining Amount -->
+	      <isNull property="lowRmngAmt">
+	         <isNotNull property="highRmngAmt">
+	         AND ATB.DEAL_RMNG_BAL_GRS_AMT &lt;= #highRmngAmt#
+	         </isNotNull>
+	      </isNull>
+	      <isNull property="highRmngAmt">
+	        <isNotNull property="lowRmngAmt">
+	        AND ATB.DEAL_RMNG_BAL_GRS_AMT &gt;= #lowRmngAmt#
+	        </isNotNull>
+	      </isNull>
+	      <isNotNull property="lowRmngAmt">
+	        <isNotNull property="highRmngAmt">
+	        AND ATB.DEAL_RMNG_BAL_GRS_AMT BETWEEN #lowRmngAmt# AND #highRmngAmt#
+	        </isNotNull>
+	      </isNotNull>
+	      
+	      <!-- AR_TRX_NUM -->
+	      <isNull property="lowInvNum">
+	        <isNotNull property="highInvNum">
+	        AND ATB.AR_TRX_NUM &lt;= #highInvNum#
+	        </isNotNull>
+	      </isNull>
+	      <isNull property="highInvNum">
+	        <isNotNull property="lowInvNum">
+	        AND ATB.AR_TRX_NUM &gt;= #lowInvNum#
+	        </isNotNull>
+	      </isNull>
+	      <isNotNull property="lowInvNum">
+	        <isNotNull property="highInvNum">
+	        AND ATB.AR_TRX_NUM BETWEEN #lowInvNum# AND #highInvNum#
+	        </isNotNull>
+	      </isNotNull>
+	      
+	      <!-- INV_DUE_DT -->
+	      <isNull property="lowInvDueDt">
+	        <isNotNull property="highInvDueDt">
+	        AND ATB.INV_DUE_DT &lt;= #highInvDueDt#
+	        </isNotNull>
+	      </isNull>
+	      <isNull property="highInvDueDt">
+	        <isNotNull property="lowInvDueDt">
+	        AND ATB.INV_DUE_DT &gt;= #lowInvDueDt#
+	        </isNotNull>
+	      </isNull>
+	      <isNotNull property="lowInvDueDt">
+	        <isNotNull property="highInvDueDt">
+	        AND ATB.INV_DUE_DT BETWEEN #lowInvDueDt# AND #highInvDueDt#
+	        </isNotNull>
+	      </isNotNull>
+	      
+	      <!-- BILL_TO_CUST_ACCT_CD -->
+	       <isNull property="lowDsAcctNum">
+	         <isNotNull property="highDsAcctNum">
+	        AND ATB.BILL_TO_CUST_ACCT_CD &lt;= #highDsAcctNum#
+	         </isNotNull>
+	      </isNull>
+	      <isNull property="highDsAcctNum">
+	        <isNotNull property="lowDsAcctNum">
+	        AND ATB.BILL_TO_CUST_ACCT_CD &gt;= #lowDsAcctNum#
+	        </isNotNull>
+	      </isNull>
+	      <isNotNull property="lowDsAcctNum">
+	        <isNotNull property="highDsAcctNum">
+	        AND ATB.BILL_TO_CUST_ACCT_CD BETWEEN #lowDsAcctNum# AND #highDsAcctNum#
+	        </isNotNull>
+	      </isNotNull>
+	      
+	      <!-- BILL_TO_CUST_CD -->
+	       <isNull property="lowBillToCustCd">
+	         <isNotNull property="highBillToCustCd">
+	         AND ATB.BILL_TO_CUST_CD &lt;= #highBillToCustCd#
+	         </isNotNull>
+	      </isNull>
+	      <isNull property="highBillToCustCd">
+	        <isNotNull property="lowBillToCustCd">
+	        AND ATB.BILL_TO_CUST_CD &gt;= #lowBillToCustCd#
+	        </isNotNull>
+	      </isNull>
+	      <isNotNull property="lowBillToCustCd">
+	        <isNotNull property="highBillToCustCd">
+	        AND ATB.BILL_TO_CUST_CD BETWEEN #lowBillToCustCd# AND #highBillToCustCd#
+	        </isNotNull>
+	      </isNotNull>
+	      
+	      <!-- AR_TRX_TP_CD -->
+	      <isNotNull property="invTp">
+	      AND ATB.AR_TRX_TP_CD IN
+	      <iterate property="arTrxTpList" var="arTrxTp[]" open="(" close=")" conjunction=",">
+             #arTrxTp[]#
+           </iterate>
+           </isNotNull>
+           <isNull property="invTp">
+           AND ATB.AR_TRX_TP_CD IN (#arTrxTpINV#, #arTrxTpCRM#)
+           </isNull>
+           
+           AND ATB.AR_CASH_APPLY_STS_CD IN (#cashAppStsU#, #cashAppStsP#)
+            
+           <isNotNull property="consChk"> 
+           AND ATB.GRP_INV_NUM IS NULL
+           AND NOT EXISTS
+             ( SELECT '*'
+                 FROM INV_PRT_CTRL IRC
+                WHERE IRC.EZCANCELFLAG                                 = '0'
+                  AND IRC.GLBL_CMPY_CD                                 = #glblCmpyCd#
+                  AND IRC.INV_NUM||DECODE(IRC.ISTL_PMT_TERM_DTL_NUM, NULL, '', '-'||IRC.ISTL_PMT_TERM_DTL_NUM) = ATB.AR_TRX_NUM
+                  AND IRC.CONSL_BILL_FLG                               = #flgY#
+                  AND IRC.INV_OTPT_REQ_FLG                             = #flgN#
+              )
+              </isNotNull>
+
+           <isNotNull property="arAdjExclCustCdisNull"> 
+           AND AEC.AR_ADJ_EXCL_CUST_CD IS NULL
+           </isNotNull>
+
+          ORDER BY ATB.BILL_TO_CUST_CD
+	</statement>
+	
+	 <statement id="getWrtOffTargetDataForConsResrc" parameterClass="Map" resultMap="result.WrtOffTargetTrxBal">
+	
+	    SELECT TB.GLBL_CMPY_CD
+	          ,TB.AR_TRX_BAL_PK
+	          ,TB.AR_TRX_NUM
+	          ,TB.AR_TRX_TP_CD
+	          ,TB.BILL_TO_CUST_CD
+	          ,TB.SELL_TO_CUST_CD
+	          ,TB.PAYER_CUST_CD
+	          ,TB.EZUPTIME
+	          ,TB.EZUPTIMEZONE
+	          ,TB.DEAL_ORIG_GRS_AMT
+	          ,TB.FUNC_ORIG_GRS_AMT
+	          ,TB.DEAL_APPLY_ADJ_RSVD_AMT
+	          ,TB.DEAL_RMNG_BAL_GRS_AMT
+	          ,TB.FUNC_RMNG_BAL_GRS_AMT
+	          ,TB.DEAL_CCY_CD
+	          ,TB.FUNC_CCY_CD
+	          ,TB.BILL_TO_CUST_ACCT_CD
+	          ,TB.AR_TRX_DT
+	          ,TB.INV_DUE_DT
+	     <!-- ,DACP.CR_MGR_PSN_CD DEL 2017/01/04 [QC#16867]  -->
+	          ,TB.TOC_CD
+	          ,TB.COA_PROD_CD
+	          ,RD.INV_TRX_BAL_LAST_UPD_TS
+	          ,RD.INV_TRX_BAL_TZ
+	          ,AEC.AR_ADJ_EXCL_CUST_CD
+	          ,SI.DS_CONTR_NUM
+	          ,SI.BLLG_PER_FROM_DT
+	          ,SI.BLLG_PER_TO_DT
+              ,RD.DEAL_RMNG_BAL_GRS_AMT AS WRT_OFF_GRS_AMT
+	      FROM 
+	    (SELECT ATB.GRP_INV_NUM
+	           ,SUM(DEAL_RMNG_BAL_GRS_AMT) AMT
+	      FROM AR_TRX_BAL          ATB
+	    WHERE ATB.EZCANCELFLAG           = '0'
+	      AND ATB.GLBL_CMPY_CD           = #glblCmpyCd#
+	      	      
+	      <!-- AR_TRX_NUM -->
+	      <isNull property="lowInvNum">
+	        <isNotNull property="highInvNum">
+	        AND ATB.AR_TRX_NUM &lt;= #highInvNum#
+	        </isNotNull>
+	      </isNull>
+	      <isNull property="highInvNum">
+	        <isNotNull property="lowInvNum">
+	        AND ATB.AR_TRX_NUM &gt;= #lowInvNum#
+	        </isNotNull>
+	      </isNull>
+	      <isNotNull property="lowInvNum">
+	        <isNotNull property="highInvNum">
+	        AND ATB.AR_TRX_NUM BETWEEN #lowInvNum# AND #highInvNum#
+	        </isNotNull>
+	      </isNotNull>
+	      
+	      <!-- INV_DUE_DT -->
+	      <isNull property="lowInvDueDt">
+	        <isNotNull property="highInvDueDt">
+	        AND ATB.INV_DUE_DT &lt;= #highInvDueDt#
+	        </isNotNull>
+	      </isNull>
+	      <isNull property="highInvDueDt">
+	        <isNotNull property="lowInvDueDt">
+	        AND ATB.INV_DUE_DT &gt;= #lowInvDueDt#
+	        </isNotNull>
+	      </isNull>
+	      <isNotNull property="lowInvDueDt">
+	        <isNotNull property="highInvDueDt">
+	        AND ATB.INV_DUE_DT BETWEEN #lowInvDueDt# AND #highInvDueDt#
+	        </isNotNull>
+	      </isNotNull>
+	      
+	      <!-- BILL_TO_CUST_ACCT_CD -->
+	       <isNull property="lowDsAcctNum">
+	         <isNotNull property="highDsAcctNum">
+	         AND ATB.BILL_TO_CUST_ACCT_CD &lt;= #highDsAcctNum#
+	         </isNotNull>
+	      </isNull>
+	      <isNull property="highDsAcctNum">
+	        <isNotNull property="lowDsAcctNum">
+	        AND ATB.BILL_TO_CUST_ACCT_CD &gt;= #lowDsAcctNum#
+	        </isNotNull>
+	      </isNull>
+	      <isNotNull property="lowDsAcctNum">
+	        <isNotNull property="highDsAcctNum">
+	        AND ATB.BILL_TO_CUST_ACCT_CD BETWEEN #lowDsAcctNum# AND #highDsAcctNum#
+	        </isNotNull>
+	      </isNotNull>
+	      
+	      <!-- BILL_TO_CUST_CD -->
+	       <isNull property="lowBillToCustCd">
+	         <isNotNull property="highBillToCustCd">
+	         AND ATB.BILL_TO_CUST_CD &lt;= #highBillToCustCd#
+	         </isNotNull>
+	      </isNull>
+	      <isNull property="highBillToCustCd">
+	        <isNotNull property="lowBillToCustCd">
+	        AND ATB.BILL_TO_CUST_CD &gt;= #lowBillToCustCd#
+	        </isNotNull>
+	      </isNull>
+	      <isNotNull property="lowBillToCustCd">
+	        <isNotNull property="highBillToCustCd">
+	        AND ATB.BILL_TO_CUST_CD BETWEEN #lowBillToCustCd# AND #highBillToCustCd#
+	        </isNotNull>
+	      </isNotNull>
+	      
+	      <!-- AR_TRX_TP_CD -->
+	      <isNotNull property="invTp">
+	      AND ATB.AR_TRX_TP_CD IN
+	      <iterate property="arTrxTpList" var="arTrxTp[]" open="(" close=")" conjunction=",">
+             #arTrxTp[]#
+           </iterate>
+           </isNotNull>
+           <isNull property="invTp">
+           <!-- START 2018/11/05 S.Takami [QC#29122, MOD] -->
+           <!-- AND ATB.AR_TRX_TP_CD &lt;&gt; #arTrxTpRCP# -->
+           AND ATB.AR_TRX_TP_CD IN (#arTrxTpINV#, #arTrxTpCRM#)
+           <!-- END   2018/11/05 S.Takami [QC#29122, MOD] -->
+           </isNull>
+           
+           AND ATB.AR_CASH_APPLY_STS_CD IN (#cashAppStsU#, #cashAppStsP#) 
+           AND ATB.GRP_INV_NUM IS NOT NULL
+        GROUP BY ATB.GRP_INV_NUM
+        ) AMT_WRK
+        , AR_TRX_BAL TB
+        , AR_ADJ_EXCL_CUST    AEC
+	    , DS_ACCT_CR_PRFL     DACP
+	    , AR_WRT_OFF_RQST_DTL RD
+	    , SVC_INV             SI 
+       WHERE TB.EZCANCELFLAG           = '0'
+         AND TB.GLBL_CMPY_CD           = #glblCmpyCd#
+         AND TB.EZCANCELFLAG           = AEC.EZCANCELFLAG(+)
+	     AND TB.GLBL_CMPY_CD           = AEC.GLBL_CMPY_CD(+)
+	     AND TB.BILL_TO_CUST_ACCT_CD   = AEC.AR_ADJ_EXCL_CUST_CD(+)
+	     AND DACP.EZCANCELFLAG         = '0'
+	     AND TB.GLBL_CMPY_CD           = DACP.GLBL_CMPY_CD
+	     AND TB.BILL_TO_CUST_ACCT_CD   = DACP.DS_ACCT_NUM 
+	     AND TB.EZCANCELFLAG           = RD.EZCANCELFLAG(+)
+	     AND TB.GLBL_CMPY_CD           = RD.GLBL_CMPY_CD(+)
+	     AND TB.AR_TRX_BAL_PK          = RD.AR_TRX_BAL_PK(+)
+	     AND RD.AR_WRT_OFF_RQST_PK(+)  = #rqstPk#
+	     AND TB.GRP_INV_NUM            = AMT_WRK.GRP_INV_NUM 
+	     AND TB.GLBL_CMPY_CD           = SI.GLBL_CMPY_CD(+)
+	     AND TB.EZCANCELFLAG           = SI.EZCANCELFLAG(+)
+	     AND TB.AR_TRX_NUM             = SI.SVC_INV_NUM(+)      
+         
+        <isNull property="lowRmngAmt" >
+          <isNotNull property="highRmngAmt" >
+          AND AMT_WRK.AMT &lt;= #highRmngAmt#
+          </isNotNull>
+        </isNull>
+        <isNull property="highRmngAmt" >
+          <isNotNull property="lowRmngAmt" >
+          AND AMT_WRK.AMT &gt;= #lowRmngAmt#
+          </isNotNull>
+        </isNull>
+        <isNotNull property="lowRmngAmt" >
+          <isNotNull property="highRmngAmt" >
+          AND AMT_WRK.AMT BETWEEN #lowRmngAmt# AND #highRmngAmt#
+          </isNotNull>
+        </isNotNull>
+        
+        <!-- AR_TRX_NUM -->
+        <isNull property="lowInvNum">
+          <isNotNull property="highInvNum">
+          AND TB.AR_TRX_NUM &lt;= #highInvNum#
+          </isNotNull>
+        </isNull>
+        <isNull property="highInvNum">
+          <isNotNull property="lowInvNum">
+          AND TB.AR_TRX_NUM &gt;= #lowInvNum#
+          </isNotNull>
+        </isNull>
+        <isNotNull property="lowInvNum">
+          <isNotNull property="highInvNum">
+          AND TB.AR_TRX_NUM BETWEEN #lowInvNum# AND #highInvNum#
+          </isNotNull>
+        </isNotNull>
+
+        <!-- INV_DUE_DT -->
+       <isNull property="lowInvDueDt">
+         <isNotNull property="highInvDueDt">
+         AND TB.INV_DUE_DT &lt;= #highInvDueDt#
+         </isNotNull>
+       </isNull>
+       <isNull property="highInvDueDt">
+         <isNotNull property="lowInvDueDt">
+         AND TB.INV_DUE_DT &gt;= #lowInvDueDt#
+         </isNotNull>
+       </isNull>
+       <isNotNull property="lowInvDueDt">
+         <isNotNull property="highInvDueDt">
+         AND TB.INV_DUE_DT BETWEEN #lowInvDueDt# AND #highInvDueDt#
+         </isNotNull>
+       </isNotNull>
+
+       <!-- BILL_TO_CUST_ACCT_CD -->
+       <isNull property="lowDsAcctNum">
+         <isNotNull property="highDsAcctNum">
+         AND TB.BILL_TO_CUST_ACCT_CD &lt;= #highDsAcctNum#
+         </isNotNull>
+       </isNull>
+       <isNull property="highDsAcctNum">
+         <isNotNull property="lowDsAcctNum">
+         AND TB.BILL_TO_CUST_ACCT_CD &gt;= #lowDsAcctNum#
+         </isNotNull>
+       </isNull>
+       <isNotNull property="lowDsAcctNum">
+         <isNotNull property="highDsAcctNum">
+         AND TB.BILL_TO_CUST_ACCT_CD BETWEEN #lowDsAcctNum# AND #highDsAcctNum#
+         </isNotNull>
+       </isNotNull>
+
+       <!-- BILL_TO_CUST_CD -->
+       <isNull property="lowBillToCustCd">
+         <isNotNull property="highBillToCustCd">
+         AND TB.BILL_TO_CUST_CD &lt;= #highBillToCustCd#
+         </isNotNull>
+       </isNull>
+       <isNull property="highBillToCustCd">
+         <isNotNull property="lowBillToCustCd">
+         AND TB.BILL_TO_CUST_CD &gt;= #lowBillToCustCd#
+         </isNotNull>
+       </isNull>
+       <isNotNull property="lowBillToCustCd">
+         <isNotNull property="highBillToCustCd">
+         AND TB.BILL_TO_CUST_CD BETWEEN #lowBillToCustCd# AND #highBillToCustCd#
+         </isNotNull>
+       </isNotNull>
+
+       <!-- AR_TRX_TP_CD -->
+       <isNotNull property="invTp">
+       AND TB.AR_TRX_TP_CD IN
+         <iterate property="arTrxTpList" var="arTrxTp[]" open="(" close=")" conjunction=",">
+         #arTrxTp[]#
+         </iterate>
+       </isNotNull>
+       
+       <isNull property="invTp">
+       <!-- START 2018/11/05 S.Takami [QC#29122, MOD] -->
+       <!-- AND TB.AR_TRX_TP_CD &lt;&gt; #arTrxTpRCP# -->
+       AND TB.AR_TRX_TP_CD IN (#arTrxTpINV#, #arTrxTpCRM#)
+       <!-- END   2018/11/05 S.Takami [QC#29122, MOD] -->
+       </isNull>
+           
+       AND TB.AR_CASH_APPLY_STS_CD IN (#cashAppStsU#, #cashAppStsP#)
+
+       <isNotNull property="arAdjExclCustCdisNull"> 
+       AND AEC.AR_ADJ_EXCL_CUST_CD IS NULL
+       </isNotNull>
+           
+     ORDER BY TB.BILL_TO_CUST_CD
+	</statement>
+
+    <statement id="getArRcptUnApply" parameterClass="Map" resultClass="Map">
+        SELECT
+            *
+        FROM
+            AR_RCPT_UN_APPLY    A
+        WHERE
+                A.GLBL_CMPY_CD  = #glblCmpyCd#
+            AND A.RCPT_NUM      = #arRcptNum#
+            AND A.EZCANCELFLAG  = '0'
+    </statement>
+
+</sqlMap>

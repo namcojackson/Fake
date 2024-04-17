@@ -1,0 +1,2315 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NFCB401001">
+    <statement id="getCompInfoNormal" parameterClass="Map" resultClass="Map">
+    WITH COMP_INFO AS (
+        SELECT
+             CASE
+                 WHEN DEALER_COUNT.COUNT &gt;     0                THEN #distChDealer#
+                 WHEN N.COA_AFFL_CD      &lt;&gt; #coaAfflNonAffl# THEN #distChIntraCompany#
+                 ELSE #distChCommercial#
+             END                        AS DIST_CH_CD
+            ,SLS_REP.TRTY_GRP_TP_CD     AS COMP_DIV_CD
+            ,D.CPO_ORD_NUM              AS CPO_ORD_NUM
+            ,F.DS_ORD_POSN_NUM          AS DS_ORD_POSN_NUM
+            ,F.CPO_DTL_LINE_NUM         AS CPO_DTL_LINE_NUM
+            ,F.CPO_DTL_LINE_SUB_NUM     AS CPO_DTL_LINE_SUB_NUM
+            ,D.DS_ORD_CATG_CD           AS DS_ORD_CATG_CD
+            ,D.DS_ORD_TP_CD             AS DS_ORD_TP_CD
+            ,SUBSTR(D.CPO_ORD_TS, 1, 8) AS ORD_CRAT_DT
+            ,J.T_MDL_NM                 AS T_MDL_NM
+            ,B.MDSE_CD                  AS MDSE_CD
+            ,D.SELL_TO_CUST_CD          AS SELL_TO_CUST_CD
+            ,M.DS_ACCT_NM               AS SELL_TO_CUST_ACCT_NM
+            ,SLS_REP.PSN_CD             AS SLS_REP_PSN_CD
+            ,NVL(INST_REP.PSN_CD, SLS_REP.PSN_CD)
+                                        AS ISTL_REP_PSN_CD
+            ,H.SVC_CONFIG_MSTR_PK       AS SVC_CONFIG_MSTR_PK
+            <!-- QC#27083 mod Start -->
+            <!-- ,L.SER_NUM                  AS SER_NUM -->
+            ,NVL(L.SER_NUM, DILSN.SER_NUM) AS SER_NUM
+            <!-- QC#27083 mod End -->
+            ,A.INV_NUM                  AS INV_NUM
+            ,B.INV_LINE_NUM             AS INV_LINE_NUM
+            ,B.INV_LINE_SUB_NUM         AS INV_LINE_SUB_NUM
+            ,A.INV_DT                   AS INV_DT
+            ,CASE
+                 WHEN PRTR_COUNT.COUNT &gt; 0 THEN 'Y'
+                 ELSE 'N'
+             END                        AS COMP_PRTR_FLG
+            ,'N'                        AS ACRL_ORD_FLG
+            <!-- START 2018/07/12 W.Honda [QC#27085,MOD]
+            ,NULL                       AS CR_REBIL_RSN_CD -->
+            ,(SELECT X.CR_REBIL_RSN_CD
+                FROM (SELECT RSN.CR_REBIL_RSN_CD
+                        FROM DS_CPO_CR_REBIL_RSN RSN
+                       WHERE RSN.GLBL_CMPY_CD = D.GLBL_CMPY_CD
+                         AND RSN.CPO_ORD_NUM  = D.CPO_ORD_NUM
+                         AND RSN.EZCANCELFLAG = '0'
+                       ORDER BY
+                             RSN.CR_REBIL_RSN_CD
+                     ) X
+               WHERE ROWNUM = 1
+            )                           AS CR_REBIL_RSN_CD
+            <!-- END 2018/07/12 W.Honda [QC#27085,MOD] -->
+            ,A.GLBL_CMPY_CD             AS GLBL_CMPY_CD
+            ,B.INV_BOL_LINE_NUM         AS INV_BOL_LINE_NUM
+            ,B.INV_LINE_SUB_TRX_NUM     AS INV_LINE_SUB_TRX_NUM
+            ,SUBSTR(D.ORD_BOOK_TS, 1, 8) 
+                                        AS ORD_BOOK_DT
+            ,B.SHIP_QTY                 AS SHIP_QTY
+            ,B.INV_LINE_DEAL_NET_AMT    AS INV_LINE_DEAL_NET_AMT
+            ,B.DEAL_NET_UNIT_PRC_AMT    AS DEAL_NET_UNIT_PRC_AMT
+            ,K.SO_NUM                   AS SO_NUM
+            ,K.SO_SLP_NUM               AS SO_SLP_NUM
+            ,D.DS_ORD_RSN_CD            AS DS_ORD_RSN_CD <!-- 2018/07/11 W.Honda [QC#27085,ADD] -->
+            ,F.CR_REBIL_CD              AS CR_REBIL_CD <!-- 2018/09/11 QC#28118,28123 Add -->
+            ,A.ACCT_DT                  AS ACCT_DT <!-- 2018/09/11 QC#28118,28123 Add -->
+            ,F.DS_CPO_LINE_NUM          AS DS_CPO_LINE_NUM <!-- 2018/09/21 QC#28232 Add -->
+            ,F.DS_CPO_LINE_SUB_NUM      AS DS_CPO_LINE_SUB_NUM <!-- 2018/09/21 QC#28232 Add -->
+            ,A.INV_TP_CD                AS INV_TP_CD  <!-- 2018/11/09 QC#29131 Add -->
+        FROM
+             INV             A
+            ,INV_LINE        B
+            ,DS_INV_LINE_SER_NUM  DILSN   <!-- QC#27083 add -->
+            ,CPO             D
+            ,CPO_DTL         F
+            ,DS_CPO_CONFIG   H
+            ,MDSE            I
+            ,MDL_NM          J
+            ,SHPG_PLN        K
+            ,SHIP_SER_NUM    L
+            ,SELL_TO_CUST    M
+            ,SELL_TO_CUST    N
+            ,(
+              SELECT
+                   X1.DS_ORD_CATG_CD
+                  ,COUNT(X1.ORD_CATG_BIZ_CTX_PK) AS COUNT
+              FROM
+                   ORD_CATG_BIZ_CTX     X1
+              WHERE
+                      X1.GLBL_CMPY_CD       = #glblCmpyCd#
+                  AND X1.EZCANCELFLAG       = '0'
+                  AND X1.ORD_CATG_CTX_TP_CD = #ordCatgCtxTpDealer#
+              GROUP BY
+                  X1.DS_ORD_CATG_CD
+             )               DEALER_COUNT
+            ,(
+              SELECT
+                   X.CPO_ORD_NUM
+                  ,X.DS_CPO_CONFIG_PK
+                  ,X.PSN_CD
+                  ,X.ORG_CD
+                  ,CASE WHEN Y.TRTY_GRP_TP_CD = #trtyGrpTpCdTD# THEN #convDivCdTDS#
+                        ELSE Y.TRTY_GRP_TP_CD END  TRTY_GRP_TP_CD
+              FROM
+                  (SELECT /*+ NO_PUSH_PRED */
+                        X1.CPO_ORD_NUM
+                       ,X1.DS_CPO_CONFIG_PK
+                       ,X3.PSN_CD
+<!--                       ,X4.$orgCd$            AS ORG_CD-->
+                       ,X5.ORG_CD
+                       ,ROW_NUMBER() OVER (PARTITION BY X1.CPO_ORD_NUM, X1.DS_CPO_CONFIG_PK ORDER BY X1.SLS_REP_CR_PCT DESC, X1.SLS_REP_TOC_CD ASC) AS ROW_NUM
+                   FROM
+                        DS_CPO_SLS_CR    X1
+                       ,LINE_BIZ_ROLE_TP X2
+                       ,ORG_FUNC_ASG     X3
+<!--                       ,S21_ORG          X4-->
+                       ,DS_ORG_RESRC_RELN    X5
+                   WHERE
+                           X1.GLBL_CMPY_CD        = #glblCmpyCd#
+                       AND X1.EZCANCELFLAG        = '0'
+                       AND X1.GLBL_CMPY_CD        = X2.GLBL_CMPY_CD
+                       AND X1.SLS_REP_ROLE_TP_CD  = X2.LINE_BIZ_ROLE_TP_CD
+                       AND X2.EZCANCELFLAG        = '0'
+                       AND X2.PRIM_REP_ROLE_FLG   = 'Y'
+                       AND X2.SLS_CR_QUOT_FLG     = 'Y'
+                       AND X1.GLBL_CMPY_CD        = X3.GLBL_CMPY_CD
+                       AND X1.SLS_REP_TOC_CD      = X3.TOC_CD
+                       AND X3.EZCANCELFLAG        = '0'
+                       AND X3.EFF_FROM_DT         &lt;= #slsDt#
+<!--2019/05/14 #50093 Del Start-->
+<!--                       AND NVL(X3.EFF_THRU_DT, #slsDt#) -->
+<!--                                                  &gt;= #slsDt#-->
+<!--2019/05/14 #50093 Del End-->
+<!--                       AND X1.GLBL_CMPY_CD        = X4.GLBL_CMPY_CD (+)-->
+<!--                       AND X1.SLS_REP_TOC_CD      = X4.TOC_CD (+)-->
+<!--                       AND X4.EZCANCELFLAG (+)    = '0'-->
+                       AND X3.GLBL_CMPY_CD        = X5.GLBL_CMPY_CD(+)
+                       AND X3.PSN_CD              = X5.PSN_CD(+)
+                       AND X5.EZCANCELFLAG(+)        = '0'
+                  ) X
+                  ,DS_ORG_UNIT  Y
+              WHERE
+                  X.ROW_NUM = 1
+              AND Y.GLBL_CMPY_CD(+)    = #glblCmpyCd#
+              AND Y.ORG_CD(+)          = X.ORG_CD
+              AND Y.EZCANCELFLAG(+)    = '0'
+             )               SLS_REP
+            ,(
+              SELECT
+                   X.CPO_ORD_NUM
+                  ,X.DS_CPO_CONFIG_PK
+                  ,X.PSN_CD
+              FROM
+                  (SELECT /*+ NO_PUSH_PRED */
+                        X1.CPO_ORD_NUM
+                       ,X1.DS_CPO_CONFIG_PK
+                       ,X3.PSN_CD
+                       ,ROW_NUMBER() OVER (PARTITION BY X1.CPO_ORD_NUM, X1.DS_CPO_CONFIG_PK ORDER BY X1.SLS_REP_CR_PCT DESC, X1.SLS_REP_TOC_CD ASC) AS ROW_NUM
+                   FROM
+                        DS_CPO_SLS_CR    X1
+                       ,LINE_BIZ_ROLE_TP X2
+                       ,ORG_FUNC_ASG     X3
+                   WHERE
+                           X1.GLBL_CMPY_CD        = #glblCmpyCd#
+                       AND X1.EZCANCELFLAG        = '0'
+                       AND X1.GLBL_CMPY_CD        = X2.GLBL_CMPY_CD
+                       AND X1.SLS_REP_ROLE_TP_CD  = X2.LINE_BIZ_ROLE_TP_CD
+                       AND X2.EZCANCELFLAG        = '0'
+                       AND X2.PRIM_REP_ROLE_FLG   = 'N'
+                       AND X2.SLS_CR_QUOT_FLG     = 'Y'
+                       AND X1.GLBL_CMPY_CD        = X3.GLBL_CMPY_CD
+                       AND X1.SLS_REP_TOC_CD      = X3.TOC_CD
+                       AND X3.EZCANCELFLAG        = '0'
+                       AND X3.EFF_FROM_DT         &lt;= #slsDt#
+<!--2019/05/14 #50093 Del Start-->
+<!--                       AND NVL(X3.EFF_THRU_DT, #slsDt#) -->
+<!--                                                  &gt;= #slsDt#-->
+<!--2019/05/14 #50093 Del End-->
+                  ) X
+              WHERE
+                  X.ROW_NUM = 1
+             )               INST_REP
+            ,(
+              SELECT
+                   X1.CPO_ORD_NUM
+                  ,X1.CPO_DTL_LINE_NUM
+                  ,X1.CPO_DTL_LINE_SUB_NUM
+                  ,COUNT(X3.MDSE_CD) COUNT
+              FROM
+                   CPO_DTL        X1
+                  ,DS_CPO_CONFIG  X2
+                  ,ALL_MDSE_V     X3
+                  ,DS_MDL         X4
+              WHERE
+                      X1.GLBL_CMPY_CD         = #glblCmpyCd#
+                  AND X1.BASE_CMPT_FLG        = 'Y'
+                  AND X1.EZCANCELFLAG         = '0'
+                  AND X1.GLBL_CMPY_CD         = X2.GLBL_CMPY_CD
+                  AND X1.CPO_ORD_NUM          = X2.CPO_ORD_NUM
+                  AND X1.DS_ORD_POSN_NUM      = X2.DS_ORD_POSN_NUM
+                  AND X2.EZCANCELFLAG         = '0'
+                  AND X1.GLBL_CMPY_CD         = X3.GLBL_CMPY_CD
+                  AND X1.MDSE_CD              = X3.MDSE_CD
+                  AND X3.EZCANCELFLAG         = '0'
+                  AND X3.COA_MDSE_TP_CD       = #coaMdseTpMachine#
+                  AND X2.GLBL_CMPY_CD         = X4.GLBL_CMPY_CD
+                  AND X2.MDL_ID               = X4.MDL_ID
+                  AND X4.EZCANCELFLAG         = '0'
+                  AND X4.MTR_GRP_PK           IS NOT NULL
+              GROUP BY
+                   X1.CPO_ORD_NUM
+                  ,X1.CPO_DTL_LINE_NUM
+                  ,X1.CPO_DTL_LINE_SUB_NUM
+             )               PRTR_COUNT
+        WHERE
+                A.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND A.TRX_SRC_TP_CD         = #invTrxSrcTpWS#  <!-- 2018/10/30 QC#29033 Add -->
+            AND A.EZCANCELFLAG          = '0'
+            <!-- START 2019/09/13 Hd.Sugawara [QC#52943,ADD] -->
+            AND A.FNLZ_INV_FLG          = #flgOnY#
+            <!-- END 2019/09/13 Hd.Sugawara [QC#52943,ADD] -->
+            AND A.GLBL_CMPY_CD          = B.GLBL_CMPY_CD
+            AND A.INV_NUM               = B.INV_NUM
+            AND B.EZCANCELFLAG          = '0'
+            <iterate property="compProcStsCdList" var="compProcStsCd[]" open="AND B.COMP_PROC_STS_CD IN (" close=")" conjunction=",">
+                #compProcStsCd[]#
+            </iterate>
+            <!-- START 2018/05/25 Hd.Sugawara [QC#21841(Sol#495),ADD] -->
+            <!-- 2018/09/25 QC#28231 Del Start -->
+            <!--
+            AND (
+                B.INV_LINE_CATG_CD      IS NULL 
+                OR
+                B.INV_LINE_CATG_CD      = #invLineCatgCd#
+                )
+            -->
+            <!-- 2018/09/25 QC#28231 Del End -->
+            <!-- END 2018/05/25 Hd.Sugawara [QC#21841(Sol#495),ADD] -->
+            AND A.GLBL_CMPY_CD          = D.GLBL_CMPY_CD
+            AND A.CPO_ORD_NUM           = D.CPO_ORD_NUM
+            AND D.EZCANCELFLAG          = '0'
+            AND A.GLBL_CMPY_CD          = F.GLBL_CMPY_CD
+            AND A.CPO_ORD_NUM           = F.CPO_ORD_NUM
+            AND B.CPO_DTL_LINE_NUM      = F.CPO_DTL_LINE_NUM
+            AND B.CPO_DTL_LINE_SUB_NUM  = F.CPO_DTL_LINE_SUB_NUM
+            AND F.EZCANCELFLAG          = '0'
+            AND F.GLBL_CMPY_CD          = H.GLBL_CMPY_CD
+            AND F.CPO_ORD_NUM           = H.CPO_ORD_NUM
+            AND F.DS_CPO_CONFIG_PK      = H.DS_CPO_CONFIG_PK
+            AND H.EZCANCELFLAG          = '0'
+            AND B.GLBL_CMPY_CD          = I.GLBL_CMPY_CD
+            AND B.MDSE_CD               = I.MDSE_CD
+            AND I.EZCANCELFLAG          = '0'
+            AND H.GLBL_CMPY_CD          = J.T_GLBL_CMPY_CD (+)
+            AND H.MDL_ID                = J.T_MDL_ID (+)
+            AND J.EZCANCELFLAG (+)      = '0'
+            AND B.GLBL_CMPY_CD          = K.GLBL_CMPY_CD (+)
+            AND B.SHPG_PLN_NUM          = K.SHPG_PLN_NUM (+)
+            AND K.EZCANCELFLAG (+)      = '0'
+            AND K.GLBL_CMPY_CD          = L.GLBL_CMPY_CD (+)
+            AND K.SO_NUM                = L.SO_NUM (+)
+            AND K.SO_SLP_NUM            = L.SO_SLP_NUM (+)
+            AND L.EZCANCELFLAG (+)      = '0'
+            AND D.GLBL_CMPY_CD          = M.GLBL_CMPY_CD
+            AND D.SELL_TO_CUST_CD       = M.SELL_TO_CUST_CD
+            AND M.EZCANCELFLAG          = '0'
+            AND H.GLBL_CMPY_CD          = N.GLBL_CMPY_CD
+            AND H.BILL_TO_CUST_ACCT_CD  = N.SELL_TO_CUST_CD
+            AND N.EZCANCELFLAG          = '0'
+            AND D.DS_ORD_CATG_CD        = DEALER_COUNT.DS_ORD_CATG_CD (+)
+            AND H.CPO_ORD_NUM           = SLS_REP.CPO_ORD_NUM (+)
+            AND H.DS_CPO_CONFIG_PK      = SLS_REP.DS_CPO_CONFIG_PK (+)
+            AND H.CPO_ORD_NUM           = INST_REP.CPO_ORD_NUM (+)
+            AND H.DS_CPO_CONFIG_PK      = INST_REP.DS_CPO_CONFIG_PK (+)
+            AND F.CPO_ORD_NUM           = PRTR_COUNT.CPO_ORD_NUM (+)
+            AND F.CPO_DTL_LINE_NUM      = PRTR_COUNT.CPO_DTL_LINE_NUM (+)
+            AND F.CPO_DTL_LINE_SUB_NUM  = PRTR_COUNT.CPO_DTL_LINE_SUB_NUM (+)
+            <!-- QC#27083 add Start -->
+            AND B.INV_NUM               = DILSN.INV_NUM (+)
+            AND B.INV_BOL_LINE_NUM      = DILSN.INV_BOL_LINE_NUM (+)
+            AND B.INV_LINE_NUM          = DILSN.INV_LINE_NUM (+)
+            AND B.INV_LINE_SUB_NUM      = DILSN.INV_LINE_SUB_NUM (+)
+            AND DILSN.EZCANCELFLAG (+)  = '0'
+            <!-- QC#27083 add End -->
+            AND EXISTS (
+                    SELECT
+                        1
+                    FROM
+                         DS_CPO_SLS_CR      X1
+                        ,LINE_BIZ_ROLE_TP   X2
+                        ,CPO_V              X3
+            <!-- QC#25938 add Start -->
+                        ,DS_ORD_TP_PROC_DFN X4
+            <!-- QC#25938 add End -->
+                    WHERE
+                            X1.GLBL_CMPY_CD        = H.GLBL_CMPY_CD
+                        AND X1.CPO_ORD_NUM         = H.CPO_ORD_NUM
+                        AND X1.DS_CPO_CONFIG_PK    = H.DS_CPO_CONFIG_PK
+                        AND X1.EZCANCELFLAG        = '0'
+                        AND X1.GLBL_CMPY_CD        = X2.GLBL_CMPY_CD
+                        AND X1.SLS_REP_ROLE_TP_CD  = X2.LINE_BIZ_ROLE_TP_CD
+                        AND X2.EZCANCELFLAG        = '0'
+                        AND X2.SLS_CR_QUOT_FLG     = 'Y'
+                        AND X1.GLBL_CMPY_CD        = X3.GLBL_CMPY_CD
+                        AND X1.CPO_ORD_NUM         = X3.CPO_ORD_NUM
+                        AND X3.EZCANCELFLAG        = '0'
+                        AND X3.LINE_BIZ_TP_CD      = #lineBizTpCd#
+            <!-- QC#25938 add Start -->
+                        AND X3.GLBL_CMPY_CD        = X4.GLBL_CMPY_CD
+                        AND X3.DS_ORD_TP_CD        = X4.DS_ORD_TP_CD
+                        AND X4.EZCANCELFLAG        = '0'
+                        AND (X4.TRTY_GRP_TP_TXT    NOT LIKE #lineBizTpCdForIs#
+                            OR  X4.TRTY_GRP_TP_TXT IS NULL)
+            <!-- QC#25938 add End -->
+                )
+     )
+    ,INV_COUNT AS (
+        SELECT
+             COMP_INFO.INV_NUM
+            ,COMP_INFO.INV_BOL_LINE_NUM
+            ,COMP_INFO.INV_LINE_NUM
+            ,COMP_INFO.INV_LINE_SUB_NUM
+            ,COMP_INFO.INV_LINE_SUB_TRX_NUM
+            ,COUNT(COMP_INFO.INV_NUM) AS COUNT
+        FROM
+            COMP_INFO
+        GROUP BY
+             COMP_INFO.INV_NUM
+            ,COMP_INFO.INV_BOL_LINE_NUM
+            ,COMP_INFO.INV_LINE_NUM
+            ,COMP_INFO.INV_LINE_SUB_NUM
+            ,COMP_INFO.INV_LINE_SUB_TRX_NUM
+     )
+<!-- QC#27084 del Start
+    ,CONTR_SLD AS (
+        SELECT
+             X1.INV_NUM
+            ,X1.INV_BOL_LINE_NUM
+            ,X1.INV_LINE_NUM
+            ,X1.INV_LINE_SUB_NUM
+            ,X1.INV_LINE_SUB_TRX_NUM
+            ,X1.SER_NUM
+            ,COUNT(X1.SVC_COV_TMPL_TP_CD) AS COUNT
+        FROM
+             (
+              SELECT /*+ NO_PUSH_PRED */
+                   COMP_INFO.GLBL_CMPY_CD
+                  ,COMP_INFO.INV_NUM
+                  ,COMP_INFO.INV_BOL_LINE_NUM
+                  ,COMP_INFO.INV_LINE_NUM
+                  ,COMP_INFO.INV_LINE_SUB_NUM
+                  ,COMP_INFO.INV_LINE_SUB_TRX_NUM
+                  ,COMP_INFO.SER_NUM
+                  ,Y2.SVC_PGM_MDSE_CD
+                  ,ROW_NUMBER() OVER (PARTITION BY Y2.SVC_MACH_MSTR_PK ORDER BY Y2.CONTR_EFF_THRU_DT DESC, Y2.DS_CONTR_DTL_PK DESC) AS ROW_NUM
+                  ,Y4.SVC_COV_TMPL_TP_CD
+              FROM
+                   COMP_INFO
+                  ,SVC_MACH_MSTR  Y1
+                  ,DS_CONTR_DTL   Y2
+                  ,MDSE             Y3
+                  ,SVC_COV_TMPL_TP  Y4
+                  ,SVC_COV_TMPL_DTL Y5
+              WHERE
+                      COMP_INFO.GLBL_CMPY_CD    = Y1.GLBL_CMPY_CD
+                  AND COMP_INFO.SO_NUM          = Y1.SO_NUM
+                  AND COMP_INFO.SO_SLP_NUM      = Y1.SO_SLP_NUM
+                  AND NVL(COMP_INFO.SER_NUM, #defSerNum#)
+                                                = NVL(Y1.SER_NUM, #defSerNum#)
+                  AND Y1.EZCANCELFLAG           = '0'
+                  AND Y1.GLBL_CMPY_CD           = Y2.GLBL_CMPY_CD
+                  AND Y1.SVC_MACH_MSTR_PK       = Y2.SVC_MACH_MSTR_PK
+                  AND Y2.EZCANCELFLAG           = '0'
+                  <iterate property="dsContrDtlStsCdList" var="dsContrDtlStsCd[]" open="AND Y2.DS_CONTR_DTL_STS_CD NOT IN (" close=")" conjunction=",">
+                      #dsContrDtlStsCd[]#
+                  </iterate>
+                  AND Y2.CONTR_EFF_FROM_DT      &lt;= COMP_INFO.ORD_BOOK_DT
+                  AND NVL(Y2.CONTR_CLO_DT, Y2.CONTR_EFF_THRU_DT )
+                                                &gt;= COMP_INFO.ORD_BOOK_DT
+
+                  AND Y2.GLBL_CMPY_CD         = Y3.GLBL_CMPY_CD
+                  AND Y2.SVC_PGM_MDSE_CD      = Y3.MDSE_CD
+                  AND Y3.EZCANCELFLAG         = '0'
+                  AND Y3.GLBL_CMPY_CD         = Y4.GLBL_CMPY_CD
+                  AND Y3.SVC_COV_TMPL_TP_CD   = Y4.SVC_COV_TMPL_TP_CD
+                  AND Y4.EZCANCELFLAG         = '0'
+                  AND Y4.GLBL_CMPY_CD         = Y5.GLBL_CMPY_CD
+                  AND Y4.SVC_COV_TMPL_TP_CD   = Y5.SVC_COV_TMPL_TP_CD
+                  AND Y5.EZCANCELFLAG         = '0'
+                  AND Y5.SVC_COV_DTL_VAL_TXT  = 'Y'
+                  AND Y5.SVC_COV_FEAT_CD      = #svcCovFeatSplyIncl#
+             ) X1
+        GROUP BY
+             X1.INV_NUM
+            ,X1.INV_BOL_LINE_NUM
+            ,X1.INV_LINE_NUM
+            ,X1.INV_LINE_SUB_NUM
+            ,X1.INV_LINE_SUB_TRX_NUM
+            ,X1.SER_NUM
+     )
+ -->
+
+        SELECT
+             COMP_INFO.DIST_CH_CD
+            ,COMP_INFO.COMP_DIV_CD
+            ,COMP_INFO.CPO_ORD_NUM
+            ,COMP_INFO.DS_ORD_POSN_NUM
+            ,COMP_INFO.CPO_DTL_LINE_NUM
+            ,COMP_INFO.CPO_DTL_LINE_SUB_NUM
+            <!-- 2018/09/21 QC#28232 Add Start -->
+            ,TO_CHAR(COMP_INFO.DS_CPO_LINE_NUM) AS DS_CPO_LINE_NUM
+            ,TO_CHAR(COMP_INFO.DS_CPO_LINE_SUB_NUM) AS DS_CPO_LINE_SUB_NUM
+            <!-- 2018/09/21 QC#28232 Add End -->
+            ,COMP_INFO.DS_ORD_CATG_CD
+            ,COMP_INFO.DS_ORD_TP_CD
+            ,COMP_INFO.ORD_CRAT_DT
+            ,COMP_INFO.T_MDL_NM
+            ,COMP_INFO.MDSE_CD
+            ,COMP_INFO.SELL_TO_CUST_CD
+            ,COMP_INFO.SELL_TO_CUST_ACCT_NM
+            ,COMP_INFO.SLS_REP_PSN_CD
+            ,COMP_INFO.ISTL_REP_PSN_CD
+            ,COMP_INFO.SVC_CONFIG_MSTR_PK
+            ,COMP_INFO.SER_NUM
+            ,CASE
+                 WHEN INV_COUNT.COUNT &gt; 1 THEN 1
+                 ELSE COMP_INFO.SHIP_QTY
+             END                        AS COMP_ORD_QTY
+            ,CASE
+                 <!-- 2018/09/11 QC#28118,28123 Mod Start -->
+                 <!--
+                 WHEN INV_COUNT.COUNT &gt; 1 THEN COMP_INFO.DEAL_NET_UNIT_PRC_AMT
+                 ELSE COMP_INFO.INV_LINE_DEAL_NET_AMT
+                 -->
+                 <!-- 2018/11/09 QC#29131 Del Start -->
+                 <!--
+                 WHEN INV_COUNT.COUNT &gt; 1 THEN 
+                 CASE
+                     WHEN COMP_INFO.CR_REBIL_CD = #crCdCredit# THEN COMP_INFO.DEAL_NET_UNIT_PRC_AMT * (-1)
+                     ELSE COMP_INFO.DEAL_NET_UNIT_PRC_AMT
+                 END
+                 ELSE
+                 CASE
+                     WHEN COMP_INFO.CR_REBIL_CD = #crCdCredit# THEN COMP_INFO.INV_LINE_DEAL_NET_AMT * (-1)
+                     ELSE COMP_INFO.INV_LINE_DEAL_NET_AMT
+                 END
+                 -->
+                 <!-- 2018/11/09 QC#29131 Del End -->
+                 <!-- 2018/09/11 QC#28118,28123 Mod End -->
+                 <!-- 2018/11/09 QC#29131 Add Start -->
+                 WHEN INV_COUNT.COUNT &gt; 1 THEN 
+                 CASE
+                     WHEN COMP_INFO.INV_TP_CD = #creditMemo# THEN COMP_INFO.DEAL_NET_UNIT_PRC_AMT * (-1)
+                     ELSE COMP_INFO.DEAL_NET_UNIT_PRC_AMT
+                 END
+                 ELSE
+                 CASE
+                     WHEN COMP_INFO.INV_TP_CD = #creditMemo# THEN COMP_INFO.INV_LINE_DEAL_NET_AMT * (-1)
+                     ELSE COMP_INFO.INV_LINE_DEAL_NET_AMT
+                 END
+                 <!-- 2018/11/09 QC#29131 Add End -->
+             END                        AS COMP_VAL_AMT
+            ,COMP_INFO.INV_NUM
+            ,COMP_INFO.INV_LINE_NUM
+            ,COMP_INFO.INV_LINE_SUB_NUM
+            <!-- 2018/09/11 QC#28118,28123 Mod Start -->
+            <!--
+            ,COMP_INFO.INV_DT
+            -->
+            ,CASE 
+             WHEN COMP_INFO.CR_REBIL_CD IN (#crCdCredit#, #crCdRebill#) THEN COMP_INFO.ACCT_DT
+             ELSE COMP_INFO.INV_DT
+             END AS INV_DT
+            <!-- QC#27084 mod Start
+            ,CASE
+                 WHEN CONTR_SLD.COUNT &gt; 0 THEN 'Y'
+                 ELSE 'N'
+             END                        AS CONTR_SLD_FLG -->
+            ,DECODE(
+                (SELECT COUNT(*)
+                    FROM
+                        DS_CONTR_DTL DCD
+                    WHERE
+                        DCD.GLBL_CMPY_CD            = COMP_INFO.GLBL_CMPY_CD
+                    AND DCD.CPO_ORD_NUM             = COMP_INFO.CPO_ORD_NUM
+                    AND DCD.CPO_DTL_LINE_NUM        = COMP_INFO.CPO_DTL_LINE_NUM
+                    AND DCD.CPO_DTL_LINE_SUB_NUM    = COMP_INFO.CPO_DTL_LINE_SUB_NUM
+                    AND DCD.EZCANCELFLAG            = '0'
+                )
+                ,0 , 'N', 'Y')        AS CONTR_SLD_FLG
+            <!-- QC#27084 mod End -->
+            ,COMP_INFO.COMP_PRTR_FLG
+            ,COMP_INFO.ACRL_ORD_FLG
+            ,COMP_INFO.CR_REBIL_RSN_CD
+            ,COMP_INFO.INV_BOL_LINE_NUM
+            ,COMP_INFO.INV_LINE_SUB_TRX_NUM
+            ,COMP_INFO.DS_ORD_RSN_CD <!-- 2018/07/11 W.Honda [QC#27085,ADD] -->
+        FROM
+             COMP_INFO
+            ,INV_COUNT
+            <!-- QC#27084 del 
+            ,CONTR_SLD
+            -->
+        WHERE
+                COMP_INFO.INV_NUM               = INV_COUNT.INV_NUM
+            AND COMP_INFO.INV_BOL_LINE_NUM      = INV_COUNT.INV_BOL_LINE_NUM
+            AND COMP_INFO.INV_LINE_NUM          = INV_COUNT.INV_LINE_NUM
+            AND COMP_INFO.INV_LINE_SUB_NUM      = INV_COUNT.INV_LINE_SUB_NUM
+            AND COMP_INFO.INV_LINE_SUB_TRX_NUM  = INV_COUNT.INV_LINE_SUB_TRX_NUM
+            <!-- QC#27084 del 
+            AND COMP_INFO.INV_NUM               = CONTR_SLD.INV_NUM (+)
+            AND COMP_INFO.INV_BOL_LINE_NUM      = CONTR_SLD.INV_BOL_LINE_NUM (+)
+            AND COMP_INFO.INV_LINE_NUM          = CONTR_SLD.INV_LINE_NUM (+)
+            AND COMP_INFO.INV_LINE_SUB_NUM      = CONTR_SLD.INV_LINE_SUB_NUM (+)
+            AND COMP_INFO.INV_LINE_SUB_TRX_NUM  = CONTR_SLD.INV_LINE_SUB_TRX_NUM (+)
+            AND NVL(COMP_INFO.SER_NUM, #defSerNum#)
+                                                = NVL(CONTR_SLD.SER_NUM (+), #defSerNum#)
+             -->
+        ORDER BY
+             COMP_INFO.INV_NUM               ASC
+            ,COMP_INFO.INV_BOL_LINE_NUM      ASC
+            ,COMP_INFO.INV_LINE_NUM          ASC
+            ,COMP_INFO.INV_LINE_SUB_NUM      ASC
+            ,COMP_INFO.INV_LINE_SUB_TRX_NUM  ASC
+            ,COMP_INFO.SER_NUM               ASC NULLS LAST
+    </statement>
+    <statement id="getCompInfoAccrual" parameterClass="Map" resultClass="Map">
+    WITH COMP_INFO AS (
+        SELECT
+             CASE
+                 WHEN DEALER_COUNT.COUNT &gt;     0                THEN #distChDealer#
+                 WHEN N.COA_AFFL_CD      &lt;&gt; #coaAfflNonAffl# THEN #distChIntraCompany#
+                 ELSE #distChCommercial#
+             END                        AS DIST_CH_CD
+            ,SLS_REP.TRTY_GRP_TP_CD     AS COMP_DIV_CD
+            ,D.CPO_ORD_NUM              AS CPO_ORD_NUM
+            ,F.DS_ORD_POSN_NUM          AS DS_ORD_POSN_NUM
+            ,F.CPO_DTL_LINE_NUM         AS CPO_DTL_LINE_NUM
+            ,F.CPO_DTL_LINE_SUB_NUM     AS CPO_DTL_LINE_SUB_NUM
+            ,D.DS_ORD_CATG_CD           AS DS_ORD_CATG_CD
+            ,D.DS_ORD_TP_CD             AS DS_ORD_TP_CD
+            ,SUBSTR(D.CPO_ORD_TS, 1, 8) AS ORD_CRAT_DT
+            ,J.T_MDL_NM                 AS T_MDL_NM
+            ,K.MDSE_CD                  AS MDSE_CD
+            ,D.SELL_TO_CUST_CD          AS SELL_TO_CUST_CD
+            ,M.DS_ACCT_NM               AS SELL_TO_CUST_ACCT_NM
+            ,SLS_REP.PSN_CD             AS SLS_REP_PSN_CD
+            ,NVL(INST_REP.PSN_CD, SLS_REP.PSN_CD)
+                                        AS ISTL_REP_PSN_CD
+            ,H.SVC_CONFIG_MSTR_PK       AS SVC_CONFIG_MSTR_PK
+            <!-- QC#27083 mod Start -->
+            <!-- ,L.SER_NUM                  AS SER_NUM -->
+            ,NVL(L.SER_NUM, F.SER_NUM)  AS SER_NUM
+            <!-- QC#27083 mod End -->
+            ,NULL                       AS INV_NUM
+            ,NULL                       AS INV_LINE_NUM
+            ,NULL                       AS INV_LINE_SUB_NUM
+            ,NULL                       AS INV_DT
+            ,CASE
+                 WHEN PRTR_COUNT.COUNT &gt; 0 THEN 'Y'
+                 ELSE 'N'
+             END                        AS COMP_PRTR_FLG
+            ,'Y'                        AS ACRL_ORD_FLG
+            <!-- START 2018/07/12 W.Honda [QC#27085,MOD]
+            ,NULL                       AS CR_REBIL_RSN_CD -->
+            ,(SELECT X.CR_REBIL_RSN_CD
+                FROM (SELECT RSN.CR_REBIL_RSN_CD
+                        FROM DS_CPO_CR_REBIL_RSN RSN
+                       WHERE RSN.GLBL_CMPY_CD = D.GLBL_CMPY_CD
+                         AND RSN.CPO_ORD_NUM  = D.CPO_ORD_NUM
+                         AND RSN.EZCANCELFLAG = '0'
+                       ORDER BY
+                             RSN.CR_REBIL_RSN_CD
+                     ) X
+               WHERE ROWNUM = 1
+            )                           AS CR_REBIL_RSN_CD
+            <!-- END 2018/07/12 W.Honda [QC#27085,MOD] -->
+            ,D.GLBL_CMPY_CD             AS GLBL_CMPY_CD
+            ,SUBSTR(D.ORD_BOOK_TS, 1, 8) 
+                                        AS ORD_BOOK_DT
+            ,K.ORD_QTY                  AS ORD_QTY
+            ,K.SP_TOT_DEAL_NET_AMT      AS SP_TOT_DEAL_NET_AMT
+            ,K.SP_DEAL_NET_UNIT_PRC_AMT AS SP_DEAL_NET_UNIT_PRC_AMT
+            ,K.SO_NUM                   AS SO_NUM
+            ,K.SO_SLP_NUM               AS SO_SLP_NUM
+            ,K.SHPG_PLN_NUM             AS SHPG_PLN_NUM
+            ,D.DS_ORD_RSN_CD            AS DS_ORD_RSN_CD <!-- 2018/07/11 W.Honda [QC#27085,ADD] -->
+            ,F.DS_CPO_LINE_NUM          AS DS_CPO_LINE_NUM <!-- 2018/09/21 QC#28232 Add -->
+            ,F.DS_CPO_LINE_SUB_NUM      AS DS_CPO_LINE_SUB_NUM <!-- 2018/09/21 QC#28232 Add -->
+            <!-- START 2018/10/17 Hd.Sugawara [QC#28842,ADD] -->
+            ,NULL                       AS INV_BOL_LINE_NUM
+            <!-- END 2018/10/17 Hd.Sugawara [QC#28842,ADD] -->
+        FROM
+             CPO             D
+            ,CPO_DTL         F
+            ,DS_CPO_CONFIG   H
+<!-- QC#55658 2020/01/31 Mod Start -->
+<!--        ,MDSE            I   -->
+            ,ALL_MDSE_V      I
+<!-- QC#55658 2020/01/31 Mod End   -->
+            ,MDL_NM          J
+            ,SHPG_PLN        K
+            ,SHIP_SER_NUM    L
+            ,SELL_TO_CUST    M
+            ,SELL_TO_CUST    N
+            ,(
+              SELECT
+                   X1.DS_ORD_CATG_CD
+                  ,COUNT(X1.ORD_CATG_BIZ_CTX_PK) AS COUNT
+              FROM
+                   ORD_CATG_BIZ_CTX     X1
+              WHERE
+                      X1.GLBL_CMPY_CD       = #glblCmpyCd#
+                  AND X1.EZCANCELFLAG       = '0'
+                  AND X1.ORD_CATG_CTX_TP_CD = #ordCatgCtxTpDealer#
+              GROUP BY
+                  X1.DS_ORD_CATG_CD
+             )               DEALER_COUNT
+            ,(
+              SELECT
+                   X.CPO_ORD_NUM
+                  ,X.DS_CPO_CONFIG_PK
+                  ,X.PSN_CD
+                  ,X.ORG_CD
+                  ,CASE WHEN Y.TRTY_GRP_TP_CD = #trtyGrpTpCdTD# THEN #convDivCdTDS#
+                        ELSE Y.TRTY_GRP_TP_CD END  TRTY_GRP_TP_CD
+              FROM
+                  (SELECT /*+ NO_PUSH_PRED */
+                        X1.CPO_ORD_NUM
+                       ,X1.DS_CPO_CONFIG_PK
+                       ,X3.PSN_CD
+<!--                       ,X4.$orgCd$            AS ORG_CD-->
+                       ,X5.ORG_CD
+                       ,ROW_NUMBER() OVER (PARTITION BY X1.CPO_ORD_NUM, X1.DS_CPO_CONFIG_PK ORDER BY X1.SLS_REP_CR_PCT DESC, X1.SLS_REP_TOC_CD ASC) AS ROW_NUM
+                   FROM
+                        DS_CPO_SLS_CR    X1
+                       ,LINE_BIZ_ROLE_TP X2
+                       ,ORG_FUNC_ASG     X3
+<!--                       ,S21_ORG          X4-->
+                       ,DS_ORG_RESRC_RELN    X5
+                   WHERE
+                           X1.GLBL_CMPY_CD        = #glblCmpyCd#
+                       AND X1.EZCANCELFLAG        = '0'
+                       AND X1.GLBL_CMPY_CD        = X2.GLBL_CMPY_CD
+                       AND X1.SLS_REP_ROLE_TP_CD  = X2.LINE_BIZ_ROLE_TP_CD
+                       AND X2.EZCANCELFLAG        = '0'
+                       AND X2.PRIM_REP_ROLE_FLG   = 'Y'
+                       AND X2.SLS_CR_QUOT_FLG     = 'Y'
+                       AND X1.GLBL_CMPY_CD        = X3.GLBL_CMPY_CD
+                       AND X1.SLS_REP_TOC_CD      = X3.TOC_CD
+                       AND X3.EZCANCELFLAG        = '0'
+                       AND X3.EFF_FROM_DT         &lt;= #slsDt#
+<!--2019/05/14 #50093 Del Start-->
+<!--                       AND NVL(X3.EFF_THRU_DT, #slsDt#) -->
+<!--                                                  &gt;= #slsDt#-->
+<!--2019/05/14 #50093 Del End-->
+<!--                       AND X1.GLBL_CMPY_CD        = X4.GLBL_CMPY_CD (+)-->
+<!--                       AND X1.SLS_REP_TOC_CD      = X4.TOC_CD (+)-->
+<!--                       AND X4.EZCANCELFLAG (+)    = '0'-->
+                       AND X3.GLBL_CMPY_CD        = X5.GLBL_CMPY_CD(+)
+                       AND X3.PSN_CD              = X5.PSN_CD(+)
+                       AND X5.EZCANCELFLAG(+)        = '0'
+                  ) X
+                  ,DS_ORG_UNIT  Y
+              WHERE
+                  X.ROW_NUM = 1
+              AND Y.GLBL_CMPY_CD(+)    = 'ADB'
+              AND Y.ORG_CD(+)          = X.ORG_CD
+              AND Y.EZCANCELFLAG(+)    = '0'
+             )               SLS_REP
+            ,(
+              SELECT
+                   X.CPO_ORD_NUM
+                  ,X.DS_CPO_CONFIG_PK
+                  ,X.PSN_CD
+              FROM
+                  (SELECT /*+ NO_PUSH_PRED */
+                        X1.CPO_ORD_NUM
+                       ,X1.DS_CPO_CONFIG_PK
+                       ,X3.PSN_CD
+                       ,ROW_NUMBER() OVER (PARTITION BY X1.CPO_ORD_NUM, X1.DS_CPO_CONFIG_PK ORDER BY X1.SLS_REP_CR_PCT DESC, X1.SLS_REP_TOC_CD ASC) AS ROW_NUM
+                   FROM
+                        DS_CPO_SLS_CR    X1
+                       ,LINE_BIZ_ROLE_TP X2
+                       ,ORG_FUNC_ASG     X3
+                   WHERE
+                           X1.GLBL_CMPY_CD        = #glblCmpyCd#
+                       AND X1.EZCANCELFLAG        = '0'
+                       AND X1.GLBL_CMPY_CD        = X2.GLBL_CMPY_CD
+                       AND X1.SLS_REP_ROLE_TP_CD  = X2.LINE_BIZ_ROLE_TP_CD
+                       AND X2.EZCANCELFLAG        = '0'
+                       AND X2.PRIM_REP_ROLE_FLG   = 'N'
+                       AND X2.SLS_CR_QUOT_FLG     = 'Y'
+                       AND X1.GLBL_CMPY_CD        = X3.GLBL_CMPY_CD
+                       AND X1.SLS_REP_TOC_CD      = X3.TOC_CD
+                       AND X3.EZCANCELFLAG        = '0'
+                       AND X3.EFF_FROM_DT         &lt;= #slsDt#
+<!--2019/05/14 #50093 Del Start-->
+<!--                       AND NVL(X3.EFF_THRU_DT, #slsDt#) -->
+<!--                                                  &gt;= #slsDt#-->
+<!--2019/05/14 #50093 Del End-->
+                  ) X
+              WHERE
+                  X.ROW_NUM = 1
+             )               INST_REP
+            ,(
+              SELECT
+                   X1.CPO_ORD_NUM
+                  ,X1.CPO_DTL_LINE_NUM
+                  ,X1.CPO_DTL_LINE_SUB_NUM
+                  ,COUNT(X3.MDSE_CD) COUNT
+              FROM
+                   CPO_DTL        X1
+                  ,DS_CPO_CONFIG  X2
+                  ,ALL_MDSE_V     X3
+                  ,DS_MDL         X4
+              WHERE
+                      X1.GLBL_CMPY_CD         = #glblCmpyCd#
+                  AND X1.BASE_CMPT_FLG        = 'Y'                  
+                  AND X1.EZCANCELFLAG         = '0'
+                  AND X1.GLBL_CMPY_CD         = X2.GLBL_CMPY_CD
+                  AND X1.CPO_ORD_NUM          = X2.CPO_ORD_NUM
+                  AND X1.DS_ORD_POSN_NUM      = X2.DS_ORD_POSN_NUM
+                  AND X2.EZCANCELFLAG         = '0'
+                  AND X1.GLBL_CMPY_CD         = X3.GLBL_CMPY_CD
+                  AND X1.MDSE_CD              = X3.MDSE_CD
+                  AND X3.EZCANCELFLAG         = '0'
+                  AND X3.COA_MDSE_TP_CD       = #coaMdseTpMachine#
+                  AND X2.GLBL_CMPY_CD         = X4.GLBL_CMPY_CD
+                  AND X2.MDL_ID               = X4.MDL_ID
+                  AND X4.EZCANCELFLAG         = '0'
+                  AND X4.MTR_GRP_PK           IS NOT NULL
+              GROUP BY
+                   X1.CPO_ORD_NUM
+                  ,X1.CPO_DTL_LINE_NUM
+                  ,X1.CPO_DTL_LINE_SUB_NUM
+             )               PRTR_COUNT
+        WHERE
+                D.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND D.EZCANCELFLAG          = '0'
+           <!-- QC#55658 2020/01/31 Add Start -->
+            AND D.ORD_HDR_STS_CD        &lt;&gt; #ordHdrStsCancel#
+            <!-- QC#55658 2020/01/31 Add End   -->
+             AND D.GLBL_CMPY_CD          = F.GLBL_CMPY_CD
+            AND D.CPO_ORD_NUM           = F.CPO_ORD_NUM
+            AND F.EZCANCELFLAG          = '0'
+            <!-- QC#55658 2020/01/31 Add Start -->
+            AND F.ORD_LINE_STS_CD       NOT IN 
+            <iterate property="ordLineStsCdList" var="ordLineStsCd[]" open="(" close=")" conjunction=",">
+                #ordLineStsCd[]#
+            </iterate>
+            <!-- QC#55658 2020/01/31 Add End   -->
+            AND F.GLBL_CMPY_CD          = H.GLBL_CMPY_CD
+            AND F.CPO_ORD_NUM           = H.CPO_ORD_NUM
+            AND F.DS_CPO_CONFIG_PK      = H.DS_CPO_CONFIG_PK
+            AND H.EZCANCELFLAG          = '0'
+            AND H.GLBL_CMPY_CD          = J.T_GLBL_CMPY_CD (+)
+            AND H.MDL_ID                = J.T_MDL_ID (+)
+            AND J.EZCANCELFLAG (+)      = '0'
+            AND F.GLBL_CMPY_CD          = K.GLBL_CMPY_CD
+            AND F.CPO_ORD_NUM           = K.TRX_HDR_NUM
+            AND F.CPO_DTL_LINE_NUM      = K.TRX_LINE_NUM
+            AND F.CPO_DTL_LINE_SUB_NUM  = K.TRX_LINE_SUB_NUM
+            AND K.EZCANCELFLAG          = '0'
+            AND K.GLBL_CMPY_CD          = I.GLBL_CMPY_CD
+            AND K.MDSE_CD               = I.MDSE_CD
+            AND I.EZCANCELFLAG          = '0'
+            AND K.GLBL_CMPY_CD          = L.GLBL_CMPY_CD (+)
+            AND K.SO_NUM                = L.SO_NUM (+)
+            AND K.SO_SLP_NUM            = L.SO_SLP_NUM (+)
+            AND L.EZCANCELFLAG (+)      = '0'
+            AND D.GLBL_CMPY_CD          = M.GLBL_CMPY_CD
+            AND D.SELL_TO_CUST_CD       = M.SELL_TO_CUST_CD
+            AND M.EZCANCELFLAG          = '0'
+            AND H.GLBL_CMPY_CD          = N.GLBL_CMPY_CD
+            AND H.BILL_TO_CUST_ACCT_CD  = N.SELL_TO_CUST_CD
+            AND N.EZCANCELFLAG          = '0'
+            AND D.DS_ORD_CATG_CD        = DEALER_COUNT.DS_ORD_CATG_CD (+)
+            AND H.CPO_ORD_NUM           = SLS_REP.CPO_ORD_NUM (+)
+            AND H.DS_CPO_CONFIG_PK      = SLS_REP.DS_CPO_CONFIG_PK (+)
+            AND H.CPO_ORD_NUM           = INST_REP.CPO_ORD_NUM (+)
+            AND H.DS_CPO_CONFIG_PK      = INST_REP.DS_CPO_CONFIG_PK (+)
+            AND F.CPO_ORD_NUM           = PRTR_COUNT.CPO_ORD_NUM (+)
+            AND F.CPO_DTL_LINE_NUM      = PRTR_COUNT.CPO_DTL_LINE_NUM (+)
+            AND F.CPO_DTL_LINE_SUB_NUM  = PRTR_COUNT.CPO_DTL_LINE_SUB_NUM (+)
+            AND EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        COMP_ACRL_PRM     X1
+                    WHERE
+                            X1.GLBL_CMPY_CD        = D.GLBL_CMPY_CD
+                        AND X1.CPO_ORD_NUM         = D.CPO_ORD_NUM
+                        AND X1.EZCANCELFLAG        = '0'
+                        <iterate property="compProcStsCdList" var="compProcStsCd[]" open="AND X1.COMP_PROC_STS_CD IN (" close=")" conjunction=",">
+                            #compProcStsCd[]#
+                        </iterate>
+                )
+            AND EXISTS (
+                    SELECT
+                        1
+                    FROM
+                         DS_CPO_SLS_CR      X1
+                        ,LINE_BIZ_ROLE_TP   X2
+                        ,CPO_V              X3
+            <!-- QC#25938 add Start -->
+                        ,DS_ORD_TP_PROC_DFN X4
+            <!-- QC#25938 add End -->
+                    WHERE
+                            X1.GLBL_CMPY_CD        = H.GLBL_CMPY_CD
+                        AND X1.CPO_ORD_NUM         = H.CPO_ORD_NUM
+                        AND X1.DS_CPO_CONFIG_PK    = H.DS_CPO_CONFIG_PK
+                        AND X1.EZCANCELFLAG        = '0'
+                        AND X1.GLBL_CMPY_CD        = X2.GLBL_CMPY_CD
+                        AND X1.SLS_REP_ROLE_TP_CD  = X2.LINE_BIZ_ROLE_TP_CD
+                        AND X2.EZCANCELFLAG        = '0'
+                        AND X2.SLS_CR_QUOT_FLG     = 'Y'
+                        AND X1.GLBL_CMPY_CD        = X3.GLBL_CMPY_CD
+                        AND X1.CPO_ORD_NUM         = X3.CPO_ORD_NUM
+                        AND X3.EZCANCELFLAG        = '0'
+                        AND X3.LINE_BIZ_TP_CD      = #lineBizTpCd#
+            <!-- QC#25938 add Start -->
+                        AND X3.GLBL_CMPY_CD        = X4.GLBL_CMPY_CD
+                        AND X3.DS_ORD_TP_CD        = X4.DS_ORD_TP_CD
+                        AND X4.EZCANCELFLAG        = '0'
+                        AND (X4.TRTY_GRP_TP_TXT    NOT LIKE #lineBizTpCdForIs#
+                            OR  X4.TRTY_GRP_TP_TXT IS NULL)
+            <!-- QC#25938 add End -->
+                )
+     )
+    ,CPO_COUNT AS (
+        SELECT
+             COMP_INFO.CPO_ORD_NUM
+            ,COMP_INFO.CPO_DTL_LINE_NUM
+            ,COMP_INFO.CPO_DTL_LINE_SUB_NUM
+            ,COUNT(COMP_INFO.CPO_ORD_NUM) AS COUNT
+        FROM
+            COMP_INFO
+        GROUP BY
+             COMP_INFO.CPO_ORD_NUM
+            ,COMP_INFO.CPO_DTL_LINE_NUM
+            ,COMP_INFO.CPO_DTL_LINE_SUB_NUM
+     )
+    <!-- QC#27084 del
+    ,CONTR_SLD AS (
+        SELECT
+             X1.CPO_ORD_NUM
+            ,X1.CPO_DTL_LINE_NUM
+            ,X1.CPO_DTL_LINE_SUB_NUM
+            ,X1.SHPG_PLN_NUM
+            ,X1.SER_NUM
+            ,COUNT(X1.SVC_COV_TMPL_TP_CD) AS COUNT
+        FROM
+             (
+              SELECT /*+ NO_PUSH_PRED */
+                   COMP_INFO.GLBL_CMPY_CD
+                  ,COMP_INFO.CPO_ORD_NUM
+                  ,COMP_INFO.CPO_DTL_LINE_NUM
+                  ,COMP_INFO.CPO_DTL_LINE_SUB_NUM
+                  ,COMP_INFO.SHPG_PLN_NUM
+                  ,COMP_INFO.SER_NUM
+                  ,Y2.SVC_PGM_MDSE_CD
+                  ,ROW_NUMBER() OVER (PARTITION BY Y2.SVC_MACH_MSTR_PK ORDER BY Y2.CONTR_EFF_THRU_DT DESC, Y2.DS_CONTR_DTL_PK DESC) AS ROW_NUM
+                  ,Y4.SVC_COV_TMPL_TP_CD
+              FROM
+                   COMP_INFO
+                  ,SVC_MACH_MSTR  Y1
+                  ,DS_CONTR_DTL   Y2
+                  ,MDSE             Y3
+                  ,SVC_COV_TMPL_TP  Y4
+                  ,SVC_COV_TMPL_DTL Y5
+              WHERE
+                      COMP_INFO.GLBL_CMPY_CD    = Y1.GLBL_CMPY_CD
+                  AND COMP_INFO.SO_NUM          = Y1.SO_NUM
+                  AND COMP_INFO.SO_SLP_NUM      = Y1.SO_SLP_NUM
+                  AND NVL(COMP_INFO.SER_NUM, #defSerNum#)
+                                                = NVL(Y1.SER_NUM, #defSerNum#)
+                  AND Y1.EZCANCELFLAG           = '0'
+                  AND Y1.GLBL_CMPY_CD           = Y2.GLBL_CMPY_CD
+                  AND Y1.SVC_MACH_MSTR_PK       = Y2.SVC_MACH_MSTR_PK
+                  AND Y2.EZCANCELFLAG           = '0'
+                  <iterate property="dsContrDtlStsCdList" var="dsContrDtlStsCd[]" open="AND Y2.DS_CONTR_DTL_STS_CD NOT IN (" close=")" conjunction=",">
+                      #dsContrDtlStsCd[]#
+                  </iterate>
+                  AND Y2.CONTR_EFF_FROM_DT      &lt;= COMP_INFO.ORD_BOOK_DT
+                  AND NVL(Y2.CONTR_CLO_DT, Y2.CONTR_EFF_THRU_DT )
+                                                &gt;= COMP_INFO.ORD_BOOK_DT
+
+                  AND Y2.GLBL_CMPY_CD         = Y3.GLBL_CMPY_CD
+                  AND Y2.SVC_PGM_MDSE_CD      = Y3.MDSE_CD
+                  AND Y3.EZCANCELFLAG         = '0'
+                  AND Y3.GLBL_CMPY_CD         = Y4.GLBL_CMPY_CD
+                  AND Y3.SVC_COV_TMPL_TP_CD   = Y4.SVC_COV_TMPL_TP_CD
+                  AND Y4.EZCANCELFLAG         = '0'
+                  AND Y4.GLBL_CMPY_CD         = Y5.GLBL_CMPY_CD
+                  AND Y4.SVC_COV_TMPL_TP_CD   = Y5.SVC_COV_TMPL_TP_CD
+                  AND Y5.EZCANCELFLAG         = '0'
+                  AND Y5.SVC_COV_DTL_VAL_TXT  = 'Y'
+                  AND Y5.SVC_COV_FEAT_CD      = #svcCovFeatSplyIncl#
+             ) X1
+        GROUP BY
+             X1.CPO_ORD_NUM
+            ,X1.CPO_DTL_LINE_NUM
+            ,X1.CPO_DTL_LINE_SUB_NUM
+            ,X1.SHPG_PLN_NUM
+            ,X1.SER_NUM
+     )
+    -->
+    <!-- QC#55658 2020/01/31 Add Start -->
+    ,COMP_INFO_R AS (
+        SELECT
+             CASE
+                 WHEN DEALER_COUNT.COUNT &gt;     0                THEN #distChDealer#
+                 WHEN N.COA_AFFL_CD      &lt;&gt; #coaAfflNonAffl# THEN #distChIntraCompany#
+                 ELSE #distChCommercial#
+             END                        AS DIST_CH_CD
+            ,SLS_REP.TRTY_GRP_TP_CD     AS COMP_DIV_CD
+            ,D.CPO_ORD_NUM              AS CPO_ORD_NUM
+            ,F.DS_ORD_POSN_NUM          AS DS_ORD_POSN_NUM
+            ,F.DS_CPO_RTRN_LINE_NUM     AS CPO_DTL_LINE_NUM
+            ,F.DS_CPO_RTRN_LINE_SUB_NUM AS CPO_DTL_LINE_SUB_NUM
+            ,D.DS_ORD_CATG_CD           AS DS_ORD_CATG_CD
+            ,D.DS_ORD_TP_CD             AS DS_ORD_TP_CD
+            ,SUBSTR(D.CPO_ORD_TS, 1, 8) AS ORD_CRAT_DT
+            ,J.T_MDL_NM                 AS T_MDL_NM
+            ,F.MDSE_CD                  AS MDSE_CD
+            ,D.SELL_TO_CUST_CD          AS SELL_TO_CUST_CD
+            ,M.DS_ACCT_NM               AS SELL_TO_CUST_ACCT_NM
+            ,SLS_REP.PSN_CD             AS SLS_REP_PSN_CD
+            ,NVL(INST_REP.PSN_CD, SLS_REP.PSN_CD)
+                                        AS ISTL_REP_PSN_CD
+            ,H.SVC_CONFIG_MSTR_PK       AS SVC_CONFIG_MSTR_PK
+            ,Q.SER_NUM                  AS SER_NUM
+            ,NULL                       AS INV_NUM
+            ,NULL                       AS INV_LINE_NUM
+            ,NULL                       AS INV_LINE_SUB_NUM
+            ,NULL                       AS INV_DT
+            ,CASE
+                 WHEN PRTR_COUNT.COUNT &gt; 0 THEN 'Y'
+                 ELSE 'N'
+             END                        AS COMP_PRTR_FLG
+            ,'Y'                        AS ACRL_ORD_FLG
+            ,(SELECT X.CR_REBIL_RSN_CD
+                FROM (SELECT RSN.CR_REBIL_RSN_CD
+                        FROM DS_CPO_CR_REBIL_RSN RSN
+                       WHERE RSN.GLBL_CMPY_CD = D.GLBL_CMPY_CD
+                         AND RSN.CPO_ORD_NUM  = D.CPO_ORD_NUM
+                         AND RSN.EZCANCELFLAG = '0'
+                       ORDER BY
+                             RSN.CR_REBIL_RSN_CD
+                     ) X
+               WHERE ROWNUM = 1
+            )                           AS CR_REBIL_RSN_CD
+            ,D.GLBL_CMPY_CD             AS GLBL_CMPY_CD
+            ,SUBSTR(D.ORD_BOOK_TS, 1, 8) 
+                                        AS ORD_BOOK_DT
+            ,NVL(Q.RWS_QTY, F.ORD_QTY * -1)  AS ORD_QTY
+            ,F.CPO_DTL_DEAL_NET_AMT     AS SP_TOT_DEAL_NET_AMT
+            ,F.ENT_DEAL_NET_UNIT_PRC_AMT * -1 AS SP_DEAL_NET_UNIT_PRC_AMT
+            ,D.DS_ORD_RSN_CD            AS DS_ORD_RSN_CD
+            ,F.DS_CPO_LINE_NUM          AS DS_CPO_LINE_NUM
+            ,F.DS_CPO_LINE_SUB_NUM      AS DS_CPO_LINE_SUB_NUM
+            ,NULL                       AS INV_BOL_LINE_NUM
+        FROM
+             CPO             D
+            ,DS_CPO_RTRN_DTL F
+            ,DS_CPO_CONFIG   H
+            ,ALL_MDSE_V      I
+            ,MDL_NM          J
+            ,SELL_TO_CUST    M
+            ,SELL_TO_CUST    N
+            ,(
+             SELECT
+                   X1.TRX_ORD_NUM
+                  ,X2.TRX_LINE_NUM
+                  ,X2.TRX_LINE_SUB_NUM
+                  ,X2.RWS_QTY
+                  ,X3.SER_NUM
+             FROM
+                   RWS_HDR X1
+                  ,RWS_DTL X2
+                  ,RWS_SER X3
+             WHERE
+                      X1.GLBL_CMPY_CD     = #glblCmpyCd#
+                  AND X1.EZCANCELFLAG     = '0'
+                  AND X1.GLBL_CMPY_CD     = X2.GLBL_CMPY_CD
+                  AND X2.EZCANCELFLAG     = '0'
+                  AND X1.RWS_NUM          = X2.RWS_NUM
+                  AND X2.GLBL_CMPY_CD     = X3.GLBL_CMPY_CD
+                  AND X2.RWS_NUM          = X3.RWS_NUM
+                  AND X2.RWS_DTL_LINE_NUM = X3.RWS_LINE_NUM
+                  AND X3.EZCANCELFLAG     = '0'
+                  AND X1.RWS_STS_CD       &lt;&gt; #rwsStsCancel#
+                  AND X2.RWS_PUT_AWAY_QTY &gt; 0
+            ) Q
+            ,(
+              SELECT
+                   X1.DS_ORD_CATG_CD
+                  ,COUNT(X1.ORD_CATG_BIZ_CTX_PK) AS COUNT
+              FROM
+                   ORD_CATG_BIZ_CTX     X1
+              WHERE
+                      X1.GLBL_CMPY_CD       = #glblCmpyCd#
+                  AND X1.EZCANCELFLAG       = '0'
+                  AND X1.ORD_CATG_CTX_TP_CD = #ordCatgCtxTpDealer#
+              GROUP BY
+                  X1.DS_ORD_CATG_CD
+             )               DEALER_COUNT
+            ,(
+              SELECT
+                   X.CPO_ORD_NUM
+                  ,X.DS_CPO_CONFIG_PK
+                  ,X.PSN_CD
+                  ,X.ORG_CD
+                  ,CASE WHEN Y.TRTY_GRP_TP_CD = #trtyGrpTpCdTD# THEN #convDivCdTDS#
+                        ELSE Y.TRTY_GRP_TP_CD END  TRTY_GRP_TP_CD
+              FROM
+                  (SELECT /*+ NO_PUSH_PRED */
+                        X1.CPO_ORD_NUM
+                       ,X1.DS_CPO_CONFIG_PK
+                       ,X3.PSN_CD
+                       ,X5.ORG_CD
+                       ,ROW_NUMBER() OVER (PARTITION BY X1.CPO_ORD_NUM, X1.DS_CPO_CONFIG_PK ORDER BY X1.SLS_REP_CR_PCT DESC, X1.SLS_REP_TOC_CD ASC) AS ROW_NUM
+                   FROM
+                        DS_CPO_SLS_CR    X1
+                       ,LINE_BIZ_ROLE_TP X2
+                       ,ORG_FUNC_ASG     X3
+                       ,DS_ORG_RESRC_RELN    X5
+                   WHERE
+                           X1.GLBL_CMPY_CD        = #glblCmpyCd#
+                       AND X1.EZCANCELFLAG        = '0'
+                       AND X1.GLBL_CMPY_CD        = X2.GLBL_CMPY_CD
+                       AND X1.SLS_REP_ROLE_TP_CD  = X2.LINE_BIZ_ROLE_TP_CD
+                       AND X2.EZCANCELFLAG        = '0'
+                       AND X2.PRIM_REP_ROLE_FLG   = 'Y'
+                       AND X2.SLS_CR_QUOT_FLG     = 'Y'
+                       AND X1.GLBL_CMPY_CD        = X3.GLBL_CMPY_CD
+                       AND X1.SLS_REP_TOC_CD      = X3.TOC_CD
+                       AND X3.EZCANCELFLAG        = '0'
+                       AND X3.EFF_FROM_DT         &lt;= #slsDt#
+                       AND X3.GLBL_CMPY_CD        = X5.GLBL_CMPY_CD(+)
+                       AND X3.PSN_CD              = X5.PSN_CD(+)
+                       AND X5.EZCANCELFLAG(+)        = '0'
+                  ) X
+                  ,DS_ORG_UNIT  Y
+              WHERE
+                  X.ROW_NUM = 1
+              AND Y.GLBL_CMPY_CD(+)    = 'ADB'
+              AND Y.ORG_CD(+)          = X.ORG_CD
+              AND Y.EZCANCELFLAG(+)    = '0'
+             )               SLS_REP
+            ,(
+              SELECT
+                   X.CPO_ORD_NUM
+                  ,X.DS_CPO_CONFIG_PK
+                  ,X.PSN_CD
+              FROM
+                  (SELECT /*+ NO_PUSH_PRED */
+                        X1.CPO_ORD_NUM
+                       ,X1.DS_CPO_CONFIG_PK
+                       ,X3.PSN_CD
+                       ,ROW_NUMBER() OVER (PARTITION BY X1.CPO_ORD_NUM, X1.DS_CPO_CONFIG_PK ORDER BY X1.SLS_REP_CR_PCT DESC, X1.SLS_REP_TOC_CD ASC) AS ROW_NUM
+                   FROM
+                        DS_CPO_SLS_CR    X1
+                       ,LINE_BIZ_ROLE_TP X2
+                       ,ORG_FUNC_ASG     X3
+                   WHERE
+                           X1.GLBL_CMPY_CD        = #glblCmpyCd#
+                       AND X1.EZCANCELFLAG        = '0'
+                       AND X1.GLBL_CMPY_CD        = X2.GLBL_CMPY_CD
+                       AND X1.SLS_REP_ROLE_TP_CD  = X2.LINE_BIZ_ROLE_TP_CD
+                       AND X2.EZCANCELFLAG        = '0'
+                       AND X2.PRIM_REP_ROLE_FLG   = 'N'
+                       AND X2.SLS_CR_QUOT_FLG     = 'Y'
+                       AND X1.GLBL_CMPY_CD        = X3.GLBL_CMPY_CD
+                       AND X1.SLS_REP_TOC_CD      = X3.TOC_CD
+                       AND X3.EZCANCELFLAG        = '0'
+                       AND X3.EFF_FROM_DT         &lt;= #slsDt#
+                  ) X
+              WHERE
+                  X.ROW_NUM = 1
+             )               INST_REP
+            ,(
+              SELECT
+                   X1.CPO_ORD_NUM
+                  ,X1.DS_CPO_RTRN_LINE_NUM      AS CPO_DTL_LINE_NUM
+                  ,X1.DS_CPO_RTRN_LINE_SUB_NUM  AS CPO_DTL_LINE_SUB_NUM
+                  ,COUNT(X3.MDSE_CD) COUNT
+              FROM
+                   DS_CPO_RTRN_DTL X1
+                  ,DS_CPO_CONFIG   X2
+                  ,ALL_MDSE_V      X3
+                  ,DS_MDL          X4
+              WHERE
+                      X1.GLBL_CMPY_CD         = #glblCmpyCd#
+                  AND X1.BASE_CMPT_FLG        = 'Y'
+                  AND X1.EZCANCELFLAG         = '0'
+                  AND X1.GLBL_CMPY_CD         = X2.GLBL_CMPY_CD
+                  AND X1.CPO_ORD_NUM          = X2.CPO_ORD_NUM
+                  AND X1.DS_ORD_POSN_NUM      = X2.DS_ORD_POSN_NUM
+                  AND X2.EZCANCELFLAG         = '0'
+                  AND X1.GLBL_CMPY_CD         = X3.GLBL_CMPY_CD
+                  AND X1.MDSE_CD              = X3.MDSE_CD
+                  AND X3.EZCANCELFLAG         = '0'
+                  AND X3.COA_MDSE_TP_CD       = #coaMdseTpMachine#
+                  AND X2.GLBL_CMPY_CD         = X4.GLBL_CMPY_CD
+                  AND X2.MDL_ID               = X4.MDL_ID
+                  AND X4.EZCANCELFLAG         = '0'
+                  AND X4.MTR_GRP_PK           IS NOT NULL
+              GROUP BY
+                   X1.CPO_ORD_NUM
+                  ,X1.DS_CPO_RTRN_LINE_NUM
+                  ,X1.DS_CPO_RTRN_LINE_SUB_NUM
+             )               PRTR_COUNT
+        WHERE
+                D.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND D.EZCANCELFLAG          = '0'
+            <!-- QC#55658 2020/01/31 Add Start -->
+            AND D.ORD_HDR_STS_CD        &lt;&gt; #ordHdrStsCancel#
+            <!-- QC#55658 2020/01/31 Add End   -->
+            AND D.GLBL_CMPY_CD          = F.GLBL_CMPY_CD
+            AND D.CPO_ORD_NUM           = F.CPO_ORD_NUM
+            AND F.EZCANCELFLAG          = '0'
+            <!-- QC#55658 2020/01/31 Add Start -->
+            AND F.RTRN_LINE_STS_CD      NOT IN 
+            <iterate property="rtrnLineStsCdList" var="rtrnLineStsCd[]" open="(" close=")" conjunction=",">
+                #rtrnLineStsCd[]#
+            </iterate>
+            <!-- QC#55658 2020/01/31 Add End   -->
+            AND F.GLBL_CMPY_CD          = H.GLBL_CMPY_CD
+            AND F.CPO_ORD_NUM           = H.CPO_ORD_NUM
+            AND F.DS_CPO_CONFIG_PK      = H.DS_CPO_CONFIG_PK
+            AND H.EZCANCELFLAG          = '0'
+            AND H.GLBL_CMPY_CD          = J.T_GLBL_CMPY_CD (+)
+            AND H.MDL_ID                = J.T_MDL_ID (+)
+            AND J.EZCANCELFLAG (+)      = '0'
+            AND Q.TRX_ORD_NUM (+)       = F.CPO_ORD_NUM
+            AND Q.TRX_LINE_NUM (+)      = F.DS_CPO_RTRN_LINE_NUM
+            AND Q.TRX_LINE_SUB_NUM (+)  = F.DS_CPO_RTRN_LINE_SUB_NUM
+            AND F.GLBL_CMPY_CD          = I.GLBL_CMPY_CD
+            AND F.MDSE_CD               = I.MDSE_CD
+            AND I.EZCANCELFLAG          = '0'
+            AND D.GLBL_CMPY_CD          = M.GLBL_CMPY_CD
+            AND D.SELL_TO_CUST_CD       = M.SELL_TO_CUST_CD
+            AND M.EZCANCELFLAG          = '0'
+            AND H.GLBL_CMPY_CD          = N.GLBL_CMPY_CD
+            AND H.BILL_TO_CUST_ACCT_CD  = N.SELL_TO_CUST_CD
+            AND N.EZCANCELFLAG          = '0'
+            AND D.DS_ORD_CATG_CD        = DEALER_COUNT.DS_ORD_CATG_CD (+)
+            AND H.CPO_ORD_NUM           = SLS_REP.CPO_ORD_NUM (+)
+            AND H.DS_CPO_CONFIG_PK      = SLS_REP.DS_CPO_CONFIG_PK (+)
+            AND H.CPO_ORD_NUM           = INST_REP.CPO_ORD_NUM (+)
+            AND H.DS_CPO_CONFIG_PK      = INST_REP.DS_CPO_CONFIG_PK (+)
+            AND F.CPO_ORD_NUM           = PRTR_COUNT.CPO_ORD_NUM (+)
+            AND F.DS_CPO_RTRN_LINE_NUM     = PRTR_COUNT.CPO_DTL_LINE_NUM (+)
+            AND F.DS_CPO_RTRN_LINE_SUB_NUM = PRTR_COUNT.CPO_DTL_LINE_SUB_NUM (+)
+            AND EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        COMP_ACRL_PRM     X1
+                    WHERE
+                            X1.GLBL_CMPY_CD        = D.GLBL_CMPY_CD
+                        AND X1.CPO_ORD_NUM         = D.CPO_ORD_NUM
+                        AND X1.EZCANCELFLAG        = '0'
+                        <iterate property="compProcStsCdList" var="compProcStsCd[]" open="AND X1.COMP_PROC_STS_CD IN (" close=")" conjunction=",">
+                            #compProcStsCd[]#
+                        </iterate>
+                )
+            AND EXISTS (
+                    SELECT
+                        1
+                    FROM
+                         DS_CPO_SLS_CR      X1
+                        ,LINE_BIZ_ROLE_TP   X2
+                        ,CPO_V              X3
+                        ,DS_ORD_TP_PROC_DFN X4
+                    WHERE
+                            X1.GLBL_CMPY_CD        = H.GLBL_CMPY_CD
+                        AND X1.CPO_ORD_NUM         = H.CPO_ORD_NUM
+                        AND X1.DS_CPO_CONFIG_PK    = H.DS_CPO_CONFIG_PK
+                        AND X1.EZCANCELFLAG        = '0'
+                        AND X1.GLBL_CMPY_CD        = X2.GLBL_CMPY_CD
+                        AND X1.SLS_REP_ROLE_TP_CD  = X2.LINE_BIZ_ROLE_TP_CD
+                        AND X2.EZCANCELFLAG        = '0'
+                        AND X2.SLS_CR_QUOT_FLG     = 'Y'
+                        AND X1.GLBL_CMPY_CD        = X3.GLBL_CMPY_CD
+                        AND X1.CPO_ORD_NUM         = X3.CPO_ORD_NUM
+                        AND X3.EZCANCELFLAG        = '0'
+                        AND X3.LINE_BIZ_TP_CD      = #lineBizTpCd#
+                        AND X3.GLBL_CMPY_CD        = X4.GLBL_CMPY_CD
+                        AND X3.DS_ORD_TP_CD        = X4.DS_ORD_TP_CD
+                        AND X4.EZCANCELFLAG        = '0'
+                        AND (X4.TRTY_GRP_TP_TXT    NOT LIKE #lineBizTpCdForIs#
+                            OR  X4.TRTY_GRP_TP_TXT IS NULL)
+                )
+     )
+    ,CPO_COUNT_R AS (
+        SELECT
+             COMP_INFO_R.CPO_ORD_NUM
+            ,COMP_INFO_R.CPO_DTL_LINE_NUM
+            ,COMP_INFO_R.CPO_DTL_LINE_SUB_NUM
+            ,COUNT(COMP_INFO_R.CPO_ORD_NUM) AS COUNT
+        FROM
+            COMP_INFO_R
+        GROUP BY
+             COMP_INFO_R.CPO_ORD_NUM
+            ,COMP_INFO_R.CPO_DTL_LINE_NUM
+            ,COMP_INFO_R.CPO_DTL_LINE_SUB_NUM
+     )
+        <!-- QC#55658 2020/01/31 Add End -->
+
+        SELECT
+             COMP_INFO.DIST_CH_CD
+            ,COMP_INFO.COMP_DIV_CD
+            ,COMP_INFO.CPO_ORD_NUM
+            ,COMP_INFO.DS_ORD_POSN_NUM
+            ,COMP_INFO.CPO_DTL_LINE_NUM
+            ,COMP_INFO.CPO_DTL_LINE_SUB_NUM
+            <!-- 2018/09/21 QC#28232 Add Start -->
+            ,TO_CHAR(COMP_INFO.DS_CPO_LINE_NUM) AS DS_CPO_LINE_NUM
+            ,TO_CHAR(COMP_INFO.DS_CPO_LINE_SUB_NUM) AS DS_CPO_LINE_SUB_NUM
+            <!-- 2018/09/21 QC#28232 Add End -->
+            ,COMP_INFO.DS_ORD_CATG_CD
+            ,COMP_INFO.DS_ORD_TP_CD
+            ,COMP_INFO.ORD_CRAT_DT
+            ,COMP_INFO.T_MDL_NM
+            ,COMP_INFO.MDSE_CD
+            ,COMP_INFO.SELL_TO_CUST_CD
+            ,COMP_INFO.SELL_TO_CUST_ACCT_NM
+            ,COMP_INFO.SLS_REP_PSN_CD
+            ,COMP_INFO.ISTL_REP_PSN_CD
+            ,COMP_INFO.SVC_CONFIG_MSTR_PK
+            ,COMP_INFO.SER_NUM
+            ,CASE
+                 WHEN CPO_COUNT.COUNT &gt; 1 THEN 1
+                 ELSE COMP_INFO.ORD_QTY
+             END                        AS COMP_ORD_QTY
+            ,CASE
+                 WHEN CPO_COUNT.COUNT &gt; 1 THEN COMP_INFO.SP_DEAL_NET_UNIT_PRC_AMT
+                 ELSE COMP_INFO.SP_TOT_DEAL_NET_AMT
+             END                        AS COMP_VAL_AMT
+            ,COMP_INFO.INV_NUM
+            ,COMP_INFO.INV_LINE_NUM
+            ,COMP_INFO.INV_LINE_SUB_NUM
+            ,COMP_INFO.INV_DT
+            <!-- QC#27084 mod Start
+            ,CASE
+                 WHEN CONTR_SLD.COUNT &gt; 0 THEN 'Y'
+                 ELSE 'N'
+             END                        AS CONTR_SLD_FLG -->
+            ,DECODE(
+                (SELECT COUNT(*)
+                    FROM
+                        DS_CONTR_DTL DCD
+                    WHERE
+                        DCD.GLBL_CMPY_CD            = COMP_INFO.GLBL_CMPY_CD
+                    AND DCD.CPO_ORD_NUM             = COMP_INFO.CPO_ORD_NUM
+                    AND DCD.CPO_DTL_LINE_NUM        = COMP_INFO.CPO_DTL_LINE_NUM
+                    AND DCD.CPO_DTL_LINE_SUB_NUM    = COMP_INFO.CPO_DTL_LINE_SUB_NUM
+                    AND DCD.EZCANCELFLAG            = '0'
+                )
+                ,0 , 'N', 'Y')        AS CONTR_SLD_FLG
+             <!-- QC#27084 mod End -->
+            ,COMP_INFO.COMP_PRTR_FLG
+            ,COMP_INFO.ACRL_ORD_FLG
+            ,COMP_INFO.CR_REBIL_RSN_CD
+            ,COMP_INFO.SHPG_PLN_NUM
+            ,COMP_INFO.DS_ORD_RSN_CD <!-- 2018/07/11 W.Honda [QC#27085,ADD] -->
+            <!-- START 2018/10/17 Hd.Sugawara [QC#28842,ADD] -->
+            ,COMP_INFO.INV_BOL_LINE_NUM
+            <!-- END 2018/10/17 Hd.Sugawara [QC#28842,ADD] -->
+            ,1 SORT_KEY
+        FROM
+             COMP_INFO
+            ,CPO_COUNT
+            <!-- QC#27084 del
+            ,CONTR_SLD
+            -->
+        WHERE
+                COMP_INFO.CPO_ORD_NUM           = CPO_COUNT.CPO_ORD_NUM
+            AND COMP_INFO.CPO_DTL_LINE_NUM      = CPO_COUNT.CPO_DTL_LINE_NUM
+            AND COMP_INFO.CPO_DTL_LINE_SUB_NUM  = CPO_COUNT.CPO_DTL_LINE_SUB_NUM
+            <!-- QC#27084 del
+            AND COMP_INFO.CPO_ORD_NUM           = CONTR_SLD.CPO_ORD_NUM (+)
+            AND COMP_INFO.CPO_DTL_LINE_NUM      = CONTR_SLD.CPO_DTL_LINE_NUM (+)
+            AND COMP_INFO.CPO_DTL_LINE_SUB_NUM  = CONTR_SLD.CPO_DTL_LINE_SUB_NUM (+)
+            AND COMP_INFO.SHPG_PLN_NUM          = CONTR_SLD.SHPG_PLN_NUM (+)
+            AND NVL(COMP_INFO.SER_NUM, #defSerNum#)
+                                                = NVL(CONTR_SLD.SER_NUM (+), #defSerNum#)
+            -->
+        <!-- QC#55658 2020/01/31 Add Start -->
+        UNION ALL
+        SELECT
+             COMP_INFO_R.DIST_CH_CD
+            ,COMP_INFO_R.COMP_DIV_CD
+            ,COMP_INFO_R.CPO_ORD_NUM
+            ,COMP_INFO_R.DS_ORD_POSN_NUM
+            ,COMP_INFO_R.CPO_DTL_LINE_NUM
+            ,COMP_INFO_R.CPO_DTL_LINE_SUB_NUM
+            ,TO_CHAR(COMP_INFO_R.DS_CPO_LINE_NUM) AS DS_CPO_LINE_NUM
+            ,TO_CHAR(COMP_INFO_R.DS_CPO_LINE_SUB_NUM) AS DS_CPO_LINE_SUB_NUM
+            ,COMP_INFO_R.DS_ORD_CATG_CD
+            ,COMP_INFO_R.DS_ORD_TP_CD
+            ,COMP_INFO_R.ORD_CRAT_DT
+            ,COMP_INFO_R.T_MDL_NM
+            ,COMP_INFO_R.MDSE_CD
+            ,COMP_INFO_R.SELL_TO_CUST_CD
+            ,COMP_INFO_R.SELL_TO_CUST_ACCT_NM
+            ,COMP_INFO_R.SLS_REP_PSN_CD
+            ,COMP_INFO_R.ISTL_REP_PSN_CD
+            ,COMP_INFO_R.SVC_CONFIG_MSTR_PK
+            ,COMP_INFO_R.SER_NUM
+            ,(CASE
+                 WHEN CPO_COUNT_R.COUNT &gt; 1 THEN 1
+                 ELSE COMP_INFO_R.ORD_QTY
+             END) * -1                  AS COMP_ORD_QTY
+            ,CASE
+                 WHEN CPO_COUNT_R.COUNT &gt; 1 THEN COMP_INFO_R.SP_DEAL_NET_UNIT_PRC_AMT
+                 ELSE COMP_INFO_R.SP_TOT_DEAL_NET_AMT
+             END                        AS COMP_VAL_AMT
+            ,COMP_INFO_R.INV_NUM
+            ,COMP_INFO_R.INV_LINE_NUM
+            ,COMP_INFO_R.INV_LINE_SUB_NUM
+            ,COMP_INFO_R.INV_DT
+            ,DECODE(
+                (SELECT COUNT(*)
+                    FROM
+                        DS_CONTR_DTL DCD
+                    WHERE
+                        DCD.GLBL_CMPY_CD            = COMP_INFO_R.GLBL_CMPY_CD
+                    AND DCD.CPO_ORD_NUM             = COMP_INFO_R.CPO_ORD_NUM
+                    AND DCD.CPO_DTL_LINE_NUM        = COMP_INFO_R.CPO_DTL_LINE_NUM
+                    AND DCD.CPO_DTL_LINE_SUB_NUM    = COMP_INFO_R.CPO_DTL_LINE_SUB_NUM
+                    AND DCD.EZCANCELFLAG            = '0'
+                )
+                ,0 , 'N', 'Y')        AS CONTR_SLD_FLG
+            ,COMP_INFO_R.COMP_PRTR_FLG
+            ,COMP_INFO_R.ACRL_ORD_FLG
+            ,COMP_INFO_R.CR_REBIL_RSN_CD
+            ,NULL
+            ,COMP_INFO_R.DS_ORD_RSN_CD
+            ,COMP_INFO_R.INV_BOL_LINE_NUM
+            ,2 SORT_KEY
+        FROM
+             COMP_INFO_R
+            ,CPO_COUNT_R
+        WHERE
+                COMP_INFO_R.CPO_ORD_NUM           = CPO_COUNT_R.CPO_ORD_NUM
+            AND COMP_INFO_R.CPO_DTL_LINE_NUM      = CPO_COUNT_R.CPO_DTL_LINE_NUM
+            AND COMP_INFO_R.CPO_DTL_LINE_SUB_NUM  = CPO_COUNT_R.CPO_DTL_LINE_SUB_NUM
+        <!-- QC#55658 2020/01/31 Add End -->
+        ORDER BY
+        <!-- QC#55658 2020/01/31 Mod Start -->
+<!--             COMP_INFO.CPO_ORD_NUM           ASC -->
+<!--            ,COMP_INFO.CPO_DTL_LINE_NUM      ASC -->
+<!--            ,COMP_INFO.CPO_DTL_LINE_SUB_NUM  ASC -->
+<!--            ,COMP_INFO.SHPG_PLN_NUM          ASC -->
+<!--            ,COMP_INFO.SER_NUM               ASC NULLS LAST -->
+             CPO_ORD_NUM           ASC
+            ,SORT_KEY              ASC
+            ,CPO_DTL_LINE_NUM      ASC
+            ,CPO_DTL_LINE_SUB_NUM  ASC
+            ,SHPG_PLN_NUM          ASC
+            ,SER_NUM               ASC NULLS LAST
+        <!-- QC#55658 2020/01/31 Mod End -->
+    </statement>
+    <!-- 2018/09/25 QC#28231 Add Start -->
+    <statement id="getCompInfoNormalRMA" parameterClass="Map" resultClass="Map">
+        WITH COMP_INFO AS (
+        SELECT
+             CASE
+                 WHEN DEALER_COUNT.COUNT &gt;     0                THEN #distChDealer#
+                 WHEN N.COA_AFFL_CD      &lt;&gt; #coaAfflNonAffl# THEN #distChIntraCompany#
+                 ELSE #distChCommercial#
+             END                        AS DIST_CH_CD
+            ,SLS_REP.TRTY_GRP_TP_CD     AS COMP_DIV_CD
+            ,D.CPO_ORD_NUM              AS CPO_ORD_NUM
+            ,F.DS_ORD_POSN_NUM          AS DS_ORD_POSN_NUM
+            ,F.DS_CPO_RTRN_LINE_NUM     AS CPO_DTL_LINE_NUM
+            ,F.DS_CPO_RTRN_LINE_SUB_NUM AS CPO_DTL_LINE_SUB_NUM
+            ,D.DS_ORD_CATG_CD           AS DS_ORD_CATG_CD
+            ,D.DS_ORD_TP_CD             AS DS_ORD_TP_CD
+            ,SUBSTR(D.CPO_ORD_TS, 1, 8) AS ORD_CRAT_DT
+            ,J.T_MDL_NM                 AS T_MDL_NM
+            ,B.MDSE_CD                  AS MDSE_CD
+            ,D.SELL_TO_CUST_CD          AS SELL_TO_CUST_CD
+            ,M.DS_ACCT_NM               AS SELL_TO_CUST_ACCT_NM
+            ,SLS_REP.PSN_CD             AS SLS_REP_PSN_CD
+            ,NVL(INST_REP.PSN_CD, SLS_REP.PSN_CD)
+                                        AS ISTL_REP_PSN_CD
+            ,H.SVC_CONFIG_MSTR_PK       AS SVC_CONFIG_MSTR_PK
+            ,NVL(Q.SER_NUM, DILSN.SER_NUM) AS SER_NUM
+            ,A.INV_NUM                  AS INV_NUM
+            ,B.INV_LINE_NUM             AS INV_LINE_NUM
+            ,B.INV_LINE_SUB_NUM         AS INV_LINE_SUB_NUM
+            ,A.INV_DT                   AS INV_DT
+            ,CASE
+                 WHEN PRTR_COUNT.COUNT &gt; 0 THEN 'Y'
+                 ELSE 'N'
+             END                        AS COMP_PRTR_FLG
+            ,'N'                        AS ACRL_ORD_FLG
+            ,(SELECT X.CR_REBIL_RSN_CD
+                FROM (SELECT RSN.CR_REBIL_RSN_CD
+                        FROM DS_CPO_CR_REBIL_RSN RSN
+                       WHERE RSN.GLBL_CMPY_CD = D.GLBL_CMPY_CD
+                         AND RSN.CPO_ORD_NUM  = D.CPO_ORD_NUM
+                         AND RSN.EZCANCELFLAG = '0'
+                       ORDER BY
+                             RSN.CR_REBIL_RSN_CD
+                     ) X
+               WHERE ROWNUM = 1
+            )                           AS CR_REBIL_RSN_CD
+            ,A.GLBL_CMPY_CD             AS GLBL_CMPY_CD
+            ,B.INV_BOL_LINE_NUM         AS INV_BOL_LINE_NUM
+            ,B.INV_LINE_SUB_TRX_NUM     AS INV_LINE_SUB_TRX_NUM
+            ,SUBSTR(D.ORD_BOOK_TS, 1, 8) 
+                                        AS ORD_BOOK_DT
+            ,B.SHIP_QTY                 AS SHIP_QTY
+            ,B.INV_LINE_DEAL_NET_AMT    AS INV_LINE_DEAL_NET_AMT
+            ,B.DEAL_NET_UNIT_PRC_AMT    AS DEAL_NET_UNIT_PRC_AMT
+            ,D.DS_ORD_RSN_CD            AS DS_ORD_RSN_CD
+            ,F.CR_REBIL_CD              AS CR_REBIL_CD
+            ,A.ACCT_DT                  AS ACCT_DT
+            ,F.DS_CPO_LINE_NUM          AS DS_CPO_LINE_NUM
+            ,F.DS_CPO_LINE_SUB_NUM      AS DS_CPO_LINE_SUB_NUM
+            <!-- 2018/11/09 QC#29131 Del Start -->
+            <!--
+            ,CASE
+                 WHEN B.INV_LINE_CATG_CD in (#invLineCatgCharge#, #invLineCatgFreight#) THEN 1
+                 ELSE -1
+             END                        AS SIGN
+             -->
+             <!-- 2018/11/09 QC#29131 Del End -->
+            ,A.INV_TP_CD                AS INV_TP_CD  <!-- 2018/11/09 QC#29131 Add -->
+        FROM
+             INV             A
+            ,INV_LINE        B
+            ,DS_INV_LINE_SER_NUM  DILSN
+            ,CPO             D
+            ,DS_CPO_RTRN_DTL F
+            ,DS_CPO_CONFIG   H
+            ,MDSE            I
+            ,MDL_NM          J
+            ,SELL_TO_CUST    M
+            ,SELL_TO_CUST    N
+            <!-- 2018/10/24 QC#28585 Mod Start -->
+            <!--
+            ,RWS_HDR         O
+            ,RWS_DTL         P
+            ,RWS_SER         Q
+            -->
+            ,(
+             SELECT
+                   X1.TRX_ORD_NUM
+                  ,X2.TRX_LINE_NUM
+                  ,X2.TRX_LINE_SUB_NUM
+                  ,X3.SER_NUM
+             FROM
+                   RWS_HDR X1
+                  ,RWS_DTL X2
+                  ,RWS_SER X3
+             WHERE
+                      X1.GLBL_CMPY_CD     = #glblCmpyCd#
+                  AND X1.EZCANCELFLAG     = '0'
+                  AND X1.GLBL_CMPY_CD     = X2.GLBL_CMPY_CD
+                  AND X2.EZCANCELFLAG     = '0'
+                  AND X1.RWS_NUM          = X2.RWS_NUM
+                  AND X2.GLBL_CMPY_CD     = X3.GLBL_CMPY_CD
+                  AND X2.RWS_NUM          = X3.RWS_NUM
+                  AND X2.RWS_DTL_LINE_NUM = X3.RWS_LINE_NUM
+                  AND X3.EZCANCELFLAG     = '0'
+                  <!-- 2019/08/15 QC#52707 Mod Start -->
+                  AND X1.RWS_STS_CD       &lt;&gt; #rwsStsCancel#
+                  AND X2.RWS_PUT_AWAY_QTY &gt; 0
+                  <!-- 2019/08/15 QC#52707 Mod End -->
+            ) Q
+            <!-- 2018/10/24 QC#28585 Mod End -->
+            ,(
+              SELECT
+                   X1.DS_ORD_CATG_CD
+                  ,COUNT(X1.ORD_CATG_BIZ_CTX_PK) AS COUNT
+              FROM
+                   ORD_CATG_BIZ_CTX     X1
+              WHERE
+                      X1.GLBL_CMPY_CD       = #glblCmpyCd#
+                  AND X1.EZCANCELFLAG       = '0'
+                  AND X1.ORD_CATG_CTX_TP_CD = #ordCatgCtxTpDealer#
+              GROUP BY
+                  X1.DS_ORD_CATG_CD
+             )               DEALER_COUNT
+            ,(
+              SELECT
+                   X.CPO_ORD_NUM
+                  ,X.DS_CPO_CONFIG_PK
+                  ,X.PSN_CD
+                  ,X.ORG_CD
+                  ,CASE WHEN Y.TRTY_GRP_TP_CD = #trtyGrpTpCdTD# THEN #convDivCdTDS#
+                        ELSE Y.TRTY_GRP_TP_CD END  TRTY_GRP_TP_CD
+              FROM
+                  (SELECT /*+ NO_PUSH_PRED */
+                        X1.CPO_ORD_NUM
+                       ,X1.DS_CPO_CONFIG_PK
+                       ,X3.PSN_CD
+                       ,X5.ORG_CD
+                       ,ROW_NUMBER() OVER (PARTITION BY X1.CPO_ORD_NUM, X1.DS_CPO_CONFIG_PK ORDER BY X1.SLS_REP_CR_PCT DESC, X1.SLS_REP_TOC_CD ASC) AS ROW_NUM
+                   FROM
+                        DS_CPO_SLS_CR    X1
+                       ,LINE_BIZ_ROLE_TP X2
+                       ,ORG_FUNC_ASG     X3
+                       ,DS_ORG_RESRC_RELN    X5
+                   WHERE
+                           X1.GLBL_CMPY_CD        = #glblCmpyCd#
+                       AND X1.EZCANCELFLAG        = '0'
+                       AND X1.GLBL_CMPY_CD        = X2.GLBL_CMPY_CD
+                       AND X1.SLS_REP_ROLE_TP_CD  = X2.LINE_BIZ_ROLE_TP_CD
+                       AND X2.EZCANCELFLAG        = '0'
+                       AND X2.PRIM_REP_ROLE_FLG   = 'Y'
+                       AND X2.SLS_CR_QUOT_FLG     = 'Y'
+                       AND X1.GLBL_CMPY_CD        = X3.GLBL_CMPY_CD
+                       AND X1.SLS_REP_TOC_CD      = X3.TOC_CD
+                       AND X3.EZCANCELFLAG        = '0'
+                       AND X3.EFF_FROM_DT         &lt;= #slsDt#
+<!--2019/05/14 #50093 Del Start-->
+<!--                       AND NVL(X3.EFF_THRU_DT, #slsDt#) -->
+<!--                                                  &gt;= #slsDt#-->
+<!--2019/05/14 #50093 Del End-->
+                       AND X3.GLBL_CMPY_CD        = X5.GLBL_CMPY_CD(+)
+                       AND X3.PSN_CD              = X5.PSN_CD(+)
+                       AND X5.EZCANCELFLAG(+)        = '0'
+                  ) X
+                  ,DS_ORG_UNIT  Y
+              WHERE
+                  X.ROW_NUM = 1
+              AND Y.GLBL_CMPY_CD(+)    = #glblCmpyCd#
+              AND Y.ORG_CD(+)          = X.ORG_CD
+              AND Y.EZCANCELFLAG(+)    = '0'
+             )               SLS_REP
+            ,(
+              SELECT
+                   X.CPO_ORD_NUM
+                  ,X.DS_CPO_CONFIG_PK
+                  ,X.PSN_CD
+              FROM
+                  (SELECT /*+ NO_PUSH_PRED */
+                        X1.CPO_ORD_NUM
+                       ,X1.DS_CPO_CONFIG_PK
+                       ,X3.PSN_CD
+                       ,ROW_NUMBER() OVER (PARTITION BY X1.CPO_ORD_NUM, X1.DS_CPO_CONFIG_PK ORDER BY X1.SLS_REP_CR_PCT DESC, X1.SLS_REP_TOC_CD ASC) AS ROW_NUM
+                   FROM
+                        DS_CPO_SLS_CR    X1
+                       ,LINE_BIZ_ROLE_TP X2
+                       ,ORG_FUNC_ASG     X3
+                   WHERE
+                           X1.GLBL_CMPY_CD        = #glblCmpyCd#
+                       AND X1.EZCANCELFLAG        = '0'
+                       AND X1.GLBL_CMPY_CD        = X2.GLBL_CMPY_CD
+                       AND X1.SLS_REP_ROLE_TP_CD  = X2.LINE_BIZ_ROLE_TP_CD
+                       AND X2.EZCANCELFLAG        = '0'
+                       AND X2.PRIM_REP_ROLE_FLG   = 'N'
+                       AND X2.SLS_CR_QUOT_FLG     = 'Y'
+                       AND X1.GLBL_CMPY_CD        = X3.GLBL_CMPY_CD
+                       AND X1.SLS_REP_TOC_CD      = X3.TOC_CD
+                       AND X3.EZCANCELFLAG        = '0'
+                       AND X3.EFF_FROM_DT         &lt;= #slsDt#
+<!--2019/05/14 #50093 Del Start-->
+<!--                       AND NVL(X3.EFF_THRU_DT, #slsDt#) -->
+<!--                                                  &gt;= #slsDt#-->
+<!--2019/05/14 #50093 Del End-->
+                  ) X
+              WHERE
+                  X.ROW_NUM = 1
+             )               INST_REP
+            ,(
+              SELECT
+                   X1.CPO_ORD_NUM
+                  ,X1.DS_CPO_RTRN_LINE_NUM      AS CPO_DTL_LINE_NUM
+                  ,X1.DS_CPO_RTRN_LINE_SUB_NUM  AS CPO_DTL_LINE_SUB_NUM
+                  ,COUNT(X3.MDSE_CD) COUNT
+              FROM
+                   DS_CPO_RTRN_DTL X1
+                  ,DS_CPO_CONFIG   X2
+                  ,ALL_MDSE_V      X3
+                  ,DS_MDL          X4
+              WHERE
+                      X1.GLBL_CMPY_CD         = #glblCmpyCd#
+                  AND X1.BASE_CMPT_FLG        = 'Y'
+                  AND X1.EZCANCELFLAG         = '0'
+                  AND X1.GLBL_CMPY_CD         = X2.GLBL_CMPY_CD
+                  AND X1.CPO_ORD_NUM          = X2.CPO_ORD_NUM
+                  AND X1.DS_ORD_POSN_NUM      = X2.DS_ORD_POSN_NUM
+                  AND X2.EZCANCELFLAG         = '0'
+                  AND X1.GLBL_CMPY_CD         = X3.GLBL_CMPY_CD
+                  AND X1.MDSE_CD              = X3.MDSE_CD
+                  AND X3.EZCANCELFLAG         = '0'
+                  AND X3.COA_MDSE_TP_CD       = #coaMdseTpMachine#
+                  AND X2.GLBL_CMPY_CD         = X4.GLBL_CMPY_CD
+                  AND X2.MDL_ID               = X4.MDL_ID
+                  AND X4.EZCANCELFLAG         = '0'
+                  AND X4.MTR_GRP_PK           IS NOT NULL
+              GROUP BY
+                   X1.CPO_ORD_NUM
+                  ,X1.DS_CPO_RTRN_LINE_NUM
+                  ,X1.DS_CPO_RTRN_LINE_SUB_NUM
+             )               PRTR_COUNT
+        WHERE
+                A.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND A.TRX_SRC_TP_CD         = #invTrxSrcTpWSReturn#  <!-- 2018/10/30 QC#29033 Add -->
+            AND A.EZCANCELFLAG          = '0'
+            AND A.GLBL_CMPY_CD          = B.GLBL_CMPY_CD
+            AND A.INV_NUM               = B.INV_NUM
+            AND B.EZCANCELFLAG          = '0'
+            <iterate property="compProcStsCdList" var="compProcStsCd[]" open="AND B.COMP_PROC_STS_CD IN (" close=")" conjunction=",">
+                #compProcStsCd[]#
+            </iterate>
+            AND A.GLBL_CMPY_CD          = D.GLBL_CMPY_CD
+            AND A.CPO_ORD_NUM           = D.CPO_ORD_NUM
+            AND D.EZCANCELFLAG          = '0'
+            AND A.GLBL_CMPY_CD          = F.GLBL_CMPY_CD
+            AND A.CPO_ORD_NUM           = F.CPO_ORD_NUM
+            AND B.CPO_DTL_LINE_NUM      = F.DS_CPO_RTRN_LINE_NUM
+            AND B.CPO_DTL_LINE_SUB_NUM  = F.DS_CPO_RTRN_LINE_SUB_NUM
+            AND F.EZCANCELFLAG          = '0'
+            AND F.GLBL_CMPY_CD          = H.GLBL_CMPY_CD
+            AND F.CPO_ORD_NUM           = H.CPO_ORD_NUM
+            AND F.DS_CPO_CONFIG_PK      = H.DS_CPO_CONFIG_PK
+            AND H.EZCANCELFLAG          = '0'
+            AND B.GLBL_CMPY_CD          = I.GLBL_CMPY_CD
+            AND B.MDSE_CD               = I.MDSE_CD
+            AND I.EZCANCELFLAG          = '0'
+            AND H.GLBL_CMPY_CD          = J.T_GLBL_CMPY_CD (+)
+            AND H.MDL_ID                = J.T_MDL_ID (+)
+            AND J.EZCANCELFLAG (+)      = '0'
+            <!-- 2018/10/24 QC#28585 Mod Start -->
+            <!--
+            AND O.GLBL_CMPY_CD          = F.GLBL_CMPY_CD
+            AND O.TRX_ORD_NUM           = F.CPO_ORD_NUM
+            AND O.EZCANCELFLAG          = '0'
+            AND P.RWS_NUM (+)           = O.RWS_NUM
+            AND P.GLBL_CMPY_CD (+)      = O.GLBL_CMPY_CD
+            AND P.TRX_LINE_NUM (+)      = F.DS_CPO_RTRN_LINE_NUM
+            AND P.TRX_LINE_SUB_NUM (+)  = F.DS_CPO_RTRN_LINE_SUB_NUM
+            AND P.EZCANCELFLAG (+)      = '0'
+            AND Q.GLBL_CMPY_CD (+)      = P.GLBL_CMPY_CD
+            AND Q.RWS_NUM (+)           = P.RWS_NUM
+            AND Q.RWS_LINE_NUM (+)      = P.RWS_DTL_LINE_NUM
+            AND Q.EZCANCELFLAG (+)      = '0'
+            -->
+            AND Q.TRX_ORD_NUM (+)       = F.CPO_ORD_NUM
+            AND Q.TRX_LINE_NUM (+)      = F.DS_CPO_RTRN_LINE_NUM
+            AND Q.TRX_LINE_SUB_NUM (+)  = F.DS_CPO_RTRN_LINE_SUB_NUM
+            <!-- 2018/10/24 QC#28585 Mod End -->
+            AND D.GLBL_CMPY_CD          = M.GLBL_CMPY_CD
+            AND D.SELL_TO_CUST_CD       = M.SELL_TO_CUST_CD
+            AND M.EZCANCELFLAG          = '0'
+            AND H.GLBL_CMPY_CD          = N.GLBL_CMPY_CD
+            AND H.BILL_TO_CUST_ACCT_CD  = N.SELL_TO_CUST_CD
+            AND N.EZCANCELFLAG          = '0'
+            AND D.DS_ORD_CATG_CD        = DEALER_COUNT.DS_ORD_CATG_CD (+)
+            AND H.CPO_ORD_NUM           = SLS_REP.CPO_ORD_NUM (+)
+            AND H.DS_CPO_CONFIG_PK      = SLS_REP.DS_CPO_CONFIG_PK (+)
+            AND H.CPO_ORD_NUM           = INST_REP.CPO_ORD_NUM (+)
+            AND H.DS_CPO_CONFIG_PK      = INST_REP.DS_CPO_CONFIG_PK (+)
+            AND F.CPO_ORD_NUM           = PRTR_COUNT.CPO_ORD_NUM (+)
+            AND F.DS_CPO_RTRN_LINE_NUM     = PRTR_COUNT.CPO_DTL_LINE_NUM (+)
+            AND F.DS_CPO_RTRN_LINE_SUB_NUM = PRTR_COUNT.CPO_DTL_LINE_SUB_NUM (+)
+            AND B.INV_NUM               = DILSN.INV_NUM (+)
+            AND B.INV_BOL_LINE_NUM      = DILSN.INV_BOL_LINE_NUM (+)
+            AND B.INV_LINE_NUM          = DILSN.INV_LINE_NUM (+)
+            AND B.INV_LINE_SUB_NUM      = DILSN.INV_LINE_SUB_NUM (+)
+            AND DILSN.EZCANCELFLAG (+)  = '0'
+            AND EXISTS (
+                    SELECT
+                        1
+                    FROM
+                         DS_CPO_SLS_CR      X1
+                        ,LINE_BIZ_ROLE_TP   X2
+                        ,CPO_V              X3
+                        ,DS_ORD_TP_PROC_DFN X4
+                    WHERE
+                            X1.GLBL_CMPY_CD        = H.GLBL_CMPY_CD
+                        AND X1.CPO_ORD_NUM         = H.CPO_ORD_NUM
+                        AND X1.DS_CPO_CONFIG_PK    = H.DS_CPO_CONFIG_PK
+                        AND X1.EZCANCELFLAG        = '0'
+                        AND X1.GLBL_CMPY_CD        = X2.GLBL_CMPY_CD
+                        AND X1.SLS_REP_ROLE_TP_CD  = X2.LINE_BIZ_ROLE_TP_CD
+                        AND X2.EZCANCELFLAG        = '0'
+                        AND X2.SLS_CR_QUOT_FLG     = 'Y'
+                        AND X1.GLBL_CMPY_CD        = X3.GLBL_CMPY_CD
+                        AND X1.CPO_ORD_NUM         = X3.CPO_ORD_NUM
+                        AND X3.EZCANCELFLAG        = '0'
+                        AND X3.LINE_BIZ_TP_CD      = #lineBizTpCd#
+                        AND X3.GLBL_CMPY_CD        = X4.GLBL_CMPY_CD
+                        AND X3.DS_ORD_TP_CD        = X4.DS_ORD_TP_CD
+                        AND X4.EZCANCELFLAG        = '0'
+                        AND (X4.TRTY_GRP_TP_TXT    NOT LIKE #lineBizTpCdForIs#
+                            OR  X4.TRTY_GRP_TP_TXT IS NULL)
+                )
+     )
+    ,INV_COUNT AS (
+        SELECT
+             COMP_INFO.INV_NUM
+            ,COMP_INFO.INV_BOL_LINE_NUM
+            ,COMP_INFO.INV_LINE_NUM
+            ,COMP_INFO.INV_LINE_SUB_NUM
+            ,COMP_INFO.INV_LINE_SUB_TRX_NUM
+            ,COUNT(COMP_INFO.INV_NUM) AS COUNT
+        FROM
+            COMP_INFO
+        GROUP BY
+             COMP_INFO.INV_NUM
+            ,COMP_INFO.INV_BOL_LINE_NUM
+            ,COMP_INFO.INV_LINE_NUM
+            ,COMP_INFO.INV_LINE_SUB_NUM
+            ,COMP_INFO.INV_LINE_SUB_TRX_NUM
+     )
+
+        SELECT
+             COMP_INFO.DIST_CH_CD
+            ,COMP_INFO.COMP_DIV_CD
+            ,COMP_INFO.CPO_ORD_NUM
+            ,COMP_INFO.DS_ORD_POSN_NUM
+            ,COMP_INFO.CPO_DTL_LINE_NUM
+            ,COMP_INFO.CPO_DTL_LINE_SUB_NUM
+            ,TO_CHAR(COMP_INFO.DS_CPO_LINE_NUM) AS DS_CPO_LINE_NUM
+            ,TO_CHAR(COMP_INFO.DS_CPO_LINE_SUB_NUM) AS DS_CPO_LINE_SUB_NUM
+            ,COMP_INFO.DS_ORD_CATG_CD
+            ,COMP_INFO.DS_ORD_TP_CD
+            ,COMP_INFO.ORD_CRAT_DT
+            ,COMP_INFO.T_MDL_NM
+            ,COMP_INFO.MDSE_CD
+            ,COMP_INFO.SELL_TO_CUST_CD
+            ,COMP_INFO.SELL_TO_CUST_ACCT_NM
+            ,COMP_INFO.SLS_REP_PSN_CD
+            ,COMP_INFO.ISTL_REP_PSN_CD
+            ,COMP_INFO.SVC_CONFIG_MSTR_PK
+            ,COMP_INFO.SER_NUM
+            <!-- 2018/11/09 QC#29131 Del Start -->
+            <!--
+            ,(CASE
+                 WHEN INV_COUNT.COUNT &gt; 1 THEN 1
+                 ELSE COMP_INFO.SHIP_QTY
+             END) * SIGN                AS COMP_ORD_QTY
+             -->
+             <!-- 2018/11/09 QC#29131 Del End -->
+             <!-- 2018/11/09 QC#29131 Add Start -->
+            ,(CASE
+                 WHEN INV_COUNT.COUNT &gt; 1 THEN 1
+                 ELSE COMP_INFO.SHIP_QTY
+             END) * -1                   AS COMP_ORD_QTY
+             <!-- 2018/11/09 QC#29131 Add End -->
+             <!-- 2018/11/09 QC#29131 Del Start -->
+             <!--
+            ,(CASE
+                 WHEN INV_COUNT.COUNT &gt; 1 THEN 
+                 CASE
+                     WHEN COMP_INFO.CR_REBIL_CD = #crCdCredit# THEN COMP_INFO.DEAL_NET_UNIT_PRC_AMT * (-1)
+                     ELSE COMP_INFO.DEAL_NET_UNIT_PRC_AMT
+                 END
+                 ELSE
+                 CASE
+                     WHEN COMP_INFO.CR_REBIL_CD = #crCdCredit# THEN COMP_INFO.INV_LINE_DEAL_NET_AMT * (-1)
+                     ELSE COMP_INFO.INV_LINE_DEAL_NET_AMT
+                 END
+             END) * SIGN                AS COMP_VAL_AMT
+             -->
+             <!-- 2018/11/09 QC#29131 Del End -->
+             <!-- 2018/11/09 QC#29131 Add Start -->
+            ,(CASE WHEN INV_COUNT.COUNT &gt; 1 THEN
+                 CASE WHEN COMP_INFO.INV_TP_CD = #creditMemo# THEN 
+                     COMP_INFO.DEAL_NET_UNIT_PRC_AMT * (-1)
+                 ELSE 
+                     COMP_INFO.DEAL_NET_UNIT_PRC_AMT
+                 END
+             ELSE
+                 CASE WHEN COMP_INFO.INV_TP_CD = #creditMemo# THEN
+                     COMP_INFO.INV_LINE_DEAL_NET_AMT * (-1)
+                 ELSE 
+                     COMP_INFO.INV_LINE_DEAL_NET_AMT
+                 END
+              END)  AS COMP_VAL_AMT
+             <!-- 2018/11/09 QC#29131 Add End -->
+            ,COMP_INFO.INV_NUM
+            ,COMP_INFO.INV_LINE_NUM
+            ,COMP_INFO.INV_LINE_SUB_NUM
+            ,CASE 
+             WHEN COMP_INFO.CR_REBIL_CD IN (#crCdCredit#, #crCdRebill#) THEN COMP_INFO.ACCT_DT
+             ELSE COMP_INFO.INV_DT
+             END AS INV_DT
+            ,DECODE(
+                (SELECT COUNT(*)
+                    FROM
+                        DS_CONTR_DTL DCD
+                    WHERE
+                        DCD.GLBL_CMPY_CD            = COMP_INFO.GLBL_CMPY_CD
+                    AND DCD.CPO_ORD_NUM             = COMP_INFO.CPO_ORD_NUM
+                    AND DCD.CPO_DTL_LINE_NUM        = COMP_INFO.CPO_DTL_LINE_NUM
+                    AND DCD.CPO_DTL_LINE_SUB_NUM    = COMP_INFO.CPO_DTL_LINE_SUB_NUM
+                    AND DCD.EZCANCELFLAG            = '0'
+                )
+                ,0 , 'N', 'Y')        AS CONTR_SLD_FLG
+            ,COMP_INFO.COMP_PRTR_FLG
+            ,COMP_INFO.ACRL_ORD_FLG
+            ,COMP_INFO.CR_REBIL_RSN_CD
+            ,COMP_INFO.INV_BOL_LINE_NUM
+            ,COMP_INFO.INV_LINE_SUB_TRX_NUM
+            ,COMP_INFO.DS_ORD_RSN_CD
+        FROM
+             COMP_INFO
+            ,INV_COUNT
+        WHERE
+                COMP_INFO.INV_NUM               = INV_COUNT.INV_NUM
+            AND COMP_INFO.INV_BOL_LINE_NUM      = INV_COUNT.INV_BOL_LINE_NUM
+            AND COMP_INFO.INV_LINE_NUM          = INV_COUNT.INV_LINE_NUM
+            AND COMP_INFO.INV_LINE_SUB_NUM      = INV_COUNT.INV_LINE_SUB_NUM
+            AND COMP_INFO.INV_LINE_SUB_TRX_NUM  = INV_COUNT.INV_LINE_SUB_TRX_NUM
+        ORDER BY
+             COMP_INFO.INV_NUM               ASC
+            ,COMP_INFO.INV_BOL_LINE_NUM      ASC
+            ,COMP_INFO.INV_LINE_NUM          ASC
+            ,COMP_INFO.INV_LINE_SUB_NUM      ASC
+            ,COMP_INFO.INV_LINE_SUB_TRX_NUM  ASC
+            ,COMP_INFO.SER_NUM               ASC NULLS LAST
+    </statement>
+    <statement id="getCompInfoAccrualRMA" parameterClass="Map" resultClass="Map">
+    WITH COMP_INFO AS (
+        SELECT
+             CASE
+                 WHEN DEALER_COUNT.COUNT &gt;     0                THEN #distChDealer#
+                 WHEN N.COA_AFFL_CD      &lt;&gt; #coaAfflNonAffl# THEN #distChIntraCompany#
+                 ELSE #distChCommercial#
+             END                        AS DIST_CH_CD
+            ,SLS_REP.TRTY_GRP_TP_CD     AS COMP_DIV_CD
+            ,D.CPO_ORD_NUM              AS CPO_ORD_NUM
+            ,F.DS_ORD_POSN_NUM          AS DS_ORD_POSN_NUM
+            ,F.DS_CPO_RTRN_LINE_NUM     AS CPO_DTL_LINE_NUM
+            ,F.DS_CPO_RTRN_LINE_SUB_NUM AS CPO_DTL_LINE_SUB_NUM
+            ,D.DS_ORD_CATG_CD           AS DS_ORD_CATG_CD
+            ,D.DS_ORD_TP_CD             AS DS_ORD_TP_CD
+            ,SUBSTR(D.CPO_ORD_TS, 1, 8) AS ORD_CRAT_DT
+            ,J.T_MDL_NM                 AS T_MDL_NM
+            <!-- 2018/10/02 QC#28585 Mod Start -->
+            <!--
+            ,P.MDSE_CD                  AS MDSE_CD
+            -->
+            ,F.MDSE_CD                  AS MDSE_CD
+            <!-- 2018/10/02 QC#28585 Mod End -->
+            ,D.SELL_TO_CUST_CD          AS SELL_TO_CUST_CD
+            ,M.DS_ACCT_NM               AS SELL_TO_CUST_ACCT_NM
+            ,SLS_REP.PSN_CD             AS SLS_REP_PSN_CD
+            ,NVL(INST_REP.PSN_CD, SLS_REP.PSN_CD)
+                                        AS ISTL_REP_PSN_CD
+            ,H.SVC_CONFIG_MSTR_PK       AS SVC_CONFIG_MSTR_PK
+            ,Q.SER_NUM                  AS SER_NUM
+            ,NULL                       AS INV_NUM
+            ,NULL                       AS INV_LINE_NUM
+            ,NULL                       AS INV_LINE_SUB_NUM
+            ,NULL                       AS INV_DT
+            ,CASE
+                 WHEN PRTR_COUNT.COUNT &gt; 0 THEN 'Y'
+                 ELSE 'N'
+             END                        AS COMP_PRTR_FLG
+            ,'Y'                        AS ACRL_ORD_FLG
+            ,(SELECT X.CR_REBIL_RSN_CD
+                FROM (SELECT RSN.CR_REBIL_RSN_CD
+                        FROM DS_CPO_CR_REBIL_RSN RSN
+                       WHERE RSN.GLBL_CMPY_CD = D.GLBL_CMPY_CD
+                         AND RSN.CPO_ORD_NUM  = D.CPO_ORD_NUM
+                         AND RSN.EZCANCELFLAG = '0'
+                       ORDER BY
+                             RSN.CR_REBIL_RSN_CD
+                     ) X
+               WHERE ROWNUM = 1
+            )                           AS CR_REBIL_RSN_CD
+            ,D.GLBL_CMPY_CD             AS GLBL_CMPY_CD
+            ,SUBSTR(D.ORD_BOOK_TS, 1, 8) 
+                                        AS ORD_BOOK_DT
+            <!-- 2018/10/02 QC#28585 Mod Start -->
+            <!--
+            ,P.RWS_QTY                  AS ORD_QTY
+            ,0                          AS SP_TOT_DEAL_NET_AMT
+            ,0                          AS SP_DEAL_NET_UNIT_PRC_AMT
+            -->
+            <!-- 2018/10/24 QC#28585 Mod Start -->
+            <!--
+            ,NVL(P.RWS_QTY, F.ORD_QTY * -1)  AS ORD_QTY
+            -->
+            ,NVL(Q.RWS_QTY, F.ORD_QTY * -1)  AS ORD_QTY
+            <!-- 2018/10/24 QC#28585 Mod End -->
+            ,F.CPO_DTL_DEAL_NET_AMT     AS SP_TOT_DEAL_NET_AMT
+            ,F.ENT_DEAL_NET_UNIT_PRC_AMT * -1 AS SP_DEAL_NET_UNIT_PRC_AMT
+            <!-- 2018/10/02 QC#28585 Mod End -->
+            ,D.DS_ORD_RSN_CD            AS DS_ORD_RSN_CD
+            ,F.DS_CPO_LINE_NUM          AS DS_CPO_LINE_NUM
+            ,F.DS_CPO_LINE_SUB_NUM      AS DS_CPO_LINE_SUB_NUM
+            <!-- START 2018/10/17 Hd.Sugawara [QC#28842,ADD] -->
+            ,NULL                       AS INV_BOL_LINE_NUM
+            <!-- END 2018/10/17 Hd.Sugawara [QC#28842,ADD] -->
+        FROM
+             CPO             D
+            ,DS_CPO_RTRN_DTL F
+            ,DS_CPO_CONFIG   H
+<!-- QC#55658 2020/01/31 Mod Start -->
+<!--        ,MDSE            I   -->
+            ,ALL_MDSE_V      I
+<!-- QC#55658 2020/01/31 Mod End   -->
+            ,MDL_NM          J
+            ,SELL_TO_CUST    M
+            ,SELL_TO_CUST    N
+            <!-- 2018/10/24 QC#28585 Mod Start -->
+            <!--
+            ,RWS_HDR         O
+            ,RWS_DTL         P
+            ,RWS_SER         Q
+            -->
+            ,(
+             SELECT
+                   X1.TRX_ORD_NUM
+                  ,X2.TRX_LINE_NUM
+                  ,X2.TRX_LINE_SUB_NUM
+                  ,X2.RWS_QTY
+                  ,X3.SER_NUM
+             FROM
+                   RWS_HDR X1
+                  ,RWS_DTL X2
+                  ,RWS_SER X3
+             WHERE
+                      X1.GLBL_CMPY_CD     = #glblCmpyCd#
+                  AND X1.EZCANCELFLAG     = '0'
+                  AND X1.GLBL_CMPY_CD     = X2.GLBL_CMPY_CD
+                  AND X2.EZCANCELFLAG     = '0'
+                  AND X1.RWS_NUM          = X2.RWS_NUM
+                  AND X2.GLBL_CMPY_CD     = X3.GLBL_CMPY_CD
+                  AND X2.RWS_NUM          = X3.RWS_NUM
+                  AND X2.RWS_DTL_LINE_NUM = X3.RWS_LINE_NUM
+                  AND X3.EZCANCELFLAG     = '0'
+                  <!-- 2019/08/15 QC#52707 Mod Start -->
+                  AND X1.RWS_STS_CD       &lt;&gt; #rwsStsCancel#
+                  AND X2.RWS_PUT_AWAY_QTY &gt; 0
+                  <!-- 2019/08/15 QC#52707 Mod End -->
+            ) Q
+            <!-- 2018/10/24 QC#28585 Mod End -->
+            ,(
+              SELECT
+                   X1.DS_ORD_CATG_CD
+                  ,COUNT(X1.ORD_CATG_BIZ_CTX_PK) AS COUNT
+              FROM
+                   ORD_CATG_BIZ_CTX     X1
+              WHERE
+                      X1.GLBL_CMPY_CD       = #glblCmpyCd#
+                  AND X1.EZCANCELFLAG       = '0'
+                  AND X1.ORD_CATG_CTX_TP_CD = #ordCatgCtxTpDealer#
+              GROUP BY
+                  X1.DS_ORD_CATG_CD
+             )               DEALER_COUNT
+            ,(
+              SELECT
+                   X.CPO_ORD_NUM
+                  ,X.DS_CPO_CONFIG_PK
+                  ,X.PSN_CD
+                  ,X.ORG_CD
+                  ,CASE WHEN Y.TRTY_GRP_TP_CD = #trtyGrpTpCdTD# THEN #convDivCdTDS#
+                        ELSE Y.TRTY_GRP_TP_CD END  TRTY_GRP_TP_CD
+              FROM
+                  (SELECT /*+ NO_PUSH_PRED */
+                        X1.CPO_ORD_NUM
+                       ,X1.DS_CPO_CONFIG_PK
+                       ,X3.PSN_CD
+                       ,X5.ORG_CD
+                       ,ROW_NUMBER() OVER (PARTITION BY X1.CPO_ORD_NUM, X1.DS_CPO_CONFIG_PK ORDER BY X1.SLS_REP_CR_PCT DESC, X1.SLS_REP_TOC_CD ASC) AS ROW_NUM
+                   FROM
+                        DS_CPO_SLS_CR    X1
+                       ,LINE_BIZ_ROLE_TP X2
+                       ,ORG_FUNC_ASG     X3
+                       ,DS_ORG_RESRC_RELN    X5
+                   WHERE
+                           X1.GLBL_CMPY_CD        = #glblCmpyCd#
+                       AND X1.EZCANCELFLAG        = '0'
+                       AND X1.GLBL_CMPY_CD        = X2.GLBL_CMPY_CD
+                       AND X1.SLS_REP_ROLE_TP_CD  = X2.LINE_BIZ_ROLE_TP_CD
+                       AND X2.EZCANCELFLAG        = '0'
+                       AND X2.PRIM_REP_ROLE_FLG   = 'Y'
+                       AND X2.SLS_CR_QUOT_FLG     = 'Y'
+                       AND X1.GLBL_CMPY_CD        = X3.GLBL_CMPY_CD
+                       AND X1.SLS_REP_TOC_CD      = X3.TOC_CD
+                       AND X3.EZCANCELFLAG        = '0'
+                       AND X3.EFF_FROM_DT         &lt;= #slsDt#
+<!--2019/05/14 #50093 Del Start-->
+<!--                       AND NVL(X3.EFF_THRU_DT, #slsDt#) -->
+<!--                                                  &gt;= #slsDt#-->
+<!--2019/05/14 #50093 Del End-->
+                       AND X3.GLBL_CMPY_CD        = X5.GLBL_CMPY_CD(+)
+                       AND X3.PSN_CD              = X5.PSN_CD(+)
+                       AND X5.EZCANCELFLAG(+)        = '0'
+                  ) X
+                  ,DS_ORG_UNIT  Y
+              WHERE
+                  X.ROW_NUM = 1
+              AND Y.GLBL_CMPY_CD(+)    = 'ADB'
+              AND Y.ORG_CD(+)          = X.ORG_CD
+              AND Y.EZCANCELFLAG(+)    = '0'
+             )               SLS_REP
+            ,(
+              SELECT
+                   X.CPO_ORD_NUM
+                  ,X.DS_CPO_CONFIG_PK
+                  ,X.PSN_CD
+              FROM
+                  (SELECT /*+ NO_PUSH_PRED */
+                        X1.CPO_ORD_NUM
+                       ,X1.DS_CPO_CONFIG_PK
+                       ,X3.PSN_CD
+                       ,ROW_NUMBER() OVER (PARTITION BY X1.CPO_ORD_NUM, X1.DS_CPO_CONFIG_PK ORDER BY X1.SLS_REP_CR_PCT DESC, X1.SLS_REP_TOC_CD ASC) AS ROW_NUM
+                   FROM
+                        DS_CPO_SLS_CR    X1
+                       ,LINE_BIZ_ROLE_TP X2
+                       ,ORG_FUNC_ASG     X3
+                   WHERE
+                           X1.GLBL_CMPY_CD        = #glblCmpyCd#
+                       AND X1.EZCANCELFLAG        = '0'
+                       AND X1.GLBL_CMPY_CD        = X2.GLBL_CMPY_CD
+                       AND X1.SLS_REP_ROLE_TP_CD  = X2.LINE_BIZ_ROLE_TP_CD
+                       AND X2.EZCANCELFLAG        = '0'
+                       AND X2.PRIM_REP_ROLE_FLG   = 'N'
+                       AND X2.SLS_CR_QUOT_FLG     = 'Y'
+                       AND X1.GLBL_CMPY_CD        = X3.GLBL_CMPY_CD
+                       AND X1.SLS_REP_TOC_CD      = X3.TOC_CD
+                       AND X3.EZCANCELFLAG        = '0'
+                       AND X3.EFF_FROM_DT         &lt;= #slsDt#
+<!--2019/05/14 #50093 Del Start-->
+<!--                       AND NVL(X3.EFF_THRU_DT, #slsDt#) -->
+<!--                                                  &gt;= #slsDt#-->
+<!--2019/05/14 #50093 Del End-->
+                  ) X
+              WHERE
+                  X.ROW_NUM = 1
+             )               INST_REP
+            ,(
+              SELECT
+                   X1.CPO_ORD_NUM
+                  ,X1.DS_CPO_RTRN_LINE_NUM      AS CPO_DTL_LINE_NUM
+                  ,X1.DS_CPO_RTRN_LINE_SUB_NUM  AS CPO_DTL_LINE_SUB_NUM
+                  ,COUNT(X3.MDSE_CD) COUNT
+              FROM
+                   DS_CPO_RTRN_DTL X1
+                  ,DS_CPO_CONFIG   X2
+                  ,ALL_MDSE_V      X3
+                  ,DS_MDL          X4
+              WHERE
+                      X1.GLBL_CMPY_CD         = #glblCmpyCd#
+                  AND X1.BASE_CMPT_FLG        = 'Y'
+                  AND X1.EZCANCELFLAG         = '0'
+                  AND X1.GLBL_CMPY_CD         = X2.GLBL_CMPY_CD
+                  AND X1.CPO_ORD_NUM          = X2.CPO_ORD_NUM
+                  AND X1.DS_ORD_POSN_NUM      = X2.DS_ORD_POSN_NUM
+                  AND X2.EZCANCELFLAG         = '0'
+                  AND X1.GLBL_CMPY_CD         = X3.GLBL_CMPY_CD
+                  AND X1.MDSE_CD              = X3.MDSE_CD
+                  AND X3.EZCANCELFLAG         = '0'
+                  AND X3.COA_MDSE_TP_CD       = #coaMdseTpMachine#
+                  AND X2.GLBL_CMPY_CD         = X4.GLBL_CMPY_CD
+                  AND X2.MDL_ID               = X4.MDL_ID
+                  AND X4.EZCANCELFLAG         = '0'
+                  AND X4.MTR_GRP_PK           IS NOT NULL
+              GROUP BY
+                   X1.CPO_ORD_NUM
+                  ,X1.DS_CPO_RTRN_LINE_NUM
+                  ,X1.DS_CPO_RTRN_LINE_SUB_NUM
+             )               PRTR_COUNT
+        WHERE
+                D.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND D.EZCANCELFLAG          = '0'
+            <!-- QC#55658 2020/01/31 Add Start -->
+            AND D.ORD_HDR_STS_CD        &lt;&gt; #ordHdrStsCancel#
+            <!-- QC#55658 2020/01/31 Add End   -->
+            AND D.GLBL_CMPY_CD          = F.GLBL_CMPY_CD
+            AND D.CPO_ORD_NUM           = F.CPO_ORD_NUM
+            AND F.EZCANCELFLAG          = '0'
+            AND F.RTRN_LINE_STS_CD      NOT IN 
+            <iterate property="rtrnLineStsCdList" var="rtrnLineStsCd[]" open="(" close=")" conjunction=",">
+                #rtrnLineStsCd[]#
+            </iterate>
+            AND F.GLBL_CMPY_CD          = H.GLBL_CMPY_CD
+            AND F.CPO_ORD_NUM           = H.CPO_ORD_NUM
+            AND F.DS_CPO_CONFIG_PK      = H.DS_CPO_CONFIG_PK
+            AND H.EZCANCELFLAG          = '0'
+            AND H.GLBL_CMPY_CD          = J.T_GLBL_CMPY_CD (+)
+            AND H.MDL_ID                = J.T_MDL_ID (+)
+            AND J.EZCANCELFLAG (+)      = '0'
+            <!-- 2018/10/24 QC#28585 Mod Start -->
+            <!--
+            AND O.GLBL_CMPY_CD          = F.GLBL_CMPY_CD
+            AND O.TRX_ORD_NUM           = F.CPO_ORD_NUM
+            AND O.EZCANCELFLAG          = '0'
+            AND P.RWS_NUM (+)           = O.RWS_NUM
+            AND P.GLBL_CMPY_CD (+)      = O.GLBL_CMPY_CD
+            AND P.TRX_LINE_NUM (+)      = F.DS_CPO_RTRN_LINE_NUM
+            AND P.TRX_LINE_SUB_NUM (+)  = F.DS_CPO_RTRN_LINE_SUB_NUM
+            AND P.EZCANCELFLAG (+)      = '0'
+            AND Q.GLBL_CMPY_CD (+)      = P.GLBL_CMPY_CD
+            AND Q.RWS_NUM (+)           = P.RWS_NUM
+            AND Q.RWS_LINE_NUM (+)      = P.RWS_DTL_LINE_NUM
+            AND Q.EZCANCELFLAG (+)      = '0'
+            -->
+            AND Q.TRX_ORD_NUM (+)       = F.CPO_ORD_NUM
+            AND Q.TRX_LINE_NUM (+)      = F.DS_CPO_RTRN_LINE_NUM
+            AND Q.TRX_LINE_SUB_NUM (+)  = F.DS_CPO_RTRN_LINE_SUB_NUM
+            <!-- 2018/10/24 QC#28585 Mod End -->
+            <!-- 2018/10/02 QC#28585 Mod Start -->
+            <!--
+            AND P.GLBL_CMPY_CD          = I.GLBL_CMPY_CD
+            AND P.MDSE_CD               = I.MDSE_CD
+            -->
+            AND F.GLBL_CMPY_CD          = I.GLBL_CMPY_CD
+            AND F.MDSE_CD               = I.MDSE_CD
+            <!-- 2018/10/02 QC#28585 Mod End -->
+            AND I.EZCANCELFLAG          = '0'
+            AND D.GLBL_CMPY_CD          = M.GLBL_CMPY_CD
+            AND D.SELL_TO_CUST_CD       = M.SELL_TO_CUST_CD
+            AND M.EZCANCELFLAG          = '0'
+            AND H.GLBL_CMPY_CD          = N.GLBL_CMPY_CD
+            AND H.BILL_TO_CUST_ACCT_CD  = N.SELL_TO_CUST_CD
+            AND N.EZCANCELFLAG          = '0'
+            AND D.DS_ORD_CATG_CD        = DEALER_COUNT.DS_ORD_CATG_CD (+)
+            AND H.CPO_ORD_NUM           = SLS_REP.CPO_ORD_NUM (+)
+            AND H.DS_CPO_CONFIG_PK      = SLS_REP.DS_CPO_CONFIG_PK (+)
+            AND H.CPO_ORD_NUM           = INST_REP.CPO_ORD_NUM (+)
+            AND H.DS_CPO_CONFIG_PK      = INST_REP.DS_CPO_CONFIG_PK (+)
+            AND F.CPO_ORD_NUM           = PRTR_COUNT.CPO_ORD_NUM (+)
+            AND F.DS_CPO_RTRN_LINE_NUM     = PRTR_COUNT.CPO_DTL_LINE_NUM (+)
+            AND F.DS_CPO_RTRN_LINE_SUB_NUM = PRTR_COUNT.CPO_DTL_LINE_SUB_NUM (+)
+            AND EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        COMP_ACRL_PRM     X1
+                    WHERE
+                            X1.GLBL_CMPY_CD        = D.GLBL_CMPY_CD
+                        AND X1.CPO_ORD_NUM         = D.CPO_ORD_NUM
+                        AND X1.EZCANCELFLAG        = '0'
+                        <iterate property="compProcStsCdList" var="compProcStsCd[]" open="AND X1.COMP_PROC_STS_CD IN (" close=")" conjunction=",">
+                            #compProcStsCd[]#
+                        </iterate>
+                )
+            AND EXISTS (
+                    SELECT
+                        1
+                    FROM
+                         DS_CPO_SLS_CR      X1
+                        ,LINE_BIZ_ROLE_TP   X2
+                        ,CPO_V              X3
+                        ,DS_ORD_TP_PROC_DFN X4
+                    WHERE
+                            X1.GLBL_CMPY_CD        = H.GLBL_CMPY_CD
+                        AND X1.CPO_ORD_NUM         = H.CPO_ORD_NUM
+                        AND X1.DS_CPO_CONFIG_PK    = H.DS_CPO_CONFIG_PK
+                        AND X1.EZCANCELFLAG        = '0'
+                        AND X1.GLBL_CMPY_CD        = X2.GLBL_CMPY_CD
+                        AND X1.SLS_REP_ROLE_TP_CD  = X2.LINE_BIZ_ROLE_TP_CD
+                        AND X2.EZCANCELFLAG        = '0'
+                        AND X2.SLS_CR_QUOT_FLG     = 'Y'
+                        AND X1.GLBL_CMPY_CD        = X3.GLBL_CMPY_CD
+                        AND X1.CPO_ORD_NUM         = X3.CPO_ORD_NUM
+                        AND X3.EZCANCELFLAG        = '0'
+                        AND X3.LINE_BIZ_TP_CD      = #lineBizTpCd#
+                        AND X3.GLBL_CMPY_CD        = X4.GLBL_CMPY_CD
+                        AND X3.DS_ORD_TP_CD        = X4.DS_ORD_TP_CD
+                        AND X4.EZCANCELFLAG        = '0'
+                        AND (X4.TRTY_GRP_TP_TXT    NOT LIKE #lineBizTpCdForIs#
+                            OR  X4.TRTY_GRP_TP_TXT IS NULL)
+                )
+     )
+    ,CPO_COUNT AS (
+        SELECT
+             COMP_INFO.CPO_ORD_NUM
+            ,COMP_INFO.CPO_DTL_LINE_NUM
+            ,COMP_INFO.CPO_DTL_LINE_SUB_NUM
+            ,COUNT(COMP_INFO.CPO_ORD_NUM) AS COUNT
+        FROM
+            COMP_INFO
+        GROUP BY
+             COMP_INFO.CPO_ORD_NUM
+            ,COMP_INFO.CPO_DTL_LINE_NUM
+            ,COMP_INFO.CPO_DTL_LINE_SUB_NUM
+     )
+
+        SELECT
+             COMP_INFO.DIST_CH_CD
+            ,COMP_INFO.COMP_DIV_CD
+            ,COMP_INFO.CPO_ORD_NUM
+            ,COMP_INFO.DS_ORD_POSN_NUM
+            ,COMP_INFO.CPO_DTL_LINE_NUM
+            ,COMP_INFO.CPO_DTL_LINE_SUB_NUM
+            ,TO_CHAR(COMP_INFO.DS_CPO_LINE_NUM) AS DS_CPO_LINE_NUM
+            ,TO_CHAR(COMP_INFO.DS_CPO_LINE_SUB_NUM) AS DS_CPO_LINE_SUB_NUM
+            ,COMP_INFO.DS_ORD_CATG_CD
+            ,COMP_INFO.DS_ORD_TP_CD
+            ,COMP_INFO.ORD_CRAT_DT
+            ,COMP_INFO.T_MDL_NM
+            ,COMP_INFO.MDSE_CD
+            ,COMP_INFO.SELL_TO_CUST_CD
+            ,COMP_INFO.SELL_TO_CUST_ACCT_NM
+            ,COMP_INFO.SLS_REP_PSN_CD
+            ,COMP_INFO.ISTL_REP_PSN_CD
+            ,COMP_INFO.SVC_CONFIG_MSTR_PK
+            ,COMP_INFO.SER_NUM
+            ,(CASE
+                 WHEN CPO_COUNT.COUNT &gt; 1 THEN 1
+                 ELSE COMP_INFO.ORD_QTY
+             END) * -1                  AS COMP_ORD_QTY
+            ,CASE
+                 WHEN CPO_COUNT.COUNT &gt; 1 THEN COMP_INFO.SP_DEAL_NET_UNIT_PRC_AMT
+                 ELSE COMP_INFO.SP_TOT_DEAL_NET_AMT
+             END                        AS COMP_VAL_AMT
+            ,COMP_INFO.INV_NUM
+            ,COMP_INFO.INV_LINE_NUM
+            ,COMP_INFO.INV_LINE_SUB_NUM
+            ,COMP_INFO.INV_DT
+            ,DECODE(
+                (SELECT COUNT(*)
+                    FROM
+                        DS_CONTR_DTL DCD
+                    WHERE
+                        DCD.GLBL_CMPY_CD            = COMP_INFO.GLBL_CMPY_CD
+                    AND DCD.CPO_ORD_NUM             = COMP_INFO.CPO_ORD_NUM
+                    AND DCD.CPO_DTL_LINE_NUM        = COMP_INFO.CPO_DTL_LINE_NUM
+                    AND DCD.CPO_DTL_LINE_SUB_NUM    = COMP_INFO.CPO_DTL_LINE_SUB_NUM
+                    AND DCD.EZCANCELFLAG            = '0'
+                )
+                ,0 , 'N', 'Y')        AS CONTR_SLD_FLG
+            ,COMP_INFO.COMP_PRTR_FLG
+            ,COMP_INFO.ACRL_ORD_FLG
+            ,COMP_INFO.CR_REBIL_RSN_CD
+            ,COMP_INFO.DS_ORD_RSN_CD
+            <!-- START 2018/10/17 Hd.Sugawara [QC#28842,ADD] -->
+            ,COMP_INFO.INV_BOL_LINE_NUM
+            <!-- END 2018/10/17 Hd.Sugawara [QC#28842,ADD] -->
+        FROM
+             COMP_INFO
+            ,CPO_COUNT
+        WHERE
+                COMP_INFO.CPO_ORD_NUM           = CPO_COUNT.CPO_ORD_NUM
+            AND COMP_INFO.CPO_DTL_LINE_NUM      = CPO_COUNT.CPO_DTL_LINE_NUM
+            AND COMP_INFO.CPO_DTL_LINE_SUB_NUM  = CPO_COUNT.CPO_DTL_LINE_SUB_NUM
+        ORDER BY
+             COMP_INFO.CPO_ORD_NUM           ASC
+            ,COMP_INFO.CPO_DTL_LINE_NUM      ASC
+            ,COMP_INFO.CPO_DTL_LINE_SUB_NUM  ASC
+            ,COMP_INFO.SER_NUM               ASC NULLS LAST
+    </statement>
+    <!-- 2018/09/25 QC#28231 Add End -->
+
+    <!-- 2020/12/01 QC#58045 Add Start -->
+    <statement id="getBandandCoveredImages" parameterClass="Map" resultClass="Map">
+        SELECT
+            PLB.PRC_LIST_BAND_DESC_TXT
+           ,CXC.XS_MTR_COPY_QTY
+        FROM
+            DS_CONTR_DTL              CD
+           ,DS_CONTR                  C
+           ,DS_CONTR_STS_V            DCS
+           ,CPO_DTL                   DCD
+           ,DS_CONTR_BLLG_MTR         CBM
+           ,CONTR_XS_COPY             CXC
+           ,PRC_LIST_BAND             PLB
+        WHERE
+            CD.GLBL_CMPY_CD             = #glblCmpyCd#
+        AND CD.CPO_ORD_NUM              = #cpoOrdNum#
+        <iterate property="dsContrDtlTpCdList" var="dsContrDtlTpCdList[]" open="AND CD.DS_CONTR_DTL_TP_CD IN (" close=")" conjunction=",">
+            #dsContrDtlTpCdList[]#
+        </iterate>
+        AND CD.DS_CONTR_CRAT_TP_CD      = #dsContrCratTpCd#
+        AND CD.EZCANCELFLAG             = '0'
+        AND CD.DS_CONTR_PK              = C.DS_CONTR_PK
+        AND CD.GLBL_CMPY_CD             = C.GLBL_CMPY_CD
+        AND C.EZCANCELFLAG              = '0'
+        AND C.GLBL_CMPY_CD              = DCS.GLBL_CMPY_CD(+)
+        AND C.DS_CONTR_PK               = DCS.DS_CONTR_PK(+)
+        AND DCS.ETTL_AVAL_FLG(+)        = 'Y'
+        AND DCS.EZCANCELFLAG(+)         = '0'
+        AND CD.GLBL_CMPY_CD             = DCD.GLBL_CMPY_CD
+        AND CD.CPO_ORD_NUM              = DCD.CPO_ORD_NUM
+        AND CD.CPO_DTL_LINE_NUM         = DCD.CPO_DTL_LINE_NUM
+        AND CD.CPO_DTL_LINE_SUB_NUM     = DCD.CPO_DTL_LINE_SUB_NUM
+        AND DCD.DS_ORD_POSN_NUM         = #dsOrdPosnNum#
+        AND DCD.ORD_LINE_STS_CD         &lt;&gt; #ordLineStsCd#
+        AND DCD.EZCANCELFLAG            = '0'
+        AND EXISTS (
+            SELECT
+                1
+            FROM
+                CPO_DTL CPO_DTL
+            WHERE
+                CPO_DTL.GLBL_CMPY_CD    = DCD.GLBL_CMPY_CD
+            AND CPO_DTL.CPO_ORD_NUM     = DCD.CPO_ORD_NUM
+            AND CPO_DTL.DS_ORD_POSN_NUM = DCD.DS_ORD_POSN_NUM
+            <iterate property="lfsCommMdses" var="lfsCommMdses[]" open="AND CPO_DTL.MDSE_CD IN (" close=")" conjunction=",">
+                #lfsCommMdses[]#
+            </iterate>
+            AND CPO_DTL.MDSE_CD IN('COEZPP','COEZPLP')
+            AND CPO_DTL.EZCANCELFLAG    = '0'
+        )
+        AND CD.DS_CONTR_DTL_PK          = CBM.DS_CONTR_DTL_PK
+        AND CD.GLBL_CMPY_CD             = CBM.GLBL_CMPY_CD
+        AND CBM.EZCANCELFLAG            = '0'
+        AND CBM.PRC_LIST_BAND_CD        = PLB.PRC_LIST_BAND_CD(+)
+        AND CBM.GLBL_CMPY_CD            = PLB.GLBL_CMPY_CD(+)
+        AND PLB.EZCANCELFLAG(+)         = '0'
+        AND CBM.DS_CONTR_BLLG_MTR_PK    = CXC.DS_CONTR_BLLG_MTR_PK(+)
+        AND CBM.GLBL_CMPY_CD            = CXC.GLBL_CMPY_CD(+)
+        AND CXC.XS_MTR_FIRST_FLG        = 'Y'
+        AND CXC.EZCANCELFLAG(+)         = '0'
+    </statement>
+    <!-- 2020/12/01 QC#58045 Add Start -->
+</sqlMap>

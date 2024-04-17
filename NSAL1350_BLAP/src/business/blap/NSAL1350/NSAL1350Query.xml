@@ -1,0 +1,434 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NSAL1350Query">
+
+    <statement id="getSearchRslt" parameterClass="Map" resultClass="Map">
+    <!-- START 2018/10/01 K.Fujimoto [QC#28399,MOD] -->
+            SELECT    DS_CPO_CONFIG_PK
+                    , DS_ORD_POSN_NUM
+                    , MDL_ID
+                    , T_MDL_NM
+                    , BILL_TO_CUST_LOC_CD
+                    , SHIP_TO_CUST_LOC_CD
+                    , DPLY_LINE_NUM
+                    , CPO_DTL_LINE_NUM
+                    , CPO_DTL_LINE_SUB_NUM
+                    , MDSE_CD
+                    , MDSE_DESC_SHORT_TXT
+                    , MDSE_ITEM_TP_CD
+                    , MDSE_ITEM_TP_NM
+                    , XX_GENL_FLD_AREA_TXT
+                    <!-- START 2024/03/21 M.Kuroi [QC#63638,ADD] -->
+                    , SHPG_STS_CD
+                    <!-- END 2024/03/21 M.Kuroi [QC#63638,ADD] -->
+            FROM (
+                 SELECT
+                           DCC.DS_CPO_CONFIG_PK
+                         , DCC.DS_ORD_POSN_NUM
+                         , DCC.MDL_ID
+                         , MN.T_MDL_NM
+                         , DCC.BILL_TO_CUST_LOC_CD
+                         , DCC.SHIP_TO_CUST_LOC_CD
+                         <!-- START 2017/07/12 K.Kojima [QC#19793,MOD] -->
+                         <!-- , CDV.DPLY_LINE_NUM -->
+                         ,CONCAT(CDV.DS_ORD_POSN_NUM, '.')
+                             || CONCAT(CDV.DS_CPO_LINE_NUM, DECODE(CDV.DS_CPO_LINE_SUB_NUM, NULL, '', '.'))
+                             || CDV.DS_CPO_LINE_SUB_NUM AS DPLY_LINE_NUM
+                         <!-- END 2017/07/12 K.Kojima [QC#19793,MOD] -->
+                         , CDV.CPO_DTL_LINE_NUM
+                         , CDV.CPO_DTL_LINE_SUB_NUM
+                         , CDV.MDSE_CD
+                         <!-- START 2017/07/12 K.Kojima [QC#19793,MOD] -->
+                         , AMV.MDSE_DESC_SHORT_TXT
+                         <!-- END 2017/07/12 K.Kojima [QC#19793,MOD] -->
+                         , MIT.MDSE_ITEM_TP_CD
+                         , MIT.MDSE_ITEM_TP_NM
+                         , RPAD( 
+                             CDV.SHIP_TO_FIRST_LINE_ADDR
+                             , LENGTH(CDV.SHIP_TO_FIRST_LINE_ADDR) + 1
+                         ) || RPAD( 
+                             CDV.SHIP_TO_SCD_LINE_ADDR
+                             , LENGTH(CDV.SHIP_TO_SCD_LINE_ADDR) + 1
+                         ) || RPAD( 
+                             CDV.SHIP_TO_THIRD_LINE_ADDR
+                             , LENGTH(CDV.SHIP_TO_THIRD_LINE_ADDR) + 1
+                         ) || RPAD( 
+                             CDV.SHIP_TO_FRTH_LINE_ADDR
+                             , LENGTH(CDV.SHIP_TO_FRTH_LINE_ADDR) + 1
+                         ) || CONCAT(CDV.SHIP_TO_CTY_ADDR, ',') || RPAD( 
+                             CDV.SHIP_TO_ST_CD
+                             , LENGTH(CDV.SHIP_TO_ST_CD) + 1
+                         ) || RPAD( 
+                             CDV.SHIP_TO_POST_CD
+                             , LENGTH(CDV.SHIP_TO_POST_CD) + 1
+                         ) XX_GENL_FLD_AREA_TXT 
+                         <!-- START 2024/03/21 M.Kuroi [QC#63638,ADD] -->
+                         , SP.SHPG_STS_CD
+                         <!-- END 2024/03/21 M.Kuroi [QC#63638,ADD] -->
+                     FROM
+                         <!-- START 2017/07/12 K.Kojima [QC#19793,MOD] -->
+                         <!-- CPO_V           CV -->
+                          CPO            CV
+                         <!-- END 2017/07/12 K.Kojima [QC#19793,MOD] -->
+                         , DS_CPO_CONFIG DCC
+                         <!-- START 2017/07/12 K.Kojima [QC#19793,MOD] -->
+                         <!-- , CPO_DTL_V     CDV -->
+                         , CPO_DTL       CDV
+                         <!-- END 2017/07/12 K.Kojima [QC#19793,MOD] -->
+                         , SELL_TO_CUST  STC
+                         , MDSE          AMV
+                         , MDSE_ITEM_TP  MIT
+                         , MDL_NM        MN
+                         <isEqual property="addAsryFlg" compareValue="Y">
+                             <isNotNull property="dsContrNum">
+                             ,DS_CONTR       C
+                             </isNotNull>
+                         </isEqual>
+                         <!-- START 2024/03/21 M.Kuroi [QC#63638,ADD] -->
+                         , SHPG_PLN      SP
+                         <!-- END 2024/03/21 M.Kuroi [QC#63638,ADD] -->
+                     WHERE
+                         CV.GLBL_CMPY_CD          = #glblCmpyCd#
+                         AND CV.CPO_ORD_NUM       = #cpoOrdNum#
+                         AND CV.ORD_HDR_STS_CD   IN (#saved#, #validated#)
+                         AND CV.EZCANCELFLAG      = '0'
+                         AND CV.GLBL_CMPY_CD      = DCC.GLBL_CMPY_CD
+                         AND CV.CPO_ORD_NUM       = DCC.CPO_ORD_NUM
+                         <isNotNull property="dsOrdPosnNum">
+                         AND DCC.DS_ORD_POSN_NUM  = #dsOrdPosnNum#
+                         </isNotNull>
+                         AND DCC.EZCANCELFLAG     = '0'
+                         <isNotNull property="mdlId">
+                         AND DCC.MDL_ID           = $mdlId$
+                         </isNotNull>
+
+                         AND DCC.DCLN_SVC_CD      <![CDATA[ <> ]]> #dclnSvcCdDcln#
+
+                         AND DCC.GLBL_CMPY_CD     = CDV.GLBL_CMPY_CD
+                         AND DCC.DS_CPO_CONFIG_PK = CDV.DS_CPO_CONFIG_PK
+                         <isNotEqual property="addAsryFlg" compareValue="Y">
+                             <isNull property="dsContrNum">
+                         AND CDV.BASE_CMPT_FLG    = 'Y'
+                             </isNull>
+                             <isNotNull property="dsContrNum">
+                         AND AMV.COA_MDSE_TP_CD IN (
+                             SELECT
+                                       MTVS.COA_MDSE_TP_CD
+                                 FROM
+                                     MDSE_TP_VAL_SET     MTVS
+                                 WHERE
+                                     MTVS.GLBL_CMPY_CD           = #glblCmpyCd#
+                                     AND MTVS.MDSE_TP_CTX_TP_CD IN
+                                     <iterate property="mdseTpCtxTpList" var="mdseTpCtxTpList[]" open=" (" close=")" conjunction=",">
+                                          #mdseTpCtxTpList[]#
+                                     </iterate>
+                                     AND MTVS.EZCANCELFLAG       = '0'
+                         ) 
+                             </isNotNull>
+                         </isNotEqual>
+                         AND CDV.CPO_DTL_CANC_FLG = 'N'
+                         <isNotNull property="mdseCd">
+                         AND CDV.MDSE_CD          LIKE #mdseCd#
+                         </isNotNull>
+                         AND CDV.EZCANCELFLAG     = '0'
+                         <!-- 2019/11/22 QC#54213 Add Start -->
+                         AND NOT EXISTS (
+                                 SELECT 
+                                     '1' 
+                                 FROM 
+                                     RTL_WH RW 
+                                 WHERE
+                                         RW.GLBL_CMPY_CD   = #glblCmpyCd#
+                                     AND RW.RTL_WH_CD      = #rtlWhCd#
+                                     AND RW.RTL_WH_CD      = CDV.RTL_WH_CD
+                                     AND RW.EZCANCELFLAG   = '0'
+                         )
+                         <!-- 2019/11/22 QC#54213 Add End -->
+                         AND CV.GLBL_CMPY_CD      = STC.GLBL_CMPY_CD
+                         AND CV.SELL_TO_CUST_CD   = STC.SELL_TO_CUST_CD
+                         AND STC.EZCANCELFLAG     = '0'
+                         AND CDV.GLBL_CMPY_CD     = AMV.GLBL_CMPY_CD
+                         AND CDV.MDSE_CD          = AMV.MDSE_CD
+                         <isNotNull property="mdseItemTpCd">
+                         AND AMV.MDSE_ITEM_TP_CD  = #mdseItemTpCd#
+                         </isNotNull>
+                         --
+                         <isEqual property="addAsryFlg" compareValue="Y">
+                         AND DCC.CONFIG_TP_CD    = #configTpAddToConfig#
+                         AND AMV.COA_MDSE_TP_CD IN (
+                             SELECT
+                                       MTVS.COA_MDSE_TP_CD
+                                 FROM
+                                     MDSE_TP_VAL_SET     MTVS
+                                 WHERE
+                                     MTVS.GLBL_CMPY_CD           = #glblCmpyCd#
+                                     AND MTVS.MDSE_TP_CTX_TP_CD IN
+                                     <iterate property="mdseTpCtxTpList" var="mdseTpCtxTpList[]" open=" (" close=")" conjunction=",">
+                                          #mdseTpCtxTpList[]#
+                                     </iterate>
+                                     AND MTVS.EZCANCELFLAG       = '0'
+                         ) 
+                         --
+                         </isEqual>
+                         AND AMV.EZCANCELFLAG     = '0' 
+                         AND AMV.GLBL_CMPY_CD     = MIT.GLBL_CMPY_CD 
+                         AND AMV.MDSE_ITEM_TP_CD  = MIT.MDSE_ITEM_TP_CD 
+                         AND MIT.EZCANCELFLAG     = '0'
+                         --
+                         AND DCC.GLBL_CMPY_CD     = MN.T_GLBL_CMPY_CD
+                         AND DCC.MDL_ID           = MN.T_MDL_ID
+                         AND MN.EZCANCELFLAG      = '0'
+                         --
+                         AND NOT EXISTS (
+                             SELECT
+                                     '1'
+                                 FROM
+                                     SHPG_PLN    SP
+                                 WHERE
+                                     SP.GLBL_CMPY_CD              = CDV.GLBL_CMPY_CD
+                                     AND SP.TRX_HDR_NUM           = CDV.CPO_ORD_NUM
+                                     AND SP.TRX_LINE_NUM          = CDV.CPO_DTL_LINE_NUM
+                                     AND SP.TRX_LINE_SUB_NUM      = CDV.CPO_DTL_LINE_SUB_NUM
+                                     AND SP.SHPG_STS_CD          &gt;= #shpgStsArrived#
+                                     AND SP.EZCANCELFLAG          = '0'
+                         )
+                         <isEqual property="addAsryFlg" compareValue="Y">
+                             <isNotNull property="dsContrNum">
+                         AND C.GLBL_CMPY_CD                       = DCC.GLBL_CMPY_CD
+                         AND C.DS_CONTR_NUM                       = #dsContrNum#
+                         AND C.EZCANCELFLAG                       = '0'
+                         --
+                         AND EXISTS (
+                             SELECT
+                                       '1'
+                                 FROM
+                                     DS_CONTR_DTL    CD
+                                 WHERE
+                                     CD.GLBL_CMPY_CD             = DCC.GLBL_CMPY_CD
+                                     AND CD.DS_CONTR_PK          = C.DS_CONTR_PK
+                                     AND CD.SVC_CONFIG_MSTR_PK   = DCC.SVC_CONFIG_MSTR_PK
+                                     AND CD.EZCANCELFLAG         = '0'
+                         )
+                             </isNotNull>
+                         </isEqual>
+                         <!-- START 2024/03/21 M.Kuroi [QC#63638,ADD] -->
+                         --
+                         AND CDV.GLBL_CMPY_CD                    = SP.GLBL_CMPY_CD(+)
+                         AND CDV.CPO_ORD_NUM                     = SP.TRX_HDR_NUM(+)
+                         AND CDV.CPO_DTL_LINE_NUM                = SP.TRX_LINE_NUM(+)
+                         AND CDV.CPO_DTL_LINE_SUB_NUM            = SP.TRX_LINE_SUB_NUM(+)
+                         AND SP.EZCANCELFLAG(+)                  = '0'
+                         <!-- END 2024/03/21 M.Kuroi [QC#63638,ADD] -->
+                         
+                         UNION ALL
+                         
+                                          SELECT
+                           DCC.DS_CPO_CONFIG_PK
+                         , DCC.DS_ORD_POSN_NUM
+                         , DCC.MDL_ID
+                         , MN.T_MDL_NM
+                         , DCC.BILL_TO_CUST_LOC_CD
+                         , DCC.SHIP_TO_CUST_LOC_CD
+                         <!-- START 2017/07/12 K.Kojima [QC#19793,MOD] -->
+                         <!-- , CDV.DPLY_LINE_NUM -->
+                         ,CONCAT(CDV.DS_ORD_POSN_NUM, '.')
+                             || CONCAT(CDV.DS_CPO_LINE_NUM, DECODE(CDV.DS_CPO_LINE_SUB_NUM, NULL, '', '.'))
+                             || CDV.DS_CPO_LINE_SUB_NUM AS DPLY_LINE_NUM
+                         <!-- END 2017/07/12 K.Kojima [QC#19793,MOD] -->
+                         , CDV.CPO_DTL_LINE_NUM
+                         , CDV.CPO_DTL_LINE_SUB_NUM
+                         , CDV.MDSE_CD
+                         <!-- START 2017/07/12 K.Kojima [QC#19793,MOD] -->
+                         , AMV.MDSE_DESC_SHORT_TXT
+                         <!-- END 2017/07/12 K.Kojima [QC#19793,MOD] -->
+                         , MIT.MDSE_ITEM_TP_CD
+                         , MIT.MDSE_ITEM_TP_NM
+                         , RPAD( 
+                             CDV.SHIP_TO_FIRST_LINE_ADDR
+                             , LENGTH(CDV.SHIP_TO_FIRST_LINE_ADDR) + 1
+                         ) || RPAD( 
+                             CDV.SHIP_TO_SCD_LINE_ADDR
+                             , LENGTH(CDV.SHIP_TO_SCD_LINE_ADDR) + 1
+                         ) || RPAD( 
+                             CDV.SHIP_TO_THIRD_LINE_ADDR
+                             , LENGTH(CDV.SHIP_TO_THIRD_LINE_ADDR) + 1
+                         ) || RPAD( 
+                             CDV.SHIP_TO_FRTH_LINE_ADDR
+                             , LENGTH(CDV.SHIP_TO_FRTH_LINE_ADDR) + 1
+                         ) || CONCAT(CDV.SHIP_TO_CTY_ADDR, ',') || RPAD( 
+                             CDV.SHIP_TO_ST_CD
+                             , LENGTH(CDV.SHIP_TO_ST_CD) + 1
+                         ) || RPAD( 
+                             CDV.SHIP_TO_POST_CD
+                             , LENGTH(CDV.SHIP_TO_POST_CD) + 1
+                         ) XX_GENL_FLD_AREA_TXT 
+                         <!-- START 2024/03/21 M.Kuroi [QC#63638,ADD] -->
+                         , SP.SHPG_STS_CD
+                         <!-- END 2024/03/21 M.Kuroi [QC#63638,ADD] -->
+                     FROM
+                         <!-- START 2017/07/12 K.Kojima [QC#19793,MOD] -->
+                         <!-- CPO_V           CV -->
+                          CPO            CV
+                         <!-- END 2017/07/12 K.Kojima [QC#19793,MOD] -->
+                         , DS_CPO_CONFIG DCC
+                         <!-- START 2017/07/12 K.Kojima [QC#19793,MOD] -->
+                         <!-- , CPO_DTL_V     CDV -->
+                         , CPO_DTL       CDV
+                         <!-- END 2017/07/12 K.Kojima [QC#19793,MOD] -->
+                         , SELL_TO_CUST  STC
+                         , MDSE          AMV
+                         , ORD_TAKE_MDSE OTM
+                         , MDSE_ITEM_TP  MIT
+                         , MDL_NM        MN
+                         <isEqual property="addAsryFlg" compareValue="Y">
+                             <isNotNull property="dsContrNum">
+                             ,DS_CONTR       C
+                             </isNotNull>
+                         </isEqual>
+                         <!-- START 2024/03/21 M.Kuroi [QC#63638,ADD] -->
+                         , SHPG_PLN      SP
+                         <!-- END 2024/03/21 M.Kuroi [QC#63638,ADD] -->
+                     WHERE
+                         CV.GLBL_CMPY_CD          = #glblCmpyCd#
+                         AND CV.CPO_ORD_NUM       = #cpoOrdNum#
+                         AND CV.ORD_HDR_STS_CD   IN (#saved#, #validated#)
+                         AND CV.EZCANCELFLAG      = '0'
+                         AND CV.GLBL_CMPY_CD      = DCC.GLBL_CMPY_CD
+                         AND CV.CPO_ORD_NUM       = DCC.CPO_ORD_NUM
+                         <isNotNull property="dsOrdPosnNum">
+                         AND DCC.DS_ORD_POSN_NUM  = #dsOrdPosnNum#
+                         </isNotNull>
+                         AND DCC.EZCANCELFLAG     = '0'
+                         <isNotNull property="mdlId">
+                         AND DCC.MDL_ID           = $mdlId$
+                         </isNotNull>
+
+                         AND DCC.DCLN_SVC_CD      <![CDATA[ <> ]]> #dclnSvcCdDcln#
+
+                         AND DCC.GLBL_CMPY_CD     = CDV.GLBL_CMPY_CD
+                         AND DCC.DS_CPO_CONFIG_PK = CDV.DS_CPO_CONFIG_PK
+                         <isNotEqual property="addAsryFlg" compareValue="Y">
+                             <isNull property="dsContrNum">
+                         AND CDV.BASE_CMPT_FLG    = 'Y'
+                             </isNull>
+                             <isNotNull property="dsContrNum">
+                         AND AMV.COA_MDSE_TP_CD IN (
+                             SELECT
+                                       MTVS.COA_MDSE_TP_CD
+                                 FROM
+                                     MDSE_TP_VAL_SET     MTVS
+                                 WHERE
+                                     MTVS.GLBL_CMPY_CD           = #glblCmpyCd#
+                                     AND MTVS.MDSE_TP_CTX_TP_CD IN
+                                     <iterate property="mdseTpCtxTpList" var="mdseTpCtxTpList[]" open=" (" close=")" conjunction=",">
+                                          #mdseTpCtxTpList[]#
+                                     </iterate>
+                                     AND MTVS.EZCANCELFLAG       = '0'
+                         ) 
+                             </isNotNull>
+                         </isNotEqual>
+                         AND OTM.EZCANCELFLAG = '0'
+                         AND AMV.MDSE_CD = OTM.MDSE_CD
+                         AND AMV.GLBL_CMPY_CD = OTM.GLBL_CMPY_CD
+
+                         AND CDV.CPO_DTL_CANC_FLG = 'N'
+                         <isNotNull property="mdseCd">
+                         AND CDV.MDSE_CD          LIKE #mdseCd#
+                         </isNotNull>
+                         AND CDV.EZCANCELFLAG     = '0'
+                         <!-- 2019/11/22 QC#54213 Add Start -->
+                         AND NOT EXISTS (
+                                 SELECT 
+                                     '1' 
+                                 FROM 
+                                     RTL_WH RW 
+                                 WHERE
+                                         RW.GLBL_CMPY_CD   = #glblCmpyCd#
+                                     AND RW.RTL_WH_CD      = #rtlWhCd#
+                                     AND RW.RTL_WH_CD      = CDV.RTL_WH_CD
+                                     AND RW.EZCANCELFLAG   = '0'
+                         )
+                         <!-- 2019/11/22 QC#54213 Add End -->
+                         AND CV.GLBL_CMPY_CD      = STC.GLBL_CMPY_CD
+                         AND CV.SELL_TO_CUST_CD   = STC.SELL_TO_CUST_CD
+                         AND STC.EZCANCELFLAG     = '0'
+                         AND CDV.GLBL_CMPY_CD     = OTM.GLBL_CMPY_CD
+                         AND CDV.MDSE_CD          = OTM.ORD_TAKE_MDSE_CD
+                         <isNotNull property="mdseItemTpCd">
+                         AND AMV.MDSE_ITEM_TP_CD  = #mdseItemTpCd#
+                         </isNotNull>
+                         --
+                         <isEqual property="addAsryFlg" compareValue="Y">
+                         AND DCC.CONFIG_TP_CD    = #configTpAddToConfig#
+                         AND AMV.COA_MDSE_TP_CD IN (
+                             SELECT
+                                       MTVS.COA_MDSE_TP_CD
+                                 FROM
+                                     MDSE_TP_VAL_SET     MTVS
+                                 WHERE
+                                     MTVS.GLBL_CMPY_CD           = #glblCmpyCd#
+                                     AND MTVS.MDSE_TP_CTX_TP_CD IN
+                                     <iterate property="mdseTpCtxTpList" var="mdseTpCtxTpList[]" open=" (" close=")" conjunction=",">
+                                          #mdseTpCtxTpList[]#
+                                     </iterate>
+                                     AND MTVS.EZCANCELFLAG       = '0'
+                         ) 
+                         --
+                         </isEqual>
+                         AND AMV.EZCANCELFLAG     = '0' 
+                         AND AMV.GLBL_CMPY_CD     = MIT.GLBL_CMPY_CD 
+                         AND AMV.MDSE_ITEM_TP_CD  = MIT.MDSE_ITEM_TP_CD 
+                         AND MIT.EZCANCELFLAG     = '0'
+                         --
+                         AND DCC.GLBL_CMPY_CD     = MN.T_GLBL_CMPY_CD
+                         AND DCC.MDL_ID           = MN.T_MDL_ID
+                         AND MN.EZCANCELFLAG      = '0'
+                         --
+                         AND NOT EXISTS (
+                             SELECT
+                                     '1'
+                                 FROM
+                                     SHPG_PLN    SP
+                                 WHERE
+                                     SP.GLBL_CMPY_CD              = CDV.GLBL_CMPY_CD
+                                     AND SP.TRX_HDR_NUM           = CDV.CPO_ORD_NUM
+                                     AND SP.TRX_LINE_NUM          = CDV.CPO_DTL_LINE_NUM
+                                     AND SP.TRX_LINE_SUB_NUM      = CDV.CPO_DTL_LINE_SUB_NUM
+                                     AND SP.SHPG_STS_CD          &gt;= #shpgStsArrived#
+                                     AND SP.EZCANCELFLAG          = '0'
+                         )
+                         <isEqual property="addAsryFlg" compareValue="Y">
+                             <isNotNull property="dsContrNum">
+                         AND C.GLBL_CMPY_CD                       = DCC.GLBL_CMPY_CD
+                         AND C.DS_CONTR_NUM                       = #dsContrNum#
+                         AND C.EZCANCELFLAG                       = '0'
+                         --
+                         AND EXISTS (
+                             SELECT
+                                       '1'
+                                 FROM
+                                     DS_CONTR_DTL    CD
+                                 WHERE
+                                     CD.GLBL_CMPY_CD             = DCC.GLBL_CMPY_CD
+                                     AND CD.DS_CONTR_PK          = C.DS_CONTR_PK
+                                     AND CD.SVC_CONFIG_MSTR_PK   = DCC.SVC_CONFIG_MSTR_PK
+                                     AND CD.EZCANCELFLAG         = '0'
+                         )
+                             </isNotNull>
+                         </isEqual>
+                         <!-- START 2024/03/21 M.Kuroi [QC#63638,ADD] -->
+                         --
+                         AND CDV.GLBL_CMPY_CD                    = SP.GLBL_CMPY_CD(+)
+                         AND CDV.CPO_ORD_NUM                     = SP.TRX_HDR_NUM(+)
+                         AND CDV.CPO_DTL_LINE_NUM                = SP.TRX_LINE_NUM(+)
+                         AND CDV.CPO_DTL_LINE_SUB_NUM            = SP.TRX_LINE_SUB_NUM(+)
+                         AND SP.EZCANCELFLAG(+)                  = '0'
+                         <!-- END 2024/03/21 M.Kuroi [QC#63638,ADD] -->
+                         
+                  )
+                ORDER BY
+                    TO_NUMBER(DS_ORD_POSN_NUM)
+                    , DPLY_LINE_NUM
+    <!-- END 2018/10/01 K.Fujimoto [QC#28399,MOD] -->
+    </statement>
+
+</sqlMap>

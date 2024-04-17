@@ -1,0 +1,500 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NMAL2630Query">
+
+    <typeAlias alias="NMAL2630CMsg"      type="business.blap.NMAL2630.NMAL2630CMsg"/>
+    <typeAlias alias="NMAL2630_ASMsg"    type="business.blap.NMAL2630.NMAL2630_ASMsg"/>
+
+    <statement id="getTerritory" parameterClass="Map" resultMap="result.getContact">
+
+    WITH ORG_REN AS(
+        SELECT
+            RELN.GLBL_CMPY_CD
+            ,RELN.ORG_CD
+            ,RELN.ORG_STRU_TP_CD
+            ,RELN.PRNT_ORG_CD
+        FROM
+            DS_ORG_RELN RELN
+            ,ORG_STRU_TP STRU
+        WHERE
+            RELN.GLBL_CMPY_CD = #glblCmpyCd#
+        AND RELN.EZCANCELFLAG = '0'
+        AND RELN.GLBL_CMPY_CD = STRU.GLBL_CMPY_CD
+        AND RELN.ORG_STRU_TP_CD = STRU.ORG_STRU_TP_CD
+        AND STRU.EZCANCELFLAG = '0'
+        AND STRU.TRTY_STRU_FLG = 'Y'
+        AND RELN.GNRN_TP_CD IN (#gnrnTpCd# ,#gnrnTpCdFuture#)
+        UNION ALL
+        SELECT
+            ORG.GLBL_CMPY_CD
+            ,ORG.ORG_CD
+            ,ORG.ORG_STRU_TP_CD
+            ,ORG.ORG_CD AS PRNT_ORG_CD
+        FROM
+            DS_ORG_UNIT ORG
+            ,ORG_STRU_TP STRU
+        WHERE
+            ORG.GLBL_CMPY_CD = #glblCmpyCd#
+        AND ORG.EZCANCELFLAG = '0'
+        AND ORG.GLBL_CMPY_CD = STRU.GLBL_CMPY_CD
+        AND STRU.EZCANCELFLAG = '0'
+        AND ORG.ORG_STRU_TP_CD = STRU.ORG_STRU_TP_CD
+        AND STRU.TRTY_STRU_FLG = 'Y'
+        AND ORG.ORG_TIER_CD = '0'
+        AND ORG.GNRN_TP_CD IN (#gnrnTpCd# ,#gnrnTpCdFuture#)
+    )
+
+    ,RESRC_ASGN AS(
+        SELECT
+            DISTINCT RESRC.PSN_CD
+            ,RESRC.ORG_CD
+            ,PSN.PSN_FIRST_NM
+            ,PSN.PSN_LAST_NM
+            <!-- 2018/03/27 QC#23124 add start -->
+            ,ROLE.ACCT_TEAM_ROLE_TP_DESC_TXT
+            <!-- 2018/03/27 QC#23124 add end -->
+        FROM
+            DS_ORG_RESRC_RELN RESRC
+            ,S21_PSN PSN
+            <!-- 2018/03/27 QC#23124 add start -->
+            ,ACCT_TEAM_ROLE_TP ROLE
+            <!-- 2018/03/27 QC#23124 add end -->
+        WHERE
+            RESRC.GLBL_CMPY_CD = #glblCmpyCd#
+        AND RESRC.EZCANCELFLAG = '0'
+        AND RESRC.GLBL_CMPY_CD = PSN.GLBL_CMPY_CD
+        AND PSN.EZCANCELFLAG = '0'
+        AND RESRC.PSN_CD = PSN.PSN_CD
+        AND RESRC.GNRN_TP_CD IN (#gnrnTpCd# ,#gnrnTpCdFuture#)
+        <!-- START 2017/11/28 Hd.Sugawara [QC#21044,ADD] -->
+        <isNotNull property="nonSlsRepFlg">
+        AND RESRC.NON_SLS_REP_FLG = #nonSlsRepFlg#
+        </isNotNull>
+        <!-- END 2017/11/28 Hd.Sugawara [QC#21044,ADD] -->
+        <!-- 2018/03/27 QC#23124 add start -->
+        AND RESRC.GLBL_CMPY_CD = ROLE.GLBL_CMPY_CD (+)
+        AND ROLE.EZCANCELFLAG (+) = '0'
+        AND RESRC.ACCT_TEAM_ROLE_TP_CD = ROLE.ACCT_TEAM_ROLE_TP_CD (+)
+        <!-- 2018/03/27 QC#23124 add end -->
+    )
+
+   ,ORG_PRNT AS (SELECT ORG_PRNT.* 
+             FROM DS_ORG_UNIT ORG_PRNT, ORG_STRU_TP STRU 
+             WHERE
+                   ORG_PRNT.GLBL_CMPY_CD = #glblCmpyCd#
+               AND ORG_PRNT.EZCANCELFLAG = '0'
+
+               AND ORG_PRNT.GLBL_CMPY_CD = STRU.GLBL_CMPY_CD
+               AND ORG_PRNT.ORG_STRU_TP_CD = STRU.ORG_STRU_TP_CD
+               AND STRU.EZCANCELFLAG = '0'
+ 
+               AND STRU.TRTY_STRU_FLG = 'Y'
+               AND ORG_PRNT.GNRN_TP_CD IN (#gnrnTpCd#, #gnrnTpCdFuture#)
+              )
+    SELECT 
+        ORG.ORG_CD AS ORG_CD
+        ,ORG.ORG_NM AS ORG_NM
+        ,ORG_REN.PRNT_ORG_CD AS PRNT_ORG_CD
+        ,ORG_PRNT.ORG_NM AS PRNT_ORG_NM
+        ,RESRC_ASGN.PSN_FIRST_NM || ' '||RESRC_ASGN.PSN_LAST_NM AS PSN_NM
+        ,ORG.EFF_FROM_DT  AS EFF_FROM_DT
+        ,ORG.EFF_THRU_DT  AS EFF_THRU_DT
+        ,GT.TRTY_GRP_TP_DESC_TXT  AS TRTY_GRP_TP_DESC_TXT
+        ,TT.TRTY_TP_DESC_TXT      AS TRTY_TP_DESC_TXT
+        <!-- 2018/03/27 QC#23124 add start -->
+        ,RESRC_ASGN.ACCT_TEAM_ROLE_TP_DESC_TXT
+        <!-- 2018/03/27 QC#23124 add end -->
+    FROM
+        DS_ORG_UNIT ORG
+        , ORG_REN
+        , ORG_PRNT
+        , ORG_TIER TIER
+        , ORG_STRU_TP STRU
+        , RESRC_ASGN
+        , TRTY_GRP_TP GT
+        , TRTY_TP     TT
+    WHERE 
+        ORG.GLBL_CMPY_CD = #glblCmpyCd#
+    AND ORG.EZCANCELFLAG = '0'
+
+    AND ORG.GLBL_CMPY_CD = ORG_REN.GLBL_CMPY_CD(+)
+    AND ORG.ORG_CD = ORG_REN.ORG_CD(+)
+    AND ORG.ORG_STRU_TP_CD = ORG_REN.ORG_STRU_TP_CD(+)
+
+    AND ORG_REN.GLBL_CMPY_CD = ORG_PRNT.GLBL_CMPY_CD(+)
+    AND ORG_REN.PRNT_ORG_CD = ORG_PRNT.ORG_CD (+)
+    AND ORG_REN.ORG_STRU_TP_CD = ORG_PRNT.ORG_STRU_TP_CD(+)
+
+    AND ORG.GLBL_CMPY_CD = TIER.GLBL_CMPY_CD
+    AND TIER.EZCANCELFLAG = '0'
+    AND ORG.ORG_TIER_CD = TIER.ORG_TIER_CD
+
+    AND ORG.GLBL_CMPY_CD = STRU.GLBL_CMPY_CD
+    AND ORG.ORG_STRU_TP_CD = STRU.ORG_STRU_TP_CD
+    AND STRU.EZCANCELFLAG = '0'
+    AND STRU.TRTY_STRU_FLG = 'Y'
+    AND ORG.ORG_TIER_CD &gt; '0'
+
+  <!-- START 2017/11/28 Hd.Sugawara [QC#21044,ADD] -->
+  <isNotNull property="nonSlsRepFlg">
+    AND ORG.ORG_CD = RESRC_ASGN.ORG_CD
+  </isNotNull>
+  <isNull property="nonSlsRepFlg">
+  <!-- END 2017/11/28 Hd.Sugawara [QC#21044,ADD] -->
+    AND ORG.ORG_CD = RESRC_ASGN.ORG_CD(+)
+  <!-- START 2017/11/28 Hd.Sugawara [QC#21044,ADD] -->
+  </isNull>
+  <!-- END 2017/11/28 Hd.Sugawara [QC#21044,ADD] -->
+
+    AND ORG.GLBL_CMPY_CD    = GT.GLBL_CMPY_CD(+)
+    AND GT.EZCANCELFLAG(+)  = '0'
+    AND ORG.TRTY_GRP_TP_CD  = GT.TRTY_GRP_TP_CD(+)
+    AND ORG.GLBL_CMPY_CD    = TT.GLBL_CMPY_CD(+)
+    AND TT.EZCANCELFLAG(+)  = '0'
+    AND ORG.TRTY_TP_CD      = TT.TRTY_TP_CD(+)
+
+    <isNotNull property="cMsg.orgStruTpCd_H1">
+           AND ORG.FIRST_ORG_CD = #orgStruTpCd#
+    </isNotNull>
+    
+    <isNotNull property="cMsg.orgNm_H1">
+           AND ORG.ORG_NM LIKE #orgNm#
+    </isNotNull>
+    
+    <!-- QC#9182 -->
+    <isNotNull property="cMsg.orgCd_H1">
+           AND ORG.ORG_CD = #orgCd#
+    </isNotNull>
+    
+    <isNotNull property="cMsg.orgNm_H2">
+           AND ORG_PRNT.ORG_NM LIKE #prntOrgNm#
+    </isNotNull>
+
+    <isNotNull property="cMsg.xxPsnNm_H1">
+           <!-- 2018/03/26 S21_NA#23605 Mod Start -->
+           <!-- AND RESRC_ASGN.PSN_FIRST_NM || ' ' ||RESRC_ASGN.PSN_LAST_NM LIKE #xxPsnNm# -->
+           AND UPPER(RESRC_ASGN.PSN_FIRST_NM) || ' ' ||UPPER(RESRC_ASGN.PSN_LAST_NM) LIKE UPPER(#xxPsnNm#)
+           <!-- 2018/03/26 S21_NA#23605 Mod Start -->
+    </isNotNull>
+
+    <isNotNull property="cMsg.psnCd_H1">
+           AND RESRC_ASGN.PSN_CD LIKE #psnCd#
+    </isNotNull>
+
+    <!-- MOD START S21_NA QC#16481 -->
+    <isNotNull property="cMsg.effFromDt_FR">
+           AND ORG.EFF_FROM_DT &gt;= #effFromDt_FR#
+           AND NVL(ORG.EFF_THRU_DT, #maxEffectiveDate#) &gt;= #effFromDt_FR#
+    </isNotNull>
+    
+    <isNotNull property="cMsg.effFromDt_TO">
+           AND ORG.EFF_FROM_DT &lt;= #effFromDt_TO#
+           AND NVL(ORG.EFF_THRU_DT, #maxEffectiveDate#) &gt;= #effFromDt_TO#
+    </isNotNull>
+    <!-- MOD END S21_NA QC#16481 -->
+
+    <isNotNull property="cMsg.orgTierCd_H1">
+           AND ORG.ORG_TIER_CD = #orgTierCd#
+    </isNotNull>
+
+    <isNotNull property="cMsg.trtyTpCd_H1">
+           AND ORG.TRTY_TP_CD = #trtyTpCd#
+    </isNotNull>
+
+    <isNotNull property="cMsg.trtyGrpTpCd_H1">
+           AND ORG.TRTY_GRP_TP_CD = #trtyGrpTpCd#
+    </isNotNull>
+
+    <isNotNull property="cMsg.orgNm_H3">
+           AND EXISTS (SELECT 1 FROM DS_ORG_RESRC_RELN RELN
+                            , S21_PSN PSN
+                            , ORG_FUNC_ASG ASG
+                            , TOC T 
+                            , DS_ORG_UNIT ORG_ORG
+                         WHERE RELN.GLBL_CMPY_CD = ORG.GLBL_CMPY_CD
+                         AND RELN.ORG_CD = ORG.ORG_CD
+                         AND RELN.EZCANCELFLAG = '0'
+                         AND RELN.GNRN_TP_CD IN (#gnrnTpCd#, #gnrnTpCdFuture#)
+
+                         AND RELN.GLBL_CMPY_CD = PSN.GLBL_CMPY_CD
+                         AND RELN.PSN_CD = PSN.PSN_CD
+                         AND PSN.EZCANCELFLAG = '0'
+
+                         AND PSN.GLBL_CMPY_CD = ASG.GLBL_CMPY_CD
+                         AND PSN.PSN_CD = ASG.PSN_CD
+                         AND ASG.EZCANCELFLAG = '0'
+                         AND ASG.GNRN_TP_CD IN (#gnrnTpCd#, #gnrnTpCdFuture#)
+
+                         AND ASG.GLBL_CMPY_CD = T.GLBL_CMPY_CD
+                         AND ASG.TOC_CD = T.TOC_CD
+                         AND T.EZCANCELFLAG = '0'
+
+                         AND T.GLBL_CMPY_CD = ORG_ORG.GLBL_CMPY_CD
+                         AND T.ORG_CD = ORG_ORG.ORG_CD
+                         AND ORG_ORG.EZCANCELFLAG = '0'
+
+                         AND ORG_ORG.ORG_NM LIKE #organizationOrgNm#
+                      )
+    </isNotNull>
+    <isNotNull property="AdvSearchFlg1">
+       AND  ( EXISTS (SELECT 1 FROM TRTY_RULE RULE
+                    WHERE ORG.GLBL_CMPY_CD = RULE.GLBL_CMPY_CD
+                          AND RULE.EZCANCELFLAG = '0'
+                          AND ORG.ORG_STRU_TP_CD = RULE.ORG_STRU_TP_CD
+                          AND ORG.ORG_CD = RULE.ORG_CD    
+                          <!-- AND ORG.ORG_TIER_CD = RULE.ORG_TIER_CD --> <!-- 2018/03/27 S21_NA#23158 Del-->
+
+        <isNotNull property="trtyRuleTpCd1">
+                          AND RULE.TRTY_RULE_TP_CD = #trtyRuleTpCd1#
+        </isNotNull>
+        <isNotNull property="trtyRuleOprdTpCd1">
+                          AND RULE.TRTY_RULE_OPRD_TP_CD = #trtyRuleOprdTpCd1#
+        </isNotNull>
+        <isNotNull property="trtyRuleFromVal1">
+                          AND RULE.TRTY_RULE_FROM_VAL_TXT = #trtyRuleFromVal1#
+        </isNotNull>
+        <isNotNull property="trtyRuleThruVal1">
+                          AND RULE.TRTY_RULE_THRU_VAL_TXT = #trtyRuleThruVal1#
+        </isNotNull>
+                          )
+    </isNotNull>
+    <isNotNull property="AdvSearchFlg2">
+       OR  EXISTS (SELECT 1 FROM TRTY_RULE RULE
+                    WHERE ORG.GLBL_CMPY_CD = RULE.GLBL_CMPY_CD
+                          AND RULE.EZCANCELFLAG = '0'
+                          AND ORG.ORG_STRU_TP_CD = RULE.ORG_STRU_TP_CD
+                          AND ORG.ORG_CD = RULE.ORG_CD    
+                          <!-- AND ORG.ORG_TIER_CD = RULE.ORG_TIER_CD --> <!-- 2018/03/27 S21_NA#23158 Del--> 
+
+        <isNotNull property="trtyRuleTpCd2">
+                          AND RULE.TRTY_RULE_TP_CD = #trtyRuleTpCd2#
+        </isNotNull>
+        <isNotNull property="trtyRuleOprdTpCd2">
+                          AND RULE.TRTY_RULE_OPRD_TP_CD = #trtyRuleOprdTpCd2#
+        </isNotNull>
+        <isNotNull property="trtyRuleFromVal2">
+                          AND RULE.TRTY_RULE_FROM_VAL_TXT = #trtyRuleFromVal2#
+        </isNotNull>
+        <isNotNull property="trtyRuleThruVal2">
+                          AND RULE.TRTY_RULE_THRU_VAL_TXT = #trtyRuleThruVal2#
+        </isNotNull>
+                          )
+    </isNotNull>
+    <isNotNull property="AdvSearchFlg3">
+       OR  EXISTS (SELECT 1 FROM TRTY_RULE RULE
+                    WHERE ORG.GLBL_CMPY_CD = RULE.GLBL_CMPY_CD
+                          AND RULE.EZCANCELFLAG = '0'
+                          AND ORG.ORG_STRU_TP_CD = RULE.ORG_STRU_TP_CD
+                          AND ORG.ORG_CD = RULE.ORG_CD    
+                          <!-- AND ORG.ORG_TIER_CD = RULE.ORG_TIER_CD --> <!-- 2018/03/27 S21_NA#23158 Del--> 
+
+        <isNotNull property="trtyRuleTpCd3">
+                          AND RULE.TRTY_RULE_TP_CD = #trtyRuleTpCd3#
+        </isNotNull>
+        <isNotNull property="trtyRuleOprdTpCd3">
+                          AND RULE.TRTY_RULE_OPRD_TP_CD = #trtyRuleOprdTpCd3#
+        </isNotNull>
+        <isNotNull property="trtyRuleFromVal3">
+                          AND RULE.TRTY_RULE_FROM_VAL_TXT = #trtyRuleFromVal3#
+        </isNotNull>
+        <isNotNull property="trtyRuleThruVal3">
+                          AND RULE.TRTY_RULE_THRU_VAL_TXT = #trtyRuleThruVal3#
+        </isNotNull>
+                          )
+    </isNotNull>
+    <isNotNull property="AdvSearchFlg4">
+       OR  EXISTS (SELECT 1 FROM TRTY_RULE RULE
+                    WHERE ORG.GLBL_CMPY_CD = RULE.GLBL_CMPY_CD
+                          AND RULE.EZCANCELFLAG = '0'
+                          AND ORG.ORG_STRU_TP_CD = RULE.ORG_STRU_TP_CD
+                          AND ORG.ORG_CD = RULE.ORG_CD    
+                          <!-- AND ORG.ORG_TIER_CD = RULE.ORG_TIER_CD --> <!-- 2018/03/27 S21_NA#23158 Del--> 
+
+        <isNotNull property="trtyRuleTpCd4">
+                          AND RULE.TRTY_RULE_TP_CD = #trtyRuleTpCd4#
+        </isNotNull>
+        <isNotNull property="trtyRuleOprdTpCd4">
+                          AND RULE.TRTY_RULE_OPRD_TP_CD = #trtyRuleOprdTpCd4#
+        </isNotNull>
+        <isNotNull property="trtyRuleFromVal4">
+                          AND RULE.TRTY_RULE_FROM_VAL_TXT = #trtyRuleFromVal4#
+        </isNotNull>
+        <isNotNull property="trtyRuleThruVal4">
+                          AND RULE.TRTY_RULE_THRU_VAL_TXT = #trtyRuleThruVal4#
+        </isNotNull>
+                          )
+    </isNotNull>
+    <isNotNull property="AdvSearchFlg5">
+       OR  EXISTS (SELECT 1 FROM TRTY_RULE RULE
+                    WHERE ORG.GLBL_CMPY_CD = RULE.GLBL_CMPY_CD
+                          AND RULE.EZCANCELFLAG = '0'
+                          AND ORG.ORG_STRU_TP_CD = RULE.ORG_STRU_TP_CD
+                          AND ORG.ORG_CD = RULE.ORG_CD    
+                          <!-- AND ORG.ORG_TIER_CD = RULE.ORG_TIER_CD --> <!-- 2018/03/27 S21_NA#23158 Del--> 
+
+        <isNotNull property="trtyRuleTpCd5">
+                          AND RULE.TRTY_RULE_TP_CD = #trtyRuleTpCd5#
+        </isNotNull>
+        <isNotNull property="trtyRuleOprdTpCd5">
+                          AND RULE.TRTY_RULE_OPRD_TP_CD = #trtyRuleOprdTpCd5#
+        </isNotNull>
+        <isNotNull property="trtyRuleFromVal5">
+                          AND RULE.TRTY_RULE_FROM_VAL_TXT = #trtyRuleFromVal5#
+        </isNotNull>
+        <isNotNull property="trtyRuleThruVal5">
+                          AND RULE.TRTY_RULE_THRU_VAL_TXT = #trtyRuleThruVal5#
+        </isNotNull>
+                          )
+    </isNotNull>
+
+    <isNotNull property="AdvSearchFlg6">
+       OR  EXISTS (SELECT 1 FROM TRTY_RULE RULE
+                    WHERE ORG.GLBL_CMPY_CD = RULE.GLBL_CMPY_CD
+                          AND RULE.EZCANCELFLAG = '0'
+                          AND ORG.ORG_STRU_TP_CD = RULE.ORG_STRU_TP_CD
+                          AND ORG.ORG_CD = RULE.ORG_CD    
+                          <!-- AND ORG.ORG_TIER_CD = RULE.ORG_TIER_CD --> <!-- 2018/03/27 S21_NA#23158 Del--> 
+
+        <isNotNull property="trtyRuleTpCd6">
+                          AND RULE.TRTY_RULE_TP_CD = #trtyRuleTpCd6#
+        </isNotNull>
+        <isNotNull property="trtyRuleOprdTpCd6">
+                          AND RULE.TRTY_RULE_OPRD_TP_CD = #trtyRuleOprdTpCd6#
+        </isNotNull>
+        <isNotNull property="trtyRuleFromVal6">
+                          AND RULE.TRTY_RULE_FROM_VAL_TXT = #trtyRuleFromVal6#
+        </isNotNull>
+        <isNotNull property="trtyRuleThruVal6">
+                          AND RULE.TRTY_RULE_THRU_VAL_TXT = #trtyRuleThruVal6#
+        </isNotNull>
+                          )
+    </isNotNull>
+    <isNotNull property="AdvSearchFlg7">
+       OR  EXISTS (SELECT 1 FROM TRTY_RULE RULE
+                    WHERE ORG.GLBL_CMPY_CD = RULE.GLBL_CMPY_CD
+                          AND RULE.EZCANCELFLAG = '0'
+                          AND ORG.ORG_STRU_TP_CD = RULE.ORG_STRU_TP_CD
+                          AND ORG.ORG_CD = RULE.ORG_CD    
+                          <!-- AND ORG.ORG_TIER_CD = RULE.ORG_TIER_CD --> <!-- 2018/03/27 S21_NA#23158 Del--> 
+
+        <isNotNull property="trtyRuleTpCd7">
+                          AND RULE.TRTY_RULE_TP_CD = #trtyRuleTpCd7#
+        </isNotNull>
+        <isNotNull property="trtyRuleOprdTpCd7">
+                          AND RULE.TRTY_RULE_OPRD_TP_CD = #trtyRuleOprdTpCd7#
+        </isNotNull>
+        <isNotNull property="trtyRuleFromVal7">
+                          AND RULE.TRTY_RULE_FROM_VAL_TXT = #trtyRuleFromVal7#
+        </isNotNull>
+        <isNotNull property="trtyRuleThruVal7">
+                          AND RULE.TRTY_RULE_THRU_VAL_TXT = #trtyRuleThruVal7#
+        </isNotNull>
+                          )
+    </isNotNull>
+    <isNotNull property="AdvSearchFlg8">
+       OR  EXISTS (SELECT 1 FROM TRTY_RULE RULE
+                    WHERE ORG.GLBL_CMPY_CD = RULE.GLBL_CMPY_CD
+                          AND RULE.EZCANCELFLAG = '0'
+                          AND ORG.ORG_STRU_TP_CD = RULE.ORG_STRU_TP_CD
+                          AND ORG.ORG_CD = RULE.ORG_CD    
+                          <!-- AND ORG.ORG_TIER_CD = RULE.ORG_TIER_CD --> <!-- 2018/03/27 S21_NA#23158 Del--> 
+
+        <isNotNull property="trtyRuleTpCd8">
+                          AND RULE.TRTY_RULE_TP_CD = #trtyRuleTpCd8#
+        </isNotNull>
+        <isNotNull property="trtyRuleOprdTpCd8">
+                          AND RULE.TRTY_RULE_OPRD_TP_CD = #trtyRuleOprdTpCd8#
+        </isNotNull>
+        <isNotNull property="trtyRuleFromVal8">
+                          AND RULE.TRTY_RULE_FROM_VAL_TXT = #trtyRuleFromVal8#
+        </isNotNull>
+        <isNotNull property="trtyRuleThruVal8">
+                          AND RULE.TRTY_RULE_THRU_VAL_TXT = #trtyRuleThruVal8#
+        </isNotNull>
+                          )
+    </isNotNull>
+    <isNotNull property="AdvSearchFlg9">
+       OR  EXISTS (SELECT 1 FROM TRTY_RULE RULE
+                    WHERE ORG.GLBL_CMPY_CD = RULE.GLBL_CMPY_CD
+                          AND RULE.EZCANCELFLAG = '0'
+                          AND ORG.ORG_STRU_TP_CD = RULE.ORG_STRU_TP_CD
+                          AND ORG.ORG_CD = RULE.ORG_CD    
+                          <!-- AND ORG.ORG_TIER_CD = RULE.ORG_TIER_CD --> <!-- 2018/03/27 S21_NA#23158 Del--> 
+
+        <isNotNull property="trtyRuleTpCd9">
+                          AND RULE.TRTY_RULE_TP_CD = #trtyRuleTpCd9#
+        </isNotNull>
+        <isNotNull property="trtyRuleOprdTpCd9">
+                          AND RULE.TRTY_RULE_OPRD_TP_CD = #trtyRuleOprdTpCd9#
+        </isNotNull>
+        <isNotNull property="trtyRuleFromVal9">
+                          AND RULE.TRTY_RULE_FROM_VAL_TXT = #trtyRuleFromVal9#
+        </isNotNull>
+        <isNotNull property="trtyRuleThruVal9">
+                          AND RULE.TRTY_RULE_THRU_VAL_TXT = #trtyRuleThruVal9#
+        </isNotNull>
+                          )
+    </isNotNull>
+    <isNotNull property="AdvSearchFlg10">
+       OR  EXISTS (SELECT 1 FROM TRTY_RULE RULE
+                    WHERE ORG.GLBL_CMPY_CD = RULE.GLBL_CMPY_CD
+                          AND RULE.EZCANCELFLAG = '0'
+                          AND ORG.ORG_STRU_TP_CD = RULE.ORG_STRU_TP_CD
+                          AND ORG.ORG_CD = RULE.ORG_CD    
+                          <!-- AND ORG.ORG_TIER_CD = RULE.ORG_TIER_CD --> <!-- 2018/03/27 S21_NA#23158 Del--> 
+
+        <isNotNull property="trtyRuleTpCd10">
+                          AND RULE.TRTY_RULE_TP_CD = #trtyRuleTpCd10#
+        </isNotNull>
+        <isNotNull property="trtyRuleOprdTpCd10">
+                          AND RULE.TRTY_RULE_OPRD_TP_CD = #trtyRuleOprdTpCd10#
+        </isNotNull>
+        <isNotNull property="trtyRuleFromVal10">
+                          AND RULE.TRTY_RULE_FROM_VAL_TXT = #trtyRuleFromVal10#
+        </isNotNull>
+        <isNotNull property="trtyRuleThruVal10">
+                          AND RULE.TRTY_RULE_THRU_VAL_TXT = #trtyRuleThruVal10#
+        </isNotNull>
+                          )
+    </isNotNull>
+
+    <isNotNull property="AdvSearchFlg1">
+        )
+    </isNotNull>
+    AND
+      ROWNUM &lt;= #rowNum#
+
+    ORDER BY ORG.ORG_CD
+    </statement>
+
+    <resultMap id="result.getContact"  class="NMAL2630_ASMsg">
+        <result property="orgCd_A1"                 column="ORG_CD"                     javaType="EZDSStringItem"/>
+        <result property="orgNm_A1"                 column="ORG_NM"                     javaType="EZDSStringItem"/>
+        <result property="orgNm_A2"                 column="PRNT_ORG_NM"                javaType="EZDSStringItem"/>
+        <result property="xxPsnNm_A1"               column="PSN_NM"                     javaType="EZDSStringItem"/>
+        <result property="effFromDt_A1"             column="EFF_FROM_DT"                javaType="EZDCDateItem"/>
+        <result property="effThruDt_A1"             column="EFF_THRU_DT"                javaType="EZDCDateItem"/>
+        <result property="trtyGrpTpDescTxt_A1"      column="TRTY_GRP_TP_DESC_TXT"       javaType="EZDSStringItem"/>
+        <result property="trtyTpDescTxt_A1"         column="TRTY_TP_DESC_TXT"           javaType="EZDSStringItem"/>
+        <!-- 2018/03/27 QC#23124 add start -->
+        <result property="acctTeamRoleTpDescTxt_A1" column="ACCT_TEAM_ROLE_TP_DESC_TXT" javaType="EZDSStringItem"/>
+        <!-- 2018/03/27 QC#23124 add end -->
+    </resultMap>
+
+    <statement id="getBusinessArea" parameterClass="Map" resultClass="Map">
+        SELECT BIZ_AREA_ORG_CD AS BIZ_AREA_ORG_CD
+            , BIZ_AREA_ORG_NM AS BIZ_AREA_ORG_NM
+        FROM 
+            BIZ_AREA_ORG AREA
+            , ORG_STRU_TP STRU 
+        WHERE AREA.GLBL_CMPY_CD = #glblCmpyCd#
+        AND AREA.EZCANCELFLAG = '0'
+
+        AND AREA.GLBL_CMPY_CD = STRU.GLBL_CMPY_CD
+        AND STRU.EZCANCELFLAG = '0'
+        AND AREA.ORG_STRU_TP_CD = STRU.ORG_STRU_TP_CD
+
+        AND STRU.TRTY_STRU_FLG = 'Y'
+
+    </statement>
+</sqlMap>

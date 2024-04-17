@@ -1,0 +1,47 @@
+/*
+ * <pre>Copyright (c) 2013 Canon USA Inc. All rights reserved.</pre>
+ */
+package business.servlet.NMAL6700;
+
+import static business.servlet.NMAL6700.constant.NMAL6700Constant.APP_FUNC_ID_HEADER;
+import parts.common.EZDBMsg;
+import parts.common.EZDCMsg;
+import parts.servletcommon.EZDApplicationContext;
+import business.servlet.NMAL6700.common.NMAL6700CommonLogic;
+
+import com.canon.cusa.s21.framework.ZYP.web.ZYPTableUtil;
+import com.canon.cusa.s21.framework.online.servlet.S21CommonHandler;
+
+/**
+ *<pre>
+ * Date         Company         Name            Create/Update   Defect No
+ * ----------------------------------------------------------------------
+ * 2015/11/16   Fujitsu         N.Sugiura       Create          N/A
+ *</pre>
+ */
+public class NMAL6700Scrn00_OpenWin_InterCompany extends S21CommonHandler {
+
+    @Override
+    protected void checkInput(EZDApplicationContext ctx, EZDBMsg bMsg) {
+    }
+
+    @Override
+    protected EZDCMsg setRequestData(EZDApplicationContext ctx, EZDBMsg bMsg) {
+        return null;
+    }
+
+    @Override
+    protected void doProcess(EZDApplicationContext ctx, EZDBMsg bMsg, EZDCMsg cMsg) {
+        NMAL6700BMsg scrnMsg = (NMAL6700BMsg) bMsg;
+        scrnMsg.xxScrEventNm.setValue(ctx.getEventName());
+        ZYPTableUtil.clear(scrnMsg.P); // Add QC#19320
+
+        scrnMsg.P.no(0).xxPopPrm.setValue(APP_FUNC_ID_HEADER);
+        scrnMsg.P.no(2).xxPopPrm.setValue(scrnMsg.coaAfflCd_H1.getValue());
+        scrnMsg.P.no(7).xxPopPrm.setValue(scrnMsg.coaChCd_H1.getValue());
+
+        Object[] params = NMAL6700CommonLogic.toArray_popup(scrnMsg.P, 10);
+
+        setArgForSubScreen(params);
+    }
+}

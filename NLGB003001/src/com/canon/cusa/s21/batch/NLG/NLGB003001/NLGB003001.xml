@@ -1,0 +1,538 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<sqlMap namespace="NLGB003001">
+
+    <statement id="getMdseHistInfo" parameterClass="Map">
+         SELECT
+             DISTINCT
+                WML.MDSE_CD                 AS WML_MDSE_CD
+               ,WML.WH_CD                   AS WML_WH_CD
+               ,WML.EZUPTIME                AS WML_EZUPTIME
+               ,M.MDSE_CD                   AS M_MDSE_CD
+               ,M.UPC_CD
+               ,M.MDSE_NM
+               ,M.VND_CD
+               ,M.FRT_CLS_CD                AS M_FRT_CLS_CD
+               ,M.SHPG_SER_TAKE_FLG
+               ,M.THIS_MTH_TOT_STD_COST_AMT
+               ,M.NEXT_MTH_TOT_STD_COST_AMT
+               ,M.SCD_PROD_CTRL_CD
+               ,M.THIRD_PROD_CTRL_CD
+               ,M.FRTH_PROD_CTRL_CD
+               ,M.FIFTH_PROD_CTRL_CD
+               ,M.COA_PROD_CD
+               ,M.ORIG_CTRY_CD
+               ,M.INVTY_CTRL_FLG
+               ,M.MDSE_FML_NM
+               ,M.INTG_PROD_CATG_CD         AS M_INTG_PROD_CATG_CD
+               ,M.TRF_CD
+               ,IPC.INTG_PROD_CATG_CD       AS IPC_INTG_PROD_CATG_CD
+               ,IPC.INTG_PROD_CATG_NM
+               ,FC.FRT_CLS_CD               AS FC_FRT_CLS_CD
+               ,FC.NMFC_CLS_NUM
+               ,FC.NMFC_ITEM_NUM
+               ,FC.NMFC_ITEM_SUB_NUM
+               ,FC.NMFC_ITEM_DESC_TXT
+                                            -- comment out 
+               ,'N' AS BAT_NUM_CTRL_FLG     -- ,M.BAT_NUM_CTRL_FLG
+               ,MSFI.HAZ_MAT_FLG
+               ,MSFI.HAZ_MAT_CD
+               ,HM.HAZ_CLS_NM
+               ,HM.HAZ_ID_NUM               AS SFTY_HAZ_ID_NUM
+               ,'N' AS LOT_CTRL_FLG         -- ,M.LOT_CTRL_FLG
+          FROM
+               (
+                   SELECT
+                          WML.GLBL_CMPY_CD
+                         ,WML.WMS_MDSE_CD AS MDSE_CD
+                         ,WML.WH_CD
+                         ,GREATEST(
+                              MAX(NVL(MH.EZUPTIME,0))
+                             ,MAX(NVL(MSRH.EZUPTIME,0))
+                             ,MAX(NVL(MSFH.EZUPTIME,0))
+                             ,MAX(NVL(MSPH.EZUPTIME,0))
+                             <isEqual property="mode" compareValue="2">
+                             ,MAX(NVL(ABC.ABC_ANLS_PROC_TS,0))
+                             </isEqual>
+                          ) AS EZUPTIME
+                     FROM
+                          WMS_MDSE_LIST            WML
+                         ,MDSE_HIST                MH
+                         ,MDSE_SER_NUM_RNG_HIST    MSRH
+                         ,MDSE_SFTY_INFO_HIST      MSFH
+                         ,MDSE_STORE_PKG_HIST      MSPH
+                         <isEqual property="mode" compareValue="2">
+                         ,(SELECT
+                               *
+                           FROM 
+                               ABC_ANLS_RSLT
+                           WHERE
+                               INTFC_UPD_TS IS NULL)    ABC
+                         </isEqual>
+                         ,RTL_WH                   RWH
+                    WHERE
+                          WML.GLBL_CMPY_CD          = #glblCmpyCd#
+                      AND WML.EZCANCELFLAG          = '0'
+                      <iterate property="wmsTrgtWhCd" var="elem[]" open="AND WML.WH_CD IN (" close=")" conjunction=",">
+                      #elem[]#
+                      </iterate>
+                      AND WML.WMS_ITEM_DNLD_STS_CD = #wmsItemDnldStsCd#
+
+                      AND WML.GLBL_CMPY_CD          = MH.GLBL_CMPY_CD(+)
+                      AND WML.WMS_MDSE_CD           = MH.MDSE_CD(+)
+                      AND MH.EZCANCELFLAG(+)        = '0'
+
+                      AND WML.GLBL_CMPY_CD          = MSRH.GLBL_CMPY_CD(+)
+                      AND WML.WMS_MDSE_CD           = MSRH.MDSE_CD(+)
+                      AND MSRH.EZCANCELFLAG(+)      = '0'
+
+                      AND WML.GLBL_CMPY_CD          = MSFH.GLBL_CMPY_CD(+)
+                      AND WML.WMS_MDSE_CD           = MSFH.MDSE_CD(+)
+                      AND MSFH.EZCANCELFLAG(+)      = '0'
+
+                      AND WML.GLBL_CMPY_CD          = MSPH.GLBL_CMPY_CD(+)
+                      AND WML.WMS_MDSE_CD           = MSPH.MDSE_CD(+)
+                      AND MSPH.EZCANCELFLAG(+)      = '0'
+
+                      <isEqual property="mode" compareValue="2">
+                      AND WML.GLBL_CMPY_CD          = ABC.GLBL_CMPY_CD(+)
+                      AND WML.WMS_MDSE_CD           = ABC.MDSE_CD(+)
+                      AND ABC.EZCANCELFLAG(+)       = '0'
+                      </isEqual>
+                      AND WML.GLBL_CMPY_CD          = RWH.GLBL_CMPY_CD(+)
+                      AND WML.WH_CD                 = RWH.WMS_WH_CD(+)
+                      AND RWH.EZCANCELFLAG(+)       = '0'
+                      <isEqual property="mode" compareValue="2">
+                      AND RWH.GLBL_CMPY_CD          = ABC.GLBL_CMPY_CD(+)
+                      AND RWH.RTL_WH_CD             = ABC.RTL_WH_CD(+)
+                      </isEqual>
+                      AND (
+                              MH.EZUPTIME      &gt; WML.LAST_INTFC_MDSE_UPD_TS
+                           OR MSRH.EZUPTIME    &gt; WML.LAST_INTFC_MDSE_UPD_TS
+                           OR MSFH.EZUPTIME    &gt; WML.LAST_INTFC_MDSE_UPD_TS
+                           OR MSPH.EZUPTIME    &gt; WML.LAST_INTFC_MDSE_UPD_TS
+                           <isEqual property="mode" compareValue="2">
+                           OR ABC.ABC_ANLS_PROC_TS     &gt; WML.LAST_INTFC_MDSE_UPD_TS
+                           </isEqual>
+                      )
+                    GROUP BY
+                          WML.GLBL_CMPY_CD
+                         ,WML.WH_CD
+                         ,WML.WMS_MDSE_CD
+               ) WML
+              ,MDSE M
+              ,INTG_PROD_CATG  IPC
+              ,FRT_CLS         FC
+              ,MDSE_SFTY_INFO  MSFI
+              ,HAZ_MAT         HM
+              <isEqual property="mode" compareValue="2">
+              ,ABC_ANLS_RSLT   AAR
+              ,ABC_ANLS_CLS    AAC
+              </isEqual>
+              ,RTL_WH          RWH
+         WHERE
+               WML.GLBL_CMPY_CD         = M.GLBL_CMPY_CD(+)
+           AND WML.MDSE_CD              = M.MDSE_CD(+)
+           AND M.EZCANCELFLAG(+)        = '0'
+           AND M.GLBL_CMPY_CD           = IPC.GLBL_CMPY_CD(+)
+           AND M.INTG_PROD_CATG_CD      = IPC.INTG_PROD_CATG_CD(+)
+           AND IPC.EZCANCELFLAG(+)      = '0'
+           AND M.GLBL_CMPY_CD           = FC.GLBL_CMPY_CD(+)
+           AND M.FRT_CLS_CD             = FC.FRT_CLS_CD(+)
+           AND FC.EZCANCELFLAG(+)       = '0'
+           AND M.GLBL_CMPY_CD           = MSFI.GLBL_CMPY_CD(+)
+           AND M.MDSE_CD                = MSFI.MDSE_CD(+)
+           AND MSFI.EZCANCELFLAG(+)     = '0'
+           AND MSFI.GLBL_CMPY_CD        = HM.GLBL_CMPY_CD(+)
+           AND MSFI.HAZ_MAT_CD          = HM.HAZ_MAT_CD(+)
+           AND HM.EZCANCELFLAG(+)       = '0'
+           <isEqual property="mode" compareValue="2">
+           AND WML.GLBL_CMPY_CD         = AAR.GLBL_CMPY_CD(+)
+           AND WML.MDSE_CD              = AAR.MDSE_CD(+)
+           </isEqual>
+           AND WML.GLBL_CMPY_CD          = RWH.GLBL_CMPY_CD(+)
+           AND WML.WH_CD                 = RWH.WMS_WH_CD(+)
+           AND RWH.EZCANCELFLAG(+)       = '0'
+           <isEqual property="mode" compareValue="2">
+           AND RWH.GLBL_CMPY_CD          = AAR.GLBL_CMPY_CD(+)
+           AND RWH.RTL_WH_CD             = AAR.RTL_WH_CD(+)
+
+           AND AAR.ABC_ANLS_LTST_FLG(+)  = 'Y'
+           AND AAR.GLBL_CMPY_CD          = AAC.GLBL_CMPY_CD(+)
+           AND AAR.ABC_ANLS_CLS_NUM      = AAC.ABC_ANLS_CLS_NUM(+)
+           AND AAR.ABC_ANLS_CLS_TAG_CD   = AAC.ABC_ANLS_CLS_TAG_CD(+)
+           AND AAR.EZCANCELFLAG(+)       = '0'
+           AND AAC.EZCANCELFLAG(+)       = '0'
+           </isEqual>
+         ORDER BY
+               WML.MDSE_CD
+              ,WML.WH_CD
+    </statement>
+
+    <statement id="getPrimaryKeyForAbcAnlsRslt" parameterClass="Map" resultClass = "BigDecimal">
+       SELECT
+            A.ABC_ANLS_RSLT_PK
+       FROM
+            ABC_ANLS_RSLT A
+       WHERE
+           A.GLBL_CMPY_CD = #glblCmpyCd#
+       AND A.MDSE_CD      = #mdseCd#
+       AND A.RTL_WH_CD    LIKE #whCd#
+       AND A.ABC_ANLS_LTST_FLG = #flag#
+       AND A.INTFC_UPD_TS IS NULL
+       AND A.EZCANCELFLAG = '0'
+    </statement>
+
+    <statement id="getCompareMaxDate" parameterClass="Map" resultClass = "Map">
+       SELECT
+            A.ABC_ANLS_CLS_TAG_CD
+           ,A.CYCLE_CNT_FREQ_DAYS_AOT
+       FROM
+            ABC_ANLS_RSLT A
+           ,(SELECT
+                GLBL_CMPY_CD
+               ,MDSE_CD
+               ,NVL(MAX(INTFC_UPD_TS),'99991231') AS INTFC_UPD_TS
+               ,RTL_WH_CD
+             FROM
+                 ABC_ANLS_RSLT
+             WHERE
+                 EZCANCELFLAG = '0'
+             GROUP BY
+                  GLBL_CMPY_CD
+                 ,MDSE_CD
+                 ,RTL_WH_CD ) B 
+       WHERE
+           A.GLBL_CMPY_CD = #glblCmpyCd#
+       AND A.MDSE_CD      = #mdseCd#
+       AND A.RTL_WH_CD    = #rtlWhCd#
+       AND A.GLBL_CMPY_CD = B.GLBL_CMPY_CD
+       AND A.MDSE_CD      = B.MDSE_CD
+       AND A.RTL_WH_CD    = B.RTL_WH_CD
+       AND A.INTFC_UPD_TS = B.INTFC_UPD_TS
+       AND A.EZCANCELFLAG = '0'
+    </statement>
+
+    <statement id="getLatestAbcAnlsRslt" parameterClass="Map" resultClass = "Map">
+       SELECT
+            A.ABC_ANLS_CLS_TAG_CD
+           ,A.CYCLE_CNT_FREQ_DAYS_AOT
+       FROM
+            ABC_ANLS_RSLT A
+       WHERE
+           A.GLBL_CMPY_CD = #glblCmpyCd#
+       AND A.MDSE_CD      = #mdseCd#
+       AND A.RTL_WH_CD    LIKE #whCd#
+       AND A.ABC_ANLS_LTST_FLG = #flag#
+       AND A.EZCANCELFLAG = '0'
+    </statement>
+    
+    <statement id="needToSendWmsColumn" parameterClass="Map" resultClass = "Map">
+    SELECT
+        DISTINCT DHRP.DS_HIST_RPT_COL_NM
+    FROM
+        DS_HIST_RPT_INFO DHRP
+    WHERE 1=1
+    AND DHRP.GLBL_CMPY_CD             = #glblCmpyCd#
+    AND DHRP.EZCANCELFLAG             = '0'
+    <iterate property="dsHistRptTblNm" var="elem[]" open="AND DHRP.DS_HIST_RPT_TBL_NM IN (" close=")" conjunction=",">
+        #elem[]#
+    </iterate>
+    AND DHRP.DS_HIST_RPT_WMS_SEND_FLG = #flgOnY#
+    </statement>
+    
+    <statement id="getMdseHistList" parameterClass="Map" resultClass = "Map">
+    SELECT
+        *
+    FROM
+        (SELECT
+            HIST.*
+         FROM
+             MDSE_HIST     HIST 
+           , WMS_MDSE_LIST LIST
+         WHERE 1=1
+         AND HIST.GLBL_CMPY_CD               = #glblCmpyCd#
+         AND HIST.EZCANCELFLAG               = '0'
+         AND HIST.MDSE_CD                    = #mdseCd#
+         AND HIST.MDSE_CD                    = LIST.WMS_MDSE_CD
+         AND HIST.GLBL_CMPY_CD               = LIST.GLBL_CMPY_CD
+         AND LIST.EZCANCELFLAG               = '0'
+         AND LIST.LAST_INTFC_MDSE_UPD_TS &lt;  HIST.EZUPTIME
+         ORDER BY 
+             HIST.EZUPTIME DESC
+         )
+    WHERE 1=1
+    AND ROWNUM                               = 1
+    UNION
+    SELECT
+        *
+    FROM
+        (SELECT
+            HIST.*
+         FROM
+             MDSE_HIST     HIST 
+           , WMS_MDSE_LIST LIST
+         WHERE 1=1
+         AND HIST.GLBL_CMPY_CD               = #glblCmpyCd#
+         AND HIST.EZCANCELFLAG               = '0'
+         AND HIST.MDSE_CD                    = #mdseCd#
+         AND HIST.MDSE_CD                    = LIST.WMS_MDSE_CD
+         AND HIST.GLBL_CMPY_CD               = LIST.GLBL_CMPY_CD
+         AND LIST.EZCANCELFLAG               = '0'
+         AND LIST.LAST_INTFC_MDSE_UPD_TS &gt;= HIST.EZUPTIME
+         ORDER BY 
+             HIST.EZUPTIME DESC
+         )
+    WHERE 1=1
+    AND ROWNUM                               = 1
+    </statement>
+    
+    <statement id="getMdseSerNumRngHistPkList" parameterClass="Map" resultClass = "Map">
+    SELECT
+        DISTINCT MDSE_SER_NUM_RNG_PK
+    FROM (
+         SELECT
+             HIST.MDSE_SER_NUM_RNG_PK
+         FROM
+             MDSE_SER_NUM_RNG_HIST     HIST 
+           , WMS_MDSE_LIST             LIST
+         WHERE 1=1
+         AND HIST.GLBL_CMPY_CD               = #glblCmpyCd#
+         --AND HIST.EZCANCELFLAG               = '0'
+         AND HIST.MDSE_CD                    = #mdseCd#
+         AND HIST.MDSE_CD                    = LIST.WMS_MDSE_CD
+         AND HIST.GLBL_CMPY_CD               = LIST.GLBL_CMPY_CD
+         AND LIST.EZCANCELFLAG               = '0'
+         AND LIST.LAST_INTFC_MDSE_UPD_TS &lt;  HIST.EZUPTIME
+         ORDER BY 
+             HIST.EZUPTIME DESC
+      )
+    </statement>
+    
+    <statement id="getMdseSerNumRngHistList" parameterClass="Map" resultClass = "Map">
+    SELECT
+        *
+    FROM
+        (SELECT
+            HIST.*
+         FROM
+             MDSE_SER_NUM_RNG_HIST     HIST 
+           , WMS_MDSE_LIST             LIST
+         WHERE 1=1
+         AND HIST.GLBL_CMPY_CD               = #glblCmpyCd#
+         AND HIST.EZCANCELFLAG               = '0'
+         AND HIST.MDSE_SER_NUM_RNG_PK        = #mdseSerNumRngPk#
+         AND HIST.MDSE_CD                    = LIST.WMS_MDSE_CD
+         AND HIST.GLBL_CMPY_CD               = LIST.GLBL_CMPY_CD
+         AND LIST.EZCANCELFLAG               = '0'
+         AND LIST.LAST_INTFC_MDSE_UPD_TS &lt;  HIST.EZUPTIME
+         ORDER BY 
+             HIST.EZUPTIME DESC
+         )
+    WHERE 1=1
+    AND ROWNUM                               = 1
+    UNION
+    SELECT
+        *
+    FROM
+        (SELECT
+            HIST.*
+         FROM
+             MDSE_SER_NUM_RNG_HIST     HIST 
+           , WMS_MDSE_LIST             LIST
+         WHERE 1=1
+         AND HIST.GLBL_CMPY_CD               = #glblCmpyCd#
+         AND HIST.EZCANCELFLAG               = '0'
+         AND HIST.MDSE_SER_NUM_RNG_PK        = #mdseSerNumRngPk#
+         AND HIST.MDSE_CD                    = LIST.WMS_MDSE_CD
+         AND HIST.GLBL_CMPY_CD               = LIST.GLBL_CMPY_CD
+         AND LIST.EZCANCELFLAG               = '0'
+         AND LIST.LAST_INTFC_MDSE_UPD_TS &gt;= HIST.EZUPTIME
+         ORDER BY 
+             HIST.EZUPTIME DESC
+         )
+    WHERE 1=1
+    AND ROWNUM                               = 1
+    </statement>
+
+<!-- QC#60692 ADD -->
+    <statement id="getMdseSftyInfoHistCountNew" parameterClass="Map" resultClass = "BigDecimal">
+    SELECT
+        COUNT(*)
+    FROM
+        MDSE_SFTY_INFO_HIST HIST
+      , WMS_MDSE_LIST       LIST
+    WHERE 1=1
+    AND HIST.GLBL_CMPY_CD           = #glblCmpyCd#
+    AND HIST.EZCANCELFLAG           = '0'
+    AND HIST.MDSE_CD                = #mdseCd#
+    AND HIST.MDSE_CD                = LIST.WMS_MDSE_CD
+    AND HIST.GLBL_CMPY_CD           = LIST.GLBL_CMPY_CD
+    AND LIST.EZCANCELFLAG           = '0'
+    AND LIST.LAST_INTFC_MDSE_UPD_TS &lt; HIST.EZUPTIME
+    </statement>
+<!-- QC#60692 ADD -->
+
+    <statement id="getMdseSftyInfoHistList" parameterClass="Map" resultClass = "Map">
+    SELECT
+        *
+    FROM
+        (SELECT
+            HIST.*
+         FROM
+             MDSE_SFTY_INFO_HIST       HIST 
+           , WMS_MDSE_LIST             LIST
+         WHERE 1=1
+         AND HIST.GLBL_CMPY_CD               = #glblCmpyCd#
+         AND HIST.EZCANCELFLAG               = '0'
+         AND HIST.MDSE_CD                    = #mdseCd#
+         AND HIST.MDSE_CD                    = LIST.WMS_MDSE_CD
+         AND HIST.GLBL_CMPY_CD               = LIST.GLBL_CMPY_CD
+         AND LIST.EZCANCELFLAG               = '0'
+         AND LIST.LAST_INTFC_MDSE_UPD_TS &lt;  HIST.EZUPTIME
+         ORDER BY 
+             HIST.EZUPTIME DESC
+         )
+    WHERE 1=1
+    AND ROWNUM                               = 1
+    UNION
+    SELECT
+        *
+    FROM
+        (SELECT
+            HIST.*
+         FROM
+             MDSE_SFTY_INFO_HIST       HIST 
+           , WMS_MDSE_LIST             LIST
+         WHERE 1=1
+         AND HIST.GLBL_CMPY_CD               = #glblCmpyCd#
+         AND HIST.EZCANCELFLAG               = '0'
+         AND HIST.MDSE_CD                    = #mdseCd#
+         AND HIST.MDSE_CD                    = LIST.WMS_MDSE_CD
+         AND HIST.GLBL_CMPY_CD               = LIST.GLBL_CMPY_CD
+         AND LIST.EZCANCELFLAG               = '0'
+         AND LIST.LAST_INTFC_MDSE_UPD_TS &gt;= HIST.EZUPTIME
+         ORDER BY 
+             HIST.EZUPTIME DESC
+         )
+    WHERE 1=1
+    AND ROWNUM                               = 1
+    </statement>
+
+    <statement id="getMdseStorePkgHistUomList" parameterClass="Map" resultClass = "Map">
+    SELECT
+        DISTINCT PKG_UOM_CD
+    FROM (
+         SELECT
+             HIST.PKG_UOM_CD
+         FROM
+             MDSE_STORE_PKG_HIST       HIST 
+           , WMS_MDSE_LIST             LIST
+         WHERE 1=1
+         AND HIST.GLBL_CMPY_CD               = #glblCmpyCd#
+         --AND HIST.EZCANCELFLAG               = '0'
+         AND HIST.MDSE_CD                    = #mdseCd#
+         AND HIST.MDSE_CD                    = LIST.WMS_MDSE_CD
+         AND HIST.GLBL_CMPY_CD               = LIST.GLBL_CMPY_CD
+         AND LIST.EZCANCELFLAG               = '0'
+         AND LIST.LAST_INTFC_MDSE_UPD_TS &lt;  HIST.EZUPTIME
+         ORDER BY 
+             HIST.EZUPTIME DESC
+      )
+    </statement>
+
+    <statement id="getMdseStorePkgHistList" parameterClass="Map" resultClass = "Map">
+    SELECT
+        *
+    FROM
+        (SELECT
+            HIST.*
+         FROM
+             MDSE_STORE_PKG_HIST       HIST 
+           , WMS_MDSE_LIST             LIST
+         WHERE 1=1
+         AND HIST.GLBL_CMPY_CD               = #glblCmpyCd#
+         AND HIST.EZCANCELFLAG               = '0'
+         AND HIST.MDSE_CD                    = #mdseCd#
+         AND HIST.PKG_UOM_CD                 = #pkgUomCd#
+         AND HIST.MDSE_CD                    = LIST.WMS_MDSE_CD
+         AND HIST.GLBL_CMPY_CD               = LIST.GLBL_CMPY_CD
+         AND LIST.EZCANCELFLAG               = '0'
+         AND LIST.LAST_INTFC_MDSE_UPD_TS &lt;  HIST.EZUPTIME
+         ORDER BY 
+             HIST.EZUPTIME DESC
+         )
+    WHERE 1=1
+    AND ROWNUM                               = 1
+    UNION
+    SELECT
+        *
+    FROM
+        (SELECT
+            HIST.*
+         FROM
+             MDSE_STORE_PKG_HIST       HIST 
+           , WMS_MDSE_LIST             LIST
+         WHERE 1=1
+         AND HIST.GLBL_CMPY_CD               = #glblCmpyCd#
+         AND HIST.EZCANCELFLAG               = '0'
+         AND HIST.MDSE_CD                    = #mdseCd#
+         AND HIST.PKG_UOM_CD                 = #pkgUomCd#
+         AND HIST.MDSE_CD                    = LIST.WMS_MDSE_CD
+         AND HIST.GLBL_CMPY_CD               = LIST.GLBL_CMPY_CD
+         AND LIST.EZCANCELFLAG               = '0'
+         AND LIST.LAST_INTFC_MDSE_UPD_TS &gt;= HIST.EZUPTIME
+         ORDER BY 
+             HIST.EZUPTIME DESC
+         )
+    WHERE 1=1
+    AND ROWNUM                               = 1
+    </statement>
+
+    <statement id="getAbcAnlsRslt" parameterClass="Map" resultClass = "Map">
+    SELECT
+        *
+    FROM
+        (SELECT
+            HIST.*
+         FROM
+             ABC_ANLS_RSLT             HIST 
+           , WMS_MDSE_LIST             LIST
+         WHERE 1=1
+         AND HIST.GLBL_CMPY_CD               = #glblCmpyCd#
+         AND HIST.EZCANCELFLAG               = '0'
+         AND HIST.MDSE_CD                    = #mdseCd#
+         AND HIST.MDSE_CD                    = LIST.WMS_MDSE_CD
+         AND HIST.GLBL_CMPY_CD               = LIST.GLBL_CMPY_CD
+         AND LIST.EZCANCELFLAG               = '0'
+         AND HIST.ABC_ANLS_PROC_TS       &lt;  HIST.EZUPTIME
+         ORDER BY 
+             HIST.EZUPTIME DESC
+         )
+    WHERE 1=1
+    AND ROWNUM                               = 1
+    UNION
+    SELECT
+        *
+    FROM
+        (SELECT
+            HIST.*
+         FROM
+             ABC_ANLS_RSLT             HIST 
+           , WMS_MDSE_LIST             LIST
+         WHERE 1=1
+         AND HIST.GLBL_CMPY_CD               = #glblCmpyCd#
+         AND HIST.EZCANCELFLAG               = '0'
+         AND HIST.MDSE_CD                    = #mdseCd#
+         AND HIST.MDSE_CD                    = LIST.WMS_MDSE_CD
+         AND HIST.GLBL_CMPY_CD               = LIST.GLBL_CMPY_CD
+         AND LIST.EZCANCELFLAG               = '0'
+         AND HIST.ABC_ANLS_PROC_TS       &gt;= HIST.EZUPTIME
+         ORDER BY 
+             HIST.EZUPTIME DESC
+         )
+    WHERE 1=1
+    AND ROWNUM                               = 1
+    </statement>
+
+</sqlMap>

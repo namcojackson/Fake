@@ -1,0 +1,270 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<sqlMap namespace="NWAB235001">
+
+    <statement id="getTargetData" parameterClass="Map" resultClass="Map">
+        SELECT
+                  SP.TRX_HDR_NUM
+                , SP.TRX_LINE_NUM
+                , SP.TRX_LINE_SUB_NUM
+                , SP.SHPG_PLN_NUM
+                , SMM.SVC_MACH_MSTR_PK
+                , SMM.SVC_MACH_MSTR_STS_CD
+                , SMM.SHPG_PLN_NUM          AS SMM_SHPG_PLN_NUM
+                , SMM.ISTL_DT 
+                , SMM.SVC_CONFIG_MSTR_PK
+                <!-- 2019/09/13 QC#52471 Add Start -->
+                , SMM.SVC_MACH_MSTR_LOC_STS_CD
+                , SMM.STK_STS_CD
+                <!-- 2019/09/13 QC#52471 Add End -->
+            FROM
+                SHPG_PLN        SP
+                , SVC_MACH_MSTR SMM
+                , CPO           DC
+                , CPO_DTL       DCD
+                , DS_ORD_TP     DOT
+                , MDSE          DMI
+                , MDSE_CATG     MC
+                <!-- 2017/12/22 S21_NA#22472 Add Start -->
+                , DS_CPO_ISTL_INFO DCII
+                , SVC_ISTL_RULE SIR
+                <!-- 2017/12/22 S21_NA#22472 Add End -->
+                <!-- 2019/11/20 QC#54204 Add Start -->
+                , DS_ORD_TP_PROC_DFN PD
+                , ORD_PROC_TP   PT
+                <!-- 2019/11/20 QC#54204 Add End -->
+            WHERE
+                SP.TRX_SRC_TP_CD            = #trxSrcTpWholeSales#      -- Whole Sales
+                AND SP.SHPG_STS_CD          = #shpgStsArrived#         -- Arrived
+                AND SP.REV_RECOG_FLG        = 'N' 
+                AND SP.TRX_LINE_SUB_NUM     &lt;&gt; '000'              -- except to the Parent of Set
+                AND SP.TRX_HDR_NUM          = DC.CPO_ORD_NUM 
+                AND SP.TRX_HDR_NUM          = DCD.CPO_ORD_NUM 
+                AND SP.TRX_LINE_NUM         = DCD.CPO_DTL_LINE_NUM 
+                AND SP.TRX_LINE_SUB_NUM     = DCD.CPO_DTL_LINE_SUB_NUM 
+                AND DC.DS_ORD_TP_CD         = DOT.DS_ORD_TP_CD 
+                <!-- 2017/12/22 S21_NA#22472 Del Start -->
+                <!-- AND DCD.CUST_ISTL_FLG       = 'Y' -->  
+                <!-- 2017/12/22 S21_NA#22472 Del End -->
+                AND DCD.BASE_CMPT_FLG       = 'Y' <!-- 2016/04/21 add -->
+                <!-- QC#9852 del
+                AND DOT.MACH_MSTR_CRAT_FLG  = 'Y' 
+                 -->
+                AND SP.MDSE_CD              = DMI.MDSE_CD 
+                AND DMI.MDSE_CATG_CD        = MC.MDSE_CATG_CD 
+                AND DMI.INSTL_BASE_CTRL_FLG = 'Y'
+                <!-- 2017/12/22 S21_NA#22472 Add Start -->
+                AND DCD.DS_CPO_CONFIG_PK    = DCII.DS_CPO_CONFIG_PK
+                AND DCII.SVC_ISTL_RULE_NUM  = SIR.SVC_ISTL_RULE_NUM
+                AND SIR.SVC_CUST_ISTL_FLG   = 'Y'
+                <!-- 2017/12/22 S21_NA#22472 Add End -->
+                <!-- 2019/11/20 QC#54204 Add Start -->
+                <!-- WH Transfer orders are not target to update. -->
+                AND PD.EZCANCELFLAG        = DC.EZCANCELFLAG
+                AND PT.EZCANCELFLAG        = DC.EZCANCELFLAG
+                AND PD.GLBL_CMPY_CD        = DC.GLBL_CMPY_CD
+                AND PT.GLBL_CMPY_CD        = DC.GLBL_CMPY_CD
+                AND DC.DS_ORD_TP_CD        = PD.DS_ORD_TP_CD
+                AND PD.ORD_PROC_TP_CD      = PT.ORD_PROC_TP_CD
+                AND PT.EFF_FROM_DT     &lt;= #slsDt#
+                AND (PT.EFF_THRU_DT    &gt;= #slsDt#
+                  OR PT.EFF_THRU_DT       IS NULL)
+                AND PD.EFF_FROM_DT     &lt;= #slsDt#
+                AND (PD.EFF_THRU_DT    &gt;= #slsDt#
+                  OR PD.EFF_THRU_DT       IS NULL)
+                AND PT.ITRL_ORD_PROC_FLG   = 'N'
+                <!-- 2019/11/20 QC#54204 Add End -->
+                AND SP.SHPG_PLN_NUM         = SMM.SHPG_PLN_NUM(+) 
+                AND SP.GLBL_CMPY_CD         = #glblCmpyCd#
+                AND SP.GLBL_CMPY_CD         = SMM.GLBL_CMPY_CD(+) 
+                AND SP.GLBL_CMPY_CD         = DC.GLBL_CMPY_CD 
+                AND SP.GLBL_CMPY_CD         = DCD.GLBL_CMPY_CD 
+                AND SP.GLBL_CMPY_CD         = DOT.GLBL_CMPY_CD 
+                AND SP.GLBL_CMPY_CD         = DMI.GLBL_CMPY_CD 
+                AND SP.GLBL_CMPY_CD         = MC.GLBL_CMPY_CD 
+                <!-- 2017/12/22 S21_NA#22472 Add Start -->
+                AND SP.GLBL_CMPY_CD         = DCII.GLBL_CMPY_CD
+                AND SP.GLBL_CMPY_CD         = SIR.GLBL_CMPY_CD
+                <!-- 2017/12/22 S21_NA#22472 Add End -->
+                AND SP.EZCANCELFLAG         = '0' 
+                AND SMM.EZCANCELFLAG(+)     = '0' 
+                AND DC.EZCANCELFLAG         = '0' 
+                AND DCD.EZCANCELFLAG        = '0' 
+                AND DOT.EZCANCELFLAG        = '0' 
+                AND DMI.EZCANCELFLAG        = '0' 
+                AND MC.EZCANCELFLAG         = '0' 
+                <!-- 2017/12/22 S21_NA#22472 Add Start -->
+                AND DCII.EZCANCELFLAG       = '0'
+                AND SIR.EZCANCELFLAG        = '0'
+                <!-- 2017/12/22 S21_NA#22472 Add End -->
+                AND NOT EXISTS (
+                    SELECT
+                        *
+                    FROM
+                        SVC_TASK        ST
+                       ,DS_SVC_CALL_TP  DSCT
+                    WHERE
+                        SMM.GLBL_CMPY_CD      = ST.GLBL_CMPY_CD
+                    AND SMM.SVC_MACH_MSTR_PK  = ST.SVC_MACH_MSTR_PK
+                    AND SMM.SHIP_DT       &lt;= ST.SVC_TASK_RCV_DT
+                    AND ST.EZCANCELFLAG       = '0'
+                    AND ST.GLBL_CMPY_CD       = DSCT.GLBL_CMPY_CD
+                    AND ST.DS_SVC_CALL_TP_CD  = DSCT.DS_SVC_CALL_TP_CD
+                    AND DSCT.SVC_ISTL_REQ_FLG = 'Y'
+                    AND DSCT.EZCANCELFLAG     = '0'
+                )
+            <!-- 2018/03/29 S21_NA#25125 Add Start -->
+            UNION ALL
+            SELECT
+                 SP.TRX_HDR_NUM              AS TRX_HDR_NUM
+                ,SP.TRX_LINE_NUM             AS TRX_LINE_NUM
+                ,SP.TRX_LINE_SUB_NUM         AS TRX_LINE_SUB_NUM
+                ,SP.SHPG_PLN_NUM             AS SHPG_PLN_NUM
+                ,SMM.SVC_MACH_MSTR_PK        AS SVC_MACH_MSTR_PK
+                ,SMM.SVC_MACH_MSTR_STS_CD    AS SVC_MACH_MSTR_STS_CD
+                ,SMM.SHPG_PLN_NUM            AS SMM_SHPG_PLN_NUM
+                ,NULL                        AS ISTL_DT
+                ,CD.SVC_CONFIG_MSTR_PK       AS SVC_CONFIG_MSTR_PK
+                <!-- 2019/09/13 QC#52471 Add Start -->
+                ,SMM.SVC_MACH_MSTR_LOC_STS_CD AS SVC_MACH_MSTR_LOC_STS_CD
+                ,SMM.STK_STS_CD              AS STK_STS_CD
+                <!-- 2019/09/13 QC#52471 Add End -->
+            FROM
+                 SHPG_PLN         SP
+                ,CPO              C
+                ,ORD_CATG_BIZ_CTX OCBC
+                ,CPO_DTL          CD
+                ,DS_CPO_ISTL_INFO DCII
+                ,SVC_ISTL_RULE    SIR
+                ,SVC_MACH_MSTR    SMM
+            WHERE
+                -- SHPG_PLN
+                    SP.GLBL_CMPY_CD             =  #glblCmpyCd#
+                AND SP.EZCANCELFLAG             =  '0'
+                AND SP.TRX_SRC_TP_CD            =  #trxSrcTpWholeSales#
+                AND SP.SHPG_STS_CD              =  #shpgStsArrived#
+                AND SP.REV_RECOG_FLG            =  'N'
+                AND SP.TRX_LINE_SUB_NUM         &lt;&gt; '000'
+                -- CPO
+                AND SP.GLBL_CMPY_CD             =  C.GLBL_CMPY_CD
+                AND SP.EZCANCELFLAG             =  C.EZCANCELFLAG
+                AND SP.TRX_HDR_NUM              =  C.CPO_ORD_NUM
+                -- ORD_CATG_BIZ_CTX
+                AND C.GLBL_CMPY_CD              =  OCBC.GLBL_CMPY_CD
+                AND C.EZCANCELFLAG              =  OCBC.EZCANCELFLAG
+                AND C.DS_ORD_CATG_CD            =  OCBC.DS_ORD_CATG_CD
+                AND OCBC.ORD_CATG_CTX_TP_CD     =  #ordCatgCtxTpSvcExchange#
+                -- CPO_DTL
+                AND SP.GLBL_CMPY_CD             =  CD.GLBL_CMPY_CD
+                AND SP.EZCANCELFLAG             =  CD.EZCANCELFLAG
+                AND SP.TRX_HDR_NUM              =  CD.CPO_ORD_NUM
+                AND SP.TRX_LINE_NUM             =  CD.CPO_DTL_LINE_NUM
+                AND SP.TRX_LINE_SUB_NUM         =  CD.CPO_DTL_LINE_SUB_NUM
+                -- DS_CPO_ISTL_INFO
+                AND CD.GLBL_CMPY_CD             =  DCII.GLBL_CMPY_CD
+                AND CD.EZCANCELFLAG             =  DCII.EZCANCELFLAG
+                AND CD.CPO_ORD_NUM              =  DCII.CPO_ORD_NUM
+                AND CD.DS_CPO_CONFIG_PK         =  DCII.DS_CPO_CONFIG_PK
+                -- SVC_ISTL_RULE
+                AND DCII.GLBL_CMPY_CD           =  SIR.GLBL_CMPY_CD
+                AND DCII.EZCANCELFLAG           =  SIR.EZCANCELFLAG
+                AND DCII.SVC_ISTL_RULE_NUM      =  SIR.SVC_ISTL_RULE_NUM
+                AND SIR.SVC_CUST_ISTL_FLG       = 'Y'
+                -- SVC_MACH_MSTR
+                AND SP.GLBL_CMPY_CD             =  SMM.GLBL_CMPY_CD
+                AND SP.EZCANCELFLAG             =  SMM.EZCANCELFLAG
+                AND SP.TRX_HDR_NUM              =  SMM.CPO_ORD_NUM
+                AND SP.TRX_LINE_NUM             =  SMM.CPO_DTL_LINE_NUM
+                AND SP.TRX_LINE_SUB_NUM         =  SMM.CPO_DTL_LINE_SUB_NUM
+                AND SP.SHPG_PLN_NUM             =  SMM.SHPG_PLN_NUM
+                AND NOT EXISTS (
+                    SELECT
+                        *
+                    FROM
+                        SVC_TASK        ST
+                       ,DS_SVC_CALL_TP  DSCT
+                    WHERE
+                        SMM.GLBL_CMPY_CD       = ST.GLBL_CMPY_CD
+                    AND SMM.SVC_MACH_MSTR_PK   = ST.SVC_MACH_MSTR_PK
+                    AND SMM.SHIP_DT            &lt;= ST.SVC_TASK_RCV_DT
+                    AND ST.EZCANCELFLAG        = '0'
+                    AND ST.GLBL_CMPY_CD        = DSCT.GLBL_CMPY_CD
+                    AND ST.DS_SVC_CALL_TP_CD   = DSCT.DS_SVC_CALL_TP_CD
+                    AND DSCT.SVC_ISTL_REQ_FLG  = 'Y'
+                    AND DSCT.EZCANCELFLAG      = '0'
+                )
+            <!-- 2018/03/29 S21_NA#25125 Add End -->
+            <!-- 2019/09/03 S21_NA#53182 Add Start -->
+            UNION ALL
+            SELECT
+                  SP.TRX_HDR_NUM
+                , NULL AS TRX_LINE_NUM
+                , NULL AS TRX_LINE_SUB_NUM
+                , NULL AS SHPG_PLN_NUM
+                , SMM.SVC_MACH_MSTR_PK
+                , SMM.SVC_MACH_MSTR_STS_CD
+                , SMM.SHPG_PLN_NUM          AS SMM_SHPG_PLN_NUM
+                , SMM.ISTL_DT
+                , SMM.SVC_CONFIG_MSTR_PK
+                <!-- 2019/09/13 QC#52471 Add Start -->
+                , SMM.SVC_MACH_MSTR_LOC_STS_CD
+                , SMM.STK_STS_CD
+                <!-- 2019/09/13 QC#52471 Add End -->
+            FROM
+                SVC_MACH_MSTR      SMM
+                , SVC_MACH_MSTR    SMM2
+                , SHPG_PLN         SP
+                , CPO              DC
+                , CPO_DTL          DCD
+                , DS_CPO_ISTL_INFO DCII
+                , SVC_ISTL_RULE    SIR
+            WHERE
+                SMM.SVC_MACH_TP_CD            = '1'
+                AND SMM.SVC_MACH_MSTR_STS_CD  = #svcMachMstrStsInstalled#
+                AND SMM.GLBL_CMPY_CD          = #glblCmpyCd#
+                AND SMM.EZCANCELFLAG(+)       = '0' 
+                AND SMM.SVC_CONFIG_MSTR_PK    = SMM2.SVC_CONFIG_MSTR_PK
+                AND SMM2.SVC_MACH_MSTR_STS_CD = #svcMachMstrStsW4I#
+                AND SMM.GLBL_CMPY_CD          = SMM2.GLBL_CMPY_CD
+                AND SMM2.EZCANCELFLAG         = '0'
+                AND SMM2.SHPG_PLN_NUM         = SP.SHPG_PLN_NUM
+                AND SP.TRX_SRC_TP_CD          = #trxSrcTpWholeSales#      -- Whole Sales
+                AND SP.TRX_LINE_SUB_NUM       &lt;&gt; '000'              -- except to the Parent of Set
+                AND SMM.GLBL_CMPY_CD          = SP.GLBL_CMPY_CD
+                AND SP.EZCANCELFLAG           = '0'
+                AND SP.TRX_HDR_NUM            = DC.CPO_ORD_NUM 
+                AND SMM.GLBL_CMPY_CD          = DC.GLBL_CMPY_CD
+                AND DC.EZCANCELFLAG           = '0'
+                AND SP.TRX_HDR_NUM            = DCD.CPO_ORD_NUM
+                AND SP.TRX_LINE_NUM           = DCD.CPO_DTL_LINE_NUM
+                AND SP.TRX_LINE_SUB_NUM       = DCD.CPO_DTL_LINE_SUB_NUM
+                AND SMM.GLBL_CMPY_CD          = DCD.GLBL_CMPY_CD
+                AND DCD.EZCANCELFLAG          = '0'
+                AND DCD.DS_CPO_CONFIG_PK      = DCII.DS_CPO_CONFIG_PK
+                AND SMM.GLBL_CMPY_CD          = DCII.GLBL_CMPY_CD
+                AND DCII.EZCANCELFLAG         = '0'
+                AND DCII.SVC_ISTL_RULE_NUm    = SIR.SVC_ISTL_RULE_NUM
+                AND SIR.SVC_CUST_ISTL_FLG     = 'Y'
+                AND SMM.GLBL_CMPY_CD          = SIR.GLBL_CMPY_CD
+                AND SIR.EZCANCELFLAG          = '0'
+            GROUP BY
+                SP.TRX_HDR_NUM 
+                , SMM.SVC_MACH_MSTR_PK
+                , SMM.SVC_MACH_MSTR_STS_CD
+                , SMM.SHPG_PLN_NUM
+                , SMM.ISTL_DT
+                , SMM.SVC_CONFIG_MSTR_PK
+                <!-- 2019/09/13 QC#52471 Add Start -->
+                , SMM.SVC_MACH_MSTR_LOC_STS_CD
+                , SMM.STK_STS_CD
+                <!-- 2019/09/13 QC#52471 Add End -->
+            <!-- 2019/09/03 S21_NA#53182 Add End -->
+            ORDER BY
+                TRX_HDR_NUM
+                , TRX_LINE_NUM
+                , TRX_LINE_SUB_NUM
+                , SHPG_PLN_NUM
+                , SVC_MACH_MSTR_PK
+    </statement>
+
+</sqlMap>

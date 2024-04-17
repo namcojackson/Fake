@@ -1,0 +1,69 @@
+/* <pre>Copyright (c) 2015 Canon USA Inc. All rights reserved.</pre> */
+package business.servlet.NSAL0790.constant;
+
+/**
+ *<pre>
+ * Fleet Rollup Detail
+ * 
+ * Date         Company         Name            Create/Update   Defect No
+ * ----------------------------------------------------------------------
+ * 2015/12/22   Hitachi         A.Kohinata      Create          N/A
+ *</pre>
+ */
+public class NSAL0790Constant {
+
+    // [0]:Button Name [1]:Event Name [2]:Button Label
+    /** Function Button 1 */
+    public static final String[] BTN_CMN_SAVE = {"btn1", "CMN_Save", "Save" };
+
+    /** Function Button 2 */
+    public static final String[] BTN_CMN_SUBMIT = {"btn2", "CMN_Submit", "Submit" };
+
+    /** Function Button 3 */
+    public static final String[] BTN_CMN_APPLY = {"btn3", "CMN_Apply", "Apply" };
+
+    /** Function Button 4 */
+    public static final String[] BTN_CMN_APPROVE = {"btn4", "CMN_Approve", "Approve" };
+
+    /** Function Button 5 */
+    public static final String[] BTN_CMN_REJECT = {"btn5", "CMN_Reject", "Reject" };
+
+    /** Function Button 6 */
+    public static final String[] BTN_CMN_DOWNROAD = {"btn6", "CMN_Download", "Download" };
+
+    /** Function Button 7 */
+    public static final String[] BTN_CMN_BLANK7 = {"btn7", "CMN_Delete", "Delete" };
+
+    /** Function Button 8 */
+    public static final String[] BTN_CMN_CLEAR = {"btn8", "CMN_Clear", "Clear" };
+
+    /** Function Button 9 */
+    public static final String[] BTN_CMN_RESET = {"btn9", "CMN_Reset", "Reset" };
+
+    /** Function Button 10 */
+    public static final String[] BTN_CMN_RETURN = {"btn10", "CMN_Return", "Return" };
+
+    /** Function Button : ResubmitRollup */
+    public static final String BTN_RESUBMIT_ROLLUP = "ResubmitRollup";
+
+    /** Function Button : Entry */
+    public static final String BTN_ENTRY = "Entry";
+
+    /** SCRN_ID : NSAL0790Scrn00 */
+    public static final String SCREEN_ID = "NSAL0790Scrn00";
+
+    /** Business ID */
+    public static final String BIZ_ID = "NSAL0790";
+
+    /** Function code : Search */
+    public static final String FUNC_SEARCH = "20";
+
+    /** Function code : Update */
+    public static final String FUNC_UPDATE = "40";
+
+    /** Reference authority */
+    public static final String AUTH_REFERENCE = "NSAL0790T010";
+
+    /** Update authority */
+    public static final String AUTH_UPDATE = "NSAL0790T020";
+}

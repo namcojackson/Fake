@@ -1,0 +1,268 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NSAL0860Query">
+    <typeAlias alias="NSAL0860_ASMsg"         type="business.blap.NSAL0860.NSAL0860_ASMsg"/>
+
+    <statement id="getSearchData" parameterClass="Map" resultMap="result.getSearchData">
+        SELECT
+            SER_NUM
+            ,T_MDL_NM
+            ,FIRST_LINE_ADDR
+                || DECODE(SCD_LINE_ADDR,   null, '', ', ' || SCD_LINE_ADDR)
+                || DECODE(THIRD_LINE_ADDR, null, '', ', ' || THIRD_LINE_ADDR)
+                || DECODE(FRTH_LINE_ADDR,  null, '', ', ' || FRTH_LINE_ADDR)
+                || DECODE(CTY_ADDR,        null, '', ', ' || CTY_ADDR)
+                || DECODE(ST_CD,           null, '', ' '  || ST_CD)
+                || DECODE(POST_CD,         null, '', ' '  || POST_CD)               SHIP_TO_CUST_LOC_ADDR
+            ,DECODE(IWR_COND_CD, null, '', IWR_COND_CD || '-' || IWR_COND_DESC_TXT) XX_SCR_STS_TXT
+            ,SHR_DLR_FLG
+            ,DS_ACCT_NM
+            ,CUR_LOC_ACCT_NUM
+            ,DS_CONTR_NUM
+            ,DS_CONTR_PK
+            ,SVC_MACH_MSTR_PK
+        FROM
+            (
+            SELECT
+                 SMM.SER_NUM               SER_NUM
+                ,MNM.T_MDL_NM              T_MDL_NM
+                ,STC.FIRST_LINE_ADDR       FIRST_LINE_ADDR
+                ,STC.SCD_LINE_ADDR         SCD_LINE_ADDR
+                ,STC.THIRD_LINE_ADDR       THIRD_LINE_ADDR
+                ,STC.FRTH_LINE_ADDR        FRTH_LINE_ADDR
+                ,STC.CTY_ADDR              CTY_ADDR
+                ,STC.ST_CD                 ST_CD
+                ,STC.POST_CD               POST_CD
+                ,IWC.IWR_COND_CD           IWR_COND_CD
+                ,IWC.IWR_COND_DESC_TXT     IWR_COND_DESC_TXT
+                ,SMM.SHR_DLR_FLG           SHR_DLR_FLG
+                ,SEL.DS_ACCT_NM            DS_ACCT_NM
+                ,SMM.CUR_LOC_ACCT_NUM      CUR_LOC_ACCT_NUM
+                ,DCO.DS_CONTR_NUM          DS_CONTR_NUM
+                ,DCO.DS_CONTR_PK           DS_CONTR_PK
+                ,SMM.SVC_MACH_MSTR_PK      SVC_MACH_MSTR_PK
+            FROM
+                 SVC_MACH_MSTR             SMM
+                ,SELL_TO_CUST              SEL
+                ,SHIP_TO_CUST              STC
+                ,SVC_CONFIG_MSTR           SCM
+                ,MDL_NM                    MNM
+                ,IWR_COND                  IWC
+                ,MDSE                      MDS
+                ,
+                (
+                SELECT
+                     GLBL_CMPY_CD
+                    ,SVC_MACH_MSTR_PK
+                    ,DS_CONTR_PK
+                    ,DS_CONTR_CATG_CD
+                    ,THRU_DT
+                    ,ROW_NUMBER
+                    ,SORT_NUMBER
+                FROM
+                    (
+                    SELECT
+                         GLBL_CMPY_CD
+                        ,SVC_MACH_MSTR_PK
+                        ,DS_CONTR_PK
+                        ,DS_CONTR_CATG_CD
+                        ,THRU_DT
+                        ,ROW_NUMBER
+                        ,ROW_NUMBER()
+                            OVER(PARTITION BY SVC_MACH_MSTR_PK
+                                ORDER BY SORT_TXT ASC)                       SORT_NUMBER
+                    FROM
+                        (
+                        SELECT
+                             '1'                                             SORT_TXT
+                            ,DTL.GLBL_CMPY_CD                                GLBL_CMPY_CD
+                            ,DTL.SVC_MACH_MSTR_PK                            SVC_MACH_MSTR_PK
+                            ,DTL.DS_CONTR_PK                                 DS_CONTR_PK
+                            ,DCC.DS_CONTR_CATG_CD                            DS_CONTR_CATG_CD
+                            ,NVL(DTL.CONTR_CLO_DT, DTL.CONTR_EFF_THRU_DT)    THRU_DT
+<!-- QC#15410(Sol#246) Mod Start -->
+<!--
+                             ,ROW_NUMBER()
+                                OVER(PARTITION BY DTL.SVC_MACH_MSTR_PK
+                                    ORDER BY DTL.SVC_MACH_MSTR_PK, NVL(DTL.CONTR_CLO_DT, DTL.CONTR_EFF_THRU_DT) DESC)
+                                                                             ROW_NUMBER
+ -->
+                             ,ROW_NUMBER()
+                                OVER(PARTITION BY DTL.SVC_MACH_MSTR_PK
+                                    ORDER BY DTL.SVC_MACH_MSTR_PK, NVL(DTL.CONTR_CLO_DT, DTL.CONTR_EFF_THRU_DT) DESC, DTL.EZINTIME ASC)
+                                                                             ROW_NUMBER
+<!-- QC#15410(Sol#246) Mod End -->
+                        FROM
+                             DS_CONTR_DTL       DTL
+                            ,DS_CONTR           DCO
+                            ,DS_CONTR_CATG      DCC
+                        WHERE
+                                DTL.GLBL_CMPY_CD                            = #glblCmpyCd#
+                            AND DTL.EZCANCELFLAG                            = '0'
+                            AND DTL.CONTR_EFF_FROM_DT                   &lt;= #slsDt#
+                            AND NVL(DTL.CONTR_EFF_THRU_DT,#slsDt#)      &gt;= #slsDt#
+                            AND NVL(DTL.CONTR_CLO_DT,#slsDt#)           &gt;= #slsDt#
+                            AND DTL.DS_CONTR_DTL_STS_CD              &lt;&gt; #dsContrDtlStsCd#
+                            AND DTL.DS_CONTR_PK                             = DCO.DS_CONTR_PK
+                            AND DTL.GLBL_CMPY_CD                            = DCO.GLBL_CMPY_CD
+                            AND DCO.EZCANCELFLAG                            = '0'
+
+                            AND DCO.DS_CONTR_CATG_CD                        = DCC.DS_CONTR_CATG_CD
+                            AND DCO.GLBL_CMPY_CD                            = DCC.GLBL_CMPY_CD
+                            AND DCC.DS_CONTR_CATG_CD                 &lt;&gt; #dsContrCatgCd#
+                            AND DCC.EZCANCELFLAG                            = '0'
+
+                        UNION ALL
+                        SELECT
+                             '2'                                             SORT_TXT
+                            ,DTL.GLBL_CMPY_CD                                GLBL_CMPY_CD
+                            ,DTL.SVC_MACH_MSTR_PK                            SVC_MACH_MSTR_PK
+                            ,DTL.DS_CONTR_PK                                 DS_CONTR_PK
+                            ,DCC.DS_CONTR_CATG_CD                            DS_CONTR_CATG_CD
+                            ,NVL(DTL.CONTR_CLO_DT, DTL.CONTR_EFF_THRU_DT)    THRU_DT
+<!-- QC#15410(Sol#246) Mod Start -->
+<!--
+                            ,ROW_NUMBER()
+                                OVER(PARTITION BY DTL.SVC_MACH_MSTR_PK
+                                    ORDER BY DTL.SVC_MACH_MSTR_PK, NVL(DTL.CONTR_CLO_DT, DTL.CONTR_EFF_THRU_DT) DESC)
+                                                                             ROW_NUMBER
+-->
+                            ,ROW_NUMBER()
+                                OVER(PARTITION BY DTL.SVC_MACH_MSTR_PK
+                                    ORDER BY DTL.SVC_MACH_MSTR_PK, NVL(DTL.CONTR_CLO_DT, DTL.CONTR_EFF_THRU_DT) DESC, DTL.EZINTIME ASC)
+                                                                             ROW_NUMBER
+<!-- QC#15410(Sol#246) Mod End -->
+                        FROM
+                             DS_CONTR_DTL       DTL
+                            ,DS_CONTR           DCO
+                            ,DS_CONTR_CATG      DCC
+                        WHERE
+                                DTL.GLBL_CMPY_CD                           = #glblCmpyCd#
+                            AND DTL.EZCANCELFLAG                           = '0'
+                            AND DTL.CONTR_EFF_FROM_DT                  &lt;= #slsDt#
+                            AND NVL(DTL.CONTR_EFF_THRU_DT,#slsDt#)     &gt;= #slsDt#
+                            AND NVL(DTL.CONTR_CLO_DT,#slsDt#)          &gt;= #slsDt#
+                            AND DTL.DS_CONTR_DTL_STS_CD             &lt;&gt; #dsContrDtlStsCd#
+                            AND DTL.DS_CONTR_PK                            = DCO.DS_CONTR_PK
+                            AND DTL.GLBL_CMPY_CD                           = DCO.GLBL_CMPY_CD
+                            AND DCO.EZCANCELFLAG                           = '0'
+
+                            AND DCO.DS_CONTR_CATG_CD                       = DCC.DS_CONTR_CATG_CD
+                            AND DCO.GLBL_CMPY_CD                           = DCC.GLBL_CMPY_CD
+                            AND DCC.DS_CONTR_CATG_CD                       = #dsContrCatgCd#
+                            AND DCC.EZCANCELFLAG                           = '0'
+                        )
+                    WHERE
+                        ROW_NUMBER = 1
+                    )
+                WHERE
+                    SORT_NUMBER    = 1
+                )   DCD
+                ,DS_CONTR   DCO
+            WHERE
+                    SMM.GLBL_CMPY_CD            = #glblCmpyCd#
+                <isNotNull property="serNum">
+                AND SMM.SER_NUM              LIKE #serNum#
+                </isNotNull>
+                <isNotNull property="iwrCondCd">
+                AND SMM.IWR_COND_CD             = #iwrCondCd#
+                </isNotNull>
+                <isNotNull property="curLocAcctNum">
+                AND SMM.CUR_LOC_ACCT_NUM     LIKE #curLocAcctNum#
+                </isNotNull>
+                AND SMM.EZCANCELFLAG            = '0'
+
+                AND SMM.CUR_LOC_ACCT_NUM        = SEL.SELL_TO_CUST_CD
+                <isNotNull property="dsAcctNm">
+                AND SEL.DS_ACCT_NM           LIKE #dsAcctNm#
+                </isNotNull>
+                AND SMM.GLBL_CMPY_CD            = SEL.GLBL_CMPY_CD
+                AND SEL.EZCANCELFLAG            = '0'
+
+                AND SMM.CUR_LOC_NUM             = STC.SHIP_TO_CUST_CD
+                AND SMM.GLBL_CMPY_CD            = STC.GLBL_CMPY_CD
+                AND STC.EZCANCELFLAG            = '0'
+
+                AND SMM.SVC_CONFIG_MSTR_PK      = SCM.SVC_CONFIG_MSTR_PK(+)
+                AND SMM.GLBL_CMPY_CD            = SCM.GLBL_CMPY_CD(+)
+                AND SCM.EZCANCELFLAG(+)         = '0'
+
+                AND SCM.MDL_ID                  = MNM.T_MDL_ID(+)
+                <isNotNull property="tMdlNm">
+                AND MNM.T_MDL_NM             LIKE #tMdlNm#
+                </isNotNull>
+                AND SCM.GLBL_CMPY_CD            = MNM.T_GLBL_CMPY_CD(+)
+                AND MNM.EZCANCELFLAG(+)         = '0'
+
+                AND SMM.IWR_COND_CD             = IWC.IWR_COND_CD(+)
+                AND SMM.GLBL_CMPY_CD            = IWC.GLBL_CMPY_CD(+)
+                AND IWC.EZCANCELFLAG(+)         = '0'
+
+                AND SMM.MDSE_CD                 = MDS.MDSE_CD
+                AND SMM.GLBL_CMPY_CD            = MDS.GLBL_CMPY_CD
+                AND MDS.IWR_ENBL_FLG            = 'Y'
+                AND MDS.EZCANCELFLAG            = '0'
+
+                AND SMM.SVC_MACH_MSTR_PK        = DCD.SVC_MACH_MSTR_PK(+)
+                AND SMM.GLBL_CMPY_CD            = DCD.GLBL_CMPY_CD(+)
+
+                AND DCD.DS_CONTR_PK             = DCO.DS_CONTR_PK(+)
+                AND DCD.GLBL_CMPY_CD            = DCO.GLBL_CMPY_CD(+)
+                <isNotNull property="dsContrNum">
+                AND DCO.DS_CONTR_NUM         LIKE #dsContrNum#
+                </isNotNull>
+                AND DCO.EZCANCELFLAG(+)         = '0'
+
+            ORDER BY SER_NUM ASC
+        )
+        WHERE
+            ROWNUM                          &lt;= #limitCount#
+
+
+    </statement>
+    <resultMap id="result.getSearchData"       class="NSAL0860_ASMsg">
+        <result property="serNum_A"            column="SER_NUM"                 javaType="EZDSStringItem"/>
+        <result property="t_MdlNm_A"           column="T_MDL_NM"                javaType="EZDSStringItem"/>
+        <result property="shipToCustLocAddr_A" column="SHIP_TO_CUST_LOC_ADDR"   javaType="EZDSStringItem"/>
+        <result property="xxScrStsTxt_A"       column="XX_SCR_STS_TXT"          javaType="EZDSStringItem"/>
+        <result property="shrDlrFlg_A"         column="SHR_DLR_FLG"             javaType="EZDSStringItem"/>
+        <result property="dsAcctNm_A"          column="DS_ACCT_NM"              javaType="EZDSStringItem"/>
+        <result property="curLocAcctNum_A"     column="CUR_LOC_ACCT_NUM"        javaType="EZDSStringItem"/>
+        <result property="contrNum_A"          column="DS_CONTR_NUM"            javaType="EZDSStringItem"/>
+        <result property="dsContrPk_A"         column="DS_CONTR_PK"             javaType="EZDBBigDecimalItem"/>
+        <result property="svcMachMstrPk_A"     column="SVC_MACH_MSTR_PK"        javaType="EZDBBigDecimalItem"/>
+    </resultMap>
+
+    <statement id="getMachineInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+             SMM.SVC_MACH_MSTR_PK
+            ,SMM.SER_NUM
+            ,SMM.SHR_DLR_FLG
+            ,MDN.T_MDL_NM
+        FROM
+              SVC_MACH_MSTR    SMM
+            , SVC_CONFIG_MSTR  SCM
+            , MDL_NM           MDN
+            , MDSE             MDS
+        WHERE
+                SMM.SER_NUM            = #serNum#
+            AND SMM.GLBL_CMPY_CD       = #glblCmpyCd#
+            AND SMM.EZCANCELFLAG       = '0'
+
+            AND SMM.SVC_CONFIG_MSTR_PK = SCM.SVC_CONFIG_MSTR_PK
+            AND SMM.GLBL_CMPY_CD       = SCM.GLBL_CMPY_CD
+            AND SCM.EZCANCELFLAG       = '0'
+
+            AND SCM.GLBL_CMPY_CD       = MDN.T_GLBL_CMPY_CD(+)
+            AND SCM.MDL_ID             = MDN.T_MDL_ID(+)
+            <isNotNull property="mdlNm">
+                AND MDN.T_MDL_NM(+)    = #mdlNm#
+            </isNotNull>
+            AND MDN.EZCANCELFLAG(+)    = '0'
+
+            AND SMM.MDSE_CD            = MDS.MDSE_CD
+            AND SMM.GLBL_CMPY_CD       = MDS.GLBL_CMPY_CD
+            AND MDS.IWR_ENBL_FLG       = 'Y'
+            AND MDS.EZCANCELFLAG       = '0'
+    </statement>
+</sqlMap>

@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NWAL1840QueryForItemLine">
+
+    <statement id="getBaseMdseCdFromMnfItemCd" parameterClass="Map" resultClass="Map">
+        SELECT
+            MDSE.MDSE_CD
+           ,OTMDSE.ORD_TAKE_MDSE_CD
+        FROM
+           MDSE         MDSE
+           ,ORD_TAKE_MDSE  OTMDSE
+        WHERE
+            MDSE.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND MDSE.MNF_ITEM_CD  = #mnfItemCd#
+            AND MDSE.RGTN_STS_CD  = #rgtnStsCd#
+            AND MDSE.EZCANCELFLAG = '0'
+
+            AND OTMDSE.GLBL_CMPY_CD(+)     = MDSE.GLBL_CMPY_CD
+            AND OTMDSE.ORD_TAKE_MDSE_CD(+) = SUBSTR(MDSE.MDSE_CD, 1,8)
+            AND OTMDSE.EZCANCELFLAG(+)     = '0'
+    </statement>
+
+    <statement id="getPkgUomCd" parameterClass="Map" resultClass="Map">
+        SELECT
+            PU1.PKG_UOM_CD                                                                  AS PKG_UOM_CD
+           ,DECODE(PU2.PKG_UOM_DESC_TXT, null, PU1.PKG_UOM_DESC_TXT, PU2.PKG_UOM_DESC_TXT)  AS PKG_UOM_DESC_TXT
+        FROM
+            MDSE              MDSE
+           ,MDSE_STORE_PKG    DMSP
+           ,PKG_UOM           PU1
+           ,PKG_UOM           PU2
+        WHERE
+            MDSE.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND MDSE.MDSE_CD      = #mdseCd#
+            AND MDSE.RGTN_STS_CD  = #rgtnStsCd#
+            AND MDSE.EZCANCELFLAG = '0'
+
+            AND MDSE.GLBL_CMPY_CD = DMSP.GLBL_CMPY_CD
+            AND MDSE.MDSE_CD      = DMSP.MDSE_CD
+            AND DMSP.PRIM_PKG_UOM_FLG = 'Y'
+            AND DMSP.EZCANCELFLAG = '0'
+
+            AND DMSP.GLBL_CMPY_CD = PU1.GLBL_CMPY_CD
+            AND DMSP.PKG_UOM_CD   = PU1.PKG_UOM_CD
+            AND PU1.EZCANCELFLAG  = '0'
+
+            AND DMSP.GLBL_CMPY_CD    = PU2.GLBL_CMPY_CD (+)
+            AND DMSP.BASE_PKG_UOM_CD = PU2.PKG_UOM_CD (+)
+            AND PU2.EZCANCELFLAG (+) = '0'
+    </statement>
+
+    <statement id="isExistWhWithDsOrdTp" parameterClass="Map" resultClass="Integer">
+        SELECT
+            COUNT(WH.RTL_WH_CD)
+        FROM
+            DS_ORD_TP_LOC_ROLE_RELN LRR
+           ,LOC_USG                 LU
+           ,DS_INVTY_LOC_V          WH
+        WHERE
+            LRR.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND LRR.DS_ORD_TP_CD = #dsOrdTpCd#
+            AND LRR.EZCANCELFLAG = '0'
+
+            AND LRR.GLBL_CMPY_CD   = LU.GLBL_CMPY_CD
+            AND LRR.LOC_ROLE_TP_CD = LU.LOC_ROLE_TP_CD
+            AND LU.EZCANCELFLAG    = '0'
+
+            AND LU.GLBL_CMPY_CD     = WH.GLBL_CMPY_CD
+            AND LU.PTY_LOC_PK       = WH.PTY_LOC_PK
+            AND WH.RGTN_STS_CD      = #rgtnStsReadyForOrderTaking#
+            AND WH.EFF_FROM_DT      &lt;= #slsDt#
+            AND NVL(WH.EFF_THRU_DT, '99991231') &gt;= #slsDt#
+            AND UPPER(WH.RTL_WH_NM) = UPPER(#rtlWhNm#)
+            AND WH.EZCANCELFLAG     = '0'
+    </statement>
+
+    <statement id="isExistWhWithOutDsOrdTp" parameterClass="Map" resultClass="Integer">
+        SELECT
+            COUNT(WH.RTL_WH_CD)
+        FROM
+            DS_INVTY_LOC_V WH
+        WHERE
+            WH.GLBL_CMPY_CD         = #glblCmpyCd#
+            AND WH.RGTN_STS_CD      = #rgtnStsReadyForOrderTaking#
+            AND WH.EFF_FROM_DT      &lt;= #slsDt#
+            AND NVL(WH.EFF_THRU_DT, '99991231') &gt;= #slsDt#
+            AND UPPER(WH.RTL_WH_NM) = UPPER(#rtlWhNm#)
+            AND WH.EZCANCELFLAG     = '0'
+    </statement>
+
+    <statement id="getChildMdseList" parameterClass="Map" resultClass="Map">
+        SELECT 
+            NVL(CMP.CHILD_MDSE_CD, CMP.CHILD_ORD_TAKE_MDSE_CD) AS MDSE_CD
+           ,CMP.CHILD_MDSE_QTY                                 AS CHILD_MDSE_QTY
+        FROM
+            CMPSN CMP
+        WHERE 
+            CMP.GLBL_CMPY_CD                     = #glblCmpyCd#
+            AND CMP.PRNT_MDSE_CD                 = #prntMdseCd#
+            AND CMP.EFF_FROM_DT                  &lt;= #slsDt#
+            AND NVL(CMP.EFF_THRU_DT, '99991231') &gt;= #slsDt#
+            AND CMP.EZCANCELFLAG                 = '0'
+        ORDER BY
+            CMPSN_PK
+     </statement>
+    <statement id="checkContractNum" parameterClass="Map" resultClass="Integer">
+    SELECT 
+        count(1)
+    FROM
+        (SELECT
+            1
+        FROM 
+             DS_CONTR           DC
+            ,DS_CONTR_DTL       DCD
+            ,SVC_MACH_MSTR      SMM
+            ,SVC_CONFIG_MSTR    SCM
+            ,DS_MDL_SPLY_RELN   DMSR
+            ,ORD_TAKE_MDSE      OTM8
+        WHERE
+                DC.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND DC.DS_CONTR_NUM     = #contrNum#
+            <isNotNull property="contrSqNum">
+            AND DC.DS_CONTR_SQ_NUM   = #contrSqNum#
+            </isNotNull>
+            AND DC.EZCANCELFLAG     = '0'
+            
+            AND DC.GLBL_CMPY_CD     = DCD.GLBL_CMPY_CD 
+            AND DC.DS_CONTR_PK      = DCD.DS_CONTR_PK
+            AND DCD.EZCANCELFLAG    = '0'
+            
+            AND DCD.GLBL_CMPY_CD        = SMM.GLBL_CMPY_CD
+            AND DCD.SVC_MACH_MSTR_PK    = SMM.SVC_MACH_MSTR_PK
+            AND SMM.EZCANCELFLAG        = '0'
+            
+            AND SMM.GLBL_CMPY_CD        = SCM.GLBL_CMPY_CD
+            AND SMM.SVC_CONFIG_MSTR_PK  = SCM.SVC_CONFIG_MSTR_PK
+            AND SCM.EZCANCELFLAG        = '0'
+            
+            AND SMM.GLBL_CMPY_CD        = OTM8.GLBL_CMPY_CD(+)
+            AND OTM8.ORD_TAKE_MDSE_CD(+)= SUBSTR(#mdseCd# ,1,8) 
+            AND OTM8.EZCANCELFLAG(+)    = '0'
+           
+            AND SCM.GLBL_CMPY_CD                            = DMSR.GLBL_CMPY_CD
+            AND SCM.MDL_ID                                  = DMSR.MDL_ID
+            AND NVL(DMSR.ORD_TAKE_MDSE_CD , SUBSTR(DMSR.MDSE_CD,1,8)) = OTM8.ORD_TAKE_MDSE_CD
+
+            AND DMSR.EFF_FROM_DT                                &lt;= #slsDt#
+            AND (DMSR.EFF_THRU_DT IS NULL OR DMSR.EFF_THRU_DT   &gt;= #slsDt#)
+            AND DMSR.EZCANCELFLAG                           = '0'
+            
+            UNION ALL
+        SELECT
+            1
+        FROM 
+             DS_CONTR           DC
+            ,DS_CONTR_DTL       DCD
+            ,SVC_MACH_MSTR      SMM
+            ,SVC_CONFIG_MSTR    SCM
+            ,DS_MDL_SPLY_RELN   DMSR
+        WHERE
+                DC.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND DC.DS_CONTR_NUM     = #contrNum#
+            <isNotNull property="contrSqNum">
+            AND DC.DS_CONTR_SQ_NUM   = #contrSqNum#
+            </isNotNull>
+            AND DC.EZCANCELFLAG     = '0'
+            
+            AND DC.GLBL_CMPY_CD     = DCD.GLBL_CMPY_CD 
+            AND DC.DS_CONTR_PK      = DCD.DS_CONTR_PK
+            AND DCD.EZCANCELFLAG    = '0'
+            
+            AND DCD.GLBL_CMPY_CD        = SMM.GLBL_CMPY_CD
+            AND DCD.SVC_MACH_MSTR_PK    = SMM.SVC_MACH_MSTR_PK
+            AND SMM.EZCANCELFLAG        = '0'
+            
+            AND SMM.GLBL_CMPY_CD        = SCM.GLBL_CMPY_CD
+            AND SMM.SVC_CONFIG_MSTR_PK  = SCM.SVC_CONFIG_MSTR_PK
+            AND SCM.EZCANCELFLAG        = '0'
+            
+            AND SCM.GLBL_CMPY_CD                            = DMSR.GLBL_CMPY_CD
+            AND SCM.MDL_ID                                  = DMSR.MDL_ID
+            AND DMSR.MDSE_CD                                = #mdseCd# 
+            AND DMSR.EFF_FROM_DT                              &lt;= #slsDt#
+            AND (DMSR.EFF_THRU_DT IS NULL OR DMSR.EFF_THRU_DT &gt;= #slsDt#)
+            AND DMSR.EZCANCELFLAG                           = '0'
+        )
+     </statement>
+
+</sqlMap>

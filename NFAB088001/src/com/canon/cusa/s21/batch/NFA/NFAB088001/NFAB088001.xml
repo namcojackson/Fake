@@ -1,0 +1,203 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<sqlMap namespace="NFAB088001">
+
+<!-- #################### Type Alias #################### -->
+
+<!-- #################### Statement #################### -->
+
+	<statement id="getMaxPrevDt" parameterClass="Map">
+		SELECT MAX(INVTY_SNAP_SHOT_DT) DT_PREV
+		FROM   INVTY_SNAP_SHOT_V
+		WHERE  EZCANCELFLAG            = '0'
+        AND    GLBL_CMPY_CD = #glblCmpyCd#
+		AND    INVTY_SNAP_SHOT_DT &lt; #dateProc#
+	</statement>
+
+    <statement id="getResultNFAB088001" parameterClass="Map" resultClass="Map">
+    SELECT
+         <!-- START 2023/09/05 K.Fujii [ALM#61663 ADD] -->
+         --+ NO_MERGE(ISS) USE_HASH(ISS)
+         <!-- END 2023/09/05 K.Fujii [ALM#61663 ADD] -->
+          ISS.INVTY_SNAP_SHOT_DT                       AS INVTY_SNAP_SHOT_DT
+         ,ISS.MDSE_CD                                  AS MDSE_CD
+         ,ISS.INVTY_LOC_CD                             AS INVTY_LOC_CD
+         ,ISS.LOC_STS_CD                               AS LOC_STS_CD
+         ,MAX(MDSE.COA_PROD_CD)                        AS COA_PROD_CD
+         ,MAX(MDSE.RGTN_STS_CD)                        AS RGTN_STS_CD
+         ,SUM(ISS.INVTY_QTY)                           AS INVTY_TOT_QTY
+         ,MAX(MDSE.THIS_MTH_TOT_STD_COST_AMT)          AS THIS_MTH_TOT_STD_COST_AMT
+         <!-- START 2018/12/11 [QC#29498, MOD] -->
+         ,MAX(NVL(
+             (
+              SELECT
+                  COA_ACCT_CD
+              FROM
+                 (
+                 SELECT 
+                     CAM.COA_ACCT_CD
+                 FROM
+                     AJE_COA_ACCT_MAP CAM
+                 WHERE
+                     (DECODE(CAM.ACCT_MAP_ATTRB_KEY_CD_01, #aster#, 1) = 1 OR CAM.ACCT_MAP_ATTRB_KEY_CD_01 = ISS.LOC_STS_CD)
+                 AND (DECODE(CAM.ACCT_MAP_ATTRB_KEY_CD_02, #aster#, 1) = 1 OR CAM.ACCT_MAP_ATTRB_KEY_CD_02 = ISS.INVTY_LOC_CD)
+                 AND (DECODE(CAM.ACCT_MAP_ATTRB_KEY_CD_03, #aster#, 1) = 1 OR CAM.ACCT_MAP_ATTRB_KEY_CD_03 = CPA.COA_PROJ_CD)
+                 ORDER BY
+                     CAM.ACCT_MAP_PRTY_NUM ASC, CAM.AJE_COA_ACCT_MAP_PK ASC
+                 )
+              WHERE ROWNUM = 1
+             ), CPA.COA_ACCT_CD))                      AS COA_ACCT_CD
+         <!-- END   2018/12/11 [QC#29498, MOD] -->
+         ,MAX(MDSE.ASSET_RECOV_COST_AMT)               AS ASSET_RECOV_COST_AMT
+         <!-- start 12/28 QC#16819 Change DS_INVTY_LOC_V to RTL_SWH -->
+         ,NVL(MAX(RS.RTL_WH_CD), ISS.INVTY_LOC_CD)     AS RTL_WH_CD
+         ,NVL(MAX(RS.RTL_SWH_CD), ISS.INVTY_LOC_CD)    AS RTL_SWH_CD
+         <!-- end 2016/12/28 -->
+         ,NVL(MAX(SWH.MDSE_COST_TP_CD), #stdCost#)     AS MDSE_COST_TP_CD
+         ,NVL(MAX(SWH.MDSE_INVTY_COST_PCT), 100)       AS MDSE_INVTY_COST_PCT
+         ,(CASE WHEN NVL(MAX(SWH.MDSE_COST_TP_CD), #stdCost#) = #stdCost# 
+                THEN ROUND(MAX(MDSE.THIS_MTH_TOT_STD_COST_AMT) * NVL(MAX(SWH.MDSE_INVTY_COST_PCT), 100) / 100, MAX(CCY.AFT_DECL_PNT_DIGIT_NUM))
+                ELSE ROUND(MAX(MDSE.ASSET_RECOV_COST_AMT) * NVL(MAX(SWH.MDSE_INVTY_COST_PCT), 100) / 100, MAX(CCY.AFT_DECL_PNT_DIGIT_NUM)) 
+           END)                                        AS ACTL_COST_AMT
+         ,MAX(CCY.AFT_DECL_PNT_DIGIT_NUM)              AS SCALE
+     FROM 
+         INVTY_SNAP_SHOT_V  ISS
+        ,MDSE_DLY_SNAP_SHOT MDSE
+        <!-- start 12/28 QC#16819 Change DS_INVTY_LOC_V to RTL_SWH
+        ,DS_INVTY_LOC_V     ILV
+        -->
+        ,RTL_SWH            RS
+        <!-- end 2016/12/28 -->
+        ,SWH                SWH
+        ,CCY                CCY
+        ,COA_PROJ_ACCT      CPA
+    WHERE ISS.EZCANCELFLAG        = '0'
+      AND MDSE.EZCANCELFLAG       = '0'
+      AND CCY.EZCANCELFLAG        = '0'
+      AND ISS.GLBL_CMPY_CD        = #glblCmpyCd#
+      AND ISS.GLBL_CMPY_CD        = MDSE.GLBL_CMPY_CD
+      <!-- start 12/28 QC#16819 Change DS_INVTY_LOC_V to RTL_SWH -->
+      AND ISS.GLBL_CMPY_CD        = RS.GLBL_CMPY_CD(+)
+      AND RS.EZCANCELFLAG(+)      = '0'
+      AND ISS.INVTY_LOC_CD        = RS.INVTY_LOC_CD(+)
+      AND RS.GLBL_CMPY_CD         = SWH.GLBL_CMPY_CD(+)
+      AND RS.RTL_SWH_CD           = SWH.RTL_SWH_CD(+)
+      AND SWH.EZCANCELFLAG(+)     = '0'
+      <!-- end 2016/12/28 -->
+      AND ISS.MDSE_CD             = MDSE.MDSE_CD
+      AND ISS.INVTY_SNAP_SHOT_DT  = MDSE.CRAT_DT
+      AND MDSE.GLBL_CMPY_CD       = CCY.GLBL_CMPY_CD
+      AND MDSE.COST_CCY_CD        = CCY.CCY_CD
+      AND ISS.INVTY_SNAP_SHOT_DT  = #dateStart#
+      AND MDSE.GLBL_CMPY_CD       = CPA.GLBL_CMPY_CD
+      AND CPA.EZCANCELFLAG        = '0'
+      AND MDSE.COA_MDSE_TP_CD     = CPA.COA_PROJ_CD
+      AND CPA.COA_PROJ_ACCT_TP_CD = #coaProjAcctTpCd#
+    GROUP BY 
+         ISS.INVTY_SNAP_SHOT_DT
+        ,ISS.MDSE_CD
+        ,ISS.INVTY_LOC_CD
+        ,ISS.LOC_STS_CD
+    ORDER BY 
+         ISS.INVTY_SNAP_SHOT_DT
+    </statement>
+
+	<statement id="back_getResultNFAB088001" parameterClass="Map" resultClass="Map">
+		SELECT
+		  ISS.INVTY_SNAP_SHOT_DT 										AS INVTY_SNAP_SHOT_DT,
+		  ISS.MDSE_CD 													AS MDSE_CD, 
+		  MAX(MDSE.COA_PROD_CD) 										AS COA_PROD_CD, 
+		  MAX(MDSE.RGTN_STS_CD) 										AS RGTN_STS_CD, 
+		  SUM(ISS.INVTY_QTY) 											AS INVTY_TOT_QTY, 
+		  MAX(MDSE.THIS_MTH_TOT_STD_COST_AMT) 							AS THIS_MTH_TOT_STD_COST_AMT,
+		  (SUM(ISS.INVTY_QTY) * MAX(MDSE.THIS_MTH_TOT_STD_COST_AMT)) 	AS DLY_MDSE_SMRY_AMT,
+		  MAX(MDSE.LAST_MTH_TOT_STD_COST_AMT) 				        	AS LAST_MTH_TOT_STD_COST_AMT,
+		  (SUM(ISS.INVTY_QTY) * MAX(MDSE.LAST_MTH_TOT_STD_COST_AMT)) 	AS LAST_DLY_MDSE_SMRY_AMT,
+		  MAX(MDSE.COA_ACCT_CD)                                         AS COA_ACCT_CD
+		FROM 	
+		  INVTY_SNAP_SHOT_V 	ISS,
+		  MDSE_DLY_SNAP_SHOT 	MDSE
+		WHERE 	ISS.EZCANCELFLAG 		= '0'
+		AND 	(MDSE.EZCANCELFLAG  	= '0'  OR MDSE.EZCANCELFLAG IS NULL)
+		AND 	ISS.GLBL_CMPY_CD 		= #glblCmpyCd#		
+		AND 	ISS.GLBL_CMPY_CD 		= MDSE.GLBL_CMPY_CD
+		AND 	ISS.MDSE_CD 			= MDSE.MDSE_CD
+	   <isNotNull property="dateEnd">
+		AND 	ISS.INVTY_SNAP_SHOT_DT BETWEEN #dateStart# AND #dateEnd#
+       </isNotNull>
+       <isNull property="dateEnd">
+		AND 	ISS.INVTY_SNAP_SHOT_DT = #dateStart#
+       </isNull>
+		GROUP BY 
+				ISS.INVTY_SNAP_SHOT_DT,
+				ISS.MDSE_CD
+		ORDER BY 
+				ISS.INVTY_SNAP_SHOT_DT
+	</statement>
+
+<!-- 
+    <statement id="getResultNFAB088001" parameterClass="Map" resultClass="Map">
+		SELECT
+		  ISS.INVTY_SNAP_SHOT_DT 										AS INVTY_SNAP_SHOT_DT,
+		  ISS.MDSE_CD 													AS MDSE_CD, 
+		  MAX(MDSE.COA_PROD_CD) 										AS COA_PROD_CD, 
+		  MAX(MDSE.RGTN_STS_CD) 										AS RGTN_STS_CD, 
+		  SUM(ISS.INVTY_QTY) 											AS INVTY_TOT_QTY, 
+		  MAX(MDSE.THIS_MTH_TOT_STD_COST_AMT) 							AS THIS_MTH_TOT_STD_COST_AMT,
+		  (SUM(ISS.INVTY_QTY) * MAX(MDSE.THIS_MTH_TOT_STD_COST_AMT)) 	AS DLY_MDSE_SMRY_AMT,
+		  MAX(MDSE.LAST_MTH_TOT_STD_COST_AMT) 				        	AS LAST_MTH_TOT_STD_COST_AMT,
+		  (SUM(ISS.INVTY_QTY) * MAX(MDSE.LAST_MTH_TOT_STD_COST_AMT)) 	AS LAST_DLY_MDSE_SMRY_AMT,
+		  MAX(MDSE.COA_ACCT_CD)                                         AS COA_ACCT_CD
+		FROM 	
+		  INVTY_SNAP_SHOT 		ISS, 
+		  MDSE_DLY_SNAP_SHOT 	MDSE, 
+		  LOC_STS				LS
+		WHERE 	ISS.EZCANCELFLAG 		= '0'
+		AND 	(MDSE.EZCANCELFLAG  	= '0'  OR MDSE.EZCANCELFLAG IS NULL)
+		AND 	(LS.EZCANCELFLAG  		= '0'  OR LS.EZCANCELFLAG IS NULL)
+		AND 	ISS.GLBL_CMPY_CD 		= #glblCmpyCd#		
+		AND 	ISS.GLBL_CMPY_CD 		= MDSE.GLBL_CMPY_CD
+		AND 	ISS.GLBL_CMPY_CD 		= LS.GLBL_CMPY_CD
+		AND 	ISS.MDSE_CD 			= MDSE.MDSE_CD		
+		AND   	ISS.LOC_STS_CD   		= LS.LOC_STS_CD(+)		
+		AND   	LS.ASSET_CD 			!= #assetCdF#
+		AND 	ISS.INVTY_SNAP_SHOT_DT BETWEEN #dateStart# AND #dateEnd#
+		AND NOT EXISTS
+		(
+			SELECT '*' 
+			FROM 
+				INVTY_LOC_V ILV
+			WHERE 
+					ILV.EZCANCELFLAG    = '0'
+			AND 	ISS.GLBL_CMPY_CD    = ILV.GLBL_CMPY_CD
+			AND		ISS.INVTY_LOC_CD 	= ILV.INVTY_LOC_CD
+			AND 	ISS.LOC_STS_CD 		= #locStsCdInTransit#
+			AND 	(ILV.INVTY_LOC_TP_CD = #invtyLocTpCdWarehouse#
+			OR       ILV.INVTY_LOC_TP_CD = #invtyLocTpCdConsignee#)
+		)
+		AND NOT EXISTS
+        (
+            SELECT '*' 
+            FROM 
+                INVTY_LOC_V ILV,
+                VND_TP_RELN VTR
+            WHERE 
+		            ILV.EZCANCELFLAG    = '0'
+			AND 	ISS.GLBL_CMPY_CD    = ILV.GLBL_CMPY_CD
+            AND     ISS.INVTY_LOC_CD    = ILV.INVTY_LOC_CD
+            AND     (VTR.EZCANCELFLAG   = '0' OR VTR.EZCANCELFLAG IS NULL)
+            AND     ILV.GLBL_CMPY_CD    = VTR.GLBL_CMPY_CD(+)
+            AND     ILV.INVTY_LOC_CD    = VTR.VND_CD(+)
+            AND     ISS.LOC_STS_CD      = #locStsCdInTransit#
+            AND     ILV.INVTY_LOC_TP_CD = #invtyLocTpCdVendor#
+            AND     (VTR.VND_TP_CD     != #vndTpKitting#
+            AND      VTR.VND_TP_CD     != #vndTpRefurbish#) 
+        )
+		GROUP BY 
+				ISS.INVTY_SNAP_SHOT_DT,
+				ISS.MDSE_CD
+		ORDER BY 
+				ISS.INVTY_SNAP_SHOT_DT
+	</statement>
+ -->
+</sqlMap>

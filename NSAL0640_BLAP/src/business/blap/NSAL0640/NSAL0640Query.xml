@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NSAL0640Query">
+    <typeAlias alias="NSAL0640_ASMsg" type="business.blap.NSAL0640.NSAL0640_ASMsg"/>
+
+    <statement id="getContrInfo" parameterClass="Map" resultMap="result.getContrInfo">
+        SELECT
+             DCH.EZUPTIME                       AS EZUPTIME
+            ,DCH.EZUPTIMEZONE                   AS EZUPTIMEZONE
+            ,DCH.DS_CONTR_PK                    AS DS_CONTR_PK
+            ,DCH.DS_CONTR_STS_CD                AS DS_CONTR_STS_CD
+<!-- START 2018/06/29 T.Ogura [QC#26786,MOD] -->
+<!--        ,CASE WHEN DCSV.DS_CONTR_STS_CD = #dsContrStsCdIsExpired# THEN 'Y' -->
+<!--              WHEN DCSV.DS_CONTR_STS_CD = #dsContrStsCdIsCancelled# THEN 'Y' -->
+<!--              WHEN DCSV.DS_CONTR_STS_CD = #dsContrStsCdIsTerminated# THEN 'Y' -->
+<!--              WHEN DCSV.DS_CONTR_STS_CD = #dsContrStsCdIsApproved# THEN 'Y' -->
+<!--              WHEN DCSV.DS_CONTR_STS_CD = #dsContrStsCdIsEffectived# THEN 'Y' -->
+<!--              WHEN DCSV.CONTR_HLD_FLG   = 'Y' THEN 'Y' -->
+<!--              WHEN DCSV.BLLG_HLD_FLG    = 'Y' THEN 'Y' -->
+            ,CASE WHEN DCSV.DS_CONTR_CTRL_STS_CD = #dsContrCtrlStsCdIsCancelled# THEN 'Y'
+                  WHEN DCSV.DS_CONTR_CTRL_STS_CD = #dsContrCtrlStsCdIsExpired# THEN 'Y'
+                  WHEN DCSV.DS_CONTR_CTRL_STS_CD = #dsContrCtrlStsCdIsExpiredHold# THEN 'Y'
+                  WHEN DCSV.DS_CONTR_CTRL_STS_CD = #dsContrCtrlStsCdIsTerminated# THEN 'Y'
+                  WHEN DCSV.DS_CONTR_CTRL_STS_CD = #dsContrCtrlStsCdIsTerminatedHold# THEN 'Y'
+<!-- END   2018/06/29 T.Ogura [QC#26786,MOD] -->
+                  ELSE 'N'
+             END                                AS XX_DPLY_CTRL_FLG
+            ,DCH.DS_CONTR_CATG_CD               AS DS_CONTR_CATG_CD
+            ,DCH.DS_CONTR_NUM                   AS DS_CONTR_NUM
+            ,TRIM(DCH.DS_CONTR_CATG_CD
+                || '-' || DCH.DS_CONTR_NUM)     AS XX_SCR_ITEM_34_TXT
+            ,STC.DS_ACCT_NM                     AS DS_ACCT_NM
+            ,DCH.CONTR_VRSN_EFF_FROM_DT         AS CONTR_VRSN_EFF_FROM_DT
+            ,DCH.CONTR_VRSN_EFF_THRU_DT         AS CONTR_VRSN_EFF_THRU_DT
+            ,DCH.SVC_LINE_BIZ_CD                AS SVC_LINE_BIZ_CD
+            ,DCH.SVC_CONTR_BR_CD                AS SVC_CONTR_BR_CD
+            ,SCB.SVC_CONTR_BR_DESC_TXT          AS SVC_CONTR_BR_DESC_TXT
+            ,TRIM(DCH.SVC_LINE_BIZ_CD 
+<!-- START 2016/04/04 [QC#4916, MOD] -->
+                || NVL2(DCH.SVC_LINE_BIZ_CD, '-' || SCB.SVC_CONTR_BR_DESC_TXT, SCB.SVC_CONTR_BR_DESC_TXT)) AS XX_GENL_FLD_AREA_TXT
+<!-- END 2016/04/04 [QC#4916, MOD] -->
+            ,TOC.TOC_CD                         AS TOC_CD
+            ,TOC.TOC_NM                         AS TOC_NM
+            ,DCH.CONTR_ADMIN_PSN_CD             AS PSN_CD
+            ,RTRIM(PSN.PSN_FIRST_NM || ' ' || PSN.PSN_LAST_NM) AS PSN_NM
+        FROM
+             DS_CONTR       DCH
+            ,DS_CONTR_STS_V DCSV
+            ,SELL_TO_CUST   STC
+            ,SVC_CONTR_BR   SCB
+            ,TOC            TOC
+            ,S21_PSN        PSN
+        WHERE
+                DCH.GLBL_CMPY_CD        = #glblCmpyCd#
+            <iterate property="dsContrPkList" var="dsContrPk[]" open="AND DCH.DS_CONTR_PK IN (" close=")" conjunction=",">
+                #dsContrPk[]#
+            </iterate>
+            AND DCH.EZCANCELFLAG        = '0'
+            AND DCH.GLBL_CMPY_CD        = DCSV.GLBL_CMPY_CD
+            AND DCH.DS_CONTR_PK         = DCSV.DS_CONTR_PK
+            AND DCSV.EZCANCELFLAG       = '0'
+            AND DCH.DS_CONTR_CATG_CD    &lt;&gt; #dsContrCatgCdIsWty#
+            AND DCH.GLBL_CMPY_CD        = STC.GLBL_CMPY_CD    (+)
+            AND DCH.DS_ACCT_NUM         = STC.SELL_TO_CUST_CD (+)
+            AND STC.EZCANCELFLAG (+)    = '0'
+            AND DCH.GLBL_CMPY_CD        = SCB.GLBL_CMPY_CD    (+)
+            AND DCH.SVC_CONTR_BR_CD     = SCB.SVC_CONTR_BR_CD (+)
+            AND SCB.EZCANCELFLAG (+)    = '0'
+            AND DCH.GLBL_CMPY_CD        = TOC.GLBL_CMPY_CD    (+)
+            AND DCH.TOC_CD              = TOC.TOC_CD          (+)
+            AND TOC.EZCANCELFLAG (+)    = '0'
+            AND DCH.GLBL_CMPY_CD        = PSN.GLBL_CMPY_CD    (+)
+            AND DCH.CONTR_ADMIN_PSN_CD  = PSN.PSN_CD          (+)
+            AND PSN.EFF_FROM_DT (+)                      &lt;= #slsDt#
+            AND NVL(PSN.EFF_THRU_DT (+), #defEffThruDt#) &gt;= #slsDt#
+            AND PSN.EZCANCELFLAG (+)    = '0'
+            AND ROWNUM                  &lt;= #limitCnt#
+        ORDER BY
+             DCH.DS_CONTR_CATG_CD ASC NULLS LAST
+            ,DCH.DS_CONTR_NUM ASC NULLS LAST
+    </statement>
+    <resultMap id="result.getContrInfo" class="NSAL0640_ASMsg">
+        <result property="ezUpTime_A1"           column="EZUPTIME"               javaType="EZDSStringItem" />
+        <result property="ezUpTimeZone_A1"       column="EZUPTIMEZONE"           javaType="EZDSStringItem" />
+        <result property="dsContrPk_A1"          column="DS_CONTR_PK"            javaType="EZDSBigDecimalItem" />
+        <result property="dsContrStsCd_A1"       column="DS_CONTR_STS_CD"        javaType="EZDSStringItem" />
+        <result property="xxDplyCtrlFlg_A1"      column="XX_DPLY_CTRL_FLG"       javaType="EZDSStringItem" />
+        <result property="xxScrItem34Txt_A1"     column="XX_SCR_ITEM_34_TXT"     javaType="EZDSStringItem" />
+        <result property="dsAcctNm_A1"           column="DS_ACCT_NM"             javaType="EZDSStringItem" />
+        <result property="contrVrsnEffFromDt_A1" column="CONTR_VRSN_EFF_FROM_DT" javaType="EZDSDateItem" />
+        <result property="contrVrsnEffThruDt_A1" column="CONTR_VRSN_EFF_THRU_DT" javaType="EZDSDateItem" />
+        <result property="svcLineBizCd_A1"       column="SVC_LINE_BIZ_CD"        javaType="EZDSStringItem" />
+        <result property="svcContrBrCd_A1"       column="SVC_CONTR_BR_CD"        javaType="EZDSStringItem" />
+        <result property="svcContrBrDescTxt_A1"  column="SVC_CONTR_BR_DESC_TXT"  javaType="EZDSStringItem" />
+        <result property="xxGenlFldAreaTxt_A1"   column="XX_GENL_FLD_AREA_TXT"   javaType="EZDSStringItem" />
+        <result property="tocCd_A1"              column="TOC_CD"                 javaType="EZDSStringItem" />
+        <result property="tocNm_A1"              column="TOC_NM"                 javaType="EZDSStringItem" />
+        <result property="psnCd_A1"              column="PSN_CD"                 javaType="EZDSStringItem" />
+        <result property="xxPsnNm_A1"            column="PSN_NM"                 javaType="EZDSStringItem" />
+    </resultMap>
+<!-- START 2016/04/01 [QC#4916, ADD] -->
+    <statement id="findBranchNameInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+             SCB.SVC_CONTR_BR_CD         AS  SVC_CONTR_BR_CD
+            ,SCB.SVC_CONTR_BR_DESC_TXT   AS  SVC_CONTR_BR_DESC_TXT
+            ,SR.SVC_LINE_BIZ_CD          AS  SVC_LINE_BIZ_CD
+        FROM 
+             SVC_CONTR_BR    SCB
+            ,SVC_RG_BR_RELN  SRBR
+            ,SVC_RG          SR
+        WHERE
+                SCB.EZCANCELFLAG          = '0'
+            AND SCB.GLBL_CMPY_CD          = #glblCmpyCd#
+            AND SCB.SVC_CONTR_BR_DESC_TXT LIKE #branchName#
+            AND SCB.SVC_CONTR_BR_ACTV_FLG = 'Y'
+            AND SCB.EFF_FROM_DT           &lt;= #slsDt#
+            AND (SCB.EFF_THRU_DT          &gt;= #slsDt# OR SCB.EFF_THRU_DT IS NULL)
+            AND SRBR.EZCANCELFLAG         = '0'
+            AND SRBR.GLBL_CMPY_CD         = SCB.GLBL_CMPY_CD
+            AND SRBR.SVC_CONTR_BR_CD      = SCB.SVC_CONTR_BR_CD
+            AND SR.EZCANCELFLAG           = '0'
+            AND SR.GLBL_CMPY_CD           = SRBR.GLBL_CMPY_CD
+            AND SR.SVC_RG_PK              = SRBR.SVC_RG_PK
+            AND SR.SVC_LINE_BIZ_CD        = #lob#
+            AND SR.SVC_RG_ACTV_FLG        = 'Y'
+            AND SR.EFF_FROM_DT            &lt;= #slsDt#
+            AND (SR.EFF_THRU_DT           &gt;= #slsDt# OR SR.EFF_THRU_DT IS NULL)
+    </statement>
+    <statement id="findRepNameInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+             PSN.PSN_CD          AS  PSN_CD
+            ,PSN.PSN_FIRST_NM    AS  FIRST_NM
+            ,PSN.PSN_LAST_NM     AS  LAST_NM
+        FROM 
+             S21_PSN    PSN
+        WHERE
+                PSN.EZCANCELFLAG    = '0'
+            AND PSN.GLBL_CMPY_CD    = #glblCmpyCd#
+            AND PSN.PSN_FIRST_NM    LIKE #firstName#
+            <isNotNull property="lastName">
+            AND PSN.PSN_LAST_NM     LIKE #lastName#
+            </isNotNull>
+            <!-- START 2019/02/12 S.Kitamura [QC#30264, DEL] -->
+            <!-- AND PSN.PSN_TP_CD       = #psnTpCd# -->
+            <!-- END 2019/02/12 S.Kitamura [QC#30264, DEL] -->
+            AND PSN.EFF_FROM_DT                      &lt;= #slsDt#
+            AND NVL(PSN.EFF_THRU_DT, #defEffThruDt#) &gt;= #slsDt#
+    </statement>
+    <statement id="countSvcBrResrcReln" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            COUNT(*)  AS CNT
+        FROM
+             SVC_BR_RESRC_RELN A
+            ,SVC_CONTR_BR      B
+            ,SVC_RG_BR_RELN    C
+            ,SVC_RG            D
+        WHERE
+            A.GLBL_CMPY_CD                  =  #glblCmpyCd#
+        AND A.EZCANCELFLAG                  =  '0'
+        AND A.SVC_CONTR_BR_CD               =  #svcContrBrCd#
+        AND A.PSN_CD                        =  #psnCd#
+        AND A.SVC_BR_RESRC_ACTV_FLG         =  'Y'
+        AND A.EFF_FROM_DT                      &lt;= #slsDt#
+        AND NVL(A.EFF_THRU_DT, #defEffThruDt#) &gt;= #slsDt#
+        AND A.GLBL_CMPY_CD                  =  B.GLBL_CMPY_CD
+        AND A.SVC_CONTR_BR_CD               =  B.SVC_CONTR_BR_CD
+        AND B.EZCANCELFLAG                  =  '0'
+        AND B.SVC_CONTR_BR_ACTV_FLG         =  'Y'
+        AND B.EFF_FROM_DT                      &lt;= #slsDt#
+        AND NVL(B.EFF_THRU_DT, #defEffThruDt#) &gt;= #slsDt#
+        AND B.GLBL_CMPY_CD                  =  C.GLBL_CMPY_CD
+        AND B.SVC_CONTR_BR_CD               =  C.SVC_CONTR_BR_CD
+        AND C.EZCANCELFLAG                  =  '0'
+        AND C.GLBL_CMPY_CD                  =  D.GLBL_CMPY_CD
+        AND C.SVC_RG_PK                     =  D.SVC_RG_PK
+        AND D.EZCANCELFLAG                  =  '0'
+        AND D.SVC_RG_ACTV_FLG               =  'Y'
+        AND D.EFF_FROM_DT                      &lt;= #slsDt#
+        AND NVL(D.EFF_THRU_DT, #defEffThruDt#) &gt;= #slsDt#
+    </statement>
+<!-- END 2016/04/01 [QC#4916, ADD] -->
+<!-- START 2018/05/08 [QC#25852, ADD] -->
+    <statement id="findRepInfo" parameterClass="Map" resultClass="BigDecimal">
+       SELECT
+            COUNT(*) AS CNT
+       FROM
+            S21_PSN PSN
+       WHERE
+               PSN.GLBL_CMPY_CD                         = #glblCmpyCd#
+           AND PSN.PSN_CD                               = #psnCd#
+           AND PSN.EFF_FROM_DT                      &lt;= #slsDt#
+           AND NVL(PSN.EFF_THRU_DT, #defEffThruDt#) &gt;= #slsDt#
+    </statement>
+<!-- END 2018/05/08 [QC#25852, ADD] -->
+</sqlMap>

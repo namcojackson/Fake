@@ -1,0 +1,118 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NMAL7240Query">
+
+    <typeAlias alias="NMAL7240SMsg"    type="business.blap.NMAL7240.NMAL7240SMsg"/>
+    <typeAlias alias="NMAL7240_ASMsg"  type="business.blap.NMAL7240.NMAL7240_ASMsg"/>
+
+    <statement id="search" parameterClass="Map" resultClass="Map">
+        SELECT
+            *
+        FROM
+            (SELECT
+                FR.FRT_RATE_SHPG_PK       AS FRT_RATE_SHPG_PK
+                ,FR.LINE_BIZ_TP_CD        AS LINE_BIZ_TP_CD
+                ,LT.LINE_BIZ_TP_DESC_TXT  AS LINE_BIZ_TP_DESC_TXT
+                ,FR.FRT_ZONE_NUM          AS FRT_ZONE_NUM
+                ,FR.SHPG_SVC_LVL_CD       AS SHPG_SVC_LVL_CD
+                ,SL.SHPG_SVC_LVL_DESC_TXT AS SHPG_SVC_LVL_DESC_TXT
+                ,FR.FROM_SCL_QTY          AS FROM_SCL_QTY
+                ,FR.QTY_UNIT_TP_CD        AS QTY_UNIT_TP_CD
+                ,FR.SHPG_FRT_RATE         AS SHPG_FRT_RATE
+                ,FR.FRT_RATE_CCY_CD       AS FRT_RATE_CCY_CD
+                ,FR.FRT_RATE_PER_NUM      AS FRT_RATE_PER_NUM
+                ,FR.PER_UNIT_TP_CD        AS PER_UNIT_TP_CD
+                ,FR.EFF_FROM_DT           AS EFF_FROM_DT
+                ,FR.EFF_THRU_DT           AS EFF_THRU_DT
+                ,FR.EZUPTIME              AS EZUPTIME
+                ,FR.EZUPTIMEZONE          AS EZUPTIMEZONE
+                ,FR.EZINTIME              AS XX_REC_HIST_CRAT_TS
+                ,FR.EZINUSERID            AS XX_REC_HIST_CRAT_BY_NM
+                ,FR.EZUPTIME              AS XX_REC_HIST_UPD_TS
+                ,FR.EZUPUSERID            AS XX_REC_HIST_UPD_BY_NM
+                ,FR.EZTABLEID             AS XX_REC_HIST_TBL_NM
+            FROM
+                FRT_RATE_SHPG FR
+                ,LINE_BIZ_TP  LT
+                ,SHPG_SVC_LVL SL
+            WHERE
+                FR.GLBL_CMPY_CD             = #glblCmpyCd#
+            AND FR.EZCANCELFLAG             = '0'
+            <isNotNull property="lineBizTpCd">
+                AND FR.LINE_BIZ_TP_CD       = #lineBizTpCd#
+            </isNotNull>
+            <isNotNull property="frtZoneNum">
+                AND FR.FRT_ZONE_NUM         = #frtZoneNum#
+            </isNotNull>
+            AND FR.GLBL_CMPY_CD             = SL.GLBL_CMPY_CD
+            AND SL.EZCANCELFLAG             = '0'
+            AND FR.SHPG_SVC_LVL_CD          = SL.SHPG_SVC_LVL_CD
+            <iterate property="shpgSvcLvlDescTxtList" var="shpgSvcLvlDescTxt[]" open="AND  SL.SHPG_SVC_LVL_DESC_TXT IN (" close=")" conjunction= ", " >
+                #shpgSvcLvlDescTxt[]#
+            </iterate>
+            <isNotNull property="actvFlg">
+                AND FR.EFF_FROM_DT      &lt;= #salesDate#
+            </isNotNull>
+            <isNotNull property="effFromDt">
+                AND FR.EFF_FROM_DT      &gt;= #effFromDt#
+            </isNotNull>
+            <isNotNull property="actvFlg">
+                AND (FR.EFF_THRU_DT     &gt;= #salesDate# OR FR.EFF_THRU_DT IS NULL)
+            </isNotNull>
+            <isNotNull property="effThruDt">
+                AND (FR.EFF_THRU_DT     &lt;= #effThruDt# OR FR.EFF_THRU_DT IS NULL)
+            </isNotNull>
+            AND FR.GLBL_CMPY_CD             = LT.GLBL_CMPY_CD(+)
+            AND LT.EZCANCELFLAG(+)          = '0'
+            AND FR.LINE_BIZ_TP_CD           = LT.LINE_BIZ_TP_CD(+)
+            ORDER BY
+                LT.LINE_BIZ_TP_DESC_TXT   ASC
+                ,FR.FRT_ZONE_NUM          ASC
+                ,SL.SHPG_SVC_LVL_DESC_TXT ASC
+                ,FR.FROM_SCL_QTY          ASC
+                ,FR.EFF_FROM_DT          DESC)
+        <!-- QC#12938
+        WHERE
+            ROWNUM &lt;= #rowNum#
+         -->
+        <isNotNull property="rowNum">
+            WHERE ROWNUM &lt;= #rowNum#
+        </isNotNull>
+    </statement>
+
+    <statement id="checkActiveDuplicationZone" parameterClass="Map" resultClass="Map">
+        SELECT
+            FR.FRT_RATE_SHPG_PK             AS FRT_RATE_SHPG_PK
+        FROM
+            FRT_RATE_SHPG FR
+        WHERE
+            FR.GLBL_CMPY_CD                     = #glblCmpyCd#
+        AND FR.EZCANCELFLAG                     = '0'
+        AND FR.LINE_BIZ_TP_CD                   = #lineBizTpCd#
+        AND FR.FRT_ZONE_NUM                     = #frtZoneNum#
+        AND FR.SHPG_SVC_LVL_CD                  = #shpgSvcLvlCd#
+        AND FR.FROM_SCL_QTY                     = #fromSclQty#
+        AND FR.QTY_UNIT_TP_CD                   = #qtyUnitTpCd#
+        AND NVL(FR.EFF_THRU_DT, #highDate#) &gt;= #effFromDt#
+        <isNotNull property="effThruDt">
+            AND (FR.EFF_FROM_DT             &lt;= #effThruDt#)
+        </isNotNull>
+        <isNull property="effThruDt">
+            AND (FR.EFF_FROM_DT             &lt;= #highDate#)
+        </isNull>
+    </statement>
+
+    <statement id="getSavedSearchOptionList" parameterClass="Map" resultClass="Map">
+        SELECT
+               SSO.SRCH_OPT_PK
+             , SSO.SRCH_OPT_NM
+         FROM
+             SAVE_SRCH_OPT SSO 
+         WHERE
+             SSO.GLBL_CMPY_CD        = #glblCmpyCd#
+             AND SSO.SRCH_OPT_APL_ID = #srchOptAplId#
+             AND SSO.SRCH_OPT_USR_ID = #srchOptUsrId#
+             AND SSO.EZCANCELFLAG    = '0'
+         ORDER BY
+               SSO.SRCH_OPT_NM
+    </statement>
+</sqlMap>

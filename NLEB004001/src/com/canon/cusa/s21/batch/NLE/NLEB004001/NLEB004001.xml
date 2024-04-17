@@ -1,0 +1,147 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NLEB004001">
+
+    <statement id="getTargetDsAssetTrx" parameterClass="Map">
+        SELECT
+                DAT.DS_ASSET_TRX_PK
+               ,DAT.ASSET_TRX_DT
+               ,DAT.TRX_CD
+               ,DAT.TRX_RSN_CD
+               ,DAT.ASSET_TP_CD
+               ,DAT.BILL_TO_CUST_CD
+               ,CASE WHEN M.MDSE_CD IS NULL THEN NULL ELSE DAT.MDSE_CD END MDSE_CD
+               ,DAT.SLS_REP_TOC_CD
+               ,DAT.AP_VND_INV_NUM
+               ,DAT.SER_NUM
+               ,DAT.INIT_BOOK_AMT
+               ,DECODE(DAT.CUR_VAL_AMT, 0 , DAT.PREV_VAL_AMT, DAT.CUR_VAL_AMT) AS CUR_VAL_AMT
+               ,DAT.PREV_VAL_AMT
+               ,DAT.DEPC_VAL_AMT
+               ,DAM.EXP_COA_CMPY_CD   AS COA_CMPY_CD
+               ,DAM.EXP_COA_BR_CD     AS COA_BR_CD
+               ,DAM.EXP_COA_CC_CD     AS COA_CC_CD
+               ,CASE WHEN DAT.TRX_CD = #trxAdj# AND DAT.TRX_RSN_CD = #trxRsn# THEN DAM.ADJ_COA_ACCT_CD ELSE DAM.EXP_COA_ACCT_CD END AS COA_ACCT_CD
+               ,DAM.EXP_COA_PROD_CD   AS COA_PROD_CD
+               ,DAM.EXP_COA_CH_CD     AS COA_CH_CD
+               ,DAM.EXP_COA_AFFL_CD   AS COA_AFFL_CD
+               ,DAM.EXP_COA_PROJ_CD   AS COA_PROJ_CD
+               ,DAM.EXP_COA_EXTN_CD   AS COA_EXTN_CD
+               ,DAT.SYS_SRC_CD
+               <!-- CSA NEW  -->
+               ,NVL(DAM.SELL_TO_CUST_CD, SMM.CUR_LOC_ACCT_NUM ) AS SELL_TO_CUST_CD
+               ,DAM.SHIP_TO_CUST_CD
+               ,DAM.SLD_TO_CUST_LOC_CD
+               ,DAM.SHIP_TO_CUST_ACCT_CD
+               ,DAM.VND_CD
+               ,NVL(DAM.CPO_ORD_NUM, SMM.CPO_ORD_NUM)                        AS CPO_ORD_NUM 
+               ,DAM.PO_ORD_NUM
+               ,DAM.SVC_MACH_MSTR_PK
+               ,RS.INVTY_LOC_CD              AS RTRN_WH_CD
+               ,( NVL(DAM.ORIG_STD_COST_AMT,0) - NVL(DAM.INIT_BOOK_AMT, 0) ) AS ASSET_ADJ_AMT
+               ,DAM.PRNT_DS_ASSET_MSTR_PK
+               <!-- start 2016/09/01 add QC#13360 -->
+               ,DAM.DS_ASSET_MSTR_PK
+               ,DAM.ASSET_COA_CMPY_CD
+               ,DAM.ASSET_COA_BR_CD
+               ,DAM.ASSET_COA_CC_CD
+               ,DAM.ASSET_COA_ACCT_CD
+               ,DAM.ASSET_COA_PROD_CD
+               ,DAM.ASSET_COA_CH_CD
+               ,DAM.ASSET_COA_AFFL_CD
+               ,DAM.ASSET_COA_PROJ_CD
+               ,DAM.ASSET_COA_EXTN_CD
+               <!-- end 2016/09/01 -->
+        FROM
+                DS_ASSET_TRX         DAT
+               ,DS_ASSET_MSTR        DAM
+               ,SVC_MACH_MSTR        SMM
+               ,RTL_SWH              RS
+               ,MDSE                 M
+        WHERE
+                DAT.GLBL_CMPY_CD      = #glblCmpyCd#
+        AND     DAT.AJE_IF_CPLT_FLG   = #ajeIfCpltFlg#
+        AND     DAT.AJE_IF_REQ_FLG    = #ajeIfReqFlg#
+        AND     DAT.EZCANCELFLAG      = '0'
+        AND     DAT.GLBL_CMPY_CD      = DAM.GLBL_CMPY_CD(+)
+        AND     DAT.DS_ASSET_MSTR_PK  = DAM.DS_ASSET_MSTR_PK(+)
+        AND     DAM.EZCANCELFLAG(+)   = '0'
+        AND     DAM.SVC_MACH_MSTR_PK  = SMM.SVC_MACH_MSTR_PK(+)
+        AND     DAM.GLBL_CMPY_CD      = SMM.GLBL_CMPY_CD(+)
+        AND     SMM.EZCANCELFLAG(+)   = '0'
+        AND     SMM.IND_CUR_LOC_NUM   = RS.INVTY_LOC_CD (+)
+        AND     SMM.GLBL_CMPY_CD      = RS.GLBL_CMPY_CD (+)
+        AND     RS.RTL_SWH_DSBL_FLG(+)= #rtlSwhDsblFlg#
+        AND     RS.EZCANCELFLAG(+)    = '0'
+        AND     DAM.GLBL_CMPY_CD      = M.GLBL_CMPY_CD(+)
+        AND     DAM.MDSE_CD           = M.MDSE_CD(+)
+        AND     M.EZCANCELFLAG(+)     = '0'
+    </statement>
+
+    <statement id="getDefultCoa" parameterClass="Map">
+        SELECT
+              BC.ASSET_COA_ACCT_CD 
+            , BC.DEPC_COA_ACCT_CD AS COA_ACCT_CD
+            , M.COA_MDSE_TP_CD AS COA_PROJ_CD
+            , M.COA_PROD_CD
+            ,(CASE WHEN CB.COA_BR_TP_CD = #newcore# THEN T.COA_BR_CD
+                   ELSE #defBrNewcore# 
+              END) AS ASSET_COA_BR_CD
+            ,(CASE WHEN CB.COA_BR_TP_CD = #newcore# THEN T.COA_CC_CD
+                   ELSE #defCcNewcore# 
+              END) AS ASSET_COA_CC_CD
+            , T.COA_EXTN_CD
+            , T.COA_BR_CD
+            , T.COA_CC_CD
+            <!-- QC#22084 Modify 10/26/2017 START-->
+            , COALESCE(STC.COA_CH_CD, STC_ACCT.COA_CH_CD, #defChNewcore#) AS COA_CH_CD
+            , NVL(STC_ACCT.COA_AFFL_CD, #defAfNewcore#)  AS COA_AFFL_CD
+            <!-- QC#22084 Modify 10/26/2017 END -->
+        FROM
+              DS_ASSET_MSTR      A
+            , ASSET_BOOK_CTRL    BC
+            , MDSE_DLY_SNAP_SHOT M
+            , TOC_DLY_SNAP_SHOT  T
+            , COA_BR             CB
+            , SVC_MACH_MSTR      SMM
+            , SHIP_TO_CUST       STC
+            <!-- QC#22084 Modify 10/26/2017 START-->
+            , SELL_TO_CUST       STC_ACCT
+            <!-- QC#22084 Modify 10/26/2017 END-->
+        WHERE
+                A.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND A.DS_ASSET_MSTR_PK = #dsAssetMstrPk#
+            AND A.EZCANCELFLAG     = '0'
+            AND A.GLBL_CMPY_CD  = BC.GLBL_CMPY_CD
+            AND A.ASSET_TP_CD   = BC.ASSET_TP_CD
+            AND BC.EFF_FROM_DT &lt;= #slsDt#
+            AND (
+                    BC.EFF_THRU_DT &gt;= #slsDt#
+                 OR BC.EFF_THRU_DT IS NULL
+                 )
+            AND BC.EZCANCELFLAG = '0'
+            AND A.GLBL_CMPY_CD     = M.GLBL_CMPY_CD (+)
+            AND A.MDSE_CD          = M.MDSE_CD (+)
+            AND M.LTST_REC_FLG (+) = 'Y'
+            AND M.EZCANCELFLAG (+) = '0'
+            AND A.GLBL_CMPY_CD     = T.GLBL_CMPY_CD (+)
+            AND A.SLS_REP_TOC_CD   = T.TOC_CD (+)
+            AND T.EZCANCELFLAG (+) = '0'
+            AND T.GLBL_CMPY_CD      = CB.GLBL_CMPY_CD (+)
+            AND T.COA_BR_CD         = CB.COA_BR_CD (+)
+            AND CB.EZCANCELFLAG (+) = '0'
+            AND A.GLBL_CMPY_CD       = SMM.GLBL_CMPY_CD (+)
+            AND A.SVC_MACH_MSTR_PK   = SMM.SVC_MACH_MSTR_PK (+)
+            AND SMM.EZCANCELFLAG (+) = '0'
+            AND SMM.GLBL_CMPY_CD       = STC.GLBL_CMPY_CD (+)
+            <!-- QC#22084 Modify 10/26/2017 START-->
+            AND SMM.CUR_LOC_NUM    = STC.SHIP_TO_CUST_CD (+)
+            <!-- QC#22084 Modify 10/26/2017 END-->
+            AND STC.EZCANCELFLAG (+)   = '0'
+            <!-- QC#22084 Modify 10/26/2017 START-->
+            AND SMM.GLBL_CMPY_CD       = STC_ACCT.GLBL_CMPY_CD (+)
+            AND SMM.CUR_LOC_ACCT_NUM   = STC_ACCT.SELL_TO_CUST_CD (+)
+            AND STC_ACCT.EZCANCELFLAG (+)   = '0'
+            <!-- QC#22084 Modify 10/26/2017 END-->
+    </statement>
+
+</sqlMap>

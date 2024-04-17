@@ -1,0 +1,1399 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+
+<sqlMap namespace="NSZC100001">
+
+    <!-- START 2017/08/21 M.Naito [QC#8661, MOD] -->
+    <statement id="getNonFleetContrInfo" parameterClass="Map" resultClass="Map">
+        WITH BLLG_MTR AS (
+                SELECT
+                     CPE.GLBL_CMPY_CD
+                    ,CPE.DS_CONTR_DTL_PK
+                    ,CPE.DS_CONTR_BLLG_MTR_PK
+                    ,CPE.DS_CONTR_PRC_EFF_SQ_NUM
+                    ,CPE.BLLG_CYCLE_CD
+                    ,CBM.BLLG_MTR_LB_CD
+<!-- QC#26631 DEL START-->
+<!-- ,CBM.SVC_PHYS_MTR_PK -->
+<!-- QC#26631 DEL END-->
+                    ,ML.MTR_LB_SORT_NUM
+                    ,ML.MTR_LB_DESC_TXT
+                    ,CPE.CONTR_PRC_EFF_FROM_DT
+                    ,CPE.CONTR_PRC_EFF_THRU_DT
+                    ,PEM.CONTR_XS_COPY_PK
+                    ,PEM.XS_MTR_COPY_QTY
+                    ,PEM.XS_MTR_AMT_RATE
+                    ,PEM.XS_MTR_FIRST_FLG
+                    ,(
+                    SELECT 
+                        NVL(MIN (NEXT.XS_MTR_COPY_QTY), 0)
+                    FROM
+                        (
+                        SELECT
+                            PEM_NEXT.XS_MTR_COPY_QTY
+                        FROM
+                            DS_CONTR_PRC_EFF_MTR    PEM_NEXT
+                        WHERE
+                                PEM_NEXT.GLBL_CMPY_CD      = #glblCmpyCd#
+                            AND PEM_NEXT.EZCANCELFLAG      = '0'
+                            AND PEM_NEXT.DS_CONTR_PRC_EFF_PK  = PEM.DS_CONTR_PRC_EFF_PK
+                            AND PEM_NEXT.XS_MTR_COPY_QTY &gt; PEM.XS_MTR_COPY_QTY
+                        )    NEXT
+                    ) AS XS_MTR_COPY_THRU_QTY_TXT
+                    <!-- QC#58314 ADD START-->
+                    ,CBM.CUM_COPY_CNT
+                    ,CBM.CUM_COPY_FREQ_MTH_AOT
+                    <!-- QC#58314 ADD END-->
+<!-- START 2021/03/17 L.Mandanas [QC#58314-1, ADD] -->
+                    ,CBM.CUM_COPY_END_DT
+<!-- END 2021/03/17 L.Mandanas [QC#58314-1, ADD] -->
+                FROM
+                     DS_CONTR_PRC_EFF           CPE
+                    ,DS_CONTR_PRC_EFF_MTR       PEM
+<!-- QC#26631 MOD START-->
+<!--                ,CONTR_PHYS_BLLG_MTR_RELN   CBM -->
+                    ,DS_CONTR_BLLG_MTR          CBM
+<!-- QC#26631 MOD END-->
+                    ,MTR_LB                     ML
+                WHERE
+                        CPE.GLBL_CMPY_CD                = #glblCmpyCd#
+                    AND CPE.USG_CHRG_FLG                = 'Y'
+                    <iterate property="dsContrDtlPkList" var="dsContrDtlPkList[]" open="AND  CPE.DS_CONTR_DTL_PK IN (" close=")" conjunction=",">
+                    #dsContrDtlPkList[]#
+                    </iterate>
+                    AND CPE.EZCANCELFLAG                = '0'
+                    AND CPE.DS_CONTR_PRC_EFF_PK         = PEM.DS_CONTR_PRC_EFF_PK
+                    AND CPE.GLBL_CMPY_CD                = PEM.GLBL_CMPY_CD
+                    AND PEM.EZCANCELFLAG                = '0'
+                    AND CPE.DS_CONTR_BLLG_MTR_PK        = CBM.DS_CONTR_BLLG_MTR_PK
+                    AND CPE.GLBL_CMPY_CD                = CBM.GLBL_CMPY_CD
+                    AND CBM.EZCANCELFLAG                = '0'
+                    AND CBM.GLBL_CMPY_CD                = ML.GLBL_CMPY_CD
+                    AND CBM.BLLG_MTR_LB_CD              = ML.MTR_LB_CD
+                    AND ML.EZCANCELFLAG                 = '0'
+                ORDER BY CPE.DS_CONTR_DTL_PK,PEM.DS_CONTR_PRC_EFF_PK, PEM.XS_MTR_COPY_QTY
+        )
+        ,BASE AS (
+                SELECT
+                     CPE.GLBL_CMPY_CD
+                    ,CPE.DS_CONTR_DTL_PK
+                    ,CPE.BASE_PRC_DEAL_AMT
+                    ,CPE.DS_CONTR_PRC_EFF_SQ_NUM
+                    ,CPE.CONTR_PRC_EFF_FROM_DT
+                    ,CPE.BLLG_CYCLE_CD
+<!-- START 2018/06/14 U.Kim [QC#25935, ADD] -->
+                    ,CPE.CONTR_PRC_EFF_THRU_DT
+<!-- END 2018/06/14 U.Kim [QC#25935, ADD] -->
+                FROM
+                     DS_CONTR_PRC_EFF           CPE
+                WHERE
+                        CPE.GLBL_CMPY_CD                = #glblCmpyCd#
+                    AND CPE.BASE_CHRG_FLG               = 'Y'
+                    AND CPE.EZCANCELFLAG                = '0'
+        )
+        --Base
+<!-- START 2021/06/18 L.Mandanas [QC#58314-1, MOD] -->
+<!--         SELECT -->
+<!-- START 2021/09/10 L.Mandanas [QC#58314-1, MOD] -->
+<!--         SELECT DISTINCT  -->
+         SELECT
+<!-- END 2021/09/10 L.Mandanas [QC#58314-1, MOD] -->
+<!-- END 2021/06/18 L.Mandanas [QC#58314-1, MOD] -->
+             '1'                        AS LINE_LV
+            ,''                         AS BLLG_MTR_LB_CD
+            ,DCD.DS_CONTR_PK
+            ,DCD.DS_CONTR_DTL_PK
+            ,DC.DS_CONTR_CATG_CD
+<!-- START 2021/02/10 Y.Penequito [QC#58312,ADD] -->
+            ,DCD.SVC_INV_MERGE_TP_CD
+            ,DCD.PRNT_DS_CONTR_DTL_PK
+            ,BASE_NEW.CONTR_PRC_EFF_FROM_DT
+<!-- END 2021/02/10 Y.Penequito [QC#58312,ADD] -->
+            ,ST.SHIP_TO_CUST_CD
+            ,ST.LOC_NUM                 AS SHIP_TO_LOC_NM
+            ,ST.FIRST_LINE_ADDR         AS SHIP_TO_FIRST_LINE_ADDR
+            ,ST.SCD_LINE_ADDR           AS SHIP_TO_SCD_LINE_ADDR
+            ,ST.THIRD_LINE_ADDR         AS SHIP_TO_THIRD_LINE_ADDR
+            ,ST.FRTH_LINE_ADDR          AS SHIP_TO_FRTH_LINE_ADDR
+            ,ST.CTY_ADDR                AS SHIP_TO_CTY_ADDR
+            ,ST.ST_CD                   AS SHIP_TO_ST_CD
+            ,ST.POST_CD                 AS SHIP_TO_POST_CD
+            ,CTRY_S.CTRY_NM             AS SHIP_TO_CTRY_NM
+            ,MDS.MDSE_DESC_SHORT_TXT    AS SVC_PRC_RNW_DESC_LINE_TXT
+            ,MN.T_MDL_NM                AS MDL_NM
+            ,SMM.SER_NUM                AS SER_NUM
+            ,0                          AS MTR_LB_SORT_NUM
+            ,BC_B.BLLG_CYCLE_NM         AS BASE_BLLG_CYCLE_DESC_TXT
+            ,''                         AS USG_BLLG_CYCLE_DESC_TXT
+            <isEqual property="bizAppId" compareValue="NSAB0030">
+            ,DCD.RNW_EFF_FROM_DT        AS CONTR_EFF_FROM_DT_TXT
+            </isEqual>
+            <isEqual property="bizAppId" compareValue="NSAB0360">
+            ,DCD.UPLFT_EFF_FROM_DT      AS CONTR_EFF_FROM_DT_TXT
+            </isEqual>
+            ,DC.CONTR_VRSN_EFF_THRU_DT  AS CONTR_EFF_THRU_DT_TXT
+<!-- START 2021/03/17 L.Mandanas [QC#58314-1, ADD] -->
+            <isEqual property="bizAppId" compareValue="NSAB0360">
+<!-- START 2021/06/18 L.Mandanas [QC#58314-1, MOD] -->
+<!--             ,DCRE.UPLFT_PCY_DT                   AS UPLFT_PCY_DT -->
+<!-- START 2021/09/10 L.Mandanas [QC#58314-1, MOD] -->
+<!--             ,TO_CHAR(TO_DATE(DCD.UPLFT_EFF_FROM_DT, 'YYYYMMDD'),  'YYYYMMDD') AS UPLFT_PCY_DT -->
+            ,DCD.UPLFT_EFF_FROM_DT AS UPLFT_PCY_DT
+<!-- END 2021/09/10 L.Mandanas [QC#58314-1, MOD] -->
+<!-- END 2021/06/18 L.Mandanas [QC#58314-1, MOD] -->
+            </isEqual>
+<!-- END 2021/03/17 L.Mandanas [QC#58314-1, ADD] -->
+            ,TO_CHAR(NVL(BASE_NEW.BASE_PRC_DEAL_AMT, '')) AS BASE_PRC_DEAL_AMT_TXT
+<!-- START 2018/06/13 U.Kim [QC#25935, MOD] -->
+<!--        ,TO_CHAR(NVL(BASE_OLD.BASE_PRC_DEAL_AMT, '')) AS OLD_BASE_PRC_DEAL_AMT_TXT -->
+            <isEqual property="bizAppId" compareValue="NSAB0030">
+            ,TO_CHAR(NVL(BASE_OLD.BASE_PRC_DEAL_AMT, '')) AS OLD_BASE_PRC_DEAL_AMT_TXT
+            </isEqual>
+            <isEqual property="bizAppId" compareValue="NSAB0360">
+            ,TO_CHAR(NVL(CASE WHEN DCD.UPLFT_EFF_FROM_DT = BASE_NEW.CONTR_PRC_EFF_FROM_DT THEN BASE_OLD.BASE_PRC_DEAL_AMT ELSE BASE_NEW.BASE_PRC_DEAL_AMT END, '')) AS OLD_BASE_PRC_DEAL_AMT_TXT
+            </isEqual>
+<!-- END 2018/06/13 U.Kim [QC#25935, MOD] -->
+            ,''                         AS XS_MTR_COV_COPY_QTY_TXT
+            ,''                         AS XS_MTR_COPY_FROM_QTY_TXT
+            ,''                         AS XS_MTR_COPY_THRU_QTY_TXT
+            ,''                         AS XS_MTR_AMT_TXT
+            ,''                         AS OLD_XS_MTR_AMT_TXT
+            ,SMM.SER_NUM                AS SORT_SER_NUM
+            ,DDT.DS_CONTR_DTL_TP_SORT_NUM
+            ,0                          AS XS_MTR_COPY_QTY
+            <!-- QC#58314 ADD START-->
+            ,''                         AS CUM_COPY_CNT
+            ,''                         AS CUM_BLLG_CYCLE_NM
+            <!-- QC#58314 ADD END-->
+<!-- START 2021/03/17 L.Mandanas [QC#58314-1, ADD] -->
+            ,''                         AS CUM_COPY_END_DT
+<!-- END 2021/03/17 L.Mandanas [QC#58314-1, ADD] -->
+        FROM
+             DS_CONTR_DTL       DCD
+            ,DS_CONTR_DTL_TP    DDT
+            ,DS_CONTR           DC
+            ,SVC_MACH_MSTR      SMM
+            ,SVC_CONFIG_MSTR    SCM
+            ,SHIP_TO_CUST       ST
+            ,CTRY               CTRY_S
+            ,MDL_NM             MN
+            ,MDSE               MDS
+            ,BLLG_CYCLE         BC_B
+            ,BASE               BASE_NEW
+            ,BASE               BASE_OLD
+<!-- START 2021/06/18 L.Mandanas [QC#58314-1, DEL] -->
+<!-- START 2021/03/17 L.Mandanas [QC#58314-1, ADD] -->
+<!-- 
+            <isEqual property="bizAppId" compareValue="NSAB0360">
+            ,DS_CONTR_RNW_ESCL  DCRE
+            </isEqual>
+-->
+<!-- END 2021/03/17 L.Mandanas [QC#58314-1, ADD] -->
+<!-- END 2021/06/18 L.Mandanas [QC#58314-1, DEL] -->
+        WHERE
+                DCD.GLBL_CMPY_CD        = #glblCmpyCd#
+            AND DCD.EZCANCELFLAG        = '0'
+            AND DCD.DS_CONTR_PK         = #dsContrPk#
+            <iterate property="dsContrDtlPkList" var="dsContrDtlPkList[]" open="AND  DCD.DS_CONTR_DTL_PK IN (" conjunction= ", " close=")">
+            #dsContrDtlPkList[]#
+            </iterate>
+            AND DCD.GLBL_CMPY_CD        = DDT.GLBL_CMPY_CD
+            AND DDT.EZCANCELFLAG        = '0'
+            AND DCD.DS_CONTR_DTL_TP_CD   = DDT.DS_CONTR_DTL_TP_CD
+            AND DCD.GLBL_CMPY_CD        = DC.GLBL_CMPY_CD
+            AND DCD.DS_CONTR_PK         = DC.DS_CONTR_PK
+            AND DC.EZCANCELFLAG         = '0'
+            AND DCD.GLBL_CMPY_CD        = SMM.GLBL_CMPY_CD
+            AND DCD.SVC_MACH_MSTR_PK    = SMM.SVC_MACH_MSTR_PK
+            AND SMM.EZCANCELFLAG        = '0'
+            AND SMM.SVC_MACH_TP_CD      = #svcMachTpCdIsMach#
+            AND SMM.GLBL_CMPY_CD        = SCM.GLBL_CMPY_CD
+            AND SMM.SVC_CONFIG_MSTR_PK  = SCM.SVC_CONFIG_MSTR_PK
+            AND SCM.EZCANCELFLAG        = '0'
+            AND SMM.GLBL_CMPY_CD        = ST.GLBL_CMPY_CD
+            AND SMM.CUR_LOC_NUM         = ST.SHIP_TO_CUST_CD
+            AND ST.EZCANCELFLAG         = '0'
+            AND ST.GLBL_CMPY_CD         = CTRY_S.GLBL_CMPY_CD
+            AND ST.CTRY_CD              = CTRY_S.CTRY_CD
+            AND CTRY_S.EZCANCELFLAG     = '0'
+            AND SCM.GLBL_CMPY_CD        = MN.T_GLBL_CMPY_CD
+            AND SCM.MDL_ID              = MN.T_MDL_ID
+            AND DCD.GLBL_CMPY_CD        = MDS.GLBL_CMPY_CD(+)
+            AND DCD.SVC_PGM_MDSE_CD     = MDS.MDSE_CD(+)
+            AND MDS.EZCANCELFLAG(+)     = '0'
+            AND DCD.GLBL_CMPY_CD        = BASE_NEW.GLBL_CMPY_CD
+            AND DCD.DS_CONTR_DTL_PK     = BASE_NEW.DS_CONTR_DTL_PK
+
+            <isEqual property="bizAppId" compareValue="NSAB0030">
+            AND DCD.RNW_EFF_FROM_DT     &lt;= BASE_NEW.CONTR_PRC_EFF_FROM_DT
+            </isEqual>
+            <isEqual property="bizAppId" compareValue="NSAB0360">
+<!-- START 2018/06/13 U.Kim [QC#25935, MOD] -->
+<!--        AND DCD.UPLFT_EFF_FROM_DT     &lt;= BASE_NEW.CONTR_PRC_EFF_FROM_DT -->
+            AND DCD.UPLFT_EFF_FROM_DT     &gt;= BASE_NEW.CONTR_PRC_EFF_FROM_DT
+            AND DCD.UPLFT_EFF_FROM_DT     &lt;= BASE_NEW.CONTR_PRC_EFF_THRU_DT
+<!-- END 2018/06/13 U.Kim [QC#25935, MOD] -->
+<!-- START 2021/06/18 L.Mandanas [QC#58314-1, DEL] -->
+<!-- START 2021/03/17 L.Mandanas [QC#58314-1, ADD] -->
+<!-- 
+            AND DCRE.EZCANCELFLAG       = '0'
+            AND DCD.DS_CONTR_DTL_PK     = DCRE.DS_CONTR_DTL_PK
+            AND DCD.DS_CONTR_PK         = DCRE.DS_CONTR_PK
+            AND DCD.GLBL_CMPY_CD        = DCRE.GLBL_CMPY_CD
+            <isEqual property="dsContrCatg" compareValue="REG">
+            AND DCRE.DS_CONTR_BASE_USG_NM = 'BASE'
+            </isEqual>
+-->
+<!-- END 2021/03/17 L.Mandanas [QC#58314-1, ADD] -->
+<!-- END 2021/06/18 L.Mandanas [QC#58314-1, DEL] -->
+            </isEqual>
+            AND BASE_NEW.GLBL_CMPY_CD        = BC_B.GLBL_CMPY_CD(+)
+            AND BASE_NEW.BLLG_CYCLE_CD  = BC_B.BLLG_CYCLE_CD(+)
+            AND BC_B.EZCANCELFLAG(+)    = '0'
+<!-- START 2018/06/13 U.Kim [QC#25935, MOD] -->
+<!--        AND BASE_NEW.GLBL_CMPY_CD       = BASE_OLD.GLBL_CMPY_CD -->
+<!--        AND BASE_NEW.DS_CONTR_DTL_PK     = BASE_OLD.DS_CONTR_DTL_PK -->
+<!--        AND BASE_OLD.DS_CONTR_PRC_EFF_SQ_NUM = BASE_NEW.DS_CONTR_PRC_EFF_SQ_NUM -1 -->
+            AND BASE_NEW.GLBL_CMPY_CD               = BASE_OLD.GLBL_CMPY_CD(+)
+            AND BASE_NEW.DS_CONTR_DTL_PK            = BASE_OLD.DS_CONTR_DTL_PK(+)
+            AND BASE_NEW.DS_CONTR_PRC_EFF_SQ_NUM -1 = BASE_OLD.DS_CONTR_PRC_EFF_SQ_NUM(+)
+<!-- END 2018/06/13 U.Kim [QC#25935, MOD] -->
+        UNION ALL
+        --Usage
+<!-- START 2021/06/18 L.Mandanas [QC#58314-1, MOD] -->
+<!--         SELECT  -->
+<!-- START 2021/09/10 L.Mandanas [QC#58314-1, MOD] -->
+<!--         SELECT DISTINCT  -->
+         SELECT
+<!-- END 2021/09/10 L.Mandanas [QC#58314-1, MOD] -->
+<!-- END 2021/06/18 L.Mandanas [QC#58314-1, MOD] -->
+             '2'                        AS LINE_LV
+            ,BM_NEW1.BLLG_MTR_LB_CD
+            ,DCD.DS_CONTR_PK
+            ,DCD.DS_CONTR_DTL_PK
+            ,DC.DS_CONTR_CATG_CD
+<!-- START 2021/02/10 Y.Penequito [QC#58312,ADD] -->
+            ,DCD.SVC_INV_MERGE_TP_CD
+            ,DCD.PRNT_DS_CONTR_DTL_PK
+            ,BM_NEW1.CONTR_PRC_EFF_FROM_DT
+<!-- END 2021/02/10 Y.Penequito [QC#58312,ADD] -->
+<!-- QC#25935 Mod Start -->
+<!-- 
+            ,''      AS SHIP_TO_CUST_CD
+            ,''      AS SHIP_TO_LOC_NM
+            ,''      AS SHIP_TO_FIRST_LINE_ADDR
+            ,''      AS SHIP_TO_SCD_LINE_ADDR
+            ,''      AS SHIP_TO_THIRD_LINE_ADDR
+            ,''      AS SHIP_TO_FRTH_LINE_ADDR
+            ,''      AS SHIP_TO_CTY_ADDR
+            ,''      AS SHIP_TO_ST_CD
+            ,''      AS SHIP_TO_POST_CD
+            ,''      AS SHIP_TO_CTRY_NM
+ -->
+            ,ST.SHIP_TO_CUST_CD
+            ,ST.LOC_NUM                 AS SHIP_TO_LOC_NM
+            ,ST.FIRST_LINE_ADDR         AS SHIP_TO_FIRST_LINE_ADDR
+            ,ST.SCD_LINE_ADDR           AS SHIP_TO_SCD_LINE_ADDR
+            ,ST.THIRD_LINE_ADDR         AS SHIP_TO_THIRD_LINE_ADDR
+            ,ST.FRTH_LINE_ADDR          AS SHIP_TO_FRTH_LINE_ADDR
+            ,ST.CTY_ADDR                AS SHIP_TO_CTY_ADDR
+            ,ST.ST_CD                   AS SHIP_TO_ST_CD
+            ,ST.POST_CD                 AS SHIP_TO_POST_CD
+            ,CTRY_S.CTRY_NM             AS SHIP_TO_CTRY_NM
+<!-- QC#25935 Mod End -->
+ 
+            ,BM_NEW1.MTR_LB_DESC_TXT        AS SVC_PRC_RNW_DESC_LINE_TXT
+
+<!-- QC#25935 Mod Start -->
+<!-- 
+            ,''      AS MDL_NM
+            ,''      AS SER_NUM
+ -->
+            ,MN.T_MDL_NM                AS MDL_NM
+            ,SMM.SER_NUM                AS SER_NUM
+<!-- QC#25935 Mod End -->
+
+            ,BM_NEW1.MTR_LB_SORT_NUM
+            ,''      AS BASE_BLLG_CYCLE_DESC_TXT
+            ,BC_U.BLLG_CYCLE_NM         AS USG_BLLG_CYCLE_DESC_TXT
+            <isEqual property="bizAppId" compareValue="NSAB0030">
+            ,DCD.RNW_EFF_FROM_DT        AS CONTR_EFF_FROM_DT_TXT
+            </isEqual>
+            <isEqual property="bizAppId" compareValue="NSAB0360">
+            ,DCD.UPLFT_EFF_FROM_DT      AS CONTR_EFF_FROM_DT_TXT
+            </isEqual>
+            ,DC.CONTR_VRSN_EFF_THRU_DT  AS CONTR_EFF_THRU_DT_TXT
+<!-- START 2021/03/17 L.Mandanas [QC#58314-1, ADD] -->
+            <isEqual property="bizAppId" compareValue="NSAB0360">
+<!-- START 2021/06/18 L.Mandanas [QC#58314-1, MOD] -->
+            <!-- ,DCRE.UPLFT_PCY_DT                   AS UPLFT_PCY_DT -->
+<!-- START 2021/09/10 L.Mandanas [QC#58314-1, MOD] -->
+<!--             ,TO_CHAR(TO_DATE(DCD.UPLFT_EFF_FROM_DT, 'YYYYMMDD'),  'YYYYMMDD') AS UPLFT_PCY_DT -->
+            ,DCD.UPLFT_EFF_FROM_DT AS UPLFT_PCY_DT
+<!-- END 2021/09/10 L.Mandanas [QC#58314-1, MOD] -->
+<!-- END 2021/06/18 L.Mandanas [QC#58314-1, MOD] -->
+            </isEqual>
+<!-- END 2021/03/17 L.Mandanas [QC#58314-1, ADD] -->
+            ,''      AS BASE_PRC_DEAL_AMT_TXT
+            ,''      AS OLD_BASE_PRC_DEAL_AMT_TXT
+            ,TO_CHAR(NVL(BM_NEW1.XS_MTR_COPY_QTY, ''))          AS XS_MTR_COV_COPY_QTY_TXT
+            ,TO_CHAR(NVL(BM_NEW1.XS_MTR_COPY_QTY + 1, ''))      AS XS_MTR_COPY_FROM_QTY_TXT
+            ,TO_CHAR(NVL(BM_NEW1.XS_MTR_COPY_THRU_QTY_TXT, '')) AS XS_MTR_COPY_THRU_QTY_TXT
+            ,TO_CHAR(NVL(BM_NEW1.XS_MTR_AMT_RATE, ''))          AS XS_MTR_AMT_TXT
+<!-- START 2018/06/13 U.Kim [QC#25935, MOD] -->
+<!--        ,TO_CHAR(NVL(BM_OLD.XS_MTR_AMT_RATE, ''))           AS OLD_XS_MTR_AMT_TXT -->
+            <isEqual property="bizAppId" compareValue="NSAB0030">
+            ,TO_CHAR(NVL(BM_OLD.XS_MTR_AMT_RATE, ''))           AS OLD_XS_MTR_AMT_TXT
+            </isEqual>
+            <isEqual property="bizAppId" compareValue="NSAB0360">
+            ,TO_CHAR(NVL(CASE WHEN DCD.UPLFT_EFF_FROM_DT = BM_NEW1.CONTR_PRC_EFF_FROM_DT THEN BM_OLD.XS_MTR_AMT_RATE ELSE BM_NEW1.XS_MTR_AMT_RATE END, '')) AS OLD_XS_MTR_AMT_TXT
+            </isEqual>
+<!-- END 2018/06/13 U.Kim [QC#25935, MOD] -->
+            ,SMM.SER_NUM                                        AS SORT_SER_NUM   
+            ,DDT.DS_CONTR_DTL_TP_SORT_NUM  
+            ,BM_NEW1.XS_MTR_COPY_QTY                           AS XS_MTR_COPY_QTY
+            <!-- QC#58314 ADD START-->
+            ,TO_CHAR(NVL(BM_NEW1.CUM_COPY_CNT ,''))            AS CUM_COPY_CNT
+            ,NVL(BC_U_CUM.BLLG_CYCLE_NM,'')                    AS CUM_BLLG_CYCLE_NM
+            <!-- QC#58314 ADD END-->
+<!-- START 2021/03/17 L.Mandanas [QC#58314-1, ADD] -->
+            ,NVL(BM_NEW1.CUM_COPY_END_DT, '')                  AS CUM_COPY_END_DT
+<!-- END 2021/03/17 L.Mandanas [QC#58314-1, ADD] -->
+        FROM
+             DS_CONTR_DTL       DCD
+            ,DS_CONTR_DTL_TP    DDT
+            ,DS_CONTR           DC
+            ,SVC_MACH_MSTR      SMM
+            ,BLLG_CYCLE         BC_U
+            ,BLLG_MTR           BM_NEW1
+            ,BLLG_MTR           BM_OLD
+<!-- QC#25935 Mod Start -->
+            ,SVC_CONFIG_MSTR    SCM
+            ,SHIP_TO_CUST       ST
+            ,CTRY               CTRY_S
+            ,MDL_NM             MN
+<!-- QC#25935 Mod End -->
+            <!-- QC#58314 ADD START-->
+            ,BLLG_CYCLE         BC_U_CUM
+            <!-- QC#58314 ADD END-->
+<!-- START 2021/06/18 L.Mandanas [QC#58314-1, DEL] -->
+<!-- START 2021/03/17 L.Mandanas [QC#58314-1, ADD] -->
+<!--
+            <isEqual property="bizAppId" compareValue="NSAB0360">
+            ,DS_CONTR_RNW_ESCL  DCRE
+            </isEqual>
+-->
+<!-- END 2021/03/17 L.Mandanas [QC#58314-1, ADD] -->
+<!-- END 2021/06/18 L.Mandanas [QC#58314-1, DEL] -->
+
+        WHERE
+                DCD.GLBL_CMPY_CD        = #glblCmpyCd#
+            AND DCD.EZCANCELFLAG        = '0'
+            AND DCD.DS_CONTR_PK         = #dsContrPk#
+            <iterate property="dsContrDtlPkList" var="dsContrDtlPkList[]" open="AND  DCD.DS_CONTR_DTL_PK IN (" conjunction= ", " close=")">
+            #dsContrDtlPkList[]#
+            </iterate>
+            AND DCD.GLBL_CMPY_CD        = DDT.GLBL_CMPY_CD
+            AND DDT.EZCANCELFLAG        = '0'
+            AND DCD.DS_CONTR_DTL_TP_CD  = DDT.DS_CONTR_DTL_TP_CD
+            AND DCD.GLBL_CMPY_CD        = DC.GLBL_CMPY_CD
+            AND DCD.DS_CONTR_PK         = DC.DS_CONTR_PK
+            AND DC.EZCANCELFLAG         = '0'
+            AND DCD.GLBL_CMPY_CD        = SMM.GLBL_CMPY_CD
+            AND DCD.SVC_MACH_MSTR_PK    = SMM.SVC_MACH_MSTR_PK
+            AND SMM.EZCANCELFLAG        = '0'
+            AND SMM.SVC_MACH_TP_CD      = #svcMachTpCdIsMach#
+
+<!-- QC#25935 Mod Start -->
+            AND SMM.GLBL_CMPY_CD        = SCM.GLBL_CMPY_CD
+            AND SMM.SVC_CONFIG_MSTR_PK  = SCM.SVC_CONFIG_MSTR_PK
+            AND SCM.EZCANCELFLAG        = '0'
+            AND SMM.GLBL_CMPY_CD        = ST.GLBL_CMPY_CD
+            AND SMM.CUR_LOC_NUM         = ST.SHIP_TO_CUST_CD
+            AND ST.EZCANCELFLAG         = '0'
+            AND ST.GLBL_CMPY_CD         = CTRY_S.GLBL_CMPY_CD
+            AND ST.CTRY_CD              = CTRY_S.CTRY_CD
+            AND CTRY_S.EZCANCELFLAG     = '0'
+            AND SCM.GLBL_CMPY_CD        = MN.T_GLBL_CMPY_CD
+            AND SCM.MDL_ID              = MN.T_MDL_ID
+<!-- QC#25935 Mod End -->
+            AND DCD.GLBL_CMPY_CD        = BM_NEW1.GLBL_CMPY_CD
+            AND DCD.DS_CONTR_DTL_PK     = BM_NEW1.DS_CONTR_DTL_PK
+            <isEqual property="bizAppId" compareValue="NSAB0030">
+            AND DCD.RNW_EFF_FROM_DT     &lt;= BM_NEW1.CONTR_PRC_EFF_FROM_DT
+            </isEqual>
+            <isEqual property="bizAppId" compareValue="NSAB0360">
+<!-- START 2018/06/13 U.Kim [QC#25935, MOD] -->
+<!--        AND DCD.UPLFT_EFF_FROM_DT     &lt;= BM_NEW1.CONTR_PRC_EFF_FROM_DT -->
+            AND DCD.UPLFT_EFF_FROM_DT     &gt;= BM_NEW1.CONTR_PRC_EFF_FROM_DT
+            AND DCD.UPLFT_EFF_FROM_DT     &lt;= BM_NEW1.CONTR_PRC_EFF_THRU_DT
+<!-- END 2018/06/13 U.Kim [QC#25935, MOD] -->
+<!-- START 2021/06/18 L.Mandanas [QC#58314-1, DEL] -->
+<!-- START 2021/03/17 L.Mandanas [QC#58314-1, ADD] -->
+<!-- 
+            AND DCRE.EZCANCELFLAG       = '0'
+            AND DCD.DS_CONTR_DTL_PK     = DCRE.DS_CONTR_DTL_PK
+            AND DCD.DS_CONTR_PK         = DCRE.DS_CONTR_PK
+            AND DCD.GLBL_CMPY_CD        = DCRE.GLBL_CMPY_CD
+            <isEqual property="dsContrCatg" compareValue="REG">
+            AND DCRE.DS_CONTR_BASE_USG_NM = 'OVERAGE'
+            </isEqual>
+-->
+<!-- END 2021/03/17 L.Mandanas [QC#58314-1, ADD] -->
+<!-- END 2021/06/18 L.Mandanas [QC#58314-1, DEL] -->
+            </isEqual>
+<!-- START 2018/06/13 U.Kim [QC#25935, MOD] -->
+<!--        AND BM_NEW1.GLBL_CMPY_CD            = BM_OLD.GLBL_CMPY_CD -->
+<!--        AND BM_NEW1.DS_CONTR_DTL_PK         = BM_OLD.DS_CONTR_DTL_PK -->
+<!--        AND BM_NEW1.CONTR_XS_COPY_PK        = BM_OLD.CONTR_XS_COPY_PK -->
+<!--        AND BM_OLD.DS_CONTR_PRC_EFF_SQ_NUM  = BM_NEW1.DS_CONTR_PRC_EFF_SQ_NUM -1 -->
+            AND BM_NEW1.GLBL_CMPY_CD               = BM_OLD.GLBL_CMPY_CD(+)
+            AND BM_NEW1.DS_CONTR_DTL_PK            = BM_OLD.DS_CONTR_DTL_PK(+)
+            AND BM_NEW1.CONTR_XS_COPY_PK           = BM_OLD.CONTR_XS_COPY_PK(+)
+            AND BM_NEW1.DS_CONTR_PRC_EFF_SQ_NUM -1 = BM_OLD.DS_CONTR_PRC_EFF_SQ_NUM(+)
+<!-- END 2018/06/13 U.Kim [QC#25935, MOD] -->
+            AND BM_NEW1.GLBL_CMPY_CD            = BC_U.GLBL_CMPY_CD(+)
+            AND BM_NEW1.BLLG_CYCLE_CD           = BC_U.BLLG_CYCLE_CD(+)
+            AND BC_U.EZCANCELFLAG(+)            = '0'
+            <!-- QC#58314 ADD START-->
+            AND BM_NEW1.GLBL_CMPY_CD             = BC_U_CUM.GLBL_CMPY_CD(+)
+            AND BM_NEW1.CUM_COPY_FREQ_MTH_AOT    = BC_U_CUM.BLLG_CYCLE_MTH_AOT(+)
+            AND BC_U_CUM.BLLG_CYCLE_START_MTH(+) IS NULL
+            AND BC_U_CUM.EZCANCELFLAG(+)         = '0'
+            <!-- QC#58314 ADD END-->
+
+        UNION ALL
+        --Accessory
+<!-- START 2021/06/18 L.Mandanas [QC#58314-1, DEL] -->
+<!--         SELECT  -->
+<!-- START 2021/09/10 L.Mandanas [QC#58314-1, MOD] -->
+<!--         SELECT DISTINCT  -->
+         SELECT
+<!-- END 2021/09/10 L.Mandanas [QC#58314-1, MOD] -->
+<!-- END 2021/06/18 L.Mandanas [QC#58314-1, DEL] -->
+             '3'    AS LINE_LV
+            ,''     AS BLLG_MTR_LB_CD
+            ,DCD.DS_CONTR_PK
+            ,DCD.DS_CONTR_DTL_PK
+            ,DC.DS_CONTR_CATG_CD
+<!-- START 2021/02/10 Y.Penequito [QC#58312,ADD] -->
+            ,DCD.SVC_INV_MERGE_TP_CD
+            ,DCD.PRNT_DS_CONTR_DTL_PK
+            ,BASE_NEW.CONTR_PRC_EFF_FROM_DT
+<!-- END 2021/02/10 Y.Penequito [QC#58312,ADD] -->
+<!-- QC#25935 Mod Start -->
+<!-- 
+            ,''     AS SHIP_TO_CUST_CD
+            ,''     AS SHIP_TO_LOC_NM
+            ,''     AS SHIP_TO_FIRST_LINE_ADDR
+            ,''     AS SHIP_TO_SCD_LINE_ADDR
+            ,''     AS SHIP_TO_THIRD_LINE_ADDR
+            ,''     AS SHIP_TO_FRTH_LINE_ADDR
+            ,''     AS SHIP_TO_CTY_ADDR
+            ,''     AS SHIP_TO_ST_CD
+            ,''     AS SHIP_TO_POST_CD
+            ,''     AS SHIP_TO_CTRY_NM
+-->
+            ,ST.SHIP_TO_CUST_CD
+            ,ST.LOC_NUM                 AS SHIP_TO_LOC_NM
+            ,ST.FIRST_LINE_ADDR         AS SHIP_TO_FIRST_LINE_ADDR
+            ,ST.SCD_LINE_ADDR           AS SHIP_TO_SCD_LINE_ADDR
+            ,ST.THIRD_LINE_ADDR         AS SHIP_TO_THIRD_LINE_ADDR
+            ,ST.FRTH_LINE_ADDR          AS SHIP_TO_FRTH_LINE_ADDR
+            ,ST.CTY_ADDR                AS SHIP_TO_CTY_ADDR
+            ,ST.ST_CD                   AS SHIP_TO_ST_CD
+            ,ST.POST_CD                 AS SHIP_TO_POST_CD
+            ,CTRY_S.CTRY_NM             AS SHIP_TO_CTRY_NM
+<!-- QC#25935 Mod End -->
+
+            ,MDS.MDSE_DESC_SHORT_TXT AS SVC_PRC_RNW_DESC_LINE_TXT
+
+<!-- QC#25935 Mod Start -->
+<!--             ,''     AS MDL_NM -->
+           ,MN.T_MDL_NM                AS MDL_NM
+ <!-- QC#25935 Mod End -->
+ 
+            ,SMM.SER_NUM                         AS SER_NUM
+            ,0      AS MTR_LB_SORT_NUM
+<!-- START 2018/06/13 U.Kim [QC#25935, MOD] -->
+<!--        ,''     AS BASE_BLLG_CYCLE_DESC_TXT -->
+            ,BC_B.BLLG_CYCLE_NM AS BASE_BLLG_CYCLE_DESC_TXT
+<!-- END 2018/06/13 U.Kim [QC#25935, MOD] -->
+            ,''     AS USG_BLLG_CYCLE_DESC_TXT
+            <isEqual property="bizAppId" compareValue="NSAB0030">
+            ,DCD.RNW_EFF_FROM_DT                 AS CONTR_EFF_FROM_DT_TXT
+            </isEqual>
+            <isEqual property="bizAppId" compareValue="NSAB0360">
+            ,DCD.UPLFT_EFF_FROM_DT               AS CONTR_EFF_FROM_DT_TXT
+            </isEqual>
+            ,DC.CONTR_VRSN_EFF_THRU_DT           AS CONTR_EFF_THRU_DT_TXT
+<!-- START 2021/03/17 L.Mandanas [QC#58314-1, ADD] -->
+            <isEqual property="bizAppId" compareValue="NSAB0360">
+<!-- START 2021/06/18 L.Mandanas [QC#58314-1, MOD] -->
+            <!-- ,DCRE.UPLFT_PCY_DT                   AS UPLFT_PCY_DT -->
+<!-- START 2021/09/10 L.Mandanas [QC#58314-1, MOD] -->
+<!--             ,TO_CHAR(TO_DATE(DCD.UPLFT_EFF_FROM_DT, 'YYYYMMDD'),  'YYYYMMDD') AS UPLFT_PCY_DT -->
+            ,DCD.UPLFT_EFF_FROM_DT AS UPLFT_PCY_DT
+<!-- END 2021/09/10 L.Mandanas [QC#58314-1, MOD] -->
+<!-- END 2021/06/18 L.Mandanas [QC#58314-1, MOD] -->
+            </isEqual>
+<!-- END 2021/03/17 L.Mandanas [QC#58314-1, ADD] -->
+            ,TO_CHAR(BASE_NEW.BASE_PRC_DEAL_AMT) AS BASE_PRC_DEAL_AMT_TXT
+<!-- START 2018/06/13 U.Kim [QC#25935, MOD] -->
+<!--        ,TO_CHAR(BASE_OLD.BASE_PRC_DEAL_AMT) AS OLD_BASE_PRC_DEAL_AMT_TXT -->
+            <isEqual property="bizAppId" compareValue="NSAB0030">
+            ,TO_CHAR(BASE_OLD.BASE_PRC_DEAL_AMT) AS OLD_BASE_PRC_DEAL_AMT_TXT
+            </isEqual>
+            <isEqual property="bizAppId" compareValue="NSAB0360">
+            ,TO_CHAR(CASE WHEN DCD.UPLFT_EFF_FROM_DT = BASE_NEW.CONTR_PRC_EFF_FROM_DT THEN BASE_OLD.BASE_PRC_DEAL_AMT ELSE BASE_NEW.BASE_PRC_DEAL_AMT END) AS OLD_BASE_PRC_DEAL_AMT_TXT
+            </isEqual>
+<!-- END 2018/06/13 U.Kim [QC#25935, MOD] -->
+            ,''     AS XS_MTR_COV_COPY_QTY_TXT
+            ,''     AS XS_MTR_COPY_FROM_QTY_TXT
+            ,''     AS XS_MTR_COPY_THRU_QTY_TXT
+            ,''     AS XS_MTR_AMT_TXT
+            ,''     AS OLD_XS_MTR_AMT_TXT
+            ,NVL(SMMP.SER_NUM,SMM.SER_NUM)       AS SORT_SER_NUM
+            ,DDT.DS_CONTR_DTL_TP_SORT_NUM
+            ,0      AS XS_MTR_COPY_QTY
+            <!-- QC#58314 ADD START-->
+            ,''     AS CUM_COPY_CNT
+            ,''     AS CUM_BLLG_CYCLE_NM
+            <!-- QC#58314 ADD END-->
+<!-- START 2021/03/17 L.Mandanas [QC#58314-1, ADD] -->
+            ,''     AS CUM_COPY_END_DT
+<!-- END 2021/03/17 L.Mandanas [QC#58314-1, ADD] -->
+        FROM
+             DS_CONTR_DTL       DCD
+            ,DS_CONTR_DTL_TP    DDT
+            ,DS_CONTR           DC
+            ,SVC_MACH_MSTR      SMM
+            ,DS_CONTR_DTL       DCDP
+            ,SVC_MACH_MSTR      SMMP
+            ,MDSE               MDS
+<!-- START 2018/06/14 U.Kim [QC#25935, ADD] -->
+            ,BLLG_CYCLE         BC_B
+<!-- END 2018/06/14 U.Kim [QC#25935, ADD] -->
+            ,BASE               BASE_NEW
+            ,BASE               BASE_OLD
+
+<!-- QC#25935 Mod Start -->
+            ,SVC_CONFIG_MSTR    SCM
+            ,SHIP_TO_CUST       ST
+            ,CTRY               CTRY_S
+            ,MDL_NM             MN
+<!-- QC#25935 Mod End -->
+<!-- START 2021/06/18 L.Mandanas [QC#58314-1, DEL] -->
+<!-- START 2021/03/17 L.Mandanas [QC#58314-1, ADD] -->
+<!--
+            <isEqual property="bizAppId" compareValue="NSAB0360">
+            ,DS_CONTR_RNW_ESCL DCRE
+            </isEqual>
+-->
+<!-- END 2021/03/17 L.Mandanas [QC#58314-1, ADD] -->
+<!-- END 2021/06/18 L.Mandanas [QC#58314-1, DEL] -->
+
+        WHERE
+                DCD.GLBL_CMPY_CD        = #glblCmpyCd#
+            AND DCD.EZCANCELFLAG        = '0'
+            AND DCD.GLBL_CMPY_CD        = DC.GLBL_CMPY_CD
+            AND DCD.DS_CONTR_PK         = #dsContrPk#
+            <iterate property="dsContrDtlPkList" var="dsContrDtlPkList[]" open="AND  DCD.DS_CONTR_DTL_PK IN (" conjunction= ", " close=")">
+            #dsContrDtlPkList[]#
+            </iterate>
+            AND DCD.GLBL_CMPY_CD        = DDT.GLBL_CMPY_CD
+            AND DDT.EZCANCELFLAG        = '0'
+            AND DCD.DS_CONTR_DTL_TP_CD  = DDT.DS_CONTR_DTL_TP_CD
+            AND DCD.GLBL_CMPY_CD        = DC.GLBL_CMPY_CD
+            AND DCD.DS_CONTR_PK         = DC.DS_CONTR_PK
+            AND DC.EZCANCELFLAG         = '0'
+            AND DCD.GLBL_CMPY_CD        = SMM.GLBL_CMPY_CD
+            AND DCD.SVC_MACH_MSTR_PK    = SMM.SVC_MACH_MSTR_PK
+            AND SMM.EZCANCELFLAG        = '0'
+            AND SMM.SVC_MACH_TP_CD      = #svcMachTpCdIsAcc#
+
+<!-- QC#25935 Mod Start -->
+            AND SMM.GLBL_CMPY_CD        = SCM.GLBL_CMPY_CD
+            AND SMM.SVC_CONFIG_MSTR_PK  = SCM.SVC_CONFIG_MSTR_PK
+            AND SCM.EZCANCELFLAG        = '0'
+            AND SMM.GLBL_CMPY_CD        = ST.GLBL_CMPY_CD
+            AND SMM.CUR_LOC_NUM         = ST.SHIP_TO_CUST_CD
+            AND ST.EZCANCELFLAG         = '0'
+            AND ST.GLBL_CMPY_CD         = CTRY_S.GLBL_CMPY_CD
+            AND ST.CTRY_CD              = CTRY_S.CTRY_CD
+            AND CTRY_S.EZCANCELFLAG     = '0'
+            AND SCM.GLBL_CMPY_CD        = MN.T_GLBL_CMPY_CD
+            AND SCM.MDL_ID              = MN.T_MDL_ID
+<!-- QC#25935 Mod End -->
+            AND DCD.PRNT_DS_CONTR_DTL_PK = DCDP.DS_CONTR_DTL_PK(+)
+            AND DCD.GLBL_CMPY_CD         = DCDP.GLBL_CMPY_CD(+)
+            AND DCDP.EZCANCELFLAG(+)    = '0'
+            AND DCDP.GLBL_CMPY_CD       = SMMP.GLBL_CMPY_CD(+)
+            AND DCDP.SVC_MACH_MSTR_PK   = SMMP.SVC_MACH_MSTR_PK(+)
+            AND SMMP.EZCANCELFLAG(+)    = '0'
+            AND DCD.GLBL_CMPY_CD        = MDS.GLBL_CMPY_CD(+)
+            AND DCD.SVC_PGM_MDSE_CD     = MDS.MDSE_CD(+)
+            AND MDS.EZCANCELFLAG(+)     = '0'
+            AND DCD.GLBL_CMPY_CD        = BASE_NEW.GLBL_CMPY_CD
+            AND DCD.DS_CONTR_DTL_PK     = BASE_NEW.DS_CONTR_DTL_PK
+            <isEqual property="bizAppId" compareValue="NSAB0030">
+            AND DCD.RNW_EFF_FROM_DT     &lt;= BASE_NEW.CONTR_PRC_EFF_FROM_DT
+            </isEqual>
+            <isEqual property="bizAppId" compareValue="NSAB0360">
+<!-- START 2018/06/13 U.Kim [QC#25935, MOD] -->
+<!--        AND DCD.UPLFT_EFF_FROM_DT     &lt;= BASE_NEW.CONTR_PRC_EFF_FROM_DT -->
+            AND DCD.UPLFT_EFF_FROM_DT     &gt;= BASE_NEW.CONTR_PRC_EFF_FROM_DT
+            AND DCD.UPLFT_EFF_FROM_DT     &lt;= BASE_NEW.CONTR_PRC_EFF_THRU_DT
+<!-- END 2018/06/13 U.Kim [QC#25935, MOD] -->
+<!-- START 2021/06/18 L.Mandanas [QC#58314-1, DEL] -->
+<!-- START 2021/03/17 L.Mandanas [QC#58314-1, ADD] -->
+<!--
+            AND DCRE.EZCANCELFLAG       = '0'
+            AND DCD.DS_CONTR_DTL_PK     = DCRE.DS_CONTR_DTL_PK
+            AND DCD.DS_CONTR_PK         = DCRE.DS_CONTR_PK
+            AND DCD.GLBL_CMPY_CD        = DCRE.GLBL_CMPY_CD
+            <isEqual property="dsContrCatg" compareValue="REG">
+            AND DCRE.DS_CONTR_BASE_USG_NM IS NULL
+            </isEqual>
+-->
+<!-- END 2021/03/17 L.Mandanas [QC#58314-1, ADD] -->
+<!-- END 2021/06/18 L.Mandanas [QC#58314-1, DEL] -->
+            </isEqual>
+<!-- START 2018/06/13 U.Kim [QC#25935, MOD] -->
+<!--        AND BASE_NEW.GLBL_CMPY_CD    = BASE_OLD.GLBL_CMPY_CD -->
+<!--        AND BASE_NEW.DS_CONTR_DTL_PK = BASE_OLD.DS_CONTR_DTL_PK -->
+<!--        AND BASE_NEW.DS_CONTR_PRC_EFF_SQ_NUM = BASE_OLD.DS_CONTR_PRC_EFF_SQ_NUM + 1 -->
+            AND BASE_NEW.GLBL_CMPY_CD                = BASE_OLD.GLBL_CMPY_CD(+)
+            AND BASE_NEW.DS_CONTR_DTL_PK             = BASE_OLD.DS_CONTR_DTL_PK(+)
+            AND BASE_NEW.DS_CONTR_PRC_EFF_SQ_NUM - 1 = BASE_OLD.DS_CONTR_PRC_EFF_SQ_NUM(+)
+<!-- END 2018/06/13 U.Kim [QC#25935, MOD] -->
+<!-- START 2018/06/13 U.Kim [QC#25935, MOD] -->
+            AND BASE_NEW.GLBL_CMPY_CD  = BC_B.GLBL_CMPY_CD(+)
+            AND BASE_NEW.BLLG_CYCLE_CD = BC_B.BLLG_CYCLE_CD(+)
+            AND BC_B.EZCANCELFLAG(+)   = '0'
+<!-- END 2018/06/13 U.Kim [QC#25935, MOD] -->
+<!-- START 2021/04/19 L.Mandanas [QC#58314-1, ADD] -->
+        <isEqual property="dsContrCatg" compareValue="AGG">
+        UNION ALL
+        --AGG line
+<!-- START 2021/06/18 L.Mandanas [QC#58314-1, MOD] -->
+<!--         SELECT  -->
+<!-- START 2021/09/10 L.Mandanas [QC#58314-1, MOD] -->
+<!--         SELECT DISTINCT  -->
+         SELECT
+<!-- END 2021/09/10 L.Mandanas [QC#58314-1, MOD] -->
+<!-- END 2021/06/18 L.Mandanas [QC#58314-1, MOD] -->
+             '4'                        AS LINE_LV
+            ,BM_NEW1.BLLG_MTR_LB_CD
+            ,DCD.DS_CONTR_PK
+            ,DCD.DS_CONTR_DTL_PK
+            ,DC.DS_CONTR_CATG_CD
+            ,DCD.SVC_INV_MERGE_TP_CD
+            ,DCD.PRNT_DS_CONTR_DTL_PK
+            ,BM_NEW1.CONTR_PRC_EFF_FROM_DT
+            ,''      AS SHIP_TO_CUST_CD
+            ,''      AS SHIP_TO_LOC_NM
+            ,''      AS SHIP_TO_FIRST_LINE_ADDR
+            ,''      AS SHIP_TO_SCD_LINE_ADDR
+            ,''      AS SHIP_TO_THIRD_LINE_ADDR
+            ,''      AS SHIP_TO_FRTH_LINE_ADDR
+            ,''      AS SHIP_TO_CTY_ADDR
+            ,''      AS SHIP_TO_ST_CD
+            ,''      AS SHIP_TO_POST_CD
+            ,''      AS SHIP_TO_CTRY_NM
+            ,BM_NEW1.MTR_LB_DESC_TXT        AS SVC_PRC_RNW_DESC_LINE_TXT
+            ,''      AS MDL_NM
+            ,''      AS SER_NUM
+            ,BM_NEW1.MTR_LB_SORT_NUM
+            ,''      AS BASE_BLLG_CYCLE_DESC_TXT
+            ,BC_U.BLLG_CYCLE_NM         AS USG_BLLG_CYCLE_DESC_TXT
+            <isEqual property="bizAppId" compareValue="NSAB0030">
+            ,DCD.RNW_EFF_FROM_DT        AS CONTR_EFF_FROM_DT_TXT
+            </isEqual>
+            <isEqual property="bizAppId" compareValue="NSAB0360">
+            ,DCD.UPLFT_EFF_FROM_DT      AS CONTR_EFF_FROM_DT_TXT
+            </isEqual>
+            ,DC.CONTR_VRSN_EFF_THRU_DT  AS CONTR_EFF_THRU_DT_TXT
+            <isEqual property="bizAppId" compareValue="NSAB0360">
+<!-- START 2021/06/18 L.Mandanas [QC#58314-1, MOD] -->
+            <!-- ,DCRE.UPLFT_PCY_DT                   AS UPLFT_PCY_DT -->
+<!-- START 2021/09/10 L.Mandanas [QC#58314-1, MOD] -->
+<!--             ,TO_CHAR(TO_DATE(DCD.UPLFT_EFF_FROM_DT, 'YYYYMMDD'),  'YYYYMMDD') AS UPLFT_PCY_DT -->
+            ,DCD.UPLFT_EFF_FROM_DT AS UPLFT_PCY_DT
+<!-- END 2021/09/10 L.Mandanas [QC#58314-1, MOD] -->
+<!-- END 2021/06/18 L.Mandanas [QC#58314-1, MOD] -->
+            </isEqual>
+            ,''      AS BASE_PRC_DEAL_AMT_TXT
+            ,''      AS OLD_BASE_PRC_DEAL_AMT_TXT
+            ,TO_CHAR(NVL(BM_NEW1.XS_MTR_COPY_QTY, ''))          AS XS_MTR_COV_COPY_QTY_TXT
+            ,TO_CHAR(NVL(BM_NEW1.XS_MTR_COPY_QTY + 1, ''))      AS XS_MTR_COPY_FROM_QTY_TXT
+            ,TO_CHAR(NVL(BM_NEW1.XS_MTR_COPY_THRU_QTY_TXT, '')) AS XS_MTR_COPY_THRU_QTY_TXT
+            ,TO_CHAR(NVL(BM_NEW1.XS_MTR_AMT_RATE, ''))          AS XS_MTR_AMT_TXT
+            <isEqual property="bizAppId" compareValue="NSAB0030">
+            ,TO_CHAR(NVL(BM_OLD.XS_MTR_AMT_RATE, ''))           AS OLD_XS_MTR_AMT_TXT
+            </isEqual>
+            <isEqual property="bizAppId" compareValue="NSAB0360">
+            ,TO_CHAR(NVL(CASE WHEN DCD.UPLFT_EFF_FROM_DT = BM_NEW1.CONTR_PRC_EFF_FROM_DT THEN BM_OLD.XS_MTR_AMT_RATE ELSE BM_NEW1.XS_MTR_AMT_RATE END, '')) AS OLD_XS_MTR_AMT_TXT
+            </isEqual>
+            ,''      AS SORT_SER_NUM   
+            ,DDT.DS_CONTR_DTL_TP_SORT_NUM  
+            ,BM_NEW1.XS_MTR_COPY_QTY                           AS XS_MTR_COPY_QTY
+            ,TO_CHAR(NVL(BM_NEW1.CUM_COPY_CNT ,''))            AS CUM_COPY_CNT
+            ,NVL(BC_U_CUM.BLLG_CYCLE_NM,'')                    AS CUM_BLLG_CYCLE_NM
+            ,NVL(BM_NEW1.CUM_COPY_END_DT, '')                  AS CUM_COPY_END_DT
+        FROM
+             DS_CONTR_DTL       DCD
+            ,DS_CONTR_DTL_TP    DDT
+            ,DS_CONTR           DC
+            ,BLLG_CYCLE         BC_U
+            ,BLLG_MTR           BM_NEW1
+            ,BLLG_MTR           BM_OLD
+            ,BLLG_CYCLE         BC_U_CUM
+<!-- START 2021/06/18 L.Mandanas [QC#58314-1, DEL] -->
+<!--
+            <isEqual property="bizAppId" compareValue="NSAB0360">
+            ,DS_CONTR_RNW_ESCL  DCRE
+            </isEqual>
+-->
+<!-- END 2021/06/18 L.Mandanas [QC#58314-1, DEL] -->
+
+        WHERE
+                DCD.GLBL_CMPY_CD        = #glblCmpyCd#
+            AND DCD.EZCANCELFLAG        = '0'
+            AND DCD.DS_CONTR_PK         = #dsContrPk#
+            <iterate property="dsContrDtlPkList" var="dsContrDtlPkList[]" open="AND  DCD.DS_CONTR_DTL_PK IN (" conjunction= ", " close=")">
+            #dsContrDtlPkList[]#
+            </iterate>
+            AND DCD.GLBL_CMPY_CD        = DDT.GLBL_CMPY_CD
+            AND DDT.EZCANCELFLAG        = '0'
+            AND DCD.DS_CONTR_DTL_TP_CD  = DDT.DS_CONTR_DTL_TP_CD
+            AND DCD.GLBL_CMPY_CD        = DC.GLBL_CMPY_CD
+            AND DCD.DS_CONTR_PK         = DC.DS_CONTR_PK
+            AND DC.EZCANCELFLAG         = '0'
+            AND DCD.GLBL_CMPY_CD        = BM_NEW1.GLBL_CMPY_CD
+            AND DCD.DS_CONTR_DTL_PK     = BM_NEW1.DS_CONTR_DTL_PK
+            <isEqual property="bizAppId" compareValue="NSAB0030">
+            AND DCD.RNW_EFF_FROM_DT     &lt;= BM_NEW1.CONTR_PRC_EFF_FROM_DT
+            </isEqual>
+            <isEqual property="bizAppId" compareValue="NSAB0360">
+            AND DCD.UPLFT_EFF_FROM_DT     &gt;= BM_NEW1.CONTR_PRC_EFF_FROM_DT
+            AND DCD.UPLFT_EFF_FROM_DT     &lt;= BM_NEW1.CONTR_PRC_EFF_THRU_DT
+<!-- START 2021/06/18 L.Mandanas [QC#58314-1, DEL] -->
+<!-- 
+            AND DCRE.EZCANCELFLAG       = '0'
+            AND DCD.DS_CONTR_DTL_PK     = DCRE.DS_CONTR_DTL_PK
+            AND DCD.DS_CONTR_PK         = DCRE.DS_CONTR_PK
+            AND DCD.GLBL_CMPY_CD        = DCRE.GLBL_CMPY_CD
+-->
+<!-- END 2021/06/18 L.Mandanas [QC#58314-1, DEL] -->
+            </isEqual>
+            AND DCD.PRNT_DS_CONTR_DTL_PK IS NULL
+            AND BM_NEW1.GLBL_CMPY_CD               = BM_OLD.GLBL_CMPY_CD(+)
+            AND BM_NEW1.DS_CONTR_DTL_PK            = BM_OLD.DS_CONTR_DTL_PK(+)
+            AND BM_NEW1.CONTR_XS_COPY_PK           = BM_OLD.CONTR_XS_COPY_PK(+)
+            AND BM_NEW1.DS_CONTR_PRC_EFF_SQ_NUM -1 = BM_OLD.DS_CONTR_PRC_EFF_SQ_NUM(+)
+            AND BM_NEW1.GLBL_CMPY_CD            = BC_U.GLBL_CMPY_CD(+)
+            AND BM_NEW1.BLLG_CYCLE_CD           = BC_U.BLLG_CYCLE_CD(+)
+            AND BC_U.EZCANCELFLAG(+)            = '0'
+            AND BM_NEW1.GLBL_CMPY_CD             = BC_U_CUM.GLBL_CMPY_CD(+)
+            AND BM_NEW1.CUM_COPY_FREQ_MTH_AOT    = BC_U_CUM.BLLG_CYCLE_MTH_AOT(+)
+            AND BC_U_CUM.BLLG_CYCLE_START_MTH(+) IS NULL
+            AND BC_U_CUM.EZCANCELFLAG(+)         = '0'
+            </isEqual>
+<!-- END 2021/04/19 L.Mandanas [QC#58314-1, ADD] -->
+        ORDER BY 
+             SORT_SER_NUM NULLS FIRST
+            ,DS_CONTR_DTL_TP_SORT_NUM
+            ,LINE_LV
+            ,MTR_LB_SORT_NUM
+            ,XS_MTR_COPY_QTY
+    </statement>
+
+
+    <statement id="getFleetContrInfo" parameterClass="Map" resultClass="Map">
+    --Fleet
+        WITH BLLG_MTR AS (
+                SELECT
+                     CPE.GLBL_CMPY_CD
+                    ,CPE.DS_CONTR_DTL_PK
+                    ,CPE.DS_CONTR_BLLG_MTR_PK
+                    ,CPE.DS_CONTR_PRC_EFF_SQ_NUM
+                    ,CPE.BLLG_CYCLE_CD
+                    ,CBM.BLLG_MTR_LB_CD
+<!-- QC#26631 DEL START-->
+<!-- ,CBM.SVC_PHYS_MTR_PK -->
+<!-- QC#26631 DEL END-->
+                    ,ML.MTR_LB_SORT_NUM
+                    ,ML.MTR_LB_DESC_TXT
+                    ,CPE.CONTR_PRC_EFF_FROM_DT
+                    ,CPE.CONTR_PRC_EFF_THRU_DT
+                    ,PEM.CONTR_XS_COPY_PK
+                    ,PEM.XS_MTR_COPY_QTY
+                    ,PEM.XS_MTR_AMT_RATE
+                    ,PEM.XS_MTR_FIRST_FLG
+                    ,(
+                    SELECT 
+                        NVL(MIN (NEXT.XS_MTR_COPY_QTY), 0)
+                    FROM
+                        (
+                        SELECT
+                            PEM_NEXT.XS_MTR_COPY_QTY
+                        FROM
+                            DS_CONTR_PRC_EFF_MTR    PEM_NEXT
+                        WHERE
+                                PEM_NEXT.GLBL_CMPY_CD      = #glblCmpyCd#
+                            AND PEM_NEXT.EZCANCELFLAG      = '0'
+                            AND PEM_NEXT.DS_CONTR_PRC_EFF_PK  = PEM.DS_CONTR_PRC_EFF_PK
+                            AND PEM_NEXT.XS_MTR_COPY_QTY &gt; PEM.XS_MTR_COPY_QTY
+                        )    NEXT
+                    ) AS XS_MTR_COPY_THRU_QTY_TXT
+                   
+                FROM
+                     DS_CONTR_PRC_EFF           CPE
+                    ,DS_CONTR_PRC_EFF_MTR       PEM
+<!-- QC#26631 MOD START -->
+<!--                ,CONTR_PHYS_BLLG_MTR_RELN   CBM -->
+                    ,DS_CONTR_BLLG_MTR          CBM
+<!-- QC#26631 MOD END -->
+                    ,MTR_LB                     ML
+                WHERE
+                        CPE.GLBL_CMPY_CD                = #glblCmpyCd#
+                    AND CPE.USG_CHRG_FLG                = 'Y'
+                    <iterate property="dsContrDtlPkList" var="dsContrDtlPkList[]" open="AND  CPE.DS_CONTR_DTL_PK IN (" close=")" conjunction=",">
+                    #dsContrDtlPkList[]#
+                    </iterate>
+                    AND CPE.EZCANCELFLAG                = '0'
+                    AND CPE.DS_CONTR_PRC_EFF_PK         = PEM.DS_CONTR_PRC_EFF_PK
+                    AND CPE.GLBL_CMPY_CD                = PEM.GLBL_CMPY_CD
+                    AND PEM.EZCANCELFLAG                = '0'
+                    AND CPE.DS_CONTR_BLLG_MTR_PK        = CBM.DS_CONTR_BLLG_MTR_PK
+                    AND CPE.GLBL_CMPY_CD                = CBM.GLBL_CMPY_CD
+                    AND CBM.EZCANCELFLAG                = '0'
+                    AND CBM.GLBL_CMPY_CD                = ML.GLBL_CMPY_CD
+                    AND CBM.BLLG_MTR_LB_CD              = ML.MTR_LB_CD
+                    AND ML.EZCANCELFLAG                 = '0'
+                ORDER BY CPE.DS_CONTR_DTL_PK,PEM.DS_CONTR_PRC_EFF_PK, PEM.XS_MTR_COPY_QTY
+        )
+      ,BASE AS (
+                SELECT
+                     CPE.GLBL_CMPY_CD
+                    ,CPE.DS_CONTR_DTL_PK
+                    ,CPE.BASE_PRC_DEAL_AMT
+                    ,CPE.DS_CONTR_PRC_EFF_SQ_NUM
+                    ,CPE.CONTR_PRC_EFF_FROM_DT
+                    ,CPE.BLLG_CYCLE_CD
+<!-- START 2018/06/14 U.Kim [QC#25935, ADD] -->
+                    ,CPE.CONTR_PRC_EFF_THRU_DT
+<!-- END 2018/06/14 U.Kim [QC#25935, ADD] -->
+                FROM
+                     DS_CONTR_PRC_EFF           CPE
+                WHERE
+                        CPE.GLBL_CMPY_CD                = #glblCmpyCd#
+                    AND CPE.BASE_CHRG_FLG               = 'Y'
+                    AND CPE.EZCANCELFLAG                = '0'
+        )
+        --Fleet Line
+        SELECT
+             '1'    AS LINE_LV
+            ,''     AS BLLG_MTR_LB_CD
+            ,DCD.DS_CONTR_PK
+            ,DCD.DS_CONTR_DTL_PK
+            ,DC.DS_CONTR_CATG_CD
+            ,''     AS SHIP_TO_CUST_CD
+            ,''     AS SHIP_TO_LOC_NM
+            ,''     AS SHIP_TO_FIRST_LINE_ADDR
+            ,''     AS SHIP_TO_SCD_LINE_ADDR
+            ,''     AS SHIP_TO_THIRD_LINE_ADDR
+            ,''     AS SHIP_TO_FRTH_LINE_ADDR
+            ,''     AS SHIP_TO_CTY_ADDR
+            ,''     AS SHIP_TO_ST_CD
+            ,''     AS SHIP_TO_POST_CD
+            ,''     AS SHIP_TO_CTRY_NM
+            ,#fleetContract#            AS MDL_NM
+            ,MDS.MDSE_DESC_SHORT_TXT    AS SVC_PRC_RNW_DESC_LINE_TXT
+            ,''                         AS SER_NUM
+            ,0      AS MTR_LB_SORT_NUM
+            ,BC_B.BLLG_CYCLE_NM         AS BASE_BLLG_CYCLE_DESC_TXT
+            ,''     AS USG_BLLG_CYCLE_DESC_TXT
+            <isEqual property="bizAppId" compareValue="NSAB0030">
+            ,DCD.RNW_EFF_FROM_DT        AS CONTR_EFF_FROM_DT_TXT
+            </isEqual>
+            <isEqual property="bizAppId" compareValue="NSAB0360">
+            ,DCD.UPLFT_EFF_FROM_DT      AS CONTR_EFF_FROM_DT_TXT
+            </isEqual>
+            ,DC.CONTR_VRSN_EFF_THRU_DT  AS CONTR_EFF_THRU_DT_TXT
+            ,TO_CHAR(NVL(BASE_NEW.BASE_PRC_DEAL_AMT, '')) AS BASE_PRC_DEAL_AMT_TXT
+<!-- START 2018/06/13 U.Kim [QC#25935, MOD] -->
+<!--        ,TO_CHAR(NVL(BASE_OLD.BASE_PRC_DEAL_AMT, '')) AS OLD_BASE_PRC_DEAL_AMT_TXT -->
+            <isEqual property="bizAppId" compareValue="NSAB0030">
+            ,TO_CHAR(NVL(BASE_OLD.BASE_PRC_DEAL_AMT, '')) AS OLD_BASE_PRC_DEAL_AMT_TXT
+            </isEqual>
+            <isEqual property="bizAppId" compareValue="NSAB0360">
+            ,TO_CHAR(NVL(CASE WHEN DCD.UPLFT_EFF_FROM_DT = BASE_NEW.CONTR_PRC_EFF_FROM_DT THEN BASE_OLD.BASE_PRC_DEAL_AMT ELSE BASE_NEW.BASE_PRC_DEAL_AMT END, '')) AS OLD_BASE_PRC_DEAL_AMT_TXT
+            </isEqual>
+<!-- END 2018/06/13 U.Kim [QC#25935, MOD] -->
+            ,''     AS XS_MTR_COV_COPY_QTY_TXT
+            ,''     AS XS_MTR_COPY_FROM_QTY_TXT
+            ,''     AS XS_MTR_COPY_THRU_QTY_TXT
+            ,''     AS XS_MTR_AMT_TXT
+            ,''     AS OLD_XS_MTR_AMT_TXT
+            ,''     AS SORT_SER_NUM
+            ,DDT.DS_CONTR_DTL_TP_SORT_NUM
+            ,0      AS XS_MTR_COPY_QTY
+        FROM
+             DS_CONTR_DTL       DCD
+            ,DS_CONTR_DTL_TP    DDT
+            ,DS_CONTR           DC
+            ,MDSE               MDS
+            ,BLLG_CYCLE         BC_B
+            ,BASE               BASE_NEW
+            ,BASE               BASE_OLD
+        WHERE
+                DCD.GLBL_CMPY_CD        = #glblCmpyCd#
+            AND DCD.EZCANCELFLAG        = '0'
+            AND DCD.DS_CONTR_PK         = #dsContrPk#
+            <iterate property="dsContrDtlPkList" var="dsContrDtlPkList[]" open="AND  DCD.DS_CONTR_DTL_PK IN (" close=")" conjunction=",">
+            #dsContrDtlPkList[]#
+            </iterate>
+            AND DCD.DS_CONTR_DTL_TP_CD  = #dsContrDtlTpCdIsFleet#
+            AND DCD.GLBL_CMPY_CD        = DDT.GLBL_CMPY_CD
+            AND DDT.EZCANCELFLAG        = '0'
+            AND DCD.DS_CONTR_DTL_TP_CD  = DDT.DS_CONTR_DTL_TP_CD
+            AND DCD.GLBL_CMPY_CD        = DC.GLBL_CMPY_CD
+            AND DCD.DS_CONTR_PK         = DC.DS_CONTR_PK
+            AND DC.EZCANCELFLAG         = '0'
+            AND DCD.GLBL_CMPY_CD        = MDS.GLBL_CMPY_CD(+)
+            AND DCD.SVC_PGM_MDSE_CD     = MDS.MDSE_CD(+)
+            AND MDS.EZCANCELFLAG(+)     = '0'
+            AND BASE_NEW.GLBL_CMPY_CD   = BC_B.GLBL_CMPY_CD(+)
+            AND BASE_NEW.BLLG_CYCLE_CD  = BC_B.BLLG_CYCLE_CD(+)
+            AND BC_B.EZCANCELFLAG(+)    = '0'
+            AND DCD.GLBL_CMPY_CD        = BASE_NEW.GLBL_CMPY_CD
+            AND DCD.DS_CONTR_DTL_PK     = BASE_NEW.DS_CONTR_DTL_PK
+            <isEqual property="bizAppId" compareValue="NSAB0030">
+            AND DCD.RNW_EFF_FROM_DT     &lt;= BASE_NEW.CONTR_PRC_EFF_FROM_DT
+            </isEqual>
+            <isEqual property="bizAppId" compareValue="NSAB0360">
+<!-- START 2018/06/13 U.Kim [QC#25935, MOD] -->
+<!--        AND DCD.UPLFT_EFF_FROM_DT     &lt;= BASE_NEW.CONTR_PRC_EFF_FROM_DT -->
+            AND DCD.UPLFT_EFF_FROM_DT     &gt;= BASE_NEW.CONTR_PRC_EFF_FROM_DT
+            AND DCD.UPLFT_EFF_FROM_DT     &lt;= BASE_NEW.CONTR_PRC_EFF_THRU_DT
+<!-- END 2018/06/13 U.Kim [QC#25935, MOD] -->
+            </isEqual>
+<!-- START 2018/06/13 U.Kim [QC#25935, MOD] -->
+<!--        AND BASE_NEW.GLBL_CMPY_CD   = BASE_OLD.GLBL_CMPY_CD -->
+<!--        AND BASE_NEW.DS_CONTR_DTL_PK = BASE_OLD.DS_CONTR_DTL_PK -->
+<!--        AND BASE_OLD.DS_CONTR_PRC_EFF_SQ_NUM = BASE_NEW.DS_CONTR_PRC_EFF_SQ_NUM -1 -->
+            AND BASE_NEW.GLBL_CMPY_CD               = BASE_OLD.GLBL_CMPY_CD(+)
+            AND BASE_NEW.DS_CONTR_DTL_PK            = BASE_OLD.DS_CONTR_DTL_PK(+)
+            AND BASE_NEW.DS_CONTR_PRC_EFF_SQ_NUM -1 = BASE_OLD.DS_CONTR_PRC_EFF_SQ_NUM(+)
+<!-- END 2018/06/13 U.Kim [QC#25935, MOD] -->
+       UNION ALL 
+        --Usage
+         SELECT
+             '2'     AS LINE_LV
+            ,BM_NEW1.BLLG_MTR_LB_CD
+            ,DCD.DS_CONTR_PK
+            ,DCD.DS_CONTR_DTL_PK
+            ,DC.DS_CONTR_CATG_CD
+            ,''      AS SHIP_TO_CUST_CD
+            ,''      AS SHIP_TO_LOC_NM
+            ,''      AS SHIP_TO_FIRST_LINE_ADDR
+            ,''      AS SHIP_TO_SCD_LINE_ADDR
+            ,''      AS SHIP_TO_THIRD_LINE_ADDR
+            ,''      AS SHIP_TO_FRTH_LINE_ADDR
+            ,''      AS SHIP_TO_CTY_ADDR
+            ,''      AS SHIP_TO_ST_CD
+            ,''      AS SHIP_TO_POST_CD
+            ,''      AS SHIP_TO_CTRY_NM
+<!-- QC#25935 Mod Start  -->
+<!--        ,''      AS MDL_NM-->
+            ,#fleetContract#                AS MDL_NM
+<!-- QC#25935 Mod End  -->
+
+            ,BM_NEW1.MTR_LB_DESC_TXT        AS SVC_PRC_RNW_DESC_LINE_TXT
+            ,''      AS SER_NUM
+            ,BM_NEW1.MTR_LB_SORT_NUM
+            ,''      AS BASE_BLLG_CYCLE_DESC_TXT
+            ,BC_U.BLLG_CYCLE_NM         AS USG_BLLG_CYCLE_DESC_TXT
+            <isEqual property="bizAppId" compareValue="NSAB0030">
+            ,DCD.RNW_EFF_FROM_DT        AS CONTR_EFF_FROM_DT_TXT
+            </isEqual>
+            <isEqual property="bizAppId" compareValue="NSAB0360">
+            ,DCD.UPLFT_EFF_FROM_DT      AS CONTR_EFF_FROM_DT_TXT
+            </isEqual>
+            ,DC.CONTR_VRSN_EFF_THRU_DT  AS CONTR_EFF_THRU_DT_TXT
+            ,''      AS BASE_PRC_DEAL_AMT_TXT
+            ,''      AS OLD_BASE_PRC_DEAL_AMT_TXT
+            ,TO_CHAR(NVL(BM_NEW1.XS_MTR_COPY_QTY, ''))          AS XS_MTR_COV_COPY_QTY_TXT
+            ,TO_CHAR(NVL(BM_NEW1.XS_MTR_COPY_QTY + 1, ''))      AS XS_MTR_COPY_FROM_QTY_TXT
+            ,TO_CHAR(NVL(BM_NEW1.XS_MTR_COPY_THRU_QTY_TXT, '')) AS XS_MTR_COPY_THRU_QTY_TXT
+            ,TO_CHAR(NVL(BM_NEW1.XS_MTR_AMT_RATE, ''))          AS XS_MTR_AMT_TXT
+<!-- START 2018/06/13 U.Kim [QC#25935, MOD] -->
+<!--        ,TO_CHAR(NVL(BM_OLD.XS_MTR_AMT_RATE, ''))           AS OLD_XS_MTR_AMT_TXT -->
+            <isEqual property="bizAppId" compareValue="NSAB0030">
+            ,TO_CHAR(NVL(BM_OLD.XS_MTR_AMT_RATE, ''))           AS OLD_XS_MTR_AMT_TXT
+            </isEqual>
+            <isEqual property="bizAppId" compareValue="NSAB0360">
+            ,TO_CHAR(NVL(CASE WHEN DCD.UPLFT_EFF_FROM_DT = BM_NEW1.CONTR_PRC_EFF_FROM_DT THEN BM_OLD.XS_MTR_AMT_RATE ELSE BM_NEW1.XS_MTR_AMT_RATE END, ''))           AS OLD_XS_MTR_AMT_TXT
+            </isEqual>
+<!-- END 2018/06/13 U.Kim [QC#25935, MOD] -->
+            ,''      AS SORT_SER_NUM   
+            ,DDT.DS_CONTR_DTL_TP_SORT_NUM
+            ,BM_NEW1.XS_MTR_COPY_QTY AS XS_MTR_COPY_QTY
+        FROM
+             DS_CONTR_DTL       DCD
+            ,DS_CONTR_DTL_TP    DDT
+            ,DS_CONTR           DC
+            ,BLLG_CYCLE         BC_U
+            ,BLLG_MTR           BM_NEW1
+            ,BLLG_MTR           BM_OLD
+        WHERE
+                DCD.GLBL_CMPY_CD        = #glblCmpyCd#
+            AND DCD.EZCANCELFLAG        = '0'
+            AND DCD.DS_CONTR_PK         = #dsContrPk#
+            AND DCD.DS_CONTR_DTL_TP_CD  = #dsContrDtlTpCdIsFleet#
+            <iterate property="dsContrDtlPkList" var="dsContrDtlPkList[]" open="AND  DCD.DS_CONTR_DTL_PK IN (" close=")" conjunction=",">
+            #dsContrDtlPkList[]#
+            </iterate>
+            AND DCD.GLBL_CMPY_CD        = DDT.GLBL_CMPY_CD
+            AND DDT.EZCANCELFLAG        = '0'
+            AND DCD.DS_CONTR_DTL_TP_CD  = DDT.DS_CONTR_DTL_TP_CD
+            AND DCD.GLBL_CMPY_CD        = DC.GLBL_CMPY_CD
+            AND DCD.DS_CONTR_PK         = DC.DS_CONTR_PK
+            AND DC.EZCANCELFLAG         = '0'
+            AND DCD.GLBL_CMPY_CD        = BM_NEW1.GLBL_CMPY_CD
+            AND DCD.DS_CONTR_DTL_PK     = BM_NEW1.DS_CONTR_DTL_PK
+            <isEqual property="bizAppId" compareValue="NSAB0030">
+            AND DCD.RNW_EFF_FROM_DT     &lt;= BM_NEW1.CONTR_PRC_EFF_FROM_DT
+            </isEqual>
+            <isEqual property="bizAppId" compareValue="NSAB0360">
+<!-- START 2018/06/13 U.Kim [QC#25935, MOD] -->
+<!--        AND DCD.UPLFT_EFF_FROM_DT     &lt;= BM_NEW1.CONTR_PRC_EFF_FROM_DT -->
+            AND DCD.UPLFT_EFF_FROM_DT     &gt;= BM_NEW1.CONTR_PRC_EFF_FROM_DT
+            AND DCD.UPLFT_EFF_FROM_DT     &lt;= BM_NEW1.CONTR_PRC_EFF_THRU_DT
+<!-- END 2018/06/13 U.Kim [QC#25935, MOD] -->
+            </isEqual>
+<!-- START 2018/06/13 U.Kim [QC#25935, MOD] -->
+<!--        AND BM_NEW1.GLBL_CMPY_CD    = BM_OLD.GLBL_CMPY_CD -->
+<!--        AND BM_NEW1.DS_CONTR_DTL_PK = BM_OLD.DS_CONTR_DTL_PK -->
+<!--        AND BM_NEW1.CONTR_XS_COPY_PK        = BM_OLD.CONTR_XS_COPY_PK -->
+<!--        AND BM_OLD.DS_CONTR_PRC_EFF_SQ_NUM  = BM_NEW1.DS_CONTR_PRC_EFF_SQ_NUM -1 -->
+            AND BM_NEW1.GLBL_CMPY_CD               = BM_OLD.GLBL_CMPY_CD(+)
+            AND BM_NEW1.DS_CONTR_DTL_PK            = BM_OLD.DS_CONTR_DTL_PK(+)
+            AND BM_NEW1.CONTR_XS_COPY_PK           = BM_OLD.CONTR_XS_COPY_PK(+)
+            AND BM_NEW1.DS_CONTR_PRC_EFF_SQ_NUM -1 = BM_OLD.DS_CONTR_PRC_EFF_SQ_NUM(+)
+<!-- END 2018/06/13 U.Kim [QC#25935, MOD] -->
+            AND BM_NEW1.GLBL_CMPY_CD            = BC_U.GLBL_CMPY_CD(+)
+            AND BM_NEW1.BLLG_CYCLE_CD           = BC_U.BLLG_CYCLE_CD(+)
+            AND BC_U.EZCANCELFLAG(+)            = '0'
+        UNION ALL
+        --Machine Line
+        SELECT
+             '1'                        AS LINE_LV
+            ,''                         AS BLLG_MTR_LB_CD
+            ,DCD.DS_CONTR_PK
+            ,DCD.DS_CONTR_DTL_PK
+            ,DC.DS_CONTR_CATG_CD
+            ,ST.SHIP_TO_CUST_CD
+            ,ST.LOC_NUM                 AS SHIP_TO_LOC_NM
+            ,ST.FIRST_LINE_ADDR         AS SHIP_TO_FIRST_LINE_ADDR
+            ,ST.SCD_LINE_ADDR           AS SHIP_TO_SCD_LINE_ADDR
+            ,ST.THIRD_LINE_ADDR         AS SHIP_TO_THIRD_LINE_ADDR
+            ,ST.FRTH_LINE_ADDR          AS SHIP_TO_FRTH_LINE_ADDR
+            ,ST.CTY_ADDR                AS SHIP_TO_CTY_ADDR
+            ,ST.ST_CD                   AS SHIP_TO_ST_CD
+            ,ST.POST_CD                 AS SHIP_TO_POST_CD
+            ,CTRY_S.CTRY_NM             AS SHIP_TO_CTRY_NM
+            ,MN.T_MDL_NM                AS MDL_NM
+            ,MDS.MDSE_DESC_SHORT_TXT    AS SVC_PRC_RNW_DESC_LINE_TXT
+            ,SMM.SER_NUM                AS SER_NUM
+            ,0      AS MTR_LB_SORT_NUM
+            ,''     AS BASE_BLLG_CYCLE_DESC_TXT
+            ,''     AS USG_BLLG_CYCLE_DESC_TXT
+            <isEqual property="bizAppId" compareValue="NSAB0030">
+            ,DCD.RNW_EFF_FROM_DT        AS CONTR_EFF_FROM_DT_TXT
+            </isEqual>
+            <isEqual property="bizAppId" compareValue="NSAB0360">
+            ,DCD.UPLFT_EFF_FROM_DT      AS CONTR_EFF_FROM_DT_TXT
+            </isEqual>
+            ,DC.CONTR_VRSN_EFF_THRU_DT  AS CONTR_EFF_THRU_DT_TXT
+            ,''     AS BASE_PRC_DEAL_AMT_TXT
+            ,''     AS OLD_BASE_PRC_DEAL_AMT_TXT
+            ,''     AS XS_MTR_COV_COPY_QTY_TXT
+            ,''     AS XS_MTR_COPY_FROM_QTY_TXT
+            ,''     AS XS_MTR_COPY_THRU_QTY_TXT
+            ,''     AS XS_MTR_AMT_TXT
+            ,''     AS OLD_XS_MTR_AMT_TXT
+            ,SMM.SER_NUM       AS SORT_SER_NUM
+            ,DDT.DS_CONTR_DTL_TP_SORT_NUM
+            ,0      AS XS_MTR_COPY_QTY
+        FROM
+             DS_CONTR_DTL       DCD
+            ,DS_CONTR_DTL_TP    DDT
+            ,DS_CONTR           DC
+            ,SVC_MACH_MSTR      SMM
+            ,SVC_CONFIG_MSTR    SCM
+            ,SHIP_TO_CUST       ST
+            ,CTRY               CTRY_S
+            ,MDL_NM             MN
+            ,MDSE               MDS
+        WHERE
+                DCD.GLBL_CMPY_CD        = #glblCmpyCd#
+            AND DCD.EZCANCELFLAG        = '0'
+            AND DCD.DS_CONTR_PK         = #dsContrPk#
+            AND DCD.DS_CONTR_DTL_TP_CD  &lt;&gt; #dsContrDtlTpCdIsFleet#
+            <iterate property="dsContrDtlPkList" var="dsContrDtlPkList[]" open="AND  DCD.DS_CONTR_DTL_PK IN (" close=")" conjunction=",">
+            #dsContrDtlPkList[]#
+            </iterate>
+            AND DCD.GLBL_CMPY_CD        = DDT.GLBL_CMPY_CD
+            AND DDT.EZCANCELFLAG        = '0'
+            AND DCD.DS_CONTR_DTL_TP_CD  = DDT.DS_CONTR_DTL_TP_CD
+            AND DCD.GLBL_CMPY_CD        = DC.GLBL_CMPY_CD
+            AND DCD.DS_CONTR_PK         = DC.DS_CONTR_PK
+            AND DC.EZCANCELFLAG         = '0'
+            AND DCD.GLBL_CMPY_CD        = SMM.GLBL_CMPY_CD
+            AND DCD.SVC_MACH_MSTR_PK    = SMM.SVC_MACH_MSTR_PK
+            AND SMM.EZCANCELFLAG        = '0'
+            AND SMM.SVC_MACH_TP_CD      = #svcMachTpCdIsMach#
+            AND SMM.GLBL_CMPY_CD        = SCM.GLBL_CMPY_CD
+            AND SMM.SVC_CONFIG_MSTR_PK  = SCM.SVC_CONFIG_MSTR_PK
+            AND SCM.EZCANCELFLAG        = '0'
+            AND SMM.GLBL_CMPY_CD        = ST.GLBL_CMPY_CD
+            AND SMM.CUR_LOC_NUM         = ST.SHIP_TO_CUST_CD
+            AND ST.EZCANCELFLAG         = '0'
+            AND ST.GLBL_CMPY_CD         = CTRY_S.GLBL_CMPY_CD
+            AND ST.CTRY_CD              = CTRY_S.CTRY_CD
+            AND CTRY_S.EZCANCELFLAG     = '0'
+            AND SCM.GLBL_CMPY_CD        = MN.T_GLBL_CMPY_CD
+            AND SCM.MDL_ID              = MN.T_MDL_ID
+            AND SMM.GLBL_CMPY_CD        = MDS.GLBL_CMPY_CD(+)
+            AND SMM.MDSE_CD             = MDS.MDSE_CD(+)
+            AND MDS.EZCANCELFLAG(+)     = '0'
+        UNION ALL
+        --ACC
+        SELECT
+             '3'                        AS LINE_LV
+            ,''      AS BLLG_MTR_LB_CD
+            ,DCD.DS_CONTR_PK
+            ,DCD.DS_CONTR_DTL_PK
+            ,DC.DS_CONTR_CATG_CD
+<!-- QC#25935 Mod Start -->
+<!-- 
+
+            ,''      AS SHIP_TO_CUST_CD
+            ,''      AS SHIP_TO_LOC_NM
+            ,''      AS SHIP_TO_FIRST_LINE_ADDR
+            ,''      AS SHIP_TO_SCD_LINE_ADDR
+            ,''      AS SHIP_TO_THIRD_LINE_ADDR
+            ,''      AS SHIP_TO_FRTH_LINE_ADDR
+            ,''      AS SHIP_TO_CTY_ADDR
+            ,''      AS SHIP_TO_ST_CD
+            ,''      AS SHIP_TO_POST_CD
+            ,''      AS SHIP_TO_CTRY_NM
+-->
+            ,ST.SHIP_TO_CUST_CD
+            ,ST.LOC_NUM                 AS SHIP_TO_LOC_NM
+            ,ST.FIRST_LINE_ADDR         AS SHIP_TO_FIRST_LINE_ADDR
+            ,ST.SCD_LINE_ADDR           AS SHIP_TO_SCD_LINE_ADDR
+            ,ST.THIRD_LINE_ADDR         AS SHIP_TO_THIRD_LINE_ADDR
+            ,ST.FRTH_LINE_ADDR          AS SHIP_TO_FRTH_LINE_ADDR
+            ,ST.CTY_ADDR                AS SHIP_TO_CTY_ADDR
+            ,ST.ST_CD                   AS SHIP_TO_ST_CD
+            ,ST.POST_CD                 AS SHIP_TO_POST_CD
+            ,CTRY_S.CTRY_NM             AS SHIP_TO_CTRY_NM
+<!-- QC#25935 Mod End -->
+<!-- QC#25935 Mod Start -->
+<!--        ,''                         AS MDL_NM -->
+            ,MN.T_MDL_NM                AS MDL_NM
+<!-- QC#25935 Mod End -->
+            ,MDS.MDSE_DESC_SHORT_TXT      AS SVC_PRC_RNW_DESC_LINE_TXT
+            ,SMM.SER_NUM                  AS SER_NUM
+            ,0       AS MTR_LB_SORT_NUM
+            ,''      AS BASE_BLLG_CYCLE_DESC_TXT
+            ,''      AS USG_BLLG_CYCLE_DESC_TXT
+            <isEqual property="bizAppId" compareValue="NSAB0030">
+            ,DCD.RNW_EFF_FROM_DT          AS CONTR_EFF_FROM_DT_TXT
+            </isEqual>
+            <isEqual property="bizAppId" compareValue="NSAB0360">
+            ,DCD.UPLFT_EFF_FROM_DT      AS CONTR_EFF_FROM_DT_TXT
+            </isEqual>
+            ,DC.CONTR_VRSN_EFF_THRU_DT    AS CONTR_EFF_THRU_DT_TXT
+            ,''      AS BASE_PRC_DEAL_AMT_TXT
+            ,''      AS OLD_BASE_PRC_DEAL_AMT_TXT
+            ,''      AS XS_MTR_COV_COPY_QTY_TXT
+            ,''      AS XS_MTR_COPY_FROM_QTY_TXT
+            ,''      AS XS_MTR_COPY_THRU_QTY_TXT
+            ,''      AS XS_MTR_AMT_TXT
+            ,''      AS OLD_XS_MTR_AMT_TXT
+            ,NVL(SMMP.SER_NUM,SMM.SER_NUM)  AS SORT_SER_NUM
+            ,DDT.DS_CONTR_DTL_TP_SORT_NUM
+            ,0       AS XS_MTR_COPY_QTY
+        FROM
+             DS_CONTR_DTL       DCD
+            ,DS_CONTR_DTL_TP    DDT
+            ,DS_CONTR           DC
+            ,SVC_MACH_MSTR      SMM
+            ,DS_CONTR_DTL       DCDP
+            ,SVC_MACH_MSTR      SMMP
+            ,MDSE               MDS
+<!-- QC#25935 Mod Start -->
+            ,SVC_CONFIG_MSTR    SCM
+            ,SHIP_TO_CUST       ST
+            ,CTRY               CTRY_S
+            ,MDL_NM             MN
+<!-- QC#25935 Mod End -->
+        WHERE
+                DCD.GLBL_CMPY_CD        = #glblCmpyCd#
+            AND DCD.EZCANCELFLAG        = '0'
+            AND DCD.GLBL_CMPY_CD        = DC.GLBL_CMPY_CD
+            AND DCD.DS_CONTR_PK         = #dsContrPk#
+            <iterate property="dsContrDtlPkList" var="dsContrDtlPkList[]" open="AND  DCD.DS_CONTR_DTL_PK IN (" close=")" conjunction=",">
+            #dsContrDtlPkList[]#
+            </iterate>
+            AND DCD.GLBL_CMPY_CD        = DDT.GLBL_CMPY_CD
+            AND DDT.EZCANCELFLAG        = '0'
+            AND DCD.DS_CONTR_DTL_TP_CD  = DDT.DS_CONTR_DTL_TP_CD
+            AND DCD.GLBL_CMPY_CD        = DC.GLBL_CMPY_CD
+            AND DCD.DS_CONTR_PK         = DC.DS_CONTR_PK
+            AND DC.EZCANCELFLAG         = '0'
+            AND DCD.GLBL_CMPY_CD        = SMM.GLBL_CMPY_CD
+            AND DCD.SVC_MACH_MSTR_PK    = SMM.SVC_MACH_MSTR_PK
+            AND SMM.EZCANCELFLAG        = '0'
+            AND SMM.SVC_MACH_TP_CD      = #svcMachTpCdIsAcc#
+<!-- QC#25935 Mod Start -->
+            AND SMM.GLBL_CMPY_CD        = SCM.GLBL_CMPY_CD
+            AND SMM.SVC_CONFIG_MSTR_PK  = SCM.SVC_CONFIG_MSTR_PK
+            AND SCM.EZCANCELFLAG        = '0'
+            AND SMM.GLBL_CMPY_CD        = ST.GLBL_CMPY_CD
+            AND SMM.CUR_LOC_NUM         = ST.SHIP_TO_CUST_CD
+            AND ST.EZCANCELFLAG         = '0'
+            AND ST.GLBL_CMPY_CD         = CTRY_S.GLBL_CMPY_CD
+            AND ST.CTRY_CD              = CTRY_S.CTRY_CD
+            AND CTRY_S.EZCANCELFLAG     = '0'
+            AND SCM.GLBL_CMPY_CD        = MN.T_GLBL_CMPY_CD
+            AND SCM.MDL_ID              = MN.T_MDL_ID
+<!-- QC#25935 Mod End -->
+            AND DCD.PRNT_DS_CONTR_DTL_PK = DCDP.DS_CONTR_DTL_PK(+)
+            AND DCD.GLBL_CMPY_CD         = DCDP.GLBL_CMPY_CD(+)
+            AND DCDP.EZCANCELFLAG(+)    = '0'
+            AND DCDP.GLBL_CMPY_CD       = SMMP.GLBL_CMPY_CD(+)
+            AND DCDP.SVC_MACH_MSTR_PK   = SMMP.SVC_MACH_MSTR_PK(+)
+            AND SMMP.EZCANCELFLAG(+)    = '0'
+            AND SMM.GLBL_CMPY_CD        = MDS.GLBL_CMPY_CD(+)
+            AND SMM.MDSE_CD             = MDS.MDSE_CD(+)
+            AND MDS.EZCANCELFLAG(+)   = '0'
+        ORDER BY 
+             SORT_SER_NUM NULLS FIRST
+            ,DS_CONTR_DTL_TP_SORT_NUM
+            ,LINE_LV
+            ,MTR_LB_SORT_NUM
+            ,XS_MTR_COPY_QTY
+    </statement>
+    <!-- END 2017/08/21 M.Naito [QC#8661, MOD] -->
+
+    <statement id="getSvcTermCondLtrInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+             STCL.SPEC_SIDE_TP_CD
+            ,STCL.SVC_TERM_COND_HDR_NUM
+            ,STCL.SVC_TERM_COND_DTL_NUM
+            ,STCL.ENG_TTL_VAL_TXT       AS TTL_VAL_TXT
+            ,STCL.ENG_DESC_VAL_TXT      AS DESC_VAL_TXT
+            ,STCL.TERM_COND_VRSN_TXT
+        FROM
+             DS_CONTR           DC
+            ,SVC_TERM_COND_LTR  STCL
+        WHERE
+                DC.GLBL_CMPY_CD         = #glblCmpyCd#
+            AND DC.DS_CONTR_PK          = #dsContrPk#
+            AND DC.EZCANCELFLAG         = '0'
+            AND DC.GLBL_CMPY_CD         = STCL.GLBL_CMPY_CD
+            AND STCL.EZCANCELFLAG       = '0'
+            AND EXISTS (
+                    SELECT
+                        1
+                    FROM
+                         DS_CONTR_DTL       DCD
+                        ,SVC_MACH_MSTR      SMM
+                    WHERE
+                            DCD.GLBL_CMPY_CD         = DC.GLBL_CMPY_CD
+                        AND DCD.DS_CONTR_PK          = DC.DS_CONTR_PK
+                        <iterate property="dsContrDtlTpList" var="dsContrDtlTpList[]" open="AND DCD.DS_CONTR_DTL_TP_CD NOT IN (" close=")" conjunction=",">
+                        #dsContrDtlTpList[]#
+                        </iterate>
+                        AND DCD.EZCANCELFLAG        = '0'
+                        AND DCD.GLBL_CMPY_CD        = SMM.GLBL_CMPY_CD
+                        AND DCD.SVC_MACH_MSTR_PK    = SMM.SVC_MACH_MSTR_PK
+                        AND SMM.EZCANCELFLAG        = '0'
+                        AND SMM.GLBL_CMPY_CD        = STCL.GLBL_CMPY_CD
+                        AND NVL(SMM.CORP_ADVTG_STS_CD, 'N')  = STCL.CORP_ADV_PRC_FLG
+                        AND STCL.EFF_FROM_DT                    &lt;= #slsDt#
+                        AND NVL(STCL.EFF_THRU_DT, #maxThruDt#)  &gt;= #slsDt#
+                )
+        ORDER BY
+             STCL.SPEC_SIDE_TP_CD NULLS FIRST
+            ,TO_NUMBER(STCL.SVC_TERM_COND_HDR_NUM)
+            ,TO_NUMBER(STCL.SVC_TERM_COND_DTL_NUM)
+    </statement>
+
+    <!-- START 2017/08/21 M.Naito [QC#8661, ADD] -->
+    <statement id="getSvcPrcRnwLtrWrkForDelete" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+             SPR.SVC_PRC_RNW_LTR_WRK_PK
+        FROM
+             SVC_PRC_RNW_LTR_WRK  SPR
+        WHERE
+                SPR.GLBL_CMPY_CD = #glblCmpyCd#
+            AND SPR.DS_CONTR_PK  = #dsContrPk#
+            AND SPR.BIZ_APP_ID   = #bizAppId#
+            AND SPR.RPT_ID       = #rptId#
+            AND SPR.EZCANCELFLAG = '0'
+    </statement>
+
+    <statement id="getDsContrHdrInfo" parameterClass="Map" resultClass="Map">
+       SELECT
+             DC.DS_CONTR_PK
+            ,TOC.TOC_NM
+            ,DC.DS_CONTR_NUM
+            ,BT.BILL_TO_CUST_CD
+            ,BT.LOC_NM           AS BILL_TO_LOC_NM
+            ,BT.FIRST_LINE_ADDR  AS BILL_TO_FIRST_LINE_ADDR
+            ,BT.SCD_LINE_ADDR    AS BILL_TO_SCD_LINE_ADDR
+            ,BT.THIRD_LINE_ADDR  AS BILL_TO_THIRD_LINE_ADDR
+            ,BT.FRTH_LINE_ADDR   AS BILL_TO_FRTH_LINE_ADDR
+            ,BT.CTY_ADDR         AS BILL_TO_CTY_ADDR
+            ,BT.ST_CD            AS BILL_TO_ST_CD
+            ,BT.POST_CD          AS BILL_TO_POST_CD
+            ,CTRY.CTRY_NM        AS BILL_TO_CTRY_NM
+        FROM
+             DS_CONTR            DC
+            ,TOC                 TOC
+            ,BILL_TO_CUST        BT
+            ,CTRY                CTRY
+        WHERE
+                DC.GLBL_CMPY_CD      = #glblCmpyCd#
+            AND DC.DS_CONTR_PK       = #dsContrPk#
+            AND DC.GLBL_CMPY_CD      = TOC.GLBL_CMPY_CD
+            AND DC.TOC_CD            = TOC.TOC_CD
+            AND DC.GLBL_CMPY_CD      = BT.GLBL_CMPY_CD
+            AND DC.ALT_PAYER_CUST_CD = BT.BILL_TO_CUST_CD
+            AND BT.GLBL_CMPY_CD      = CTRY.GLBL_CMPY_CD
+            AND BT.CTRY_CD           = CTRY.CTRY_CD
+            AND DC.EZCANCELFLAG      = '0'
+            AND TOC.EZCANCELFLAG     = '0'
+            AND BT.EZCANCELFLAG      = '0'
+            AND CTRY.EZCANCELFLAG    = '0'
+    </statement>
+
+    <statement id="getIntlLangVal" parameterClass="Map" resultClass="String">
+        SELECT
+            ILV.ENG_VAL_TXT
+        FROM
+            INTL_LANG_VAL ILV
+        WHERE
+                ILV.GLBL_CMPY_CD = #glblCmpyCd#
+            AND ILV.LANG_KEY_CD  = #langKeyCd#
+            AND ILV.EZCANCELFLAG = '0'
+    </statement>
+    <!-- END 2017/08/21 M.Naito [QC#8661, ADD] -->
+
+</sqlMap>

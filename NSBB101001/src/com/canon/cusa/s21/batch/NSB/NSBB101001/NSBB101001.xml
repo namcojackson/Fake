@@ -1,0 +1,277 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NSBB101001">
+    <statement id="getSvcModUpldWrk" parameterClass="Map" resultClass="Map">
+        SELECT
+            A.UPLD_CSV_RQST_PK,
+            A.UPLD_CSV_RQST_ROW_NUM,
+            A.SVC_MOD_PLN_ID,
+            A.SER_NUM,
+            A.SVC_MOD_OPT_DESC_TXT,
+            A.SVC_MOD_OPT_DT,
+            A.SVC_MOD_NOTE_TXT
+        FROM
+            SVC_MOD_UPLD_WRK  A
+        WHERE
+                A.GLBL_CMPY_CD           = #glblCmpyCd#
+            AND A.EZCANCELFLAG           = '0'
+            AND A.UPLD_CSV_RQST_PK       = #upldCsvRqstPk#
+        ORDER BY
+             A.SVC_MOD_PLN_ID   ASC
+            ,A.SER_NUM          ASC
+    </statement>
+    
+    <statement id="isSvcModPk" parameterClass="Map" resultClass="Map">
+        SELECT
+             A.GLBL_CMPY_CD AS GLBL_CMPY_CD
+            ,A.SVC_MOD_PK   AS SVC_MOD_PK
+        FROM
+            SVC_MOD  A
+        WHERE
+                A.GLBL_CMPY_CD           = #glblCmpyCd#
+            AND A.EZCANCELFLAG           = '0'
+            AND A.SVC_MOD_PLN_ID         = #svcModPlnId#
+    </statement>
+    
+    <statement id="isSvcMachMstrPk" parameterClass="Map" resultClass="Map">
+        SELECT
+             A.GLBL_CMPY_CD     AS GLBL_CMPY_CD
+            ,A.SVC_MACH_MSTR_PK AS SVC_MACH_MSTR_PK
+        FROM
+            SVC_MACH_MSTR  A
+        WHERE
+                A.GLBL_CMPY_CD           = #glblCmpyCd#
+            AND A.EZCANCELFLAG           = '0'
+            AND A.SER_NUM                = #serNum#
+    </statement>
+    
+    <statement id="getSvcModOpt" parameterClass="Map" resultClass="Map">
+        SELECT
+             A.GLBL_CMPY_CD   AS GLBL_CMPY_CD
+            ,A.SVC_MOD_OPT_CD AS SVC_MOD_OPT_CD
+        FROM
+            SVC_MOD_OPT  A
+        WHERE
+                A.GLBL_CMPY_CD           = #glblCmpyCd#
+            AND A.EZCANCELFLAG           = '0'
+            AND A.SVC_MOD_OPT_DESC_TXT   = #svcModOptDescTxt#
+    </statement>
+    <statement id="getSvcModSts" parameterClass="Map" resultClass="Map">
+        SELECT
+             SMS.GLBL_CMPY_CD        AS GLBL_CMPY_CD
+            ,SMS.SVC_MOD_STS_PK      AS SVC_MOD_STS_PK
+            ,SMS.SVC_MOD_PROC_STS_CD AS SVC_MOD_PROC_STS_CD
+        FROM
+             SVC_MOD_STS    SMS
+            ,SVC_MOD        SM
+            ,SVC_MACH_MSTR  SMM
+        WHERE
+                SMS.GLBL_CMPY_CD         = #glblCmpyCd#
+            AND SMS.EZCANCELFLAG         = '0'
+            AND SMS.GLBL_CMPY_CD         = SM.GLBL_CMPY_CD
+            AND SMS.SVC_MOD_PK           = SM.SVC_MOD_PK
+            AND SM.EZCANCELFLAG          = '0'
+            AND SM.SVC_MOD_PLN_ID        = #svcModPlnId#
+            AND SMS.GLBL_CMPY_CD         = SMM.GLBL_CMPY_CD
+            AND SMS.SVC_MACH_MSTR_PK     = SMM.SVC_MACH_MSTR_PK
+            AND SMM.EZCANCELFLAG         = '0'
+            AND SMM.SER_NUM              = #serNum#
+    </statement>
+<!-- START 2023/03/31 S.Kitamura [QC#60927, ADD] -->
+    <statement id="getSvcMod" parameterClass="Map" resultClass="Map">
+            SELECT
+            <!-- START 2023/04/21 S.Kitamura [QC#60927, ADD] -->
+                 DISTINCT
+            <!-- END 2023/04/21 S.Kitamura [QC#60927, ADD] -->
+                 STS.SVC_MOD_STS_PK         AS SVC_MOD_STS_PK
+                ,SMM.MDSE_CD                AS MDSE_CD
+                ,SMM.SER_NUM                AS SER_NUM
+                ,(
+                    SELECT
+                        SMPS.SVC_MOD_PROC_STS_CD
+                    FROM
+                        SVC_MOD_PROC_STS SMPS
+                    WHERE
+                            SMPS.GLBL_CMPY_CD           = #glblCmpyCd#
+                        AND SMPS.SVC_MOD_PROC_STS_CD    = CASE
+                                                            WHEN STS.SVC_MOD_PROC_STS_CD IS NULL AND EXISTS(
+                                                                SELECT 1
+                                                                FROM
+                                                                    SVC_MOD_DTL SMD
+                                                                WHERE
+                                                                    SMD.GLBL_CMPY_CD    = #glblCmpyCd#
+                                                                AND SMD.SVC_MOD_PK      = #svcModPk#
+                                                                AND SMD.EZCANCELFLAG    = '0'
+                                                                AND (   SMD.SVC_MOD_CANC_DT &lt;= #slsDt#
+                                                                     OR SMD.SVC_MOD_OBSL_DT &lt;= #slsDt#)
+                                                                AND ((LENGTH(SMD.MDSE_CD) &gt;  #mdseCdLen# AND SMM.MDSE_CD = SMD.MDSE_CD)
+                                                                     OR
+                                                                     (LENGTH(SMD.MDSE_CD) &lt;= #mdseCdLen# AND SMM.MDSE_CD LIKE SMD.MDSE_CD || '%'))
+                                                                UNION
+                                                                SELECT 1
+                                                                FROM
+                                                                    SVC_MOD_DTL SMD
+                                                                    ,MDSE_ITEM_FLIP_SET FLP
+                                                                WHERE
+                                                                    SMD.GLBL_CMPY_CD    = #glblCmpyCd#
+                                                                AND SMD.SVC_MOD_PK      = #svcModPk#
+                                                                AND SMD.EZCANCELFLAG    = '0'
+                                                                AND (   SMD.SVC_MOD_CANC_DT &lt;= #slsDt#
+                                                                     OR SMD.SVC_MOD_OBSL_DT &lt;= #slsDt#)
+                                                                AND SMD.GLBL_CMPY_CD    = FLP.GLBL_CMPY_CD
+                                                                AND SMD.MDSE_CD         = FLP.MDSE_CD
+                                                                AND FLP.EZCANCELFLAG    = '0'
+                                                                <iterate property="mdseItemRelnTpCdList" var="mdseItemRelnTpCd[]" open="AND FLP.MDSE_ITEM_RELN_TP_CD (+) IN (" close=")" conjunction=",">
+                                                                    #mdseItemRelnTpCd[]#
+                                                                </iterate>
+                                                                AND ((LENGTH(FLP.RELN_MDSE_CD) &gt; #mdseCdLen# AND SMM.MDSE_CD = FLP.RELN_MDSE_CD)
+                                                                     OR
+                                                                     (LENGTH(FLP.RELN_MDSE_CD) &lt;= #mdseCdLen# AND SMM.MDSE_CD LIKE FLP.RELN_MDSE_CD || '%'))
+                                                            )
+                                                            THEN #svcModProcStsCd_canc#
+                                                            WHEN STS.SVC_MOD_PROC_STS_CD IS NULL
+                                                            THEN #svcModProcStsCd_op#
+                                                            ELSE STS.SVC_MOD_PROC_STS_CD
+                                                          END
+                        AND SMPS.EZCANCELFLAG           = '0'
+                 )                          AS SVC_MOD_PROC_STS_CD
+                ,MDT_SVC_MOD_PK             AS SVC_MOD_PK
+                ,MDT_SVC_MOD_DTL_PK         AS SVC_MOD_DTL_PK
+                ,SMM.SVC_MACH_MSTR_PK       AS SVC_MACH_MSTR_PK
+            FROM
+                (
+                    SELECT --+ NO_MERGE USE_CONCAT
+                        RNG.MDSE_CD               AS RNG_MDSE_CD
+                       ,RNG.GLBL_CMPY_CD          AS RNG_GLBL_CMPY_CD
+                       ,RNG.SVC_MOD_DTL_PK        AS RNG_SVC_MOD_DTL_PK
+                       ,RNG.SVC_MOD_FROM_SER_NUM  AS RNG_SVC_MOD_FROM_SER_NUM
+                       ,RNG.SVC_MOD_TO_SER_NUM    AS RNG_SVC_MOD_TO_SER_NUM
+                       ,RNG.LG_SER_NUM            AS RNG_LG_SER_NUM
+                       ,MDT.SVC_MOD_DTL_PK        AS MDT_SVC_MOD_DTL_PK
+                       ,MDT.SVC_MOD_PK            AS MDT_SVC_MOD_PK
+                       ,MDT.GLBL_CMPY_CD          AS MDT_GLBL_CMPY_CD
+                       ,MDT.MDSE_CD               AS MDT_MDSE_CD
+                       ,NVL(FLP.RELN_MDSE_CD, FLP2.RELN_MDSE_CD) AS FLP_RELN_MDSE_CD
+                    FROM
+                        SVC_MOD_SER_RNG    RNG
+                       ,SVC_MOD_DTL        MDT
+                       ,MDSE_ITEM_FLIP_SET FLP
+                       ,MDSE_ITEM_FLIP_SET FLP2
+                    WHERE
+                        RNG.GLBL_CMPY_CD          = #glblCmpyCd#
+                    AND RNG.SVC_MOD_PK            = #svcModPk#
+                    AND RNG.GLBL_CMPY_CD          = MDT.GLBL_CMPY_CD
+                    AND RNG.SVC_MOD_PK            = MDT.SVC_MOD_PK
+                    AND RNG.SVC_MOD_DTL_PK        = MDT.SVC_MOD_DTL_PK
+                    AND MDT.GLBL_CMPY_CD          = FLP.GLBL_CMPY_CD (+)
+                    AND MDT.MDSE_CD               = FLP.MDSE_CD (+)
+                    AND FLP.EZCANCELFLAG (+)      = '0'
+                    AND MDT.GLBL_CMPY_CD          = FLP2.GLBL_CMPY_CD (+)
+                    AND MDT.MDSE_CD               = FLP2.RELN_MDSE_CD (+)
+                    AND FLP2.EZCANCELFLAG (+)      = '0'
+                    AND RNG.EZCANCELFLAG          = '0'
+                    AND MDT.EZCANCELFLAG          = '0'
+                ) SEG
+                ,SVC_MACH_MSTR      SMM
+                ,SVC_MOD_STS        STS
+                ,SVC_MACH_MSTR_STS  SMMS
+                ,(
+                      SELECT
+                          DISTINCT SMSR.SVC_MOD_PK
+                         ,SMSR.GLBL_CMPY_CD
+                         ,SMSR.MDSE_CD
+                         ,SMSR.SVC_MOD_FROM_SER_NUM
+                         ,SMSR.SVC_MOD_TO_SER_NUM
+                      FROM
+                          SVC_MOD_SER_RNG SMSR
+                      WHERE
+                          SMSR.EZCANCELFLAG            = '0'
+                          AND LENGTH(SMSR.MDSE_CD) &gt; #mdseCdLen#
+                      UNION ALL
+                      SELECT
+                          DISTINCT SMSR.SVC_MOD_PK
+                         ,SMSR.GLBL_CMPY_CD
+                         ,SMSR.MDSE_CD
+                         ,SMSR.SVC_MOD_FROM_SER_NUM
+                         ,SMSR.SVC_MOD_TO_SER_NUM
+                      FROM
+                          SVC_MOD_SER_RNG SMSR
+                      WHERE
+                          SMSR.EZCANCELFLAG             = '0'
+                          AND LENGTH(SMSR.MDSE_CD) &lt;= #mdseCdLen#
+                  ) MDSECD1A
+                ,(
+                      SELECT
+                          DISTINCT MIFS.RELN_MDSE_CD
+                         ,MIFS.GLBL_CMPY_CD
+                         ,MIFS.MDSE_CD
+                      FROM
+                          MDSE_ITEM_FLIP_SET MIFS
+                      WHERE
+                          MIFS.EZCANCELFLAG            = '0'
+                          <iterate property="mdseItemRelnTpCdList" var="mdseItemRelnTpCd[]" open="AND MIFS.MDSE_ITEM_RELN_TP_CD (+) IN (" close=")" conjunction=",">
+                               #mdseItemRelnTpCd[]#
+                          </iterate>
+                          AND LENGTH(MIFS.RELN_MDSE_CD) &gt; #mdseCdLen#
+                      UNION ALL
+                      SELECT
+                          DISTINCT MIFS.RELN_MDSE_CD
+                         ,MIFS.GLBL_CMPY_CD
+                         ,MIFS.MDSE_CD
+                      FROM
+                          MDSE_ITEM_FLIP_SET MIFS
+                      WHERE
+                          MIFS.EZCANCELFLAG            = '0'
+                          <iterate property="mdseItemRelnTpCdList" var="mdseItemRelnTpCd[]" open="AND MIFS.MDSE_ITEM_RELN_TP_CD (+) IN (" close=")" conjunction=",">
+                               #mdseItemRelnTpCd[]#
+                          </iterate>
+                          AND LENGTH(MIFS.RELN_MDSE_CD) &lt;= #mdseCdLen#
+                  ) MDSECD2A
+            WHERE
+                1 = 1
+                AND RNG_GLBL_CMPY_CD          = SMM.GLBL_CMPY_CD
+                AND SMM.SER_NUM               = #serNum#
+                AND RNG_SVC_MOD_FROM_SER_NUM &lt;= SMM.SER_NUM
+                AND RNG_SVC_MOD_TO_SER_NUM   &gt;= SMM.SER_NUM
+                AND RNG_LG_SER_NUM            = LENGTH(SMM.SER_NUM)
+                AND MDSECD1A.SVC_MOD_PK(+)                = MDT_SVC_MOD_PK
+                AND MDSECD1A.GLBL_CMPY_CD(+)              = MDT_GLBL_CMPY_CD
+                AND MDSECD1A.MDSE_CD(+)                   = SMM.MDSE_CD
+                AND MDSECD1A.SVC_MOD_FROM_SER_NUM(+)  &lt;= SMM.SER_NUM 
+                AND MDSECD1A.SVC_MOD_TO_SER_NUM(+)    &gt;= SMM.SER_NUM
+                AND (SMM.MDSE_CD LIKE MDSECD1A.MDSE_CD || '%')
+                AND MDSECD2A.MDSE_CD(+)                   = MDT_MDSE_CD
+                AND MDSECD2A.GLBL_CMPY_CD(+)              = MDT_GLBL_CMPY_CD
+                AND MDSECD2A.RELN_MDSE_CD(+)              = SMM.MDSE_CD
+                AND (SMM.MDSE_CD LIKE MDSECD2A.RELN_MDSE_CD || '%')
+                AND SMM.MDSE_CD =
+                                  CASE
+                                      WHEN MDSECD1A.MDSE_CD IS NOT NULL
+                                          THEN RNG_MDSE_CD
+                                      WHEN MDSECD2A.MDSE_CD IS NOT NULL
+                                          THEN FLP_RELN_MDSE_CD
+                                      END
+                AND SMM.GLBL_CMPY_CD          = SMMS.GLBL_CMPY_CD
+                AND SMM.SVC_MACH_MSTR_STS_CD  = SMMS.SVC_MACH_MSTR_STS_CD
+                AND SMMS.EZCANCELFLAG         = '0'
+                AND SMM.EZCANCELFLAG          = '0'
+                AND RNG_GLBL_CMPY_CD          = STS.GLBL_CMPY_CD(+)
+                AND RNG_SVC_MOD_DTL_PK        = STS.SVC_MOD_DTL_PK(+)
+                AND STS.SVC_TASK_NUM(+)       IS NULL
+                AND STS.SVC_MACH_MSTR_PK(+)   = SMM.SVC_MACH_MSTR_PK
+                AND STS.EZCANCELFLAG(+)       = '0'
+                AND NOT EXISTS (
+                            SELECT
+                                1
+                            FROM
+                                SVC_MOD_STS SMS
+                            WHERE
+                                    SMS.GLBL_CMPY_CD     = SMM.GLBL_CMPY_CD
+                                AND SMS.SVC_MACH_MSTR_PK = SMM.SVC_MACH_MSTR_PK
+                                AND SMS.SVC_MOD_PK       = #svcModPk#
+                                AND SMS.EZCANCELFLAG     = '0'
+                                AND (SMS.SVC_MOD_STS_PK  = STS.SVC_MOD_STS_PK
+                                    OR STS.SVC_MOD_STS_PK IS NULL)
+                                )
+    </statement>
+<!-- END 2023/03/31 S.Kitamura [QC#60927, ADD] -->
+</sqlMap>

@@ -1,0 +1,228 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+
+<sqlMap namespace="NSZC066001">
+
+    <statement id="getDsContrDtlInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+                  DC.DS_CONTR_PK
+                 ,DC.CONTR_VRSN_EFF_FROM_DT
+                 ,DC.CONTR_VRSN_EFF_THRU_DT
+                 ,DCD.SVC_PGM_MDSE_CD
+                 ,DCD.DS_CONTR_DTL_PK
+                 <!-- START 2018/11/21 K.Kitachi [QC#29197, ADD] -->
+                 ,DCDT.USG_CHRG_FLG
+                 <!-- END 2018/11/21 K.Kitachi [QC#29197, ADD] -->
+
+        FROM
+                 DS_CONTR_DTL DCD
+                ,DS_CONTR_DTL_STS_V DCDSV
+                ,DS_CONTR DC
+                ,DS_CONTR_STS_V DCSV
+                <!-- START 2018/11/21 K.Kitachi [QC#29197, ADD] -->
+                ,DS_CONTR_DTL_TP DCDT
+                <!-- END 2018/11/21 K.Kitachi [QC#29197, ADD] -->
+        WHERE
+             DCD.GLBL_CMPY_CD                    = #glblCmpyCd#
+             AND DCD.SVC_MACH_MSTR_PK            = #svcMachMstrPk#
+             AND DCD.CONTR_EFF_FROM_DT           &lt;= #cpoOrdTs#
+             AND (DCD.CONTR_EFF_THRU_DT          &gt;= #cpoOrdTs#
+              OR  DCD.CONTR_EFF_THRU_DT          IS NULL)
+             AND DCD.EZCANCELFLAG                = '0'
+             AND DCDSV.GLBL_CMPY_CD              = DCD.GLBL_CMPY_CD
+             AND DCDSV.DS_CONTR_PK               = DCD.DS_CONTR_PK
+             AND DCDSV.DS_CONTR_DTL_PK           = DCD.DS_CONTR_DTL_PK
+             AND DCDSV.EZCANCELFLAG              = '0'
+             AND DCD.GLBL_CMPY_CD                = DC.GLBL_CMPY_CD
+             AND DCD.DS_CONTR_PK                 = DC.DS_CONTR_PK
+             AND DC.CONTR_VRSN_EFF_FROM_DT       &lt;= #cpoOrdTs#
+             AND (DC.CONTR_VRSN_EFF_THRU_DT      &gt;= #cpoOrdTs#
+              OR  DC.CONTR_VRSN_EFF_THRU_DT      IS NULL)
+             AND DC.DS_CONTR_CATG_CD             &lt;&gt; #dsContrCatgWty#
+             AND DC.EZCANCELFLAG                 = '0'
+             AND DC.GLBL_CMPY_CD                 = DCSV.GLBL_CMPY_CD
+             AND DC.DS_CONTR_PK                  = DCSV.DS_CONTR_PK
+             AND DCSV.EZCANCELFLAG               = '0'
+             <!-- START 2018/11/21 K.Kitachi [QC#29197, ADD] -->
+             AND DCD.GLBL_CMPY_CD                = DCDT.GLBL_CMPY_CD
+             AND DCD.DS_CONTR_DTL_TP_CD          = DCDT.DS_CONTR_DTL_TP_CD
+             AND DCDT.EZCANCELFLAG               = '0'
+             <!-- END 2018/11/21 K.Kitachi [QC#29197, ADD] -->
+             <!-- START 2019/02/20 S.Kitamura [QC#30431,ADD] -->
+             AND DCDSV.ETTL_AVAL_FLG             = 'Y'
+        ORDER BY
+             CASE WHEN DCD.BASE_PRC_DEAL_AMT > 0 THEN 1 ELSE 2 END ASC
+            ,NVL(DCD.CONTR_CLO_DT, DCD.CONTR_EFF_THRU_DT) DESC
+            ,DC.DS_CONTR_CRAT_DT
+            ,DC.DS_CONTR_PK
+             <!-- END 2019/02/20 S.Kitamura [QC#30431,ADD] -->
+    </statement>
+
+    <statement id="getSvcSplyAbuseStage" parameterClass="Map" resultClass="Map">
+        SELECT
+                 SSAS.GLBL_CMPY_CD
+                ,SSAS.SVC_SPLY_ABUSE_STAGE_PK
+                ,SSAS.ABUSE_FLG
+                ,SSAS.OVWRT_ABUSE_FLG
+                ,SSAS.EZUPTIME
+                ,SSAS.EZUPTIMEZONE
+
+        FROM
+                 SVC_SPLY_ABUSE_STAGE SSAS
+        WHERE
+             SSAS.GLBL_CMPY_CD                   = #glblCmpyCd#
+             AND SSAS.DS_CONTR_PK                = #dsContrPk#
+             AND SSAS.FRZ_FLG                    = 'N'
+             AND SSAS.SVC_PGM_MDSE_CD            = #svcPgmMdseCd#
+             AND SSAS.EZCANCELFLAG               = '0'
+    </statement>
+
+    <statement id="getSupplyOrderInfo" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+                 count(*) AS CNT
+
+        FROM
+                 CPO    C
+        WHERE
+             C.GLBL_CMPY_CD                       = #glblCmpyCd#
+             AND C.CPO_ORD_NUM             &lt;&gt; #cpoOrdNum#
+             AND C.CPO_ORD_TS                 &gt;= #cpoOrdTsFrom#
+             AND C.CPO_ORD_TS                 &lt;= #cpoOrdTsThru#
+             AND C.ORD_HDR_STS_CD          &lt;&gt; #ordHdrSts#
+             AND C.EZCANCELFLAG                   = '0'
+             AND EXISTS
+             (
+                 SELECT 1 FROM CPO_DTL CPD
+                 WHERE
+                    CPD.GLBL_CMPY_CD = C.GLBL_CMPY_CD
+                    AND CPD.CPO_ORD_NUM           = C.CPO_ORD_NUM
+                    AND CPD.SVC_MACH_MSTR_PK      = #svcMachMstrPk#
+                    AND CPD.ORD_LINE_STS_CD &lt;&gt; #ordLineSts#
+                    AND CPD.EZCANCELFLAG = '0'
+             )
+             AND EXISTS
+             (
+                 SELECT 1 FROM SVC_SPLY_ORD_TP_RELN SSOTR
+                 WHERE
+                  SSOTR.GLBL_CMPY_CD                = C.GLBL_CMPY_CD
+                  AND SSOTR.DS_ORD_TP_CD            = C.DS_ORD_TP_CD
+                  AND SSOTR.EZCANCELFLAG            = '0'
+             )
+    </statement>
+
+    <statement id="geSvcTermCondAttrbInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+                 STCA.SVC_TERM_COND_ATTRB_PK
+                ,STCA.EZUPTIME
+                ,STCA.EZUPTIMEZONE
+
+        FROM
+                 SVC_TERM_COND_ATTRB STCA
+        WHERE
+             STCA.GLBL_CMPY_CD                    = #glblCmpyCd#
+             AND STCA.SVC_TERM_COND_ATTRB_NM      = #capBwOrgAttrbNm#
+             AND STCA.EFF_FROM_DT             &lt;= #salseDate#
+             AND (STCA.EFF_THRU_DT            &gt;= #salseDate#
+              OR  STCA.EFF_THRU_DT            IS NULL)
+             AND STCA.EZCANCELFLAG                = '0'
+    </statement>
+
+    <statement id="getSvcTermCondInfo" parameterClass="Map" resultClass="String">
+        SELECT
+                 STC.SVC_TERM_ATTRB_MAP_VAL_CD
+
+        FROM
+                 SVC_TERM_COND STC
+        WHERE
+             STC.GLBL_CMPY_CD                     = #glblCmpyCd#
+             AND STC.DS_CONTR_PK                  = #dsContrPk#
+             AND STC.DS_CONTR_DTL_PK              = #dsContrDtlPk#
+             AND STC.SVC_TERM_COND_ATTRB_PK       = #svcPgmMdseCd#
+             AND STC.SVC_TERM_ATTRB_MAP_VAL_CD    IS NOT NULL
+             AND STC.EZCANCELFLAG                 = '0'
+    </statement>
+
+    <statement id="getSvcSplyMachUsedInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+                 SSMY.BW_USED_QTY
+                ,SSMY.COLOR_USED_QTY
+
+        FROM
+                 SVC_SPLY_MACH_USED SSMY
+        WHERE
+             SSMY.GLBL_CMPY_CD                     = #glblCmpyCd#
+             AND SSMY.DS_CONTR_PK                  = #dsContrPk#
+             AND SSMY.FRZ_FLG                      = 'N'
+             AND SSMY.SVC_PGM_MDSE_CD              = #svcPgmMdseCd#
+             AND SSMY.SVC_MACH_MSTR_PK             = #svcMachMstrPk# 
+             AND SSMY.EZCANCELFLAG                 = '0'
+    </statement>
+ 
+ <!-- START 2018/10/01 T.Tomita [QC#28478, ADD] -->
+     <statement id="getSvcSplyMachAllw" parameterClass="Map" resultClass="Map">
+        SELECT
+                 SSMA.BW_ALLW_QTY
+                ,SSMA.COLOR_ALLW_QTY
+        FROM
+                 SVC_SPLY_MACH_ALLW SSMA
+        WHERE
+                 SSMA.GLBL_CMPY_CD                 = #glblCmpyCd#
+             AND SSMA.DS_CONTR_PK                  = #dsContrPk#
+             AND SSMA.FRZ_FLG                      = 'N'
+             AND SSMA.SVC_PGM_MDSE_CD              = #svcPgmMdseCd#
+             AND SSMA.SVC_MACH_MSTR_PK             = #svcMachMstrPk# 
+             AND SSMA.EZCANCELFLAG                 = '0'
+    </statement>
+<!-- END 2018/10/01 T.Tomita [QC#28478, ADD] -->
+ 
+     <statement id="getAbuseBcktInfo" parameterClass="Map" resultClass="String">
+        SELECT
+                 AB.ABUSE_FLG
+
+        FROM
+                 ABUSE_BCKT AB
+        WHERE
+             AB.GLBL_CMPY_CD                      = #glblCmpyCd#
+<!-- START 2018/08/16 M.Naito [QC#27250, MOD] -->
+             <!-- AND AB.BCKT_FROM_QTY             &gt;= #bcktFromQty# -->
+             <!-- AND AB.BCKT_TO_QTY               &lt;= #bcktToQty# -->
+             AND AB.BCKT_FROM_QTY             &lt;= #bcktFromQty#
+             AND AB.BCKT_TO_QTY               &gt;= #bcktToQty#
+<!-- END 2018/08/16 M.Naito [QC#27250, MOD] -->
+             AND AB.EZCANCELFLAG                  = '0'
+    </statement>
+
+    <statement id="getCpoTonerOrdQty" parameterClass="Map" resultClass="Map">
+        SELECT
+             CD.MDSE_CD
+            ,CD.ORD_QTY
+            ,ISCT.BLACK_COLOR_FLG
+        FROM
+             CPO_DTL           CD
+            ,ORD_TAKE_MDSE     OTM
+            ,MDSE              M
+            ,IMG_SPLY_COLOR_TP ISCT
+        WHERE
+                CD.GLBL_CMPY_CD               = #glblCmpyCd#
+            AND CD.CPO_ORD_NUM                = #cpoOrdNum#
+            AND CD.SVC_MACH_MSTR_PK           = #svcMachMstrPk#
+            AND CD.EZCANCELFLAG               = '0'
+            AND CD.GLBL_CMPY_CD               = OTM.GLBL_CMPY_CD(+)
+            AND CD.MDSE_CD                    = OTM.ORD_TAKE_MDSE_CD(+)
+            AND OTM.EZCANCELFLAG(+)           = '0'
+            AND CD.GLBL_CMPY_CD               = M.GLBL_CMPY_CD
+            AND NVL(OTM.MDSE_CD, CD.MDSE_CD)  = M.MDSE_CD
+            <isNotNull property="trgtImgSplyTpCdList">
+            <iterate property="trgtImgSplyTpCdList" var="trgtImgSplyTpCdList[]" open="AND M.IMG_SPLY_TP_CD IN (" close=")" conjunction=",">
+            #trgtImgSplyTpCdList[]#
+            </iterate>
+            </isNotNull>
+            AND M.EZCANCELFLAG                = '0'
+            AND M.GLBL_CMPY_CD                = ISCT.GLBL_CMPY_CD(+)
+            AND M.IMG_SPLY_COLOR_TP_CD        = ISCT.IMG_SPLY_COLOR_TP_CD(+)
+            AND ISCT.EZCANCELFLAG(+)          = '0'
+        ORDER BY
+             CD.CPO_ORD_NUM
+            ,CD.MDSE_CD
+    </statement>
+
+</sqlMap>

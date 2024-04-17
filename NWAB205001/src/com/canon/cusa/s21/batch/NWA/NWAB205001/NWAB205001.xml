@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NWAB205001">
+
+    <statement id="getCrCardTrx" parameterClass="Map">
+    SELECT
+         CCT.CR_CARD_TRX_PK
+        ,CCT.CR_CARD_TRX_TP_CD
+        ,CCT.FIRST_TRX_INFO_TXT
+        ,DECODE(CCT.CR_CARD_TRX_TP_CD, 'CPO', CPO.ORD_HDR_STS_CD, 'SVC_REQ', FSR.FSR_STS_CD, NULL) STS_CD
+        ,INV.CPO_ORD_NUM
+        ,INV.FNLZ_INV_FLG
+        ,SI.FSR_NUM
+
+    FROM
+         CR_CARD_TRX  CCT
+        ,CPO          CPO
+        ,FSR          FSR
+        ,INV          INV
+        ,SVC_INV      SI
+
+    WHERE
+            CCT.GLBL_CMPY_CD         = #glblCmpyCd#
+
+        AND (    ( CCT.CR_CARD_AUTH_STS_CD     = #crCardAuthStsCdSaved#
+                AND SUBSTR(CCT.EZUPTIME, 1, 8) &lt;= TO_CHAR(ADD_MONTHS(TO_DATE(#slsDt#, #dateFormat#), #dsinPeriodMonth#), #dateFormat#)
+            ) OR ( CCT.CR_CARD_AUTH_STS_CD     = #crCardAuthStsCdAuthCmp#
+                AND CCT.CR_CARD_AUTH_DT        &lt;= TO_CHAR(ADD_MONTHS(TO_DATE(#slsDt#, #dateFormat#), #dsinPeriodMonth#), #dateFormat#)
+            ) OR ( CCT.CR_CARD_AUTH_STS_CD     = #crCardAuthStsCdStlCmp#
+                AND CCT.CR_CARD_SETL_DT        &lt;= TO_CHAR(ADD_MONTHS(TO_DATE(#slsDt#, #dateFormat#), #dsinPeriodMonth#), #dateFormat#)
+            ) OR ( CCT.CR_CARD_AUTH_STS_CD     = #crCardAuthStsCdRefCmp#
+                AND CCT.CR_CARD_SETL_DT        &lt;= TO_CHAR(ADD_MONTHS(TO_DATE(#slsDt#, #dateFormat#), #dsinPeriodMonth#), #dateFormat#)
+            ) OR ( CCT.CR_CARD_AUTH_STS_CD     = #crCardAuthStsCdVoidCmp#
+                AND CCT.CR_CARD_CANC_DT        &lt;= TO_CHAR(ADD_MONTHS(TO_DATE(#slsDt#, #dateFormat#), #dsinPeriodMonth#), #dateFormat#)
+            ))
+
+        AND NOT EXISTS (
+            SELECT
+                '1'
+            FROM
+                SVC_INV SI2
+            WHERE
+                    SI2.GLBL_CMPY_CD      = CCT.GLBL_CMPY_CD
+                AND SI2.SVC_INV_NUM       = CCT.FIRST_TRX_INFO_TXT
+                AND SI2.SVC_INV_SRC_TP_CD = #svcInvSrcTpCd# 
+                AND SI2.EZCANCELFLAG      = '0')
+        AND CCT.EZCANCELFLAG         = '0'
+
+        AND CCT.GLBL_CMPY_CD         = CPO.GLBL_CMPY_CD(+)
+        AND CCT.FIRST_TRX_INFO_TXT   = CPO.CPO_ORD_NUM(+)
+        AND CPO.EZCANCELFLAG(+)      = '0'
+
+        AND CCT.GLBL_CMPY_CD         = FSR.GLBL_CMPY_CD(+)
+        AND CCT.FIRST_TRX_INFO_TXT   = FSR.FSR_NUM(+)
+        AND FSR.EZCANCELFLAG(+)      = '0'
+
+        AND CCT.GLBL_CMPY_CD         = INV.GLBL_CMPY_CD(+)
+        AND CCT.FIRST_TRX_INFO_TXT   = INV.INV_NUM(+)
+        AND INV.EZCANCELFLAG(+)      = '0'
+
+        AND INV.GLBL_CMPY_CD         = SI.GLBL_CMPY_CD(+)
+        AND INV.INV_NUM              = SI.SVC_INV_NUM(+)
+        AND SI.EZCANCELFLAG(+)       = '0'
+    </statement>
+
+    <statement id="cntCpoClose" parameterClass="Map" resultClass="BigDecimal">
+    SELECT
+        COUNT(CPO_ORD_NUM)
+    FROM
+        CPO CPO
+    WHERE
+            CPO.GLBL_CMPY_CD     = #glblCmpyCd#
+        AND CPO.CPO_ORD_NUM      = #cpoOrdNum#
+        AND CPO.ORD_HDR_STS_CD   IN
+        <iterate property="ordHdrStsCdList" var="ordHdrStsCd[]" open="(" close=")" conjunction=",">
+            #ordHdrStsCd[]#
+        </iterate>
+        AND CPO.EZCANCELFLAG     = '0'
+    </statement>
+
+    <statement id="cntFsrClose" parameterClass="Map" resultClass="BigDecimal">
+    SELECT
+        COUNT(FSR_NUM)
+    FROM
+        FSR FSR
+    WHERE
+            FSR.GLBL_CMPY_CD     = #glblCmpyCd#
+        AND FSR.FSR_NUM          = #fsrNum#
+        AND FSR.FSR_STS_CD       = #fsrStsCd#
+        AND FSR.EZCANCELFLAG     = '0'
+    </statement>
+
+    <statement id="getCrCardInvalidTarget" parameterClass="Map">
+    SELECT
+        DCC.DS_CR_CARD_PK   
+    FROM
+        DS_CR_CARD DCC
+    WHERE
+            DCC.GLBL_CMPY_CD         = #glblCmpyCd#
+        AND DCC.CR_CARD_VALID_FLG    = #crCardValidFlg#
+        AND DCC.CR_CARD_EXPR_YR_MTH  &lt; #slsDtYrMth#
+        AND DCC.EZCANCELFLAG         = '0'
+    </statement>
+    <!-- Add QC#58621 -->
+    <statement id="getCrCardTrxDtlPks" parameterClass="Map" resultClass="BigDecimal">
+    SELECT
+        CCTD.CR_CARD_TRX_DTL_PK
+    FROM
+        CR_CARD_TRX_DTL CCTD
+    WHERE
+        CCTD.GLBL_CMPY_CD         = #glblCmpyCd#
+    AND CCTD.CR_CARD_TRX_PK       = #crCardTrxPk#
+    AND CCTD.EZCANCELFLAG         = '0'
+    </statement>
+
+</sqlMap>

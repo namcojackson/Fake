@@ -1,0 +1,255 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NWXC011001">
+    <statement id="selectDsAcctCust" parameterClass="Map" resultClass="Map">
+        SELECT
+             S.DS_ACCT_NM
+            ,S.DS_CUST_SIC_CD
+            ,S.LOC_NUM
+            ,S.DS_ACCT_CLS_CD
+            ,S.DS_ACCT_TP_CD
+            ,S.DS_ACCT_DLR_CD
+            ,DAGA.DS_ACCT_GRP_CD
+            ,S.COA_CH_CD
+        FROM
+             SELL_TO_CUST S
+            ,( SELECT
+                  GLBL_CMPY_CD
+                , EZCANCELFLAG
+                , DS_ACCT_NUM
+                , DS_ACCT_GRP_CD
+               FROM DS_ACCT_GRP_ASG DAGA
+               WHERE
+                    DAGA.GLBL_CMPY_CD = #glblCmpyCd#
+                AND DAGA.EZCANCELFLAG = '0'
+                AND DAGA.EFF_FROM_DT &lt;= #prcBaseDt#
+                AND (DAGA.EFF_THRU_DT &gt;= #prcBaseDt# OR DAGA.EFF_THRU_DT IS NULL )
+            ) DAGA
+            ,DS_TAX_GRP_EXEM DTGE
+        WHERE
+            S.GLBL_CMPY_CD = #glblCmpyCd#
+        AND S.EZCANCELFLAG = '0'
+        AND S.SELL_TO_CUST_CD = #dsAcctNum#
+        AND S.EFF_FROM_DT &lt;= #prcBaseDt#
+        AND (S.EFF_THRU_DT &gt;= #prcBaseDt# OR S.EFF_THRU_DT IS NULL )
+        AND S.GLBL_CMPY_CD = DAGA.GLBL_CMPY_CD(+)
+        AND S.EZCANCELFLAG = DAGA.EZCANCELFLAG(+)
+        AND S.SELL_TO_CUST_CD = DAGA.DS_ACCT_NUM(+)
+        AND S.GLBL_CMPY_CD = DTGE.GLBL_CMPY_CD(+)
+        AND S.EZCANCELFLAG = DTGE.EZCANCELFLAG(+)
+        AND S.DS_TAX_GRP_EXEM_CD = DTGE.DS_TAX_GRP_EXEM_CD(+)
+    </statement>
+
+    <statement id="selectFrtRateShpg" parameterClass="Map" resultClass="Map">
+       SELECT
+             FRS.SHPG_FRT_RATE
+            ,FRS.FRT_RATE_PER_NUM
+            ,FRS.FRT_RATE_CCY_CD
+            ,TMP.DS_ACCT_NUM
+            ,TMP.PRC_GRP_PK
+            ,TMP.SHIP_TO_ST_CD
+            ,TMP.SHIP_TO_CTRY_CD
+            ,TMP.SHIP_TO_FROM_POST_CD
+            ,TMP.SHIP_TO_THRU_POST_CD
+        FROM
+            FRT_RATE_SHPG          FRS
+          ,(
+              SELECT
+                 FRS.LINE_BIZ_TP_CD
+                ,FRS.FRT_ZONE_NUM
+                ,MAX(FRS.FROM_SCL_QTY) AS FROM_SCL_QTY
+                ,FZ.DS_ACCT_NUM
+                ,FZ.PRC_GRP_PK
+                ,FZ.SHIP_TO_ST_CD
+                ,FZ.SHIP_TO_CTRY_CD
+                ,FZ.SHIP_TO_FROM_POST_CD
+                ,FZ.SHIP_TO_THRU_POST_CD
+              FROM
+                   FRT_ZONE               FZ
+                  ,FRT_RATE_SHPG          FRS
+              WHERE
+                  FZ.GLBL_CMPY_CD = #glblCmpyCd#
+              AND FZ.EZCANCELFLAG = '0'
+              AND FZ.LINE_BIZ_TP_CD = #lineBizTpCd#
+              AND (FZ.DS_ACCT_NUM = #shipAcctNum# OR FZ.DS_ACCT_NUM IS NULL)
+              AND (FZ.SHIP_TO_ST_CD = #shipToStCd# OR FZ.SHIP_TO_ST_CD IS NULL)
+              AND (FZ.SHIP_TO_CTRY_CD = #shipToCtryCd# OR FZ.SHIP_TO_CTRY_CD IS NULL) 
+              AND (FZ.SHIP_TO_FROM_POST_CD &lt;= #shipToPostCd# OR FZ.SHIP_TO_FROM_POST_CD IS NULL)
+              AND (FZ.SHIP_TO_THRU_POST_CD &gt;= #shipToPostCd# OR FZ.SHIP_TO_THRU_POST_CD IS NULL)
+              AND FZ.EFF_FROM_DT &lt;= #prcBaseDt#
+              AND (FZ.EFF_THRU_DT &gt;= #prcBaseDt# OR FZ.EFF_THRU_DT IS NULL)
+              AND 
+              (
+                  FZ.PRC_GRP_PK IS NULL OR FZ.PRC_GRP_PK = 
+                  (
+                      SELECT A.PRC_GRP_PK FROM PRC_GRP A
+                      WHERE  A.GLBL_CMPY_CD = #glblCmpyCd#
+                      AND    A.EZCANCELFLAG = '0'
+                      AND    A.PRC_GRP_TP_CD = #prcGrpTpCd#
+                      AND    A.ACTV_FLG = #actvFlg#
+                      AND    A.PRC_GRP_PK = FZ.PRC_GRP_PK
+                      AND    A.EFF_FROM_DT &lt;= #prcBaseDt#
+                      AND   (A.EFF_THRU_DT &gt;= #prcBaseDt# OR A.EFF_THRU_DT IS NULL)
+                      AND 
+                      (
+                          SELECT COUNT(DISTINCT PRC_GRP_TRGT_ATTRB_CD) FROM PRC_GRP_DTL B
+                          WHERE
+                              A.GLBL_CMPY_CD = B.GLBL_CMPY_CD
+                          AND A.EZCANCELFLAG = B.EZCANCELFLAG
+                          AND A.PRC_GRP_PK = B.PRC_GRP_PK
+                          AND B.EFF_FROM_DT &lt;= #prcBaseDt#
+                          AND (B.EFF_THRU_DT &gt;= #prcBaseDt# OR B.EFF_THRU_DT IS NULL)
+                      ) = (
+                          SELECT COUNT(DISTINCT PRC_GRP_TRGT_ATTRB_CD) FROM PRC_GRP_DTL B
+                          WHERE
+                              A.GLBL_CMPY_CD = B.GLBL_CMPY_CD
+                          AND A.EZCANCELFLAG = B.EZCANCELFLAG
+                          AND A.PRC_GRP_PK = B.PRC_GRP_PK
+                          AND B.EFF_FROM_DT &lt;= #prcBaseDt#
+                          AND (B.EFF_THRU_DT &gt;= #prcBaseDt# OR B.EFF_THRU_DT IS NULL)
+                          AND 
+                          (
+                              CASE B.PRC_GRP_TRGT_ATTRB_CD
+                              WHEN #PrcGrpTrgtAttrbCd_14#  THEN
+                                  CASE
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd01# AND #dsAcctNum# = B.PRC_GRP_FROM_TXT  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd02# AND #dsAcctNum# != B.PRC_GRP_FROM_TXT  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd03# AND (#dsAcctNum# BETWEEN B.PRC_GRP_FROM_TXT AND B.PRC_GRP_THRU_TXT)  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd04# AND #dsAcctNum# LIKE B.PRC_GRP_FROM_TXT  THEN 1
+                                      ELSE 0
+                                  END
+                              WHEN #PrcGrpTrgtAttrbCd_15#  THEN
+                                  CASE
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd01# AND #dsAcctNm# = B.PRC_GRP_FROM_TXT  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd02# AND #dsAcctNm# != B.PRC_GRP_FROM_TXT  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd03# AND (#dsAcctNm# BETWEEN B.PRC_GRP_FROM_TXT AND B.PRC_GRP_THRU_TXT)  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd04# AND #dsAcctNm# LIKE B.PRC_GRP_FROM_TXT  THEN 1
+                                      ELSE 0
+                                  END
+                              WHEN #PrcGrpTrgtAttrbCd_16#  THEN
+                                  CASE
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd01# AND #dsCustSicCd# = B.PRC_GRP_FROM_TXT  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd02# AND #dsCustSicCd# != B.PRC_GRP_FROM_TXT  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd03# AND (#dsCustSicCd# BETWEEN B.PRC_GRP_FROM_TXT AND B.PRC_GRP_THRU_TXT)  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd04# AND #dsCustSicCd# LIKE B.PRC_GRP_FROM_TXT THEN 1
+                                      ELSE 0
+                                  END
+                              WHEN #PrcGrpTrgtAttrbCd_17#  THEN
+                                  CASE
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd01# AND #locNum# = B.PRC_GRP_FROM_TXT  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd02# AND #locNum# != B.PRC_GRP_FROM_TXT  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd03# AND (#locNum# BETWEEN B.PRC_GRP_FROM_TXT AND B.PRC_GRP_THRU_TXT)  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd04# AND #locNum# LIKE B.PRC_GRP_FROM_TXT THEN 1
+                                      ELSE 0
+                                  END
+                              WHEN #PrcGrpTrgtAttrbCd_18#  THEN
+                                  CASE
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd01# AND #dsAcctClsCd# = B.PRC_GRP_FROM_TXT  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd02# AND #dsAcctClsCd# != B.PRC_GRP_FROM_TXT  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd03# AND (#dsAcctClsCd# BETWEEN B.PRC_GRP_FROM_TXT AND B.PRC_GRP_THRU_TXT)  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd04# AND #dsAcctClsCd# LIKE B.PRC_GRP_FROM_TXT THEN 1
+                                      ELSE 0
+                                  END
+                              WHEN #PrcGrpTrgtAttrbCd_19#  THEN
+                                  CASE
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd01# AND #dsAcctTpCd# = B.PRC_GRP_FROM_TXT  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd02# AND #dsAcctTpCd# != B.PRC_GRP_FROM_TXT  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd03# AND (#dsAcctTpCd# BETWEEN B.PRC_GRP_FROM_TXT AND B.PRC_GRP_THRU_TXT)  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd04# AND #dsAcctTpCd# LIKE B.PRC_GRP_FROM_TXT THEN 1
+                                      ELSE 0
+                                  END
+                              WHEN #PrcGrpTrgtAttrbCd_20#  THEN
+                                  CASE
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd01# AND #dsAcctDlrCd# = B.PRC_GRP_FROM_TXT  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd02# AND #dsAcctDlrCd# != B.PRC_GRP_FROM_TXT  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd03# AND (#dsAcctDlrCd# BETWEEN B.PRC_GRP_FROM_TXT AND B.PRC_GRP_THRU_TXT)  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd04# AND #dsAcctDlrCd# LIKE B.PRC_GRP_FROM_TXT THEN 1
+                                      ELSE 0
+                                  END
+                              WHEN #PrcGrpTrgtAttrbCd_21#  THEN
+                                  CASE
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd01# AND #csmpNum# = B.PRC_GRP_FROM_TXT  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd02# AND #csmpNum# != B.PRC_GRP_FROM_TXT  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd03# AND (#csmpNum# BETWEEN B.PRC_GRP_FROM_TXT AND B.PRC_GRP_THRU_TXT)  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd04# AND #csmpNum# LIKE B.PRC_GRP_FROM_TXT THEN 1
+                                      ELSE 0
+                                  END
+                              WHEN #PrcGrpTrgtAttrbCd_22#  THEN
+                                  CASE
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd01# AND #dlrRefNum# = B.PRC_GRP_FROM_TXT  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd02# AND #dlrRefNum# != B.PRC_GRP_FROM_TXT  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd03# AND (#dlrRefNum# BETWEEN B.PRC_GRP_FROM_TXT AND B.PRC_GRP_THRU_TXT)  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd04# AND #dlrRefNum# LIKE B.PRC_GRP_FROM_TXT THEN 1
+                                      ELSE 0
+                                  END
+                              WHEN #PrcGrpTrgtAttrbCd_24#  THEN
+                                  CASE
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd01# AND #prcContrNum# = B.PRC_GRP_FROM_TXT  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd02# AND #prcContrNum# != B.PRC_GRP_FROM_TXT  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd03# AND (#prcContrNum# BETWEEN B.PRC_GRP_FROM_TXT AND B.PRC_GRP_THRU_TXT)  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd04# AND #prcContrNum# LIKE B.PRC_GRP_FROM_TXT THEN 1
+                                      ELSE 0
+                                  END
+                              <!-- S21_NA#18789 add start -->
+                              WHEN #PrcGrpTrgtAttrbCd_28#  THEN
+                                  CASE
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd01# AND #coaChCd# = B.PRC_GRP_FROM_TXT  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd02# AND #coaChCd# != B.PRC_GRP_FROM_TXT  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd03# AND (#coaChCd# BETWEEN B.PRC_GRP_FROM_TXT AND B.PRC_GRP_THRU_TXT)  THEN 1
+                                      WHEN B.PRC_GRP_OP_CD = #prcGrpOpCd04# AND #coaChCd# LIKE B.PRC_GRP_FROM_TXT THEN 1
+                                      ELSE 0
+                                  END
+                              END
+                              <!-- S21_NA#18789 add end -->
+                          ) = 1
+                      )
+                      AND EXISTS (
+                           SELECT 1 FROM PRC_GRP_DTL B
+                           WHERE
+	                           A.GLBL_CMPY_CD = B.GLBL_CMPY_CD
+	                       AND A.EZCANCELFLAG = B.EZCANCELFLAG
+	                       AND A.PRC_GRP_PK = B.PRC_GRP_PK
+	                       AND B.EFF_FROM_DT &lt;= #prcBaseDt#
+	                       AND (B.EFF_THRU_DT &gt;= #prcBaseDt# OR B.EFF_THRU_DT IS NULL)
+                      )
+                  )
+              )
+              AND FZ.GLBL_CMPY_CD = FRS.GLBL_CMPY_CD
+              AND FZ.EZCANCELFLAG = FRS.EZCANCELFLAG
+              AND FZ.LINE_BIZ_TP_CD = FRS.LINE_BIZ_TP_CD
+              AND FZ.FRT_ZONE_NUM = FRS.FRT_ZONE_NUM
+              AND FRS.SHPG_SVC_LVL_CD = #shpgSvcLvlCd#
+              AND FRS.QTY_UNIT_TP_CD = #qtyUnitTpCd#   -- LB
+              AND FRS.FRT_RATE_CCY_CD = #ccyCd#
+              AND FRS.PER_UNIT_TP_CD = #perUnitTpCd#   -- LB
+              AND FRS.EFF_FROM_DT &lt;= #prcBaseDt#
+              AND (FRS.EFF_THRU_DT &gt;= #prcBaseDt# OR FRS.EFF_THRU_DT IS NULL )
+              AND FRS.FROM_SCL_QTY &lt;= #ordQty#
+              GROUP BY FRS.LINE_BIZ_TP_CD
+                      ,FRS.FRT_ZONE_NUM
+                      ,FZ.DS_ACCT_NUM
+                      ,FZ.PRC_GRP_PK
+                      ,FZ.SHIP_TO_ST_CD
+                      ,FZ.SHIP_TO_CTRY_CD
+                      ,FZ.SHIP_TO_FROM_POST_CD
+                      ,FZ.SHIP_TO_THRU_POST_CD
+          ) TMP
+        WHERE
+              FRS.GLBL_CMPY_CD = #glblCmpyCd#
+          AND FRS.EZCANCELFLAG = '0'
+          AND FRS.LINE_BIZ_TP_CD = TMP.LINE_BIZ_TP_CD
+          AND FRS.FRT_ZONE_NUM = TMP.FRT_ZONE_NUM
+          AND FRS.FROM_SCL_QTY = TMP.FROM_SCL_QTY
+          AND FRS.SHPG_SVC_LVL_CD = #shpgSvcLvlCd#
+          AND FRS.QTY_UNIT_TP_CD = #qtyUnitTpCd#   -- LB
+          AND FRS.FRT_RATE_CCY_CD = #ccyCd#
+          AND FRS.PER_UNIT_TP_CD = #perUnitTpCd#   -- LB
+          AND FRS.EFF_FROM_DT &lt;= #prcBaseDt#
+          AND (FRS.EFF_THRU_DT &gt;= #prcBaseDt# OR FRS.EFF_THRU_DT IS NULL )
+        ORDER BY
+             TMP.DS_ACCT_NUM          ASC NULLS LAST
+            ,TMP.PRC_GRP_PK           ASC NULLS LAST
+            ,TMP.SHIP_TO_FROM_POST_CD ASC NULLS LAST
+            ,TMP.SHIP_TO_CTRY_CD      ASC NULLS LAST
+   </statement>
+</sqlMap>
+    

@@ -1,0 +1,199 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NWAL1500QueryForCategory">
+
+    <statement id="getDsOrdCatgCdList" parameterClass="Map" resultClass="Map">
+        SELECT
+            OC.DS_ORD_CATG_CD       AS DS_ORD_CATG_CD
+           ,OC.DS_ORD_CATG_DESC_TXT AS DS_ORD_CATG_DESC_TXT
+        FROM
+            DS_ORD_CATG           OC
+           ,DS_ORD_TP             OT
+           ,AVAL_DS_ORD_TP_APP_ID AI
+        WHERE
+            OC.GLBL_CMPY_CD             = #glblCmpyCd#
+            AND OC.DS_ORD_CATG_DESC_TXT LIKE #dsOrdCatgDescTxt#
+            AND OC.EZCANCELFLAG         = '0'
+
+            AND OC.GLBL_CMPY_CD   = OT.GLBL_CMPY_CD
+            AND OC.DS_ORD_CATG_CD = OT.DS_ORD_CATG_CD
+            AND OT.EZCANCELFLAG   = '0'
+
+            AND OT.GLBL_CMPY_CD = AI.GLBL_CMPY_CD
+            AND OT.DS_ORD_TP_CD = AI.DS_ORD_TP_CD
+            AND AI.BIZ_APP_ID   = #bizId#
+            AND AI.EZCANCELFLAG = '0'
+        GROUP BY
+            OC.DS_ORD_CATG_CD
+           ,OC.DS_ORD_CATG_DESC_TXT
+    </statement>
+
+    <statement id="isExistDsOrdCatg" parameterClass="Map" resultClass="Integer">
+        SELECT
+            COUNT(OC.DS_ORD_CATG_CD)
+        FROM
+            DS_ORD_CATG OC
+        WHERE
+            OC.GLBL_CMPY_CD             = #glblCmpyCd#
+            AND OC.DS_ORD_CATG_DESC_TXT = #dsOrdCatgDescTxt#
+            AND OC.EZCANCELFLAG         = '0'
+    </statement>
+
+    <statement id="getDsOrdTpList"  parameterClass="Map" resultClass="Map">
+        SELECT
+            DOT.DS_ORD_TP_CD       AS DS_ORD_TP_CD
+            ,DOT.DS_ORD_TP_DESC_TXT AS DS_ORD_TP_DESC_TXT
+        FROM
+            DS_ORD_TP            DOT
+            ,DS_ORD_TP_PROC_DFN  DOTPD
+        WHERE
+            DOT.EZCANCELFLAG       = '0'
+            AND DOT.GLBL_CMPY_CD   = #glblCmpyCd#
+            AND DOT.EZCANCELFLAG   = DOTPD.EZCANCELFLAG
+            AND DOT.GLBL_CMPY_CD   = DOTPD.GLBL_CMPY_CD
+            AND DOT.DS_ORD_TP_CD   = DOTPD.DS_ORD_TP_CD
+            AND DOT.DS_ORD_CATG_CD    = #dsOrdCatgCd#
+            AND DOT.DS_ORD_TP_DESC_TXT LIKE #dsOrdTpDescTxt#
+            AND DOTPD.ACTV_FLG     = 'Y'
+    </statement>
+
+    <statement id="getDsOrdTpCd" parameterClass="Map" resultClass="String">
+        SELECT
+            DS_ORD_TP_CD
+        FROM
+            (
+             SELECT
+                 OT.DS_ORD_TP_CD   AS DS_ORD_TP_CD
+             FROM
+                DS_ORD_CATG           OC
+               ,DS_ORD_TP             OT
+             WHERE
+                 OC.GLBL_CMPY_CD       = #glblCmpyCd#
+                 AND OC.DS_ORD_CATG_CD = #dsOrdCatgCd#
+                 AND OC.EZCANCELFLAG   = '0'
+
+                 AND OC.GLBL_CMPY_CD   = OT.GLBL_CMPY_CD
+                 AND OC.DS_ORD_CATG_CD = OT.DS_ORD_CATG_CD
+                 AND OT.EZCANCELFLAG   = '0'
+             ORDER BY
+                 OT.DS_ORD_TP_CD
+            )
+        WHERE
+            ROWNUM = 1
+    </statement>
+
+    <statement id="getCustAddlInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+            PD.DEF_BILL_TO_CUST_ACCT_CD AS DEF_BILL_TO_CUST_ACCT_CD
+           ,PD.DEF_BILL_TO_CUST_CD      AS DEF_BILL_TO_CUST_CD
+           ,PD.LINE_BIZ_TP_CD           AS LINE_BIZ_TP_CD
+           ,PD.DEF_SHPG_SVC_LVL_CD      AS DEF_SHPG_SVC_LVL_CD
+           ,DAC.DS_ACCT_NM              AS DS_ACCT_NM
+           ,(
+             CASE WHEN BTC.FIRST_LINE_ADDR IS NOT NULL THEN
+<!--                 BTC.FIRST_LINE_ADDR || ' ' ||-->
+<!--                 BTC.SCD_LINE_ADDR   || ' ' ||-->
+<!--                 BTC.THIRD_LINE_ADDR || ' ' ||-->
+<!--                 BTC.FRTH_LINE_ADDR  || ' ' ||-->
+<!--                 BTC.CTY_ADDR        || ',' ||-->
+<!--                 BTC.ST_CD           || ' ' ||-->
+<!--                 BTC.POST_CD-->
+<!--                 -->
+            <!-- QC1694 -->
+                 DECODE (BTC.FIRST_LINE_ADDR, NULL, '', CONCAT(BTC.FIRST_LINE_ADDR, CHR(13) || CHR(10)))
+                  || DECODE (BTC.SCD_LINE_ADDR, NULL, '', CONCAT(BTC.SCD_LINE_ADDR, CHR(13) || CHR(10)))
+                  || DECODE (BTC.THIRD_LINE_ADDR, NULL, '', CONCAT(BTC.THIRD_LINE_ADDR, CHR(13) || CHR(10)))
+                  || DECODE (BTC.FRTH_LINE_ADDR, NULL, '', CONCAT(BTC.FRTH_LINE_ADDR, CHR(13) || CHR(10)))
+                  || CONCAT (BTC.CTY_ADDR, ',')
+                  || RPAD (BTC.ST_CD, LENGTH (BTC.ST_CD) + 1)
+                  || BTC.POST_CD
+              END                     ) AS BILL_TO_ADDR
+           ,FC.FRT_COND_DESC_TXT        AS FRT_COND_DESC_TXT
+           ,PC.PRC_CATG_NM              AS PRC_CATG_NM
+           ,CSL.CARR_SVC_LVL_DESC_TXT   AS CARR_SVC_LVL_DESC_TXT
+           ,FC.FRT_COND_CD              AS FRT_COND_CD <!-- 2016/03/04 S21_NA#1679 Add -->
+        FROM
+            DS_ORD_TP_PROC_DFN PD
+           ,SELL_TO_CUST       DAC
+           ,BILL_TO_CUST       BTC
+           ,FRT_COND           FC
+           ,PRC_CATG           PC
+           ,CARR_SVC_LVL       CSL
+        WHERE
+            PD.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND PD.DS_ORD_TP_CD = #dsOrdTpCd#
+            AND PD.ACTV_FLG     = 'Y'
+            AND PD.EFF_FROM_DT  &lt;= #effDt#
+            AND NVL(PD.EFF_THRU_DT, '99991231') &gt;= #effDt#
+            AND PD.EZCANCELFLAG = '0'
+
+            AND PD.GLBL_CMPY_CD             = DAC.GLBL_CMPY_CD (+)
+            AND PD.DEF_BILL_TO_CUST_ACCT_CD = DAC.SELL_TO_CUST_CD (+)
+            AND DAC.EZCANCELFLAG (+)        = '0'
+
+            AND PD.GLBL_CMPY_CD        = BTC.GLBL_CMPY_CD (+)
+            AND PD.DEF_BILL_TO_CUST_CD = BTC.BILL_TO_CUST_CD (+)
+            AND BTC.RGTN_STS_CD (+)    = #rgtnSts#
+            AND BTC.EZCANCELFLAG (+)   = '0'
+
+            AND PD.GLBL_CMPY_CD     = FC.GLBL_CMPY_CD (+)
+            AND PD.FRT_COND_CD      = FC.FRT_COND_CD (+)
+            AND FC.EZCANCELFLAG (+) = '0'
+
+            AND PD.GLBL_CMPY_CD     = PC.GLBL_CMPY_CD (+)
+            AND PD.DEF_PRC_CATG_CD  = PC.PRC_CATG_CD (+)
+            AND PC.EZCANCELFLAG (+) = '0'
+
+            AND PD.GLBL_CMPY_CD        = CSL.GLBL_CMPY_CD (+)
+            AND PD.DEF_CARR_SVC_LVL_CD = CSL.CARR_SVC_LVL_CD (+)
+            AND CSL.EZCANCELFLAG (+)   = '0'
+    </statement>
+
+    <statement id="getPmtTermCashDiscCd" parameterClass="Map" resultClass="String">
+        SELECT
+            PMT_TERM_CASH_DISC_CD
+        FROM
+            (
+             SELECT
+                 CCP.PMT_TERM_CASH_DISC_CD
+             FROM
+                 CUST_CR_PRFL CCP
+             WHERE
+                 CCP.GLBL_CMPY_CD        = #glblCmpyCd#
+                 AND CCP.BILL_TO_CUST_CD = #billToCustCd#
+                 AND CCP.EZCANCELFLAG    = '0'
+             ORDER BY
+                 CCP.BILL_TO_CUST_PK DESC
+            )
+        WHERE
+            ROWNUM = 1
+    </statement>
+
+    <!-- 2016/03/04 S21_NA#1679 Add Start -->
+    <statement id="getShpgSvcLvlDataList" parameterClass="Map" resultClass="Map">
+        SELECT 
+            SSL.SHPG_SVC_LVL_CD
+            ,SSL.SHPG_SVC_LVL_DESC_TXT
+            ,SSL.SHPG_SVC_LVL_SORT_NUM
+        FROM 
+            SHPG_SVC_LVL SSL
+            ,FRT_COND_SVC_LVL_RELN FCSLR
+        WHERE
+                SSL.GLBL_CMPY_CD        = #glblCmpyCd#
+            AND SSL.GLBL_CMPY_CD        = FCSLR.GLBL_CMPY_CD
+            AND SSL.SHPG_SVC_LVL_CD     = FCSLR.SHPG_SVC_LVL_CD
+            AND FCSLR.LINE_BIZ_TP_CD    = #lineBizTpCd#
+            <isNotNull property="frtCondCd">
+                AND FCSLR.FRT_COND_CD   = #frtCondCd#
+            </isNotNull>
+            AND SSL.EZCANCELFLAG = '0'
+            AND FCSLR.EZCANCELFLAG = '0'
+        GROUP BY
+            SSL.SHPG_SVC_LVL_CD
+            ,SSL.SHPG_SVC_LVL_DESC_TXT
+            ,SSL.SHPG_SVC_LVL_SORT_NUM
+        ORDER BY
+            SSL.SHPG_SVC_LVL_SORT_NUM
+    </statement>
+    <!-- 2016/03/04 S21_NA#1679 Add End -->
+
+</sqlMap>

@@ -1,0 +1,234 @@
+<?xml version="1.0" encoding="UTF-8"?>
+    <sqlMap namespace="NWZC168001">
+
+    <statement id="getTracking" parameterClass="Map"  resultClass="Map">
+        SELECT
+            SO.CUST_ISS_PO_NUM AS CUST_ISS_PO_NUM
+           ,SO.TRX_HDR_NUM AS CPO_ORD_NUM
+           ,CASE WHEN DCD.DS_CPO_LINE_SUB_NUM IS NOT NULL THEN DCD.DS_CPO_LINE_NUM || '.' || DCD.DS_CPO_LINE_SUB_NUM
+                 ELSE TO_CHAR(DCD.DS_CPO_LINE_NUM)  END AS CPO_WRK_LINE_NUM
+           <!-- 2018/10/04 QC#28585 Mod Start -->
+           <!--
+           ,DAC.DS_ACCT_NM AS SELL_TO_CUST_NM
+           ,RTRIM(DAC.DS_ACCT_NM || DECODE(DAC.DS_ACCT_NM, NULL, '', '/') 
+                || SHIP.FIRST_LINE_ADDR || ' ' || SHIP.SCD_LINE_ADDR || ' ' || SHIP.THIRD_LINE_ADDR || ' ' || SHIP.FRTH_LINE_ADDR)
+                || DECODE(SHIP.FIRST_LINE_ADDR || ' ' || SHIP.SCD_LINE_ADDR || ' ' || SHIP.THIRD_LINE_ADDR || ' ' || SHIP.FRTH_LINE_ADDR, NULL, '', '/') 
+                || RTRIM(SHIP.CTY_ADDR || DECODE(SHIP.CTY_ADDR, NULL, '', '/') || SHIP.ST_CD || DECODE(SHIP.POST_CD, NULL, '', ',') || SHIP.POST_CD) AS SHIP_TO_INFO_TXT
+           -->
+           ,DAC.LOC_NM AS SELL_TO_CUST_NM
+           ,RTRIM(DAC.LOC_NM || DECODE(DAC.LOC_NM, NULL, '', '/') 
+                || SHIP.FIRST_LINE_ADDR || ' ' || SHIP.SCD_LINE_ADDR || ' ' || SHIP.THIRD_LINE_ADDR || ' ' || SHIP.FRTH_LINE_ADDR)
+                || DECODE(SHIP.FIRST_LINE_ADDR || ' ' || SHIP.SCD_LINE_ADDR || ' ' || SHIP.THIRD_LINE_ADDR || ' ' || SHIP.FRTH_LINE_ADDR, NULL, '', '/') 
+                || RTRIM(SHIP.CTY_ADDR || DECODE(SHIP.CTY_ADDR, NULL, '', '/') || SHIP.ST_CD || DECODE(SHIP.POST_CD, NULL, '', ',') || SHIP.POST_CD) AS SHIP_TO_INFO_TXT
+           <!-- 2018/10/04 QC#28585 Mod End -->
+           ,SOCD.MDSE_CD AS MDSE_CD
+           ,DMI.MDSE_DESC_SHORT_TXT AS MDSE_DESC_SHORT_TXT
+           ,TO_CHAR(SOD.RQST_ORD_QTY, 'FM9,999,999,990') AS ORD_QTY_TXT
+           ,TO_CHAR(SOCD.SHIP_QTY, 'FM9,999,999,990') AS SHIP_QTY_TXT
+           ,V.LOC_NM AS CARR_NM
+           ,DECODE(SOCD.PRO_NUM, '*', SOCD.BOL_NUM, SOCD.PRO_NUM) AS PRO_NUM
+           <!-- 2018/08/23 S21_NA#25746 Mod Start -->
+           <!-- ,TO_CHAR(TO_DATE(SUBSTR(SOC.SHIP_DT_TM_TS, 1, 8), 'YYYY/MM/DD'), 'MM/DD/YYYY') AS ACTL_SHIP_DT_TXT -->
+           ,TO_CHAR(TO_DATE(SUBSTR(SOCD.SHIP_DT_TM_TS, 1, 8), 'YYYY/MM/DD'), 'MM/DD/YYYY') AS ACTL_SHIP_DT_TXT
+           <!-- 2018/08/23 S21_NA#25746 Mod Start -->
+           ,SO.WH_CD AS REF_VAL_TXT
+           ,SOD.SO_NUM || ', ' || SOD.SO_SLP_NUM AS HDR_LINE_INFO_TXT
+        FROM 
+            SHPG_ORD_CONF_DTL SOCD
+           ,RTL_SWH       RS
+           ,BOL_RELN      BR
+           <!-- ,SHPG_ORD_CONF SOC --><!-- 2018/08/23 S21_NA#25746 Del -->
+           ,SHPG_ORD      SO
+           ,SELL_TO_CUST  DAC
+           ,SHPG_ORD_DTL  SOD
+           ,MDSE          DMI
+           ,CPO           C
+           ,SHIP_TO_CUST  SHIP
+           ,CPO_DTL       DCD
+           ,VND           V
+        WHERE 
+            SOCD.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND SOCD.EZCANCELFLAG = '0'
+
+            AND SOCD.GLBL_CMPY_CD = BR.GLBL_CMPY_CD
+            AND SOCD.BOL_NUM      = BR.BOL_NUM
+            AND SOCD.VND_CD       = NVL(BR.CARR_CD,'*')
+            AND SOCD.PRO_NUM      = NVL(BR.PRO_NUM,'*')
+            AND BR.EZCANCELFLAG   = '0'
+
+            AND SOCD.GLBL_CMPY_CD = RS.GLBL_CMPY_CD
+            AND SOCD.WH_CD        = RS.RTL_WH_CD || RS.RTL_SWH_CD
+            AND RS.EZCANCELFLAG   = '0'
+
+            AND RS.GLBL_CMPY_CD = BR.GLBL_CMPY_CD
+            AND RS.RTL_WH_CD    = BR.WH_CD
+            AND BR.EZCANCELFLAG = '0'
+
+            <!-- 2018/08/23 S21_NA#25746 Del Start -->
+            <!-- AND SOCD.GLBL_CMPY_CD = SOC.GLBL_CMPY_CD
+            AND SOCD.SO_NUM       = SOC.SO_NUM
+            AND SOC.EZCANCELFLAG  = '0' -->
+            <!-- 2018/08/23 S21_NA#25746 Del End -->
+
+            AND SOCD.GLBL_CMPY_CD  = SO.GLBL_CMPY_CD
+            AND SOCD.SO_NUM        = SO.SO_NUM
+            AND SO.SELL_TO_CUST_CD = #sellToCustCd#
+            <isNotNull property="cpoOrdNum">
+                AND SO.TRX_HDR_NUM = #cpoOrdNum#
+            </isNotNull>
+            AND SO.EZCANCELFLAG    = '0'
+
+            AND SO.GLBL_CMPY_CD    = DAC.GLBL_CMPY_CD
+            AND SO.SELL_TO_CUST_CD = DAC.SELL_TO_CUST_CD
+            AND DAC.EZCANCELFLAG   = '0'
+
+            AND SOCD.GLBL_CMPY_CD = SOD.GLBL_CMPY_CD
+            AND SOCD.SO_NUM       = SOD.SO_NUM
+            AND SOCD.SO_SLP_NUM   = SOD.SO_SLP_NUM
+            AND SOD.EZCANCELFLAG  = '0'
+
+            AND SOCD.GLBL_CMPY_CD = DMI.GLBL_CMPY_CD
+            AND SOCD.MDSE_CD      = DMI.MDSE_CD
+            AND DMI.EZCANCELFLAG  = '0'
+
+            AND SO.GLBL_CMPY_CD = C.GLBL_CMPY_CD 
+            AND SO.TRX_HDR_NUM  = C.CPO_ORD_NUM
+            AND C.EZCANCELFLAG  = '0'
+
+            AND SO.GLBL_CMPY_CD    = SHIP.GLBL_CMPY_CD
+            AND SO.SHIP_TO_CUST_CD = SHIP.SHIP_TO_CUST_CD
+            AND SHIP.EZCANCELFLAG  = '0'
+
+            AND SOD.GLBL_CMPY_CD     = DCD.GLBL_CMPY_CD
+            AND SOD.TRX_HDR_NUM      = DCD.CPO_ORD_NUM
+            AND SOD.TRX_LINE_NUM     = DCD.CPO_DTL_LINE_NUM
+            AND SOD.TRX_LINE_SUB_NUM = DCD.CPO_DTL_LINE_SUB_NUM
+            AND DCD.EZCANCELFLAG     = '0'
+
+            AND BR.GLBL_CMPY_CD    = V.GLBL_CMPY_CD (+)
+            AND BR.CARR_CD         = V.VND_CD (+)
+            AND V.EZCANCELFLAG (+) = '0'
+
+        UNION
+
+        SELECT 
+            C.CUST_ISS_PO_NUM AS CUST_ISS_PO_NUM
+           ,SP.TRX_HDR_NUM AS CPO_ORD_NUM
+           ,CASE WHEN DCD.DS_CPO_LINE_SUB_NUM IS NOT NULL THEN DCD.DS_CPO_LINE_NUM || '.' || DCD.DS_CPO_LINE_SUB_NUM
+                 ELSE TO_CHAR(DCD.DS_CPO_LINE_NUM)  END AS CPO_WRK_LINE_NUM
+           <!-- 2018/10/04 QC#28585 Mod Start -->
+           <!--
+           ,DAC.DS_ACCT_NM AS SELL_TO_CUST_NM
+           ,RTRIM(DAC.DS_ACCT_NM || DECODE(DAC.DS_ACCT_NM, NULL, '', '/') 
+                || SHIP.FIRST_LINE_ADDR || ' ' || SHIP.SCD_LINE_ADDR || ' ' || SHIP.THIRD_LINE_ADDR || ' ' || SHIP.FRTH_LINE_ADDR)
+                || DECODE(SHIP.FIRST_LINE_ADDR || ' ' || SHIP.SCD_LINE_ADDR || ' ' || SHIP.THIRD_LINE_ADDR || ' ' || SHIP.FRTH_LINE_ADDR, NULL, '', '/') 
+                || RTRIM(SHIP.CTY_ADDR || DECODE(SHIP.CTY_ADDR, NULL, '', '/') || SHIP.ST_CD || DECODE(SHIP.POST_CD, NULL, '', ',') || SHIP.POST_CD) AS SHIP_TO_INFO_TXT
+           -->
+           ,DAC.LOC_NM AS SELL_TO_CUST_NM
+           ,RTRIM(DAC.LOC_NM || DECODE(DAC.LOC_NM, NULL, '', '/') 
+                || SHIP.FIRST_LINE_ADDR || ' ' || SHIP.SCD_LINE_ADDR || ' ' || SHIP.THIRD_LINE_ADDR || ' ' || SHIP.FRTH_LINE_ADDR)
+                || DECODE(SHIP.FIRST_LINE_ADDR || ' ' || SHIP.SCD_LINE_ADDR || ' ' || SHIP.THIRD_LINE_ADDR || ' ' || SHIP.FRTH_LINE_ADDR, NULL, '', '/') 
+                || RTRIM(SHIP.CTY_ADDR || DECODE(SHIP.CTY_ADDR, NULL, '', '/') || SHIP.ST_CD || DECODE(SHIP.POST_CD, NULL, '', ',') || SHIP.POST_CD) AS SHIP_TO_INFO_TXT
+           <!-- 2018/10/04 QC#28585 Mod End -->
+           ,SP.MDSE_CD AS MDSE_CD
+           ,DMI.MDSE_DESC_SHORT_TXT AS MDSE_DESC_SHORT_TXT
+           ,TO_CHAR(SP.ORD_QTY, 'FM9,999,999,990') AS ORD_QTY_TXT
+           ,TO_CHAR(SP.ORD_QTY, 'FM9,999,999,990') AS SHIP_QTY_TXT
+           ,V.LOC_NM AS CARR_NM
+           ,DECODE(DPRD.PRO_NUM, '*', DPRD.BOL_NUM, DPRD.PRO_NUM) AS PRO_NUM
+           ,TO_CHAR(TO_DATE(SP.ACTL_SHIP_DT, 'YYYY/MM/DD'), 'MM/DD/YYYY') AS ACTL_SHIP_DT_TXT
+           ,PRH.PO_RCV_FROM_LOC_CD AS REF_VAL_TXT
+           ,PD.PO_ORD_NUM || ',' || PD.PO_ORD_DTL_LINE_NUM AS HDR_LINE_INFO_TXT
+        FROM
+            PO_RCV_HDR    PRH
+           ,PO_RCV_DTL    PRD
+           ,PO_RCV_DTL    DPRD
+           ,PO_DTL        PD
+           ,SHPG_PLN      SP
+           ,SELL_TO_CUST  DAC
+           ,CPO           C
+           ,SCE_ORD_TP    SOT
+           ,SHIP_TO_CUST  SHIP
+           ,VND           V
+           ,MDSE          DMI
+           ,CPO_DTL       DCD
+        WHERE 
+            PRH.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND PRH.EZCANCELFLAG = '0'
+
+            AND PRH.GLBL_CMPY_CD = PRD.GLBL_CMPY_CD
+            AND PRH.PO_RCV_NUM   = PRD.PO_RCV_NUM
+            AND PRD.EZCANCELFLAG = '0'
+
+            AND PRD.GLBL_CMPY_CD    = DPRD.GLBL_CMPY_CD
+            AND PRD.PO_RCV_NUM      = DPRD.PO_RCV_NUM
+            AND PRD.PO_RCV_LINE_NUM = DPRD.PO_RCV_LINE_NUM
+            AND DPRD.EZCANCELFLAG   = '0'
+
+            AND PRH.GLBL_CMPY_CD       = PD.GLBL_CMPY_CD
+            AND PRH.PO_RCV_TRX_HDR_NUM = PD.PO_ORD_NUM
+            AND PD.EZCANCELFLAG        = '0'
+
+            AND PRD.GLBL_CMPY_CD        = PD.GLBL_CMPY_CD
+            AND PRD.PO_RCV_TRX_LINE_NUM = PD.PO_ORD_DTL_LINE_NUM
+            AND PD.EZCANCELFLAG         = '0'
+
+            AND PD.GLBL_CMPY_CD    = SP.GLBL_CMPY_CD
+            AND PD.SHPG_PLN_NUM    = SP.SHPG_PLN_NUM
+            AND SP.SELL_TO_CUST_CD = #sellToCustCd#
+            <isNotNull property="cpoOrdNum">
+                AND SP.TRX_HDR_NUM = #cpoOrdNum#
+            </isNotNull>
+            AND SP.EZCANCELFLAG    = '0'
+
+            AND SP.GLBL_CMPY_CD    = DAC.GLBL_CMPY_CD
+            AND SP.SELL_TO_CUST_CD = DAC.SELL_TO_CUST_CD
+            AND DAC.EZCANCELFLAG   = '0'
+
+            AND SP.GLBL_CMPY_CD = C.GLBL_CMPY_CD
+            AND SP.TRX_HDR_NUM  = C.CPO_ORD_NUM
+            AND C.EZCANCELFLAG  = '0'
+
+            AND PRH.GLBL_CMPY_CD     = SOT.GLBL_CMPY_CD (+)
+            AND PRH.SCE_ORD_TP_CD    = SOT.SCE_ORD_TP_CD (+)
+            AND SOT.INBD_OTBD_CD (+) = #inbdOtbtCd#
+            AND SOT.EZCANCELFLAG (+) = '0'
+
+            AND SP.GLBL_CMPY_CD    = SHIP.GLBL_CMPY_CD
+            AND SP.SHIP_TO_CUST_CD = SHIP.SHIP_TO_CUST_CD
+            AND SHIP.EZCANCELFLAG  = '0'
+
+            AND DPRD.GLBL_CMPY_CD  = V.GLBL_CMPY_CD (+)
+            AND DPRD.CARR_CD       = V.VND_CD (+)
+            AND V.EZCANCELFLAG (+) = '0'
+
+            AND SP.GLBL_CMPY_CD  = DMI.GLBL_CMPY_CD
+            AND SP.MDSE_CD       = DMI.MDSE_CD
+            AND DMI.EZCANCELFLAG = '0'
+ 
+            AND SP.GLBL_CMPY_CD     = DCD.GLBL_CMPY_CD
+            AND SP.TRX_HDR_NUM      = DCD.CPO_ORD_NUM
+            AND SP.TRX_LINE_NUM     = DCD.CPO_DTL_LINE_NUM
+            AND SP.TRX_LINE_SUB_NUM = DCD.CPO_DTL_LINE_SUB_NUM
+            AND DCD.EZCANCELFLAG    = '0'
+        ORDER BY
+            CUST_ISS_PO_NUM
+           ,CPO_ORD_NUM
+           ,CPO_WRK_LINE_NUM
+           ,SELL_TO_CUST_NM
+    </statement>
+
+    <statement id="getDeleteWrk" parameterClass="Map"  resultClass="Map">
+        SELECT
+            O.SPLY_TRK_RPT_WRK_PK
+        FROM
+            SPLY_TRK_RPT_WRK O
+        WHERE
+            O.EZCANCELFLAG = '0'
+            AND O.GLBL_CMPY_CD = #glblCmpyCd#
+            AND O.BIZ_APP_ID = #bizAppId#
+            AND O.OTPT_OP_CD = #otptOpCd#
+            AND O.CPO_ORD_NUM = #cpoOrdNum#
+    </statement>
+
+</sqlMap>

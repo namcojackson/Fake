@@ -1,0 +1,53 @@
+/*
+* Copyright (c) 2011 Canon USA Inc. All rights reserved.
+* Original Author: AUTO generated File : S21 CodeTable Generator Tool
+* Company: Canon USA Inc.
+* Date Generated:2011/09/15 20:06:31
+*/
+package com.canon.cusa.s21.framework.ZYP.constant.cdtable;
+
+/**
+ * <p>
+ * This interface provides the logical code names as constants for RTL_INV_CHRG_TP table.
+ * </p>
+ *
+ * @author $Author$
+ * @version $Revision$
+ */
+public interface RTL_INV_CHRG_TP {
+
+String ADMIN_DEALER_CREDIT = "ADMCR";
+String CUSTOMER_CANCELLATION_CHARGES = "CANCH";
+String CUSTOMER_REFUND_METER = "CUSMC";
+String CUSTOMER_REFUND_PERIOD = "CUSPC";
+String CUSTOMER_REFUND_SERVICE = "CUSSC";
+String DEALER_PROVIDED_ITEM = "DLITM";
+String DEALER_PURCHASE_CHARGE = "DPURC";
+String SUPPLY_FIND_FEE_ORIG = "DSFFO";
+String EXTENDED_WARRANTY_CREDIT = "EXWCR";
+String FINDER_DEALER_CHARGE_BACK = "FCHBK";
+String DEALER_FIND_FEE_FINDER = "FFF";
+String DEALER_FIND_FEE_INSTALL = "FFI";
+String DEALER_FIND_FEE_ORIGINATING = "FFO";
+String DEALER_FINDER_FEE_ORDER_TAKE = "FFOT";
+String CUSTOMER_INSTALL_CHARGE = "INSCH";
+String DEALER_INSTALL_CREDIT = "INSCR";
+String CUSTOMER_METER_USAGE_CHARGE = "METCH";
+String DEALER_METER_USAGE_CREDIT = "METCR";
+String MISC_DEALER = "MISCD";
+String MISC_CUSTOMER = "MISCU";
+String CUSTOMER_PERIOD_CHARGE = "PRDCH";
+String DEALER_PERIOD_CREDIT = "PRDCR";
+String CUSTOMER_PURCHASE_CHARGE = "PURCH";
+String DEALER_PURCHASE_CREDIT = "PURCR";
+String CUSTOMER_REMOVAL_CHARGE = "REMCH";
+String DEALER_REMOVAL_CREDIT = "REMCR";
+String CUSTOMER_RENEWAL_CHARGE = "RENCH";
+String DEALER_RENEWAL_CREDIT = "RENCR";
+String SERVICE_ADMIN_DEALER_CREDIT = "SADCR";
+String CUSTOMER_SERVICE_CHARGE = "SVCCH";
+String DEALER_SERVICE_CREDIT = "SVCCR";
+String DEALER_TRADE_IN_CHARGE_BACK = "TRDCB";
+String CUSTOMER_TRADE_IN = "TRDIN";
+
+}

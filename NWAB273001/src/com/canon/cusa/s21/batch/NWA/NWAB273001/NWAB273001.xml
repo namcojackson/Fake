@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NWAB273001">
+    <statement id="getTargetInvoice" parameterClass="Map" resultClass="Map">
+    SELECT 
+        I.INV_NUM
+        ,(CASE WHEN I.INV_TP_CD = '2' THEN
+            -1 * I.INV_TOT_DEAL_NET_AMT
+          ELSE
+            I.INV_TOT_DEAL_NET_AMT
+          END) AS INV_TOT_DEAL_NET_AMT
+        ,I.INV_DT
+        ,I.SELL_TO_CUST_CD
+        ,I.PMT_TERM_CD
+        ,CUSR.DS_CUST_BANK_ACCT_RELN_PK
+        ,SI.DS_CONTR_PK
+        ,NVL(DBA.DS_BANK_ACCT_NUM,'No Bank Acct') AS DS_BANK_ACCT_NUM
+        ,NVL(DBA.BANK_RTE_NUM,'No RTE Num') AS BANK_RTE_NUM
+        ,CP.CLT_PSN_CD
+        ,CP.CLT_PSN_NM
+        ,NVL(
+         (CASE WHEN LENGTH(DBA.DS_BANK_ACCT_NUM) &lt;= 4
+          THEN
+            REGEXP_REPLACE(DBA.DS_BANK_ACCT_NUM,'.','*')
+          ELSE 
+            REGEXP_REPLACE(SUBSTR(DBA.DS_BANK_ACCT_NUM, 1, LENGTH(DBA.DS_BANK_ACCT_NUM)-4),'.','*')
+            || SUBSTR(DBA.DS_BANK_ACCT_NUM, LENGTH(DBA.DS_BANK_ACCT_NUM)-4+1)
+          END),'No Bank Acct') AS MASK_BANK_ACCT_NUM
+    
+    FROM
+         INV                        I
+        ,SVC_INV                    SI
+        ,SELL_TO_CUST               STC
+        ,DS_CONTR_BANK_ACCT_RELN    CONR
+        ,DS_CUST_BANK_ACCT_RELN     CUSR
+        ,DS_BANK_ACCT               DBA
+        ,CLT_PTFO                   CP
+    
+    WHERE
+        I.GLBL_CMPY_CD                      = #glblCmpyCd#
+        AND I.FNLZ_INV_FLG                  = #fnlzInvFlg#
+        AND I.PMT_TERM_CASH_DISC_CD         = #echkPmtTermCashDiscCd#
+        AND I.EZCANCELFLAG                  = '0'
+        <!-- START 2023/08/17 S.Ikariya [QC#61721, ADD] -->
+        AND I.ORIG_INV_NUM IS NULL
+        <!-- END 2023/08/17 S.Ikariya [QC#61721, ADD] -->
+        
+        AND I.GLBL_CMPY_CD                  = SI.GLBL_CMPY_CD
+        AND I.SVC_INV_PK                    = SI.SVC_INV_PK
+        AND SI.EZCANCELFLAG                 = '0'
+        
+        AND I.GLBL_CMPY_CD                  = STC.GLBL_CMPY_CD
+        AND I.SELL_TO_CUST_CD               = STC.SELL_TO_CUST_CD
+        AND STC.EZCANCELFLAG                = '0'
+        
+        AND I.GLBL_CMPY_CD                  = CONR.GLBL_CMPY_CD
+        AND SI.DS_CONTR_PK                  = CONR.DS_CONTR_PK
+        AND CONR.EZCANCELFLAG               = '0'
+        
+        AND I.GLBL_CMPY_CD                  = CUSR.GLBL_CMPY_CD(+)
+        AND CONR.DS_CUST_BANK_ACCT_RELN_PK  = CUSR.DS_CUST_BANK_ACCT_RELN_PK(+)
+        AND CUSR.EZCANCELFLAG(+)            = '0'
+        
+        AND I.GLBL_CMPY_CD                  = DBA.GLBL_CMPY_CD(+)
+        AND CUSR.DS_BANK_ACCT_PK            = DBA.DS_BANK_ACCT_PK(+)
+        AND DBA.EZCANCELFLAG(+)             = '0'
+        
+        AND I.GLBL_CMPY_CD                  = CP.GLBL_CMPY_CD(+)
+        AND STC.CLT_PTFO_PK                 = CP.CLT_PTFO_PK(+)
+        AND CP.EZCANCELFLAG(+)              = '0'
+        
+        AND NOT EXISTS (
+            SELECT 1 
+            FROM
+                ECHK_RCPT_TRX_DTL ERTD
+            WHERE
+                I.GLBL_CMPY_CD              = ERTD.GLBL_CMPY_CD
+                AND I.INV_NUM               = ERTD.INV_NUM
+                AND ERTD.EZCANCELFLAG       = '0'
+        )
+    
+    ORDER BY 
+        STC.SELL_TO_CUST_CD
+        ,DBA.BANK_RTE_NUM
+        ,DBA.DS_BANK_ACCT_NUM
+    </statement>
+</sqlMap>
+                

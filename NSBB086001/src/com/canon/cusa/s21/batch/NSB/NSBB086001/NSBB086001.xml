@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NSBB086001">
+    <statement id="getInputData" parameterClass="Map" resultClass="Map">
+        WITH MTR_RD AS (
+            SELECT
+                 SPMR.GLBL_CMPY_CD 
+                ,SPMR.FSR_NUM
+                ,SPMR.SVC_MACH_MSTR_PK
+                ,SPMR.MTR_LB_CD
+                ,SPMR.READ_MTR_CNT
+                ,SPMR.MTR_READ_DT
+                ,ROW_NUMBER() OVER (
+                    PARTITION BY
+                         SPMR.FSR_NUM
+                        ,SPMR.MTR_LB_CD 
+                    ORDER BY
+                         SPMR.MTR_READ_DT DESC
+                        ,SPMR.SVC_PHYS_MTR_READ_GRP_SQ DESC) as ROW_NUMBER
+            FROM
+                SVC_PHYS_MTR_READ SPMR
+            ORDER BY 
+                 SPMR.FSR_NUM
+                ,SPMR.MTR_LB_CD)
+        ,TG_FSR AS (
+            SELECT
+                 A.GLBL_CMPY_CD
+                ,A.FSR_NUM
+                ,A.SVC_MACH_MSTR_PK
+            FROM
+                FSR    A
+            WHERE
+                    A.GLBL_CMPY_CD     =  #glblCmpyCd#
+                AND A.EZCANCELFLAG     =  '0'
+                AND A.FSR_STS_CD       =  #fsrStsCd#
+                AND A.EZUPTIME      &gt;  TO_CHAR(TO_TIMESTAMP(ADD_MONTHS(LAST_DAY(TO_DATE(#slsDt#,'yyyy/mm/dd')),#addMonth#)),'YYYYMMDDHH24MISSFF3')
+                AND A.EZUPTIME      &lt;  TO_CHAR(TO_TIMESTAMP(TO_DATE(#slsDt#,'yyyy/mm/dd') + 1),'YYYYMMDDHH24MISSFF3')
+            ORDER BY
+                A.FSR_NUM ASC)
+        ,PRE_FSR AS (
+            SELECT 
+                 D.FSR_NUM
+                ,D.SVC_MACH_MSTR_PK
+                ,D.MTR_READ_DT
+                ,D.MTR_LB_CD
+                ,D.READ_MTR_CNT
+            FROM
+                (
+                 SELECT 
+                      TG_FSR.FSR_NUM
+                     ,A.SVC_MACH_MSTR_PK
+                     ,A.MTR_READ_DT
+                     ,A.MTR_LB_CD
+                     ,A.READ_MTR_CNT
+                     ,ROW_NUMBER() OVER (
+                          PARTITION BY
+                               TG_FSR.FSR_NUM
+                              ,A.MTR_LB_CD
+                          ORDER BY
+                               A.MTR_READ_DT DESC
+                              ,A.SVC_PHYS_MTR_READ_GRP_SQ DESC) RANK
+                 FROM
+                      TG_FSR
+                     ,MTR_RD
+                     ,SVC_PHYS_MTR_READ       A
+                 WHERE 
+                         TG_FSR.FSR_NUM           =  MTR_RD.FSR_NUM
+                     AND TG_FSR.SVC_MACH_MSTR_PK  =  MTR_RD.SVC_MACH_MSTR_PK
+                     AND TG_FSR.GLBL_CMPY_CD      =  A.GLBL_CMPY_CD
+                     AND TG_FSR.FSR_NUM     &lt;&gt; A.FSR_NUM
+                     AND A.FSR_NUM                IS NOT NULL
+                     AND TG_FSR.SVC_MACH_MSTR_PK  =  A.SVC_MACH_MSTR_PK
+                     AND MTR_RD.MTR_READ_DT    &gt;  A.MTR_READ_DT
+                 GROUP BY
+                      TG_FSR.FSR_NUM
+                     ,A.SVC_MACH_MSTR_PK
+                     ,A.MTR_READ_DT
+                     ,A.MTR_LB_CD
+                     ,A.SVC_PHYS_MTR_READ_GRP_SQ
+                     ,A.READ_MTR_CNT) D
+            WHERE 
+                D.RANK = 1
+            ORDER BY
+                 D.FSR_NUM ASC
+                ,D.MTR_LB_CD ASC)
+        SELECT
+             TG_FSR.FSR_NUM             AS FSR_NUM
+            ,MTR_RD.MTR_LB_CD           AS MTR_LB_CD
+            ,CASE
+                WHEN PRE_FSR.READ_MTR_CNT IS NULL THEN '000000000'
+                ELSE TO_CHAR(MTR_RD.READ_MTR_CNT - PRE_FSR.READ_MTR_CNT)
+             END                        AS MTR_COPY_QTY_01
+            ,CASE
+                WHEN PRE_FSR.READ_MTR_CNT IS NULL THEN '000000000'
+                ELSE TO_CHAR(MTR_RD.READ_MTR_CNT - PRE_FSR.READ_MTR_CNT)
+             END                        AS MTR_COPY_QTY_02
+            ,MACH.SVC_CONFIG_MSTR_PK    AS SVC_CONFIG_MSTR_PK
+            ,(SELECT TO_NUMBER(MIN(VISIT.FSR_VISIT_ARV_DT))
+                FROM
+                    FSR_VISIT    VISIT
+                WHERE
+                        VISIT.GLBL_CMPY_CD    = TG_FSR.GLBL_CMPY_CD
+                    AND VISIT.FSR_NUM         = TG_FSR.FSR_NUM
+                    AND VISIT.FSR_VISIT_ARV_DT  IS NOT NULL)    AS FSR_VISIT_ARV_DT
+            ,#meterInOutIndicator#      AS FILL_1_TXT
+            ,MTR_RD.READ_MTR_CNT        AS LAST_READ_MTR_CNT
+            ,#unitOfMeasure#            AS FILL_3_TXT
+        FROM
+             TG_FSR
+            ,FSR_VISIT        VISIT
+            ,SVC_MACH_MSTR    MACH
+            ,MTR_RD
+            ,PRE_FSR
+        WHERE
+                VISIT.GLBL_CMPY_CD           = TG_FSR.GLBL_CMPY_CD
+            AND VISIT.FSR_NUM                = TG_FSR.FSR_NUM
+            AND TG_FSR.GLBL_CMPY_CD          = MACH.GLBL_CMPY_CD 
+            AND TG_FSR.SVC_MACH_MSTR_PK      = MACH.SVC_MACH_MSTR_PK
+            AND MTR_RD.GLBL_CMPY_CD(+)       = TG_FSR.GLBL_CMPY_CD
+            AND MTR_RD.FSR_NUM(+)            = TG_FSR.FSR_NUM
+            AND MTR_RD.SVC_MACH_MSTR_PK(+)   = TG_FSR.SVC_MACH_MSTR_PK
+            AND MTR_RD.ROW_NUMBER(+)         = #rowNum#
+            AND TG_FSR.FSR_NUM               = PRE_FSR.FSR_NUM(+)
+            AND TG_FSR.SVC_MACH_MSTR_PK      = PRE_FSR.SVC_MACH_MSTR_PK(+)
+    </statement>
+</sqlMap>

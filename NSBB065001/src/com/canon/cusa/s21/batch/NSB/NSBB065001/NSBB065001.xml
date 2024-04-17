@@ -1,0 +1,299 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NSBB065001">
+    <statement id="getInputData" parameterClass="Map" resultClass="Map">
+        WITH MACH AS (
+            SELECT
+                 SVCMACH.GLBL_CMPY_CD
+                ,SVCMACH.SVC_MACH_MSTR_PK
+                ,SVCMACH.SER_NUM
+                ,SVCMACH.SVC_CONFIG_MSTR_PK
+                ,SVCMACH.MDSE_CD
+                ,SVCMACH.FLD_SVC_BR_CD
+                ,SVCMACH.CUR_LOC_ACCT_NUM
+                ,SVCMACH.ISTL_DT
+                ,SVCMACH.SVC_MACH_TRX_TP_CD 
+                ,SVCMACH.EFF_FROM_DT
+                ,NVL(SVCMACH.EFF_THRU_DT,  #effThruDt#) AS EFF_THRU_DT
+                ,SVCMACH.PRF_TECH_CD
+                ,SVCMACH.SHIP_TO_CUST_CD
+            FROM
+                SVC_MACH_MSTR   SVCMACH
+            WHERE
+                    SVCMACH.GLBL_CMPY_CD           = #glblCmpyCd#
+                AND SVCMACH.EZUPTIME               &gt; TO_CHAR(TO_TIMESTAMP(ADD_MONTHS(LAST_DAY(TO_DATE(#slsDt#, 'YYYYMMDD')), #addMonth#)), 'YYYYMMDDHH24MISSFF3')
+                AND SVCMACH.EZUPTIME               &lt; TO_CHAR(TO_TIMESTAMP(TO_DATE(#slsDt#, 'YYYYMMDD') + 1), 'YYYYMMDDHH24MISSFF3')
+                <iterate property="svcMachMstrStsCdList" var="svcMachMstrSts[]" open="AND SVCMACH.SVC_MACH_MSTR_STS_CD  IN (" close=")" conjunction=",">
+                    #svcMachMstrSts[]#
+                </iterate>
+                AND SVCMACH.EZCANCELFLAG           = '0'
+        )
+        ,TIER_RG AS(
+            SELECT
+                OHSD.ORG_TIER_CD
+            FROM
+                 STRU_DFN          SDF
+                ,ORG_HRCH_STRU_DFN OHSD
+            WHERE
+                    SDF.GLBL_CMPY_CD     = #glblCmpyCd#
+                AND SDF.RG_FLG           = 'Y'
+                AND SDF.GLBL_CMPY_CD     = OHSD.GLBL_CMPY_CD
+                AND SDF.STRU_DFN_CD      = OHSD.STRU_DFN_CD
+                AND OHSD.BIZ_AREA_ORG_CD = #bizAreaOrgCd_service#
+                AND SDF.EZCANCELFLAG     = '0'
+                AND OHSD.EZCANCELFLAG    = '0'
+                AND OHSD.EFF_FROM_DT               &lt;= #slsDt#
+                AND NVL(OHSD.EFF_THRU_DT, #slsDt#) &gt;= #slsDt#
+                AND ROWNUM               = 1
+        )
+        ,CONTDTL AS (
+            SELECT
+                 DCON.GLBL_CMPY_CD
+                ,DDTL.SVC_MACH_MSTR_PK
+                ,DCON.DS_CONTR_CATG_CD
+                ,DCON.DS_CONTR_NUM
+                ,DDTL.SVC_PGM_MDSE_CD
+                ,FIRST_VALUE(DDTL.CONTR_EFF_THRU_DT)
+                    OVER(ORDER BY DDTL.CONTR_EFF_FROM_DT DESC, DDTL.CONTR_EFF_THRU_DT) F_DATE_VAL
+            FROM
+                 DS_CONTR           DCON
+                ,DS_CONTR_DTL_STS_V STSV
+                ,DS_CONTR_DTL       DDTL
+                ,MACH
+            WHERE
+                    DCON.GLBL_CMPY_CD           = #glblCmpyCd#
+                AND DCON.GLBL_CMPY_CD           = DDTL.GLBL_CMPY_CD
+                AND DCON.DS_CONTR_PK            = DDTL.DS_CONTR_PK
+                AND DDTL.SVC_MACH_MSTR_PK       IS NOT NULL
+                AND DDTL.GLBL_CMPY_CD           = MACH.GLBL_CMPY_CD
+                AND DDTL.CONTR_EFF_FROM_DT      &lt;= MACH.EFF_FROM_DT
+                AND (
+                        NVL(DDTL.CONTR_EFF_THRU_DT, #slsDt#) &gt;= MACH.EFF_THRU_DT
+                    OR  NVL(DDTL.CONTR_CLO_DT,      #slsDt#) &gt;= MACH.EFF_THRU_DT
+                    )
+                AND DDTL.SVC_MACH_MSTR_PK       = MACH.SVC_MACH_MSTR_PK
+                AND DDTL.GLBL_CMPY_CD           = STSV.GLBL_CMPY_CD
+                AND DDTL.DS_CONTR_DTL_PK        = STSV.DS_CONTR_DTL_PK
+                <iterate property="dsContrCtrlStsCdList" var="dsContrCtrlSts[]" open="AND STSV.DS_CONTR_CTRL_STS_CD NOT IN (" close=")" conjunction=",">
+                    #dsContrCtrlSts[]#
+                </iterate>
+                AND DCON.EZCANCELFLAG           = '0'
+                AND DDTL.EZCANCELFLAG           = '0'
+                AND STSV.EZCANCELFLAG           = '0'
+        )
+        SELECT
+             MDLNM.T_MDL_NM                                                             AS T_MDL_NM
+            ,MACH.SER_NUM                                                               AS SER_NUM
+            ,MACH.SVC_CONFIG_MSTR_PK                                                    AS SVC_CONFIG_MSTR_PK
+            ,MD.ZEROTH_PROD_CTRL_CD                                                     AS ZEROTH_PROD_CTRL_CD
+            ,1                                                                          AS INTFC_MDL_GRP_NUM
+            ,DSMDLG.MDL_GRP_NM                                                          AS MDL_GRP_NM
+            ,MACH.MDSE_CD                                                               AS MDSE_CD
+            ,CASE WHEN TIER_RG.ORG_TIER_CD = #orgTierCd_0#  THEN ORG.FIRST_ORG_CD
+                  WHEN TIER_RG.ORG_TIER_CD = #orgTierCd_1#  THEN ORG.SCD_ORG_CD
+                  WHEN TIER_RG.ORG_TIER_CD = #orgTierCd_2#  THEN ORG.THIRD_ORG_CD
+                  WHEN TIER_RG.ORG_TIER_CD = #orgTierCd_3#  THEN ORG.FRTH_ORG_CD
+                  WHEN TIER_RG.ORG_TIER_CD = #orgTierCd_4#  THEN ORG.FIFTH_ORG_CD
+                  WHEN TIER_RG.ORG_TIER_CD = #orgTierCd_5#  THEN ORG.SIXTH_ORG_CD
+                  WHEN TIER_RG.ORG_TIER_CD = #orgTierCd_6#  THEN ORG.SVNTH_ORG_CD
+                  WHEN TIER_RG.ORG_TIER_CD = #orgTierCd_7#  THEN ORG.EIGHTH_ORG_CD
+                  WHEN TIER_RG.ORG_TIER_CD = #orgTierCd_8#  THEN ORG.NINTH_ORG_CD
+                  WHEN TIER_RG.ORG_TIER_CD = #orgTierCd_9#  THEN ORG.TENTH_ORG_CD
+                  WHEN TIER_RG.ORG_TIER_CD = #orgTierCd_10# THEN ORG.ELVTH_ORG_CD
+             END                                                                        AS FIFTH_ORG_CD
+            ,MACH.FLD_SVC_BR_CD                                                         AS FLD_SVC_BR_CD
+            ,'1'                                                                        AS FILL_1_TXT_01
+            ,'1'                                                                        AS FILL_1_TXT_02
+            ,''                                                                         AS FILL_1_TXT_03
+            ,''                                                                         AS FILL_3_TXT
+            ,MACH.CUR_LOC_ACCT_NUM                                                      AS CUR_LOC_ACCT_NUM
+            ,CUST.LOC_NM                                                                AS LOC_NM
+            ,CUST.FIRST_LINE_ADDR                                                       AS FIRST_LINE_ADDR
+            ,''                                                                         AS FILL_10_TXT
+            ,CUST.POST_CD                                                               AS POST_CD
+            ,CUST.CTY_ADDR                                                              AS CTY_ADDR
+            ,CASE WHEN LENGTH(MAIL.MAILING_NAME) &gt; #maxLength_62# THEN SUBSTRB(MAIL.MAILING_NAME,1,#maxLength_62#)
+                  ELSE MAIL.MAILING_NAME
+             END                                                                        AS CTAC_FULL_PSN_NM_01
+            ,''                                                                         AS FILL_40_TXT
+            ,MAIL.CTAC_PSN_TEL_NUM                                                      AS CTAC_PSN_TEL_NUM
+            ,''                                                                         AS FILL_1_TXT_04
+            ,MACH.ISTL_DT                                                               AS ISTL_DT
+            ,MACH.SVC_MACH_TRX_TP_CD                                                    AS SVC_MACH_TRX_TP_CD_01
+            ,(CASE
+                WHEN NVL(CONTDTL3.CNT, 0) > 0
+                THEN 'Y'
+                ELSE 'N'
+                END)                                                                    AS FILL_1_TXT_05
+            ,''                                                                         AS FILL_1_TXT_06
+            ,''                                                                         AS SVC_MACH_TRX_TP_CD_02
+            ,CONTDTL1.SVC_PGM_MDSE_CD                                                   AS SVC_PGM_MDSE_CD
+            ,CONTDTL1.F_DATE_VAL                                                        AS CONTR_EFF_THRU_DT
+            ,CONTDTL2.DS_CONTR_CATG_CD                                                  AS DS_CONTR_CATG_CD
+            ,MACH.PRF_TECH_CD                                                           AS PRF_TECH_CD
+            ,''                                                                         AS SVC_TEAM_MGR_PSN_CD
+            ,TECH.FLD_SVC_MGR_CD                                                        AS FLD_SVC_MGR_CD
+            ,''                                                                         AS SVC_BR_MGR_PSN_CD
+            ,''                                                                         AS MGR_PSN_CD
+            ,''                                                                         AS FILL_6_TXT_01
+            ,CASE WHEN LENGTH(KEYOPE.KEY_OPERATOR_NAME) &gt; #maxLength_62# THEN SUBSTRB(KEYOPE.KEY_OPERATOR_NAME,1,#maxLength_62#)
+                  ELSE KEYOPE.KEY_OPERATOR_NAME
+             END                                                                        AS CTAC_FULL_PSN_NM_02
+            ,CONTDTL1.DS_CONTR_NUM                                                      AS DS_CONTR_NUM
+            ,''                                                                         AS FILL_1_TXT_07
+            ,''                                                                         AS FILL_30_TXT
+            ,''                                                                         AS FILL_6_TXT_02
+            ,''                                                                         AS FILL_1_TXT_08
+        FROM
+             MACH
+            ,TIER_RG
+            ,CONTDTL             CONTDTL1
+            ,CONTDTL             CONTDTL2
+            ,SVC_CONFIG_MSTR     CONF
+            ,MDL_NM              MDLNM
+            ,DS_MDL              DSMDL
+            ,DS_MDL_GRP          DSMDLG
+            ,SHIP_TO_CUST        CUST
+            ,TECH_MSTR           TECH
+            ,MDSE                MD
+            ,ORG_FUNC_ASG        ORGASG
+            ,S21_ORG             ORG
+            ,(
+                SELECT
+                     CONTDTL.GLBL_CMPY_CD
+                    ,CONTDTL.SVC_MACH_MSTR_PK
+                    ,COUNT(*) AS CNT
+                FROM
+                     SVC_COV_TMPL_DTL   TMPL
+                    ,MDSE               MDS
+                    ,CONTDTL
+                WHERE
+                        CONTDTL.DS_CONTR_CATG_CD       &lt;&gt; #dsContrCatgCd_Warranty#
+                    AND MDS.GLBL_CMPY_CD                = CONTDTL.GLBL_CMPY_CD
+                    AND MDS.MDSE_CD                     = CONTDTL.SVC_PGM_MDSE_CD
+                    AND TMPL.GLBL_CMPY_CD               = MDS.GLBL_CMPY_CD
+                    AND TMPL.SVC_COV_TMPL_TP_CD         = MDS.SVC_COV_TMPL_TP_CD
+                    AND TMPL.SVC_COV_FEAT_CD            = #svcCovFeatCd_bill_cd#
+                    AND TMPL.SVC_COV_DTL_ACTV_FLG       = 'Y'
+                    AND TMPL.EZCANCELFLAG               = '0'
+                    AND MDS.EZCANCELFLAG                = '0'
+                GROUP BY
+                     CONTDTL.GLBL_CMPY_CD
+                    ,CONTDTL.SVC_MACH_MSTR_PK
+            ) CONTDTL3
+            ,(
+                SELECT
+                     SVCPSN.GLBL_CMPY_CD
+                    ,SVCPSN.SVC_MACH_MSTR_PK
+                    ,TRIM(PSN.CTAC_PSN_FIRST_NM) || ' ' || TRIM(PSN.CTAC_PSN_MID_NM) || ' ' || TRIM(PSN.CTAC_PSN_LAST_NM) AS MAILING_NAME
+                    ,PSN.CTAC_PSN_TEL_NUM
+                FROM
+                     MACH
+                    ,SVC_MACH_CTAC_PSN   SVCPSN
+                    ,DS_CTAC_PNT         DSCPNT
+                    ,CTAC_PSN            PSN
+                WHERE
+                        SVCPSN.GLBL_CMPY_CD         = MACH.GLBL_CMPY_CD
+                    AND SVCPSN.SVC_MACH_MSTR_PK     = MACH.SVC_MACH_MSTR_PK
+                    AND DSCPNT.GLBL_CMPY_CD         = SVCPSN.GLBL_CMPY_CD
+                    AND DSCPNT.DS_CTAC_PNT_PK       = SVCPSN.DS_CTAC_PNT_PK
+                    AND PSN.GLBL_CMPY_CD            = DSCPNT.GLBL_CMPY_CD
+                    AND PSN.CTAC_PSN_PK             = DSCPNT.CTAC_PSN_PK
+                    AND SVCPSN.EZCANCELFLAG         = '0'
+                    AND DSCPNT.EZCANCELFLAG         = '0'
+                    AND PSN.EZCANCELFLAG            = '0'
+                    AND SVCPSN.SVC_MACH_CTAC_PSN_PK IN (
+                            SELECT
+                                MAX(SVCPSN2.SVC_MACH_CTAC_PSN_PK)
+                            FROM
+                                SVC_MACH_CTAC_PSN  SVCPSN2
+                            WHERE
+                                SVCPSN2.EZCANCELFLAG    = '0'
+                            GROUP BY
+                                 SVCPSN2.GLBL_CMPY_CD
+                                ,SVCPSN2.SVC_MACH_MSTR_PK
+                        )
+            ) MAIL
+            ,(
+                SELECT
+                     SVCPSN.GLBL_CMPY_CD
+                    ,SVCPSN.SVC_MACH_MSTR_PK
+                    ,TRIM(PSN.CTAC_PSN_FIRST_NM) || ' ' || TRIM(PSN.CTAC_PSN_MID_NM) || ' ' || TRIM(PSN.CTAC_PSN_LAST_NM) AS KEY_OPERATOR_NAME
+                FROM
+                     MACH
+                    ,SVC_MACH_CTAC_PSN   SVCPSN
+                    ,DS_CTAC_PNT         DSCPNT
+                    ,CTAC_PSN            PSN
+                WHERE
+                        SVCPSN.GLBL_CMPY_CD     = MACH.GLBL_CMPY_CD
+                    AND SVCPSN.SVC_MACH_MSTR_PK = MACH.SVC_MACH_MSTR_PK
+                    AND DSCPNT.GLBL_CMPY_CD     = SVCPSN.GLBL_CMPY_CD
+                    AND DSCPNT.DS_CTAC_PNT_PK   = SVCPSN.DS_CTAC_PNT_PK
+                    AND PSN.GLBL_CMPY_CD        = DSCPNT.GLBL_CMPY_CD
+                    AND PSN.CTAC_PSN_PK         = DSCPNT.CTAC_PSN_PK
+                    AND SVCPSN.EZCANCELFLAG     = '0'
+                    AND DSCPNT.EZCANCELFLAG     = '0'
+                    AND PSN.EZCANCELFLAG        = '0'
+                    AND SVCPSN.SVC_MACH_CTAC_PSN_PK IN
+                        (
+                            SELECT
+                                MAX(SVCPSN2.SVC_MACH_CTAC_PSN_PK)
+                            FROM
+                                  MACH
+                                 ,SVC_MACH_CTAC_PSN  SVCPSN2
+                            WHERE
+                                    SVCPSN2.GLBL_CMPY_CD     = MACH.GLBL_CMPY_CD
+                                AND SVCPSN2.SVC_MACH_MSTR_PK = MACH.SVC_MACH_MSTR_PK
+                                AND SVCPSN2.CTAC_TP_CD       = #svcCtacTp_svc_key_operator#
+                                AND SVCPSN2.EZCANCELFLAG     = '0'
+                            GROUP BY
+                                 SVCPSN2.GLBL_CMPY_CD
+                                ,SVCPSN2.SVC_MACH_MSTR_PK
+                        )
+            ) KEYOPE
+        WHERE
+                CONTDTL1.GLBL_CMPY_CD(+)        = MACH.GLBL_CMPY_CD
+            AND CONTDTL1.SVC_MACH_MSTR_PK(+)    = MACH.SVC_MACH_MSTR_PK
+            AND CONTDTL1.DS_CONTR_CATG_CD(+)   &lt;&gt; #dsContrCatgCd_Warranty#
+            AND CONTDTL2.GLBL_CMPY_CD(+)        = MACH.GLBL_CMPY_CD
+            AND CONTDTL2.SVC_MACH_MSTR_PK(+)    = MACH.SVC_MACH_MSTR_PK
+            AND CONTDTL2.DS_CONTR_CATG_CD(+)    = #dsContrCatgCd_Warranty#
+            AND CONTDTL3.GLBL_CMPY_CD(+)        = MACH.GLBL_CMPY_CD
+            AND CONTDTL3.SVC_MACH_MSTR_PK(+)    = MACH.SVC_MACH_MSTR_PK
+            AND MD.GLBL_CMPY_CD                 = MACH.GLBL_CMPY_CD
+            AND MD.MDSE_CD                      = MACH.MDSE_CD
+            AND CONF.GLBL_CMPY_CD               = MACH.GLBL_CMPY_CD
+            AND CONF.SVC_MACH_MSTR_PK           = MACH.SVC_MACH_MSTR_PK
+            AND MDLNM.T_GLBL_CMPY_CD            = CONF.GLBL_CMPY_CD	
+            AND MDLNM.T_MDL_ID                  = CONF.MDL_ID
+            AND DSMDL.GLBL_CMPY_CD              = CONF.GLBL_CMPY_CD
+            AND DSMDL.MDL_ID                    = CONF.MDL_ID
+            AND DSMDLG.GLBL_CMPY_CD             = DSMDL.GLBL_CMPY_CD
+            AND DSMDLG.MDL_GRP_ID               = DSMDL.MDL_GRP_ID
+            AND CUST.GLBL_CMPY_CD(+)            = MACH.GLBL_CMPY_CD
+            AND CUST.SHIP_TO_CUST_CD(+)         = MACH.SHIP_TO_CUST_CD
+            AND TECH.GLBL_CMPY_CD(+)            = MACH.GLBL_CMPY_CD
+            AND TECH.TECH_TOC_CD(+)             = MACH.PRF_TECH_CD
+            AND MAIL.GLBL_CMPY_CD(+)            = MACH.GLBL_CMPY_CD
+            AND MAIL.SVC_MACH_MSTR_PK(+)        = MACH.SVC_MACH_MSTR_PK
+            AND KEYOPE.GLBL_CMPY_CD(+)          = MACH.GLBL_CMPY_CD
+            AND KEYOPE.SVC_MACH_MSTR_PK(+)      = MACH.SVC_MACH_MSTR_PK
+            AND ORGASG.GLBL_CMPY_CD(+)          = MACH.GLBL_CMPY_CD
+            AND ORGASG.PSN_CD(+)                = MACH.PRF_TECH_CD
+            AND ORG.GLBL_CMPY_CD(+)             = ORGASG.GLBL_CMPY_CD
+            AND ORG.TOC_CD(+)                   = ORGASG.TOC_CD
+            AND CONF.EZCANCELFLAG               = '0'
+            AND MDLNM.EZCANCELFLAG              = '0'
+            AND DSMDL.EZCANCELFLAG              = '0'
+            AND DSMDLG.EZCANCELFLAG             = '0'
+            AND CUST.EZCANCELFLAG(+)            = '0'
+            AND TECH.EZCANCELFLAG(+)            = '0'
+            AND MD.EZCANCELFLAG                 = '0'
+            AND ORGASG.EZCANCELFLAG(+)          = '0'
+            AND ORG.EZCANCELFLAG(+)             = '0'
+        ORDER BY
+             MDLNM.T_MDL_NM             ASC
+            ,MACH.SER_NUM               ASC
+            ,MACH.SVC_CONFIG_MSTR_PK    ASC
+    </statement>
+</sqlMap>

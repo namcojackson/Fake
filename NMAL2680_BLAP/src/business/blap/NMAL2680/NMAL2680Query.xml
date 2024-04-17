@@ -1,0 +1,194 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NMAL2680Query">
+
+    <typeAlias alias="NMAL2680_ASMsg"	type="business.blap.NMAL2680.NMAL2680_ASMsg"/>
+
+    <resultMap id="result.getRule" class="NMAL2680_ASMsg">
+        <result property="trtyRulePk_A1"         column="TRTY_RULE_PK"            javaType="EZDSBigDecimalItem"/>
+        <result property="dsAcctNum_A1"          column="DS_ACCT_NUM"             javaType="EZDCStringItem"/>
+        <result property="locNum_A1"             column="LOC_NUM"                 javaType="EZDCStringItem"/>
+        <result property="dsAcctNm_A1"           column="DS_ACCT_NM"              javaType="EZDCStringItem"/>
+        <result property="dsAcctTpCd_A1"         column="DS_ACCT_TP_CD"           javaType="EZDCStringItem"/>
+        <result property="dsAcctTpNm_A1"         column="DS_ACCT_TP_NM"           javaType="EZDCStringItem"/>
+        <result property="xxAllLineAddr_A1"      column="XX_ALL_LINE_ADDR"        javaType="EZDCStringItem"/>
+    </resultMap>
+
+    <statement id="getTrtyRule" parameterClass="Map" resultClass="Map">
+            SELECT
+                 TR.TRTY_RULE_PK
+                ,TR.ORG_CD
+                ,DOU.ORG_NM
+             <isNotNull property="orgCd">
+                ,#territory# ||' ' || #orgCd# AS XX_DS_MSG_ENTRY_TXT
+             </isNotNull>
+             <isNull property="orgCd">
+                ,CASE
+                 WHEN TR.TRTY_RULE_OPRD_TP_CD = '4' THEN
+                    TRT.TRTY_RULE_TP_NM || ' ' || TROT.TRTY_RULE_OPRD_TP_NM || ' '  || TR.TRTY_RULE_FROM_VAL_TXT || ' AND ' || TR.TRTY_RULE_THRU_VAL_TXT
+                 ELSE
+                    TRT.TRTY_RULE_TP_NM || ' ' || TROT.TRTY_RULE_OPRD_TP_NM || ' '  || TR.TRTY_RULE_FROM_VAL_TXT
+                 END AS XX_DS_MSG_ENTRY_TXT
+             </isNull>
+            FROM
+                TRTY_RULE TR
+               ,TRTY_RULE_TP TRT
+               ,TRTY_RULE_OPRD_TP TROT
+               ,DS_ORG_UNIT DOU
+            WHERE
+                TR.GLBL_CMPY_CD          = #glblCmpyCd#
+          <isNotNull property="orgCd">
+            AND TR.ORG_CD                = #orgCd#
+          </isNotNull>
+          <isNull property="orgCd">
+            AND TR.TRTY_RULE_PK          = #trtyRulePk#
+          </isNull>
+            AND TR.EZCANCELFLAG          = '0'
+            AND TR.GLBL_CMPY_CD          = TRT.GLBL_CMPY_CD
+            AND TR.TRTY_RULE_TP_CD       = TRT.TRTY_RULE_TP_CD
+            AND TRT.EZCANCELFLAG         = '0'
+            AND TR.GLBL_CMPY_CD          = TROT.GLBL_CMPY_CD
+            AND TR.TRTY_RULE_OPRD_TP_CD  = TROT.TRTY_RULE_OPRD_TP_CD
+            AND TROT.EZCANCELFLAG        = '0'
+            AND TR.GLBL_CMPY_CD          = DOU.GLBL_CMPY_CD
+            AND TR.ORG_CD                = DOU.ORG_CD
+            AND DOU.EZCANCELFLAG         = '0'
+    </statement>
+
+    <statement id="getCustRule" parameterClass="Map" resultMap="result.getRule">
+        WITH RULE_V AS (
+            SELECT
+                 TRLR.TRTY_RULE_PK
+                ,TRLR.DS_ACCT_NUM
+                ,TRLR.LOC_NUM
+                ,TRLR.DS_ACCT_NM
+                ,TRLR.DS_ACCT_TP_CD
+                ,DAT.DS_ACCT_TP_NM
+                ,PTY.FIRST_LINE_ADDR ||
+                  DECODE(PTY.SCD_LINE_ADDR,   NULL, '', ' ' || PTY.SCD_LINE_ADDR)   ||
+                  DECODE(PTY.THIRD_LINE_ADDR, NULL, '', ' ' || PTY.THIRD_LINE_ADDR) ||
+                  DECODE(PTY.FRTH_LINE_ADDR,  NULL, '', ' ' || PTY.FRTH_LINE_ADDR)  ||
+                  ' ' ||
+                  PTY.CTY_ADDR        || ' ' ||
+                  PTY.ST_CD           || ' ' ||
+                  PTY.POST_CD                   AS XX_ALL_LINE_ADDR
+            FROM
+                TRTY_RULE_LOC_RELN TRLR
+               ,DS_ACCT_TP DAT
+               ,PTY_LOC_WRK PTY
+            WHERE
+                TRLR.GLBL_CMPY_CD          = #glblCmpyCd#
+           <isNotNull property="orgCd">
+            AND TRLR.ORG_CD                = #orgCd#
+           </isNotNull>
+           <isNull property="orgCd">
+            AND TRLR.TRTY_RULE_PK          = #trtyRulePk#
+           </isNull>
+            AND TRLR.EZCANCELFLAG          = '0'
+            AND TRLR.GLBL_CMPY_CD          = DAT.GLBL_CMPY_CD
+            AND TRLR.DS_ACCT_TP_CD         = DAT.DS_ACCT_TP_CD
+            AND DAT.EZCANCELFLAG           = '0'
+            AND TRLR.GLBL_CMPY_CD          = PTY.GLBL_CMPY_CD(+)
+            AND TRLR.PTY_LOC_PK            = PTY.PTY_LOC_PK(+)
+            AND PTY.EZCANCELFLAG(+)        = '0'
+        )
+        SELECT
+              *
+        FROM
+             (
+                 SELECT
+                      *
+                 FROM
+                     RULE_V 
+                 WHERE
+                     1 = 1
+                 <isNotNull property="filter">
+                 AND (
+                        UPPER(DS_ACCT_NUM)      LIKE #filter#
+                     OR UPPER(LOC_NUM)          LIKE #filter#
+                     OR UPPER(DS_ACCT_NM)       LIKE #filter#
+                     OR UPPER(DS_ACCT_TP_NM)    LIKE #filter#
+                     OR UPPER(XX_ALL_LINE_ADDR) LIKE #filter#
+                 )
+                 </isNotNull>
+                 ORDER BY
+                     TRTY_RULE_PK
+                    ,DS_ACCT_NUM
+                    ,LOC_NUM
+             ) TRV
+        WHERE
+             1 = 1
+        <isNotNull property="rowNum">
+         AND ROWNUM &lt;= #rowNum#
+        </isNotNull>
+    </statement>
+    
+
+    <statement id="getProsRule" parameterClass="Map" resultMap="result.getRule">
+        WITH RULE_V AS (
+            SELECT
+                 TRLR.TRTY_RULE_PK
+                ,TRLR.DS_ACCT_NUM
+                ,TRLR.LOC_NUM
+                ,TRLR.DS_ACCT_NM
+                ,TRLR.DS_ACCT_TP_CD
+                ,DAT.DS_ACCT_TP_NM
+                ,PTY.FIRST_LINE_ADDR ||
+                  DECODE(PTY.SCD_LINE_ADDR,   NULL, '', ' ' || PTY.SCD_LINE_ADDR)   ||
+                  DECODE(PTY.THIRD_LINE_ADDR, NULL, '', ' ' || PTY.THIRD_LINE_ADDR) ||
+                  DECODE(PTY.FRTH_LINE_ADDR,  NULL, '', ' ' || PTY.FRTH_LINE_ADDR)  ||
+                  ' ' ||
+                  PTY.CTY_ADDR        || ' ' ||
+                  PTY.ST_CD           || ' ' ||
+                  PTY.POST_CD                   AS XX_ALL_LINE_ADDR
+            FROM
+                TRTY_RULE_PROS_RELN TRLR
+               ,DS_ACCT_TP DAT
+               ,PROS_PTY_LOC_WRK PTY
+            WHERE
+                TRLR.GLBL_CMPY_CD          = #glblCmpyCd#
+           <isNotNull property="orgCd">
+            AND TRLR.ORG_CD                = #orgCd#
+           </isNotNull>
+           <isNull property="orgCd">
+            AND TRLR.TRTY_RULE_PK          = #trtyRulePk#
+           </isNull>
+            AND TRLR.EZCANCELFLAG          = '0'
+            AND TRLR.GLBL_CMPY_CD          = DAT.GLBL_CMPY_CD
+            AND TRLR.DS_ACCT_TP_CD         = DAT.DS_ACCT_TP_CD
+            AND DAT.EZCANCELFLAG           = '0'
+            AND TRLR.GLBL_CMPY_CD          = PTY.GLBL_CMPY_CD(+)
+            AND TRLR.PTY_LOC_PK            = PTY.PTY_LOC_PK(+)
+            AND PTY.EZCANCELFLAG(+)        = '0'
+        )
+        SELECT
+              *
+        FROM
+             (
+                 SELECT
+                      *
+                 FROM
+                     RULE_V 
+                 WHERE
+                     1 = 1
+                 <isNotNull property="filter">
+                 AND (
+                        UPPER(DS_ACCT_NUM)      LIKE #filter#
+                     OR UPPER(LOC_NUM)          LIKE #filter#
+                     OR UPPER(DS_ACCT_NM)       LIKE #filter#
+                     OR UPPER(DS_ACCT_TP_NM)    LIKE #filter#
+                     OR UPPER(XX_ALL_LINE_ADDR) LIKE #filter#
+                 )
+                 </isNotNull>
+                 ORDER BY
+                     TRTY_RULE_PK
+                    ,DS_ACCT_NUM
+                    ,LOC_NUM
+             ) TRV
+        WHERE
+             1 = 1
+        <isNotNull property="rowNum">
+         AND ROWNUM &lt;= #rowNum#
+        </isNotNull>
+    </statement>
+</sqlMap>

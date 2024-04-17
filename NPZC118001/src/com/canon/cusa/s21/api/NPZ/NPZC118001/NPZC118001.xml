@@ -1,0 +1,244 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+
+<sqlMap namespace="NPZC118001">
+    <statement id="getRwsByDoNum" parameterClass="Map" resultClass="Map">
+         SELECT
+            HDR.RWS_NUM
+            ,HDR.SCE_ORD_TP_CD
+            ,HDR.RWS_STS_CD
+            ,HDR.WH_CD
+            ,HDR.RWS_REF_NUM
+        FROM
+            RWS_HDR     HDR
+        WHERE
+            HDR.GLBL_CMPY_CD            = #glblCmpyCd#
+            AND HDR.EZCANCELFLAG        = '0'
+            AND HDR.SHIP_FROM_SO_NUM   = #shipFromSoNum#
+        ORDER BY
+            HDR.RWS_NUM
+    </statement>
+
+    <statement id="getRwsDetail" parameterClass="Map" resultClass="Map">
+         SELECT
+            HDR.RWS_NUM
+            ,DTL.RWS_DTL_LINE_NUM
+            ,DTL.INVTY_STK_STS_CD
+            ,HDR.SCE_ORD_TP_CD
+            ,DTL.RWS_QTY
+            ,DTL.INVTY_LOC_CD
+            ,DTL.MDSE_CD
+            ,HDR.RWS_REF_NUM
+            ,DTL.FROM_STK_STS_CD
+        FROM
+            RWS_HDR     HDR
+            ,RWS_DTL    DTL
+        WHERE
+            HDR.GLBL_CMPY_CD            = #glblCmpyCd#
+            AND HDR.RWS_NUM             = #rwsNum#
+            AND HDR.EZCANCELFLAG        = '0'
+            AND HDR.GLBL_CMPY_CD        = DTL.GLBL_CMPY_CD
+            AND HDR.RWS_NUM             = DTL.RWS_NUM
+            AND DTL.EZCANCELFLAG        = '0'
+        ORDER BY
+            HDR.RWS_NUM
+            ,DTL.RWS_DTL_LINE_NUM
+    </statement>
+
+    <statement id="getRtlWh" parameterClass="Map" resultClass="Map">
+         SELECT
+             RW.TECH_TOC_CD
+            <!-- START 2020/01/24 [QC#55358, ADD] -->
+            ,RW.ALT_PSN_CD
+            <!-- END   2020/01/24 [QC#55358, ADD] -->
+            ,RW.RTL_WH_CD
+            ,RW.RTL_WH_NM
+        FROM
+             RWS_HDR  HD
+            ,RTL_WH   RW
+        WHERE
+                HD.GLBL_CMPY_CD       = #glblCmpyCd#
+            AND HD.RWS_NUM            = #rwsNum#
+            AND HD.EZCANCELFLAG       = '0'
+            AND HD.GLBL_CMPY_CD       = RW.GLBL_CMPY_CD
+            AND HD.WH_CD              = RW.RTL_WH_CD
+            AND RW.EZCANCELFLAG       = '0'
+            AND RW.EFF_FROM_DT        &lt;= #slsDt#
+            AND NVL(RW.EFF_THRU_DT, #maxEffThruDt#)
+                                      &gt;= #slsDt#
+        ORDER BY
+            RW.TECH_TOC_CD
+    </statement>
+
+    <statement id="getRtlSwh" parameterClass="Map" resultClass="Map">
+        SELECT
+             RW.RTL_WH_CD
+            ,RW.RTL_WH_NM
+            ,RS.RTL_SWH_CD
+            ,RS.INVTY_LOC_CD
+            ,LV.INVTY_LOC_NM
+            ,CASE WHEN RW.RTL_WH_CD = RW.TECH_TOC_CD THEN 1 ELSE 2 END AS SORT_NUM
+        FROM
+             RTL_WH   RW
+            ,RTL_SWH  RS
+            ,DS_INVTY_LOC_V  LV
+        WHERE
+                RW.GLBL_CMPY_CD       = #glblCmpyCd#
+            AND RW.TECH_TOC_CD        = #techTocCd#
+            AND RW.RTL_WH_CATG_CD     = #rtlWhCatgTechCarStoc#
+            AND RW.EFF_FROM_DT        &lt;= #slsDt#
+            AND NVL(RW.EFF_THRU_DT, #maxEffThruDt#)
+                                      &gt;= #slsDt#
+            AND RW.EZCANCELFLAG       = '0'
+            AND RW.GLBL_CMPY_CD       = RS.GLBL_CMPY_CD
+            AND RW.RTL_WH_CD          = RS.RTL_WH_CD
+            AND RS.EZCANCELFLAG       = '0'
+            AND RS.RTL_SWH_CD         IN (
+                    SELECT
+                        DISTINCT DT.RTL_SWH_CD
+                    FROM
+                        RWS_DTL DT
+                    WHERE
+                            DT.GLBL_CMPY_CD   = RS.GLBL_CMPY_CD
+                        AND DT.RWS_NUM        = #rwsNum#
+                        AND DT.EZCANCELFLAG   = '0')
+            AND RS.GLBL_CMPY_CD       = LV.GLBL_CMPY_CD
+            AND RS.INVTY_LOC_CD       = LV.INVTY_LOC_CD
+            AND LV.EZCANCELFLAG       = '0'
+        ORDER BY
+             SORT_NUM
+            ,RS.RTL_WH_CD
+            ,RS.RTL_SWH_CD
+    </statement>
+
+    <statement id="getInvtyTrxSlpNum" parameterClass="Map" resultClass="String">
+        SELECT
+            NVL(PO.PO_ORD_NUM, SO.TRX_HDR_NUM) AS INVTY_TRX_SLP_NUM
+        FROM
+             RWS_HDR  HD
+            ,PO       PO
+            ,SHPG_ORD SO
+        WHERE
+                HD.GLBL_CMPY_CD       = #glblCmpyCd#
+            AND HD.RWS_NUM            = #rwsNum#
+            AND HD.EZCANCELFLAG       = '0'
+            AND HD.GLBL_CMPY_CD       = PO.GLBL_CMPY_CD (+)
+            AND HD.PO_RCV_TRX_HDR_NUM = PO.PO_ORD_NUM   (+)
+            AND PO.EZCANCELFLAG (+)   = '0'
+            AND HD.GLBL_CMPY_CD       = SO.GLBL_CMPY_CD (+)
+            AND HD.PO_RCV_TRX_HDR_NUM = SO.SO_NUM       (+)
+            AND SO.EZCANCELFLAG (+)   = '0'
+    </statement>
+
+    <statement id="getRwsCloDtTmTs" parameterClass="Map" resultClass="String">
+        SELECT
+            CP.RWS_CLO_DT_TM_TS
+        FROM
+             RWS_HDR  HD
+            ,RWS_CPLT CP
+        WHERE
+                HD.GLBL_CMPY_CD       = #glblCmpyCd#
+            AND HD.RWS_NUM            = #rwsNum#
+            AND HD.RWS_STS_CD         = #rwsStsReceived#
+            AND HD.EZCANCELFLAG       = '0'
+            AND HD.GLBL_CMPY_CD       = CP.GLBL_CMPY_CD
+            AND HD.RWS_NUM            = CP.RWS_NUM 
+            AND CP.EZCANCELFLAG       = '0'
+    </statement>
+
+    <!-- QC#12110 Add SQL -->
+<!-- START 2022/04/20 K.Kitachi [QC#59897, DEL] -->
+<!--<statement id="getPrtItemTp" parameterClass="Map" resultClass="String"> -->
+<!--    SELECT -->
+<!--       MDSE.PRT_ITEM_TP_CD -->
+<!--    FROM -->
+<!--       ALL_MDSE_V MDSE -->
+<!--    WHERE 1=1 -->
+<!--    AND MDSE.GLBL_CMPY_CD     = #glblCmpyCd# -->
+<!--    AND MDSE.MDSE_CD          = #mdseCd# -->
+<!--    AND MDSE.EZCANCELFLAG     = '0' -->
+<!--</statement> -->
+<!-- END 2022/04/20 K.Kitachi [QC#59897, DEL] -->
+
+    <!-- START 2019/07/29 T.Kanasaka [QC#51585, ADD] -->
+    <statement id="countSuccess" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            COUNT(*) AS CNT
+        FROM
+            CLICK_TECH_RCV_PRT RPT
+        WHERE
+                RPT.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND RPT.CLICK_TRK_NUM    = #clickTrkNum#
+            AND RPT.RWS_STS_DESC_TXT = #rwsStsDescTxt_Success#
+            AND RPT.CLICK_KEY_TXT    = #clickKeyTxt#
+            AND RPT.EZCANCELFLAG     = '0'
+    </statement>
+
+    <statement id="countClickTechRcvPrt" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            COUNT(*) AS CNT
+        FROM
+            CLICK_TECH_RCV_PRT RPT
+        WHERE
+                RPT.GLBL_CMPY_CD     = #glblCmpyCd#
+            AND RPT.RWS_STS_DESC_TXT = #rwsStsDescTxt#
+            AND RPT.CLICK_KEY_TXT    = #clickKeyTxt#
+        <isNull property="clickTrkNum">
+            AND RPT.CLICK_TRK_NUM    IS NULL
+        </isNull>
+        <isNotNull property="clickTrkNum">
+            AND RPT.CLICK_TRK_NUM    = #clickTrkNum#
+        </isNotNull>
+        <isNull property="techCd">
+            AND RPT.TECH_CD          IS NULL
+        </isNull>
+        <isNotNull property="techCd">
+            AND RPT.TECH_CD          = #techCd#
+        </isNotNull>
+        <isNull property="whCd">
+            AND RPT.WH_CD            IS NULL
+        </isNull>
+        <isNotNull property="whCd">
+            AND RPT.WH_CD            = #whCd#
+        </isNotNull>
+        <isNull property="rtlWhNm">
+            AND RPT.RTL_WH_NM        IS NULL
+        </isNull>
+        <isNotNull property="rtlWhNm">
+            AND RPT.RTL_WH_NM        = #rtlWhNm#
+        </isNotNull>
+        <isNull property="svcAsgTechCd">
+            AND RPT.SVC_ASG_TECH_CD  IS NULL
+        </isNull>
+        <isNotNull property="svcAsgTechCd">
+            AND RPT.SVC_ASG_TECH_CD  = #svcAsgTechCd#
+        </isNotNull>
+            AND RPT.EZCANCELFLAG     = '0'
+    </statement>
+    <!-- END   2019/07/29 T.Kanasaka [QC#51585, ADD] -->
+    <!-- START 2019/10/15 K.Fujimoto [QC#53956, ADD] -->
+    <statement id="getFsrVisitByRws" parameterClass="Map" resultClass="Map">
+    SELECT
+           FV.FSR_NUM
+          ,FV.FSR_VISIT_NUM
+      FROM
+           FSR_VISIT FV
+          ,PRCH_REQ  PR
+     WHERE
+           FV.GLBL_CMPY_CD = #glblCmpyCd#
+       AND FV.EZCANCELFLAG = '0'
+       AND FV.FSR_NUM = PR.FSR_NUM
+       AND FV.SVC_TASK_NUM = PR.SVC_TASK_NUM
+       AND FV.GLBL_CMPY_CD = PR.GLBL_CMPY_CD
+       AND PR.EZCANCELFLAG = '0'
+       AND EXISTS(
+             SELECT 1
+               FROM PRCH_REQ_DTL PRD
+              WHERE PRD.PRCH_REQ_NUM = PR.PRCH_REQ_NUM
+                AND PRD.GLBL_CMPY_CD = PR.GLBL_CMPY_CD
+                AND PR.EZCANCELFLAG = '0'
+                AND PRD.RWS_NUM = #rwsNum#
+           )
+      AND ROWNUM = 1
+    </statement>
+    <!-- END   2019/10/15 K.Fujimoto [QC#53956, ADD] -->
+</sqlMap>

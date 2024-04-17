@@ -1,0 +1,568 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NFCB402001">
+    <statement id="getCompInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+              A.INV_NUM                  AS INV_NUM
+             ,B.INV_LINE_NUM             AS INV_LINE_NUM
+             ,B.INV_LINE_SUB_NUM         AS INV_LINE_SUB_NUM
+             ,B.INV_BOL_LINE_NUM         AS INV_BOL_LINE_NUM
+             ,B.INV_LINE_SUB_TRX_NUM     AS INV_LINE_SUB_TRX_NUM
+             <!-- 2018/09/11 QC#28118,28123 Mod Start -->
+             <!--
+             ,A.INV_DT                   AS INV_DT
+             -->
+             ,CASE 
+              WHEN J.CR_REBIL_CD IN (#crCdCredit#, #crCdRebill#) THEN A.ACCT_DT
+              <!-- 2020/04/23 QC#56638 Add Start -->
+              WHEN A.SYS_SRC_CD= #nfc# AND A.ORIG_INV_NUM IS NOT NULL THEN A.ACCT_DT
+              <!-- 2020/04/23 QC#56638 Add End -->
+              ELSE A.INV_DT
+              END                        AS INV_DT
+             <!-- 2018/09/11 QC#28118,28123 Mod End -->
+             ,A.CPO_ORD_NUM              AS CPO_ORD_NUM
+             ,A.SELL_TO_CUST_CD          AS SELL_TO_CUST_CD
+             ,D.T_MDL_NM                 AS T_MDL_NM
+             ,B.MDSE_CD                  AS MDSE_CD
+             ,E.DS_CMSN_GRP_CD           AS DS_CMSN_GRP_CD
+             ,B.SHIP_QTY                 AS SHIP_QTY
+             <!-- 2018/09/11 QC#28118,28123 Mod Start -->
+             <!--
+             ,B.DEAL_NET_UNIT_PRC_AMT    AS COMP_UNIT_AMT
+             -->
+             <!-- 2018/11/09 QC#29131 Del Start -->
+             <!--
+             ,CASE 
+              WHEN J.CR_REBIL_CD =#crCdCredit# THEN B.DEAL_NET_UNIT_PRC_AMT * (-1)
+              ELSE B.DEAL_NET_UNIT_PRC_AMT
+              END          AS COMP_UNIT_AMT
+              -->
+             <!-- 2018/11/09 QC#29131 Del End -->               
+             <!-- 2018/09/11 QC#28118,28123 Mod End -->
+             <!-- 2018/11/09 QC#29131 Add Start -->
+             ,CASE
+              WHEN A.INV_TP_CD = #creditMemo# THEN B.DEAL_NET_UNIT_PRC_AMT * (-1) 
+              ELSE B.DEAL_NET_UNIT_PRC_AMT
+              END                        AS COMP_UNIT_AMT
+             <!-- 2018/11/09 QC#29131 Add End -->
+             ,G.SER_NUM                  AS SER_NUM
+             ,H.DS_ACCT_NM               AS DS_ACCT_NM
+             <!-- 2020/04/23 QC#56638 Mod Start -->
+             ,CASE
+              WHEN A.SYS_SRC_CD= #nfc# AND A.ORIG_INV_NUM IS NOT NULL THEN #miscCd#
+              ELSE I.DS_ORD_CATG_CD
+              END                        AS DS_ORD_CATG_CD
+             ,CASE
+              WHEN A.SYS_SRC_CD= #nfc# AND A.ORIG_INV_NUM IS NOT NULL THEN #lfsMiscCd#
+              ELSE I.DS_ORD_TP_CD
+              END                        AS DS_ORD_TP_CD
+             <!-- 2020/04/23 QC#56638 Mod End -->
+             <!-- START 2019/09/05 Hd.Sugawara [QC#51704,ADD] -->
+             ,SUBSTR(I.ORD_BOOK_TS, 0, #substrDtLngth#) AS ORD_BOOK_DT
+             <!-- END 2019/09/05 Hd.Sugawara [QC#51704,ADD] -->
+             ,SLS_REP.PSN_CD             AS SLS_REP_PSN_CD
+             ,SLS_REP.SLS_REP_ROLE_TP_CD AS SLS_REP_ROLE_TP_CD
+             <!-- 2020/04/23 QC#56638 Add Start -->
+             ,L.LOC_NUM AS SOLD_TO_CUST_LOC_CD
+             <!-- 2020/04/23 QC#56638 Add End -->
+        FROM
+             INV                         A
+            ,INV_LINE                    B
+            ,MDSE                        E
+            <!-- 05/15/2018 QC#25937 H.Kumagai Del Start -->
+            <!-- ,IMG_SPLY_COMP_GRP           F -->
+            <!-- 05/15/2018 QC#25937 H.Kumagai Del End -->
+            ,CPO                         I
+            ,CPO_DTL                     J
+            ,DS_CPO_CONFIG               K
+            ,MDL_NM                      D
+            ,SVC_MACH_MSTR               G
+            ,SELL_TO_CUST                H
+            <!-- 2020/04/23 QC#56638 Add Start -->
+            ,BILL_TO_CUST                L
+            <!-- 2020/04/23 QC#56638 Add End -->
+            ,(
+              SELECT
+                   X.CPO_ORD_NUM
+                  ,X.DS_CPO_CONFIG_PK
+                  ,X.SLS_REP_ROLE_TP_CD
+                  ,X.PSN_CD
+              FROM
+                  (SELECT
+                        X1.CPO_ORD_NUM
+                       ,X1.DS_CPO_CONFIG_PK
+                       ,X1.SLS_REP_ROLE_TP_CD
+                       ,X3.PSN_CD
+                       ,ROW_NUMBER() OVER (PARTITION BY X1.CPO_ORD_NUM, X1.DS_CPO_CONFIG_PK ORDER BY X1.SLS_REP_CR_PCT DESC, X1.SLS_REP_TOC_CD ASC) AS ROW_NUM
+                   FROM
+                        DS_CPO_SLS_CR    X1
+                       ,LINE_BIZ_ROLE_TP X2
+                       ,ORG_FUNC_ASG     X3
+                   WHERE
+                           X1.GLBL_CMPY_CD        = #glblCmpyCd#
+                       AND X1.EZCANCELFLAG        = '0'
+                       AND X1.GLBL_CMPY_CD        = X2.GLBL_CMPY_CD
+                       AND X1.SLS_REP_ROLE_TP_CD  = X2.LINE_BIZ_ROLE_TP_CD
+                       AND X2.EZCANCELFLAG        = '0'
+                       AND X2.PRIM_REP_ROLE_FLG   = 'Y'
+                       AND X2.SLS_CR_QUOT_FLG     = 'Y'
+                       AND X1.DS_CPO_CONFIG_PK    IS NOT NULL
+                       AND EXISTS(SELECT 1 FROM INV
+                                    WHERE
+                                        INV.GLBL_CMPY_CD     = X1.GLBL_CMPY_CD
+                                        AND INV.CPO_ORD_NUM  = X1.CPO_ORD_NUM
+                                        AND INV.INV_DT       BETWEEN #aotDay# AND #slsDt#
+                                        <!-- START 2019/09/13 Hd.Sugawara [QC#52943,ADD] -->
+                                        AND INV.FNLZ_INV_FLG = #flgOnY#
+                                        <!-- END 2019/09/13 Hd.Sugawara [QC#52943,ADD] -->
+                                        AND INV.EZCANCELFLAG = '0')
+                       AND X1.GLBL_CMPY_CD        = X3.GLBL_CMPY_CD
+                       AND X1.SLS_REP_TOC_CD      = X3.TOC_CD
+                       AND X3.EZCANCELFLAG        = '0'
+                       AND X3.EFF_FROM_DT         &lt;= #slsDt#
+<!--2019/05/14 #50093 Del Start-->
+<!--                       AND NVL(X3.EFF_THRU_DT, #slsDt#) -->
+<!--                                                  &gt;= #slsDt#-->
+<!--2019/05/14 #50093 Del End-->
+                  ) X
+              WHERE
+                  X.ROW_NUM = 1
+             )               SLS_REP
+        WHERE
+                A.CPO_ORD_NUM                    IS NOT NULL
+            AND A.GLBL_CMPY_CD                   = #glblCmpyCd#
+            AND A.INV_DT                          BETWEEN #aotDay# AND #slsDt#
+            AND A.TRX_SRC_TP_CD                  = #invTrxSrcTpWS#  <!-- 2018/10/30 QC#29033 Add -->
+            <!-- START 2019/09/13 Hd.Sugawara [QC#52943,ADD] -->
+            AND A.FNLZ_INV_FLG                   = #flgOnY#
+            <!-- END 2019/09/13 Hd.Sugawara [QC#52943,ADD] -->
+            AND A.EZCANCELFLAG                   = '0'
+            AND A.GLBL_CMPY_CD                   = B.GLBL_CMPY_CD
+            AND A.INV_NUM                        = B.INV_NUM
+            AND B.EZCANCELFLAG                   = '0'
+            <iterate property="compProcStsCdList" var="compProcStsCd[]"
+                open="AND B.COMP_PROC_STS_CD IN (" close=")" conjunction=",">
+                #compProcStsCd[]#
+            </iterate>
+            <!-- START 2018/05/25 Hd.Sugawara [QC#21841(Sol#495),ADD] -->
+            <!-- 2018/09/25 QC#28231 Del Start -->
+            <!--
+            AND (
+                B.INV_LINE_CATG_CD      IS NULL 
+                OR
+                B.INV_LINE_CATG_CD      = #invLineCatgCd#
+                )
+            -->
+            <!-- 2018/09/25 QC#28231 Del End -->
+            <!-- END 2018/05/25 Hd.Sugawara [QC#21841(Sol#495),ADD] -->
+            AND B.MDSE_CD                        = E.MDSE_CD
+            AND B.GLBL_CMPY_CD                   = E.GLBL_CMPY_CD
+            AND E.EZCANCELFLAG                   = '0'
+            <!-- 05/15/2018 QC#25937 H.Kumagai Del Start -->
+            <!-- 
+            AND E.DS_CMSN_GRP_CD                 = F.IMG_SPLY_COMP_GRP_CD
+            AND E.GLBL_CMPY_CD                   = F.GLBL_CMPY_CD          
+            AND F.EZCANCELFLAG                   = '0' -->
+            <!-- 05/15/2018 QC#25937 H.Kumagai Del End -->
+            AND A.CPO_ORD_NUM                    = I.CPO_ORD_NUM
+            AND A.GLBL_CMPY_CD                   = I.GLBL_CMPY_CD
+            AND I.EZCANCELFLAG                   = '0'
+            AND I.CPO_ORD_NUM                    = J.CPO_ORD_NUM
+            AND I.GLBL_CMPY_CD                   = J.GLBL_CMPY_CD
+            AND B.CPO_DTL_LINE_NUM               = J.CPO_DTL_LINE_NUM
+            AND B.CPO_DTL_LINE_SUB_NUM           = J.CPO_DTL_LINE_SUB_NUM
+            AND B.GLBL_CMPY_CD                   = J.GLBL_CMPY_CD
+            AND J.EZCANCELFLAG                   = '0'
+            AND J.CPO_ORD_NUM                    = K.CPO_ORD_NUM
+            AND J.DS_CPO_CONFIG_PK               = K.DS_CPO_CONFIG_PK
+            AND J.GLBL_CMPY_CD                   = K.GLBL_CMPY_CD
+            AND K.EZCANCELFLAG                   = '0'
+            AND K.CPO_ORD_NUM                    = SLS_REP.CPO_ORD_NUM
+            AND K.DS_CPO_CONFIG_PK               = SLS_REP.DS_CPO_CONFIG_PK
+            AND EXISTS (
+                SELECT
+                    1
+                FROM
+                     DS_CPO_SLS_CR X1
+                    ,LINE_BIZ_ROLE_TP X2
+                    ,CPO X3
+                    ,DS_ORD_TP_PROC_DFN X4
+                WHERE
+                    X1.GLBL_CMPY_CD              = K.GLBL_CMPY_CD
+                    AND X1.CPO_ORD_NUM           = K.CPO_ORD_NUM
+                    AND X1.DS_CPO_CONFIG_PK      = K.DS_CPO_CONFIG_PK
+                    AND X1.EZCANCELFLAG          = '0'
+                    AND X1.GLBL_CMPY_CD          = X2.GLBL_CMPY_CD
+                    AND X1.SLS_REP_ROLE_TP_CD    = X2.LINE_BIZ_ROLE_TP_CD
+                    AND X2.EZCANCELFLAG          = '0'
+                    AND X2.SLS_CR_QUOT_FLG       = 'Y'
+                    AND X1.GLBL_CMPY_CD          = X3.GLBL_CMPY_CD
+                    AND X1.CPO_ORD_NUM           = X3.CPO_ORD_NUM
+                    AND X3.EZCANCELFLAG          = '0'
+                    AND X3.GLBL_CMPY_CD          = X4.GLBL_CMPY_CD
+                    AND X3.DS_ORD_TP_CD          = X4.DS_ORD_TP_CD
+                    AND X4.EZCANCELFLAG          = '0'
+                    AND X4.TRTY_GRP_TP_TXT       LIKE #lineBizTpCd#
+                )
+            AND K.GLBL_CMPY_CD                   = D.T_GLBL_CMPY_CD(+)
+            AND K.MDL_ID                         = D.T_MDL_ID(+)
+            AND D.EZCANCELFLAG(+)                = '0'
+            AND J.SVC_MACH_MSTR_PK               = G.SVC_MACH_MSTR_PK(+)
+            AND J.GLBL_CMPY_CD                   = G.GLBL_CMPY_CD(+)
+            AND G.EZCANCELFLAG(+)                = '0'
+            AND A.SELL_TO_CUST_CD                = H.SELL_TO_CUST_CD
+            AND A.GLBL_CMPY_CD                   = H.GLBL_CMPY_CD
+            AND H.EZCANCELFLAG                   = '0'
+            <!-- 2020/04/23 QC#56638 Add Start -->
+            AND A.SOLD_TO_CUST_LOC_CD            = L.BILL_TO_CUST_CD
+            AND A.GLBL_CMPY_CD = L.GLBL_CMPY_CD
+            AND A.EZCANCELFLAG = L.EZCANCELFLAG
+            <!-- 2020/04/23 QC#56638 Add End -->
+        ORDER BY
+             B.INV_NUM ASC
+            ,B.INV_BOL_LINE_NUM ASC
+            ,B.INV_LINE_NUM ASC
+            ,B.INV_LINE_SUB_NUM ASC
+            ,B.INV_LINE_SUB_TRX_NUM ASC
+    </statement>
+    <statement id="getRootOrgCd" parameterClass="Map" resultClass="String">
+        SELECT
+            DOU.ORG_CD 
+        FROM
+             <!-- 2020/04/23 QC#56638 Del Start -->
+             <!-- DS_ORG_RESRC_RELN   DORR -->
+             <!-- 2020/04/23 QC#56638 Del End -->
+             DS_ORG_UNIT         DOU
+            ,TRTY_RULE TR
+        WHERE 
+<!-- 2020/04/23 QC#56638 Del Start -->
+<!--           DORR.GLBL_CMPY_CD    = #glblCmpyCd# -->
+<!--        AND DORR.PSN_CD          = #psnCd# -->
+<!--        AND DORR.NON_SLS_REP_FLG = 'N' -->
+<!--        AND DORR.EZCANCELFLAG    = '0' -->
+        <!-- 2018/08/07 QC#26406 H.Kumagai Add Start -->
+<!--2019/06/03 QC#50637 M.Ishii Del Start-->
+<!--        AND (DORR.EFF_THRU_DT is null or DORR.EFF_THRU_DT &gt; #slsDt#)-->
+<!--2019/06/03 QC#50637 M.Ishii Del End-->
+        <!-- 2019/12/12 QC#54880 Del Start -->
+        <!-- AND DORR.GNRN_TP_CD      = #gnrnTpCd# -->
+        <!-- 2019/12/12 QC#54880 Del End -->
+        <!-- 2019/12/12 QC#54880 Add Start -->
+<!--        AND DORR.EFF_FROM_DT(+)  &lt;= #ordBookDt# -->
+<!--        AND (DORR.EFF_THRU_DT IS NULL OR DORR.EFF_THRU_DT &gt;= #ordBookDt#) -->
+        <!-- 2019/12/12 QC#54880 Add End -->
+        <!-- 2018/08/07 QC#26406 H.Kumagai Add End -->
+
+<!--        AND DOU.GLBL_CMPY_CD     = DORR.GLBL_CMPY_CD -->
+<!--        AND DOU.ORG_CD           = DORR.ORG_CD -->
+<!-- 2020/04/23 QC#56638 Del End -->
+<!-- 2020/04/23 QC#56638 Add Start -->
+            DOU.GLBL_CMPY_CD     = #glblCmpyCd#
+        AND DOU.TRTY_GRP_TP_CD   = #trtyGrpTpCd#
+        AND DOU.ORG_STRU_TP_CD   = #orgStruTpCd#
+        AND DOU.EZCANCELFLAG     = '0'
+
+        AND DOU.GLBL_CMPY_CD            = TR.GLBL_CMPY_CD
+        AND DOU.ORG_CD                  = TR.ORG_CD
+        AND TR.TRTY_RULE_FROM_VAL_TXT = #soldToCustCd#
+        AND TR.EFF_FROM_DT  &lt;= #slsDt#
+        AND (TR.EFF_THRU_DT IS NULL OR TR.EFF_THRU_DT &gt;= #slsDt#)
+        AND DOU.EZCANCELFLAG = TR.EZCANCELFLAG
+<!-- 2020/04/23 QC#56638 Add End -->
+
+    </statement>
+    <statement id="getOrgCdList" parameterClass="Map" resultClass="Map">
+        SELECT
+            DOR.ORG_CD 
+        FROM
+            DS_ORG_RELN       DOR
+        <!-- 2018/08/07 QC#26406 H.Kumagai Del Start -->
+        WHERE
+            DOR.EZCANCELFLAG = '0'
+        <!-- START 2019/09/05 Hd.Sugawara [QC#51704,MOD] -->
+        <!-- AND (DOR.EFF_THRU_DT is null or DOR.EFF_THRU_DT &gt; #slsDt#) -->
+        <!-- AND DOR.GNRN_TP_CD = #gnrnTpCd# -->
+        AND DOR.GLBL_CMPY_CD   = #glblCmpyCd#
+        AND DOR.ORG_STRU_TP_CD = #orgStruTpCd#
+        <!-- 2020/04/23 QC#56638 Mod Start -->
+<!--        AND DOR.EFF_FROM_DT    &lt;= #ordBookDt# -->
+<!--         AND (DOR.EFF_THRU_DT IS NULL OR DOR.EFF_THRU_DT &gt;= #ordBookDt#) -->
+        AND DOR.EFF_FROM_DT    &lt;= #slsDt#
+        AND (DOR.EFF_THRU_DT IS NULL OR DOR.EFF_THRU_DT &gt;= #slsDt#)
+        <!-- 2020/04/23 QC#56638 Mod End -->
+        AND DOR.GNRN_TP_CD     &lt;&gt; #gnrnTpCdDelete#
+        AND DOR.GNRN_TP_CD     &lt;&gt; #gnrnTpCdTerminated#
+        <!-- END 2019/09/05 Hd.Sugawara [QC#51704,MOD] -->
+        <!-- 2018/08/07 QC#26406 H.Kumagai Del End -->
+
+        <!-- START 2019/09/05 Hd.Sugawara [QC#51704,MOD] -->
+        <!-- START WITH        DOR.ORG_CD      = #orgCd# -->
+        <!-- CONNECT BY PRIOR  DOR.PRNT_ORG_CD = DOR.ORG_CD  -->
+        START WITH
+                DOR.ORG_CD         = #orgCd#
+            AND DOR.EZCANCELFLAG   = '0'
+            AND DOR.GLBL_CMPY_CD   = #glblCmpyCd#
+            AND DOR.ORG_STRU_TP_CD = #orgStruTpCd#
+        <!-- 2020/04/23 QC#56638 Mod Start -->
+<!--            AND DOR.EFF_FROM_DT    &lt;= #ordBookDt# -->
+<!--            AND (DOR.EFF_THRU_DT IS NULL OR DOR.EFF_THRU_DT &gt;= #ordBookDt#) -->
+            AND DOR.EFF_FROM_DT    &lt;= #slsDt#
+            AND (DOR.EFF_THRU_DT IS NULL OR DOR.EFF_THRU_DT &gt;= #slsDt#)
+        <!-- 2020/04/23 QC#56638 Mod End -->
+            AND DOR.GNRN_TP_CD     &lt;&gt; #gnrnTpCdDelete#
+            AND DOR.GNRN_TP_CD     &lt;&gt; #gnrnTpCdTerminated#
+        CONNECT BY PRIOR
+                DOR.PRNT_ORG_CD    = DOR.ORG_CD 
+            AND DOR.EZCANCELFLAG   = '0'
+            AND DOR.GLBL_CMPY_CD   = #glblCmpyCd#
+            AND DOR.ORG_STRU_TP_CD = #orgStruTpCd#
+            <!-- 2020/04/23 QC#56638 Mod Start -->
+<!--            AND DOR.EFF_FROM_DT    &lt;= #ordBookDt# -->
+<!--            AND (DOR.EFF_THRU_DT IS NULL OR DOR.EFF_THRU_DT &gt;= #ordBookDt#) -->
+            AND DOR.EFF_FROM_DT    &lt;= #slsDt#
+            AND (DOR.EFF_THRU_DT IS NULL OR DOR.EFF_THRU_DT &gt;= #slsDt#)
+            <!-- 2020/04/23 QC#56638 Mod End -->
+            AND DOR.GNRN_TP_CD     &lt;&gt; #gnrnTpCdDelete#
+            AND DOR.GNRN_TP_CD     &lt;&gt; #gnrnTpCdTerminated#
+        <!-- END 2019/09/05 Hd.Sugawara [QC#51704,MOD] -->
+    </statement>
+    <statement id="getPsnCdList" parameterClass="Map" resultClass="Map">
+        SELECT
+             DORR.PSN_CD
+            ,DOU.TRTY_GRP_TP_CD
+        FROM
+             DS_ORG_UNIT         DOU
+            ,DS_ORG_RESRC_RELN   DORR
+        WHERE 
+                DOU.GLBL_CMPY_CD      = #glblCmpyCd#
+            AND DOU.ORG_CD            = #orgCd#
+            AND DOU.ORG_STRU_TP_CD    = #orgStruTpCd#
+            AND DOU.EZCANCELFLAG      = '0'
+
+            AND DORR.GLBL_CMPY_CD(+)  = DOU.GLBL_CMPY_CD
+            AND DORR.ORG_CD(+)        = DOU.ORG_CD
+            AND (DORR.ACCT_TEAM_ROLE_TP_CD(+) IN 
+            <iterate property="acctTeamRoleTpCdList" var="acctTeamRoleTpCd[]" open="(" close=")" conjunction=",">
+                #acctTeamRoleTpCd[]#
+            </iterate>
+                <!-- 2020/04/23 QC#56638 Add Start -->
+                OR DORR.ACCT_TEAM_ROLE_TP_CD(+) IS NULL)
+                <!-- 2020/04/23 QC#56638 Add End -->
+            AND DORR.EZCANCELFLAG(+)  = '0'
+            <!-- 2018/08/07 QC#26406 H.Kumagai Del Start -->
+            <!-- START 2019/09/05 Hd.Sugawara [QC#51704,MOD] -->
+            <!-- AND (DORR.EFF_THRU_DT is null or DORR.EFF_THRU_DT &gt; #slsDt#) -->
+            <!-- AND DORR.GNRN_TP_CD = #gnrnTpCd# -->
+            <!-- 2020/04/23 QC#56638 Mod Start -->
+<!--            AND DORR.EFF_FROM_DT(+)  &lt;= #ordBookDt# -->
+<!--            AND (DORR.EFF_THRU_DT IS NULL OR DORR.EFF_THRU_DT &gt;= #ordBookDt#) -->
+            AND DORR.EFF_FROM_DT(+)  &lt;= #slsDt#
+            AND (DORR.EFF_THRU_DT IS NULL OR DORR.EFF_THRU_DT &gt;= #slsDt1st#)
+            <!-- 2020/04/23 QC#56638 Mod End -->
+            <!-- END 2019/09/05 Hd.Sugawara [QC#51704,MOD] -->
+            <!-- 2018/08/07 QC#26406 H.Kumagai Del End -->
+    </statement>
+    <!-- 2018/09/25 QC#28231 Add Start -->
+    <statement id="getCompInfoRMA" parameterClass="Map" resultClass="Map">
+        SELECT
+              A.INV_NUM                  AS INV_NUM
+             ,B.INV_LINE_NUM             AS INV_LINE_NUM
+             ,B.INV_LINE_SUB_NUM         AS INV_LINE_SUB_NUM
+             ,B.INV_BOL_LINE_NUM         AS INV_BOL_LINE_NUM
+             ,B.INV_LINE_SUB_TRX_NUM     AS INV_LINE_SUB_TRX_NUM
+             ,CASE
+              WHEN J.CR_REBIL_CD IN (#crCdCredit#, #crCdRebill#) THEN A.ACCT_DT
+              <!-- 2020/04/23 QC#56638 Add Start -->
+              WHEN A.SYS_SRC_CD= #nfc# AND A.ORIG_INV_NUM IS NOT NULL THEN A.ACCT_DT
+              <!-- 2020/04/23 QC#56638 Add End -->
+              ELSE A.INV_DT
+              END                        AS INV_DT
+             ,A.CPO_ORD_NUM              AS CPO_ORD_NUM
+             ,A.SELL_TO_CUST_CD          AS SELL_TO_CUST_CD
+             ,D.T_MDL_NM                 AS T_MDL_NM
+             ,B.MDSE_CD                  AS MDSE_CD
+             ,E.DS_CMSN_GRP_CD           AS DS_CMSN_GRP_CD
+             <!-- 2018/11/09 QC#29131 Del Start -->
+             <!--
+             ,B.SHIP_QTY *
+              CASE
+                  WHEN B.INV_LINE_CATG_CD in (#invLineCatgCharge#, #invLineCatgFreight#) THEN 1
+                  ELSE -1 END            AS SHIP_QTY
+             -->
+             <!-- 2018/11/09 QC#29131 Del End -->
+             <!-- 2018/11/09 QC#29131 Add Start -->
+             ,B.SHIP_QTY * -1            AS SHIP_QTY
+             <!-- 2018/11/09 QC#29131 Add End -->
+             <!-- 2018/11/09 QC#29131 Del Start -->
+             <!--
+             ,(CASE
+                  WHEN J.CR_REBIL_CD =#crCdCredit# THEN B.DEAL_NET_UNIT_PRC_AMT * (-1)
+                  ELSE B.DEAL_NET_UNIT_PRC_AMT
+                  END) *
+              (CASE
+                  WHEN B.INV_LINE_CATG_CD in (#invLineCatgCharge#, #invLineCatgFreight#) THEN 1
+                  ELSE -1 END)           AS COMP_UNIT_AMT
+             -->
+             <!-- 2018/11/09 QC#29131 Del End -->
+             <!-- 2018/11/09 QC#29131 Add Start -->
+             ,CASE WHEN A.INV_TP_CD = #creditMemo# THEN
+                 B.DEAL_NET_UNIT_PRC_AMT * (-1) 
+              ELSE
+                 B.DEAL_NET_UNIT_PRC_AMT
+              END                        AS COMP_UNIT_AMT
+             <!-- 2018/11/09 QC#29131 Add End -->
+             ,G.SER_NUM                  AS SER_NUM
+             ,H.DS_ACCT_NM               AS DS_ACCT_NM
+             <!-- 2020/04/23 QC#56638 Mod Start -->
+             ,CASE
+              WHEN A.SYS_SRC_CD= #nfc# AND A.ORIG_INV_NUM IS NOT NULL THEN #miscCd#
+              ELSE I.DS_ORD_CATG_CD
+              END                        AS DS_ORD_CATG_CD
+             ,CASE
+              WHEN A.SYS_SRC_CD= #nfc# AND A.ORIG_INV_NUM IS NOT NULL THEN #lfsMiscCd#
+              ELSE I.DS_ORD_TP_CD
+              END                        AS DS_ORD_TP_CD
+             <!-- 2020/04/23 QC#56638 Mod End -->
+             <!-- START 2019/09/05 Hd.Sugawara [QC#51704,ADD] -->
+             ,SUBSTR(I.ORD_BOOK_TS, 0, #substrDtLngth#) AS ORD_BOOK_DT
+             <!-- END 2019/09/05 Hd.Sugawara [QC#51704,ADD] -->
+             ,SLS_REP.PSN_CD             AS SLS_REP_PSN_CD
+             ,SLS_REP.SLS_REP_ROLE_TP_CD AS SLS_REP_ROLE_TP_CD
+             <!-- 2020/04/23 QC#56638 Add Start -->
+             ,L.LOC_NUM AS SOLD_TO_CUST_LOC_CD
+             <!-- 2020/04/23 QC#56638 Add End -->
+        FROM
+             INV                         A
+            ,INV_LINE                    B
+            ,MDSE                        E
+            ,CPO                         I
+            ,DS_CPO_RTRN_DTL             J
+            ,DS_CPO_CONFIG               K
+            ,MDL_NM                      D
+            ,SVC_MACH_MSTR               G
+            ,SELL_TO_CUST                H
+            <!-- 2020/04/23 QC#56638 Add Start -->
+            ,BILL_TO_CUST                L
+            <!-- 2020/04/23 QC#56638 Add End -->
+            ,(
+              SELECT
+                   X.CPO_ORD_NUM
+                  ,X.DS_CPO_CONFIG_PK
+                  ,X.SLS_REP_ROLE_TP_CD
+                  ,X.PSN_CD
+              FROM
+                  (SELECT
+                        X1.CPO_ORD_NUM
+                       ,X1.DS_CPO_CONFIG_PK
+                       ,X1.SLS_REP_ROLE_TP_CD
+                       ,X3.PSN_CD
+                       ,ROW_NUMBER() OVER (PARTITION BY X1.CPO_ORD_NUM, X1.DS_CPO_CONFIG_PK ORDER BY X1.SLS_REP_CR_PCT DESC, X1.SLS_REP_TOC_CD ASC) AS ROW_NUM
+                   FROM
+                        DS_CPO_SLS_CR    X1
+                       ,LINE_BIZ_ROLE_TP X2
+                       ,ORG_FUNC_ASG     X3
+                   WHERE
+                           X1.GLBL_CMPY_CD        = #glblCmpyCd#
+                       AND X1.EZCANCELFLAG        = '0'
+                       AND X1.GLBL_CMPY_CD        = X2.GLBL_CMPY_CD
+                       AND X1.SLS_REP_ROLE_TP_CD  = X2.LINE_BIZ_ROLE_TP_CD
+                       AND X2.EZCANCELFLAG        = '0'
+                       AND X2.PRIM_REP_ROLE_FLG   = 'Y'
+                       AND X2.SLS_CR_QUOT_FLG     = 'Y'
+                       AND X1.DS_CPO_CONFIG_PK    IS NOT NULL
+                       AND EXISTS(SELECT 1 FROM INV
+                                    WHERE
+                                        INV.GLBL_CMPY_CD     = X1.GLBL_CMPY_CD
+                                        AND INV.CPO_ORD_NUM  = X1.CPO_ORD_NUM
+                                        AND INV.INV_DT       BETWEEN #aotDay# AND #slsDt#
+                                        AND INV.EZCANCELFLAG = '0')
+                       AND X1.GLBL_CMPY_CD        = X3.GLBL_CMPY_CD
+                       AND X1.SLS_REP_TOC_CD      = X3.TOC_CD
+                       AND X3.EZCANCELFLAG        = '0'
+                       AND X3.EFF_FROM_DT         &lt;= #slsDt#
+<!--2019/05/14 #50093 Del Start-->
+<!--                       AND NVL(X3.EFF_THRU_DT, #slsDt#) -->
+<!--                                                  &gt;= #slsDt#-->
+<!--2019/05/14 #50093 Del End-->
+                  ) X
+              WHERE
+                  X.ROW_NUM = 1
+             )               SLS_REP
+        WHERE
+                A.CPO_ORD_NUM                    IS NOT NULL
+            AND A.GLBL_CMPY_CD                   = #glblCmpyCd#
+            AND A.INV_DT                          BETWEEN #aotDay# AND #slsDt#
+            AND A.TRX_SRC_TP_CD                  = #invTrxSrcTpWSReturn#  <!-- 2018/10/30 QC#29033 Add -->
+            AND A.EZCANCELFLAG                   = '0'
+            AND A.GLBL_CMPY_CD                   = B.GLBL_CMPY_CD
+            AND A.INV_NUM                        = B.INV_NUM
+            AND B.EZCANCELFLAG                   = '0'
+            <iterate property="compProcStsCdList" var="compProcStsCd[]"
+                open="AND B.COMP_PROC_STS_CD IN (" close=")" conjunction=",">
+                #compProcStsCd[]#
+            </iterate>
+            AND B.MDSE_CD                        = E.MDSE_CD
+            AND B.GLBL_CMPY_CD                   = E.GLBL_CMPY_CD
+            AND E.EZCANCELFLAG                   = '0'
+            AND A.CPO_ORD_NUM                    = I.CPO_ORD_NUM
+            AND A.GLBL_CMPY_CD                   = I.GLBL_CMPY_CD
+            AND I.EZCANCELFLAG                   = '0'
+            AND I.CPO_ORD_NUM                    = J.CPO_ORD_NUM
+            AND I.GLBL_CMPY_CD                   = J.GLBL_CMPY_CD
+            AND B.CPO_DTL_LINE_NUM               = J.DS_CPO_RTRN_LINE_NUM
+            AND B.CPO_DTL_LINE_SUB_NUM           = J.DS_CPO_RTRN_LINE_SUB_NUM
+            AND B.GLBL_CMPY_CD                   = J.GLBL_CMPY_CD
+            AND J.EZCANCELFLAG                   = '0'
+            AND J.CPO_ORD_NUM                    = K.CPO_ORD_NUM
+            AND J.DS_CPO_CONFIG_PK               = K.DS_CPO_CONFIG_PK
+            AND J.GLBL_CMPY_CD                   = K.GLBL_CMPY_CD
+            AND K.EZCANCELFLAG                   = '0'
+            AND K.CPO_ORD_NUM                    = SLS_REP.CPO_ORD_NUM
+            AND K.DS_CPO_CONFIG_PK               = SLS_REP.DS_CPO_CONFIG_PK
+            AND EXISTS (
+                SELECT
+                    1
+                FROM
+                     DS_CPO_SLS_CR X1
+                    ,LINE_BIZ_ROLE_TP X2
+                    ,CPO X3
+                    ,DS_ORD_TP_PROC_DFN X4
+                WHERE
+                    X1.GLBL_CMPY_CD              = K.GLBL_CMPY_CD
+                    AND X1.CPO_ORD_NUM           = K.CPO_ORD_NUM
+                    AND X1.DS_CPO_CONFIG_PK      = K.DS_CPO_CONFIG_PK
+                    AND X1.EZCANCELFLAG          = '0'
+                    AND X1.GLBL_CMPY_CD          = X2.GLBL_CMPY_CD
+                    AND X1.SLS_REP_ROLE_TP_CD    = X2.LINE_BIZ_ROLE_TP_CD
+                    AND X2.EZCANCELFLAG          = '0'
+                    AND X2.SLS_CR_QUOT_FLG       = 'Y'
+                    AND X1.GLBL_CMPY_CD          = X3.GLBL_CMPY_CD
+                    AND X1.CPO_ORD_NUM           = X3.CPO_ORD_NUM
+                    AND X3.EZCANCELFLAG          = '0'
+                    AND X3.GLBL_CMPY_CD          = X4.GLBL_CMPY_CD
+                    AND X3.DS_ORD_TP_CD          = X4.DS_ORD_TP_CD
+                    AND X4.EZCANCELFLAG          = '0'
+                    AND X4.TRTY_GRP_TP_TXT       LIKE #lineBizTpCd#
+                )
+            AND K.GLBL_CMPY_CD                   = D.T_GLBL_CMPY_CD(+)
+            AND K.MDL_ID                         = D.T_MDL_ID(+)
+            AND D.EZCANCELFLAG(+)                = '0'
+            AND J.SVC_MACH_MSTR_PK               = G.SVC_MACH_MSTR_PK(+)
+            AND J.GLBL_CMPY_CD                   = G.GLBL_CMPY_CD(+)
+            AND G.EZCANCELFLAG(+)                = '0'
+            AND A.SELL_TO_CUST_CD                = H.SELL_TO_CUST_CD
+            AND A.GLBL_CMPY_CD                   = H.GLBL_CMPY_CD
+            AND H.EZCANCELFLAG                   = '0'
+            <!-- 2020/04/23 QC#56638 Add Start -->
+            AND A.SOLD_TO_CUST_LOC_CD            = L.BILL_TO_CUST_CD
+            AND A.GLBL_CMPY_CD = L.GLBL_CMPY_CD
+            AND A.EZCANCELFLAG = L.EZCANCELFLAG
+            <!-- 2020/04/23 QC#56638 Add End -->
+        ORDER BY
+             B.INV_NUM ASC
+            ,B.INV_BOL_LINE_NUM ASC
+            ,B.INV_LINE_NUM ASC
+            ,B.INV_LINE_SUB_NUM ASC
+            ,B.INV_LINE_SUB_TRX_NUM ASC
+    </statement>
+    <!-- 2018/09/25 QC#28231 Add End -->
+</sqlMap>

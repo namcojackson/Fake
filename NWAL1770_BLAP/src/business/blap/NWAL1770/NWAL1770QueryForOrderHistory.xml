@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NWAL1770QueryForOrderHistory">
+
+    <statement id="getOrderHistory" parameterClass="Map" resultClass="Map">
+        SELECT
+            CPO.CPO_ORD_NUM AS CPO_ORD_NUM
+        FROM
+        (
+            SELECT
+                A.CPO_ORD_NUM
+               ,A.CPO_ORD_TS
+            FROM
+                CPO A
+            WHERE
+                    A.GLBL_CMPY_CD        = #glblCmpyCd#
+                AND A.SOLD_TO_CUST_LOC_CD = #soldToCode#
+                AND A.CPO_ORD_NUM IS NOT NULL
+                AND A.DS_ORD_CATG_CD      = #catgCd#
+                AND A.ORD_HDR_STS_CD      &lt;&gt; #ordHdrStsCd#
+                AND A.EZCANCELFLAG        = '0'
+                AND EXISTS (
+                    SELECT
+                        1
+                    FROM
+                        CPO_DTL B
+                    WHERE
+                            B.GLBL_CMPY_CD = #glblCmpyCd#
+                        AND B.EZCANCELFLAG = '0'
+                        AND B.CPO_ORD_NUM = A.CPO_ORD_NUM
+                )
+            ORDER BY
+                A.CPO_ORD_TS DESC
+               ,A.CPO_ORD_NUM DESC
+        ) CPO
+        WHERE
+            ROWNUM &lt;= #numOfOrder#
+    </statement>
+
+    <statement id="getOrderLineHistory" parameterClass="Map" resultClass="Map">
+        WITH LINE_HIST AS (
+            SELECT
+                D.CPO_ORD_NUM
+               ,D.CPO_ORD_TS
+               ,D.ORD_HDR_STS_CD
+               ,CONCAT(B.DS_ORD_POSN_NUM, '.')
+                || CONCAT(B.DS_CPO_LINE_NUM, DECODE(B.DS_CPO_LINE_SUB_NUM, NULL, '', '.'))
+                || B.DS_CPO_LINE_SUB_NUM AS LINE_NUM
+               ,B.MDSE_CD
+               ,B.MDSE_NM
+               ,B.ORIG_MDSE_CD
+               ,B.ORD_QTY
+            FROM
+                CPO_DTL B
+               ,CPO D
+               ,DS_ORD_CATG F
+               ,DS_ORD_TP G
+               ,DS_ORD_LINE_CATG H
+               ,BILL_TO_CUST I
+               ,BILL_TO_CUST J
+               ,DS_CPO_CONFIG K
+               ,SHIP_TO_CUST L
+            WHERE
+                    B.GLBL_CMPY_CD          = #glblCmpyCd#
+                AND B.GLBL_CMPY_CD          = D.GLBL_CMPY_CD
+                AND B.CPO_ORD_NUM           = D.CPO_ORD_NUM
+                AND D.GLBL_CMPY_CD          = F.GLBL_CMPY_CD(+)
+                AND D.DS_ORD_CATG_CD        = F.DS_ORD_CATG_CD(+)
+                AND D.GLBL_CMPY_CD          = G.GLBL_CMPY_CD
+                AND D.DS_ORD_TP_CD          = G.DS_ORD_TP_CD
+                AND B.GLBL_CMPY_CD          = H.GLBL_CMPY_CD(+)
+                AND B.DS_ORD_LINE_CATG_CD   = H.DS_ORD_LINE_CATG_CD(+)
+                AND D.GLBL_CMPY_CD          = I.GLBL_CMPY_CD
+                AND D.SOLD_TO_CUST_LOC_CD   = I.BILL_TO_CUST_CD
+                AND D.GLBL_CMPY_CD          = J.GLBL_CMPY_CD
+                AND D.BILL_TO_CUST_CD       = J.BILL_TO_CUST_CD
+                AND B.GLBL_CMPY_CD          = K.GLBL_CMPY_CD(+)
+                AND B.DS_CPO_CONFIG_PK      = K.DS_CPO_CONFIG_PK(+)
+                AND B.GLBL_CMPY_CD          = L.GLBL_CMPY_CD
+                AND B.SHIP_TO_CUST_CD       = L.SHIP_TO_CUST_CD
+                AND D.CPO_ORD_NUM           = #ordNum#
+                AND B.ORD_LINE_STS_CD       &lt;&gt; #ordLineStsCd#
+                AND B.EZCANCELFLAG          = '0'
+                AND D.EZCANCELFLAG          = '0'
+                AND F.EZCANCELFLAG(+)       = '0'
+                AND G.EZCANCELFLAG          = '0'
+                AND H.EZCANCELFLAG(+)       = '0'
+                AND I.EZCANCELFLAG          = '0'
+                AND J.EZCANCELFLAG          = '0'
+                AND K.EZCANCELFLAG(+)       = '0'
+                AND L.EZCANCELFLAG          = '0'
+            ORDER BY
+                B.CPO_ORD_TS DESC
+               ,B.DS_ORD_POSN_NUM DESC
+               ,B.DS_CPO_LINE_NUM DESC
+               ,B.DS_CPO_LINE_SUB_NUM DESC NULLS LAST
+        )
+
+        SELECT
+            CPO_ORD_NUM
+           ,CPO_ORD_TS
+           ,ORD_HDR_STS_CD
+           ,LINE_NUM
+           ,MDSE_CD
+           ,MDSE_NM
+           ,ORIG_MDSE_CD
+           ,ORD_QTY
+        FROM (
+            SELECT
+                CPO_ORD_NUM
+               ,CPO_ORD_TS
+               ,ORD_HDR_STS_CD
+               ,LINE_NUM
+               ,MDSE_CD
+               ,MDSE_NM
+               ,ORIG_MDSE_CD
+               ,ORD_QTY
+            FROM
+                LINE_HIST
+        )
+        WHERE
+            ROWNUM        &lt;= #numOfLine#
+    </statement>
+
+</sqlMap>

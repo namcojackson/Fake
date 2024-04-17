@@ -1,0 +1,730 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NFBL2060Query">
+
+    <typeAlias alias="NFBL2060CMsg"      type="business.blap.NFBL2060.NFBL2060CMsg"/>
+    <typeAlias alias="NFBL2060_DSMsg"    type="business.blap.NFBL2060.NFBL2060_DSMsg"/>
+    <typeAlias alias="NFBL2060_SSMsg"    type="business.blap.NFBL2060.NFBL2060_SSMsg"/>
+
+    <statement id="getApInvCatgPulldownValue"  parameterClass="Map" resultClass="Map">
+        SELECT
+            AP_INV_CATG_CD
+        ,   AP_INV_CATG_DESC_TXT 
+        FROM
+            AP_INV_CATG
+        WHERE
+            GLBL_CMPY_CD = #glblCmpyCd#
+        AND EZCANCELFLAG = '0' 
+        ORDER BY
+            AP_INV_CATG_SORT_NUM ASC
+    </statement>
+
+    <statement id="getDetailedTabRecord" parameterClass="Map" resultMap="result.NFBL2060_DSMsg">
+        SELECT
+                MAIN.AP_INV_CATG_DESC_TXT
+            ,   MAIN.AP_VND_INV_NUM
+            ,   MAIN.AP_VND_INV_SQ_NUM
+            ,   MAIN.INV_DT
+            ,   MAIN.INV_AUTH_DT
+            ,   MAIN.PRNT_VND_CD
+            ,   MAIN.DPLY_VND_NM
+            ,   MAIN.AP_VND_CD
+            ,   MAIN.VND_PMT_TERM_DESC_TXT
+            ,   MAIN.AC_INV_TOT_COST_AMT        <!-- Invoice Amount -->
+            ,   MAIN.INV_HDR_DESC_TXT
+            ,   MAIN.ACCT_INV_STS_CD
+            ,   MAIN.ACCT_INV_STS_DESC_TXT
+            ,   DECODE(MAIN.PO_NUM, #none#, NULL, MAIN.PO_NUM) PO_NUM  <!-- PO Number -->
+            ,   MAIN.PO_APVL_DT                 <!-- PO Date -->
+            ,   DECODE(MAIN.VND_RTRN_NUM, #none#, NULL, MAIN.VND_RTRN_NUM) VND_RTRN_NUM  <!-- PO Number -->
+            ,   MAIN.VND_RTRN_SUBMT_DT                 <!-- Vendor Return Date -->
+            ,   DECODE(MAIN.DELY_ORD_NUM, #none#, NULL, MAIN.DELY_ORD_NUM) DELY_ORD_NUM  <!-- Receipt Number -->
+            ,   MAIN.AP_VND_INV_LINE_NUM        <!-- Invoice Line # -->
+            ,   MAIN.AP_LINE_TP_DESC_TXT        <!-- Line Type -->
+            ,   MAIN.MDSE_DESC_SHORT_TXT        <!-- Line Description -->
+            ,   MAIN.AC_INV_JRNL_COST_AMT       <!-- Line Amount-->
+            ,   MAIN.AC_SC_TAX_AMT              <!-- Line Tax -->
+            ,   MAIN.AP_ACCT_DESC_TXT           <!-- Account Description -->
+            ,   MAIN.XX_CMNT_TXT                <!-- Charge Account -->
+            ,   MAIN.PO_QTY                     <!-- Order Quantity -->
+            ,   MAIN.INV_RCV_QTY                <!-- Received Quantity -->
+            ,   MAIN.AP_BILL_QTY                <!-- Billed Quantity -->
+            ,   MAIN.AP_PMT_CHK_NUM             <!-- Payment Number -->
+            ,   MAIN.ARCS_PMT_DT                <!-- Payment Date -->
+            ,   MAIN.CONTR_NUM                  <!-- Contract -->
+            ,   MAIN.CUST_DLR_CD                <!-- Dealer Code -->
+            ,   MAIN.SER_NUM                    <!-- Serial Number -->
+            ,   MAIN.CSMP_INV_NUM               <!-- CSMP Invoice -->
+            ,   MAIN.ISTL_LOC_CTY_ADDR          <!-- Install Loc -->
+            ,   MAIN.DISP_PO_DTL_LINE_NUM       <!-- PO Line # -->
+            ,   MAIN.EZINTIME                     XX_REC_HIST_CRAT_TS
+            ,   MAIN.EZINUSERID                   XX_REC_HIST_CRAT_BY_NM
+            ,   MAIN.EZUPTIME                     XX_REC_HIST_UPD_TS
+            ,   MAIN.EZUPUSERID                   XX_REC_HIST_UPD_BY_NM
+            ,   MAIN.EZTABLEID                    XX_REC_HIST_TBL_NM
+        FROM
+            (
+                SELECT
+                    AIC.AP_INV_CATG_DESC_TXT
+                ,   HDR.AP_VND_INV_NUM
+                ,   HDR.AP_VND_INV_SQ_NUM
+                ,   HDR.INV_DT
+                ,   CASE WHEN HDR.ACCT_INV_STS_CD IN (#acctInvStsL#, #acctInvStsP#, #acctInvStsV#) THEN HDR.INV_AUTH_DT ELSE NULL END INV_AUTH_DT
+                ,   PV.PRNT_VND_CD
+                ,   PV.PRNT_VND_NM || ' - ' || V.LOC_NM  AS  DPLY_VND_NM
+                ,   HDR.AP_VND_CD
+                ,   VPT.VND_PMT_TERM_DESC_TXT
+                ,   HDR.AC_INV_TOT_COST_AMT  <!-- Invoice Amount -->
+                ,   HDR.INV_HDR_DESC_TXT
+                ,   HDR.ACCT_INV_STS_CD
+                ,   AIS.ACCT_INV_STS_DESC_TXT
+                <!-- ,   HDR.PO_NUM -->
+                ,   CAID.PO_NUM
+                ,   PO.PO_APVL_DT            <!-- PO Date -->
+                <!-- ,   HDR.VND_RTRN_NUM -->
+                ,   DTL.VND_RTRN_NUM
+                ,   VR.VND_RTRN_SUBMT_DT            <!-- Vendor Return Date -->
+                ,   CAID.DELY_ORD_NUM
+                ,   NVL(CAID.AP_VND_INV_LINE_NUM, DTL.AP_VND_INV_LINE_NUM) AS AP_VND_INV_LINE_NUM   <!-- Invoice Line # -->
+                ,   ALT.AP_LINE_TP_DESC_TXT        <!-- Line Type -->
+                ,   CAID.MDSE_DESC_SHORT_TXT  <!-- Line Description -->
+                ,   CASE
+                        WHEN DTL.AP_LINE_TP_CD = #apLineTpItem#
+                        THEN NVL(CAID.AC_SC_FOB_COST_AMT, DTL.AC_INV_JRNL_COST_AMT)
+                        WHEN DTL.AP_LINE_TP_CD &lt;&gt; #apLineTpItem#
+                        THEN DTL.AC_INV_JRNL_COST_AMT
+                    END                      AC_INV_JRNL_COST_AMT  <!-- Line Amount -->
+
+                ,   CAID.AC_SC_TAX_AMT       <!-- Line Tax -->
+                ,   CA.COA_ACCT_DESC_TXT     AP_ACCT_DESC_TXT     <!-- Account Description -->
+                ,   DECODE
+                        (
+                            DTL.DR_COA_CMPY_CD || 
+                            DTL.DR_COA_BR_CD   || 
+                            DTL.DR_COA_CC_CD   || 
+                            DTL.DR_COA_ACCT_CD || 
+                            DTL.DR_COA_PROD_CD || 
+                            DTL.DR_COA_CH_CD   || 
+                            DTL.DR_COA_AFFL_CD || 
+                            DTL.DR_COA_PROJ_CD || 
+                            DTL.DR_COA_EXTN_CD
+                        ,   NULL
+                        ,   NULL
+                        ,   DTL.DR_COA_CMPY_CD || '.' ||
+                            DTL.DR_COA_BR_CD   || '.' ||
+                            DTL.DR_COA_CC_CD   || '.' ||
+                            DTL.DR_COA_ACCT_CD || '.' ||
+                            DTL.DR_COA_PROD_CD || '.' ||
+                            DTL.DR_COA_CH_CD   || '.' ||
+                            DTL.DR_COA_AFFL_CD || '.' ||
+                            DTL.DR_COA_PROJ_CD || '.' ||
+                            DTL.DR_COA_EXTN_CD
+                        )        XX_CMNT_TXT <!-- Charge Account -->
+                ,   CAID.PO_QTY              <!-- Order Quantity -->
+                ,   CAID.INV_RCV_QTY         <!-- Received Quantity -->
+                ,   DTL.AP_BILL_QTY          <!-- Billed Quantity -->
+                ,   HDR.AP_PMT_CHK_NUM       <!-- Payment Number -->
+                ,   HDR.ARCS_PMT_DT          <!-- Payment Date -->
+                ,   DTL.CONTR_NUM            <!-- Contract -->
+                ,   DTL.CUST_DLR_CD          <!-- Dealer Code -->
+                ,   DTL.SER_NUM              <!-- Serial Number -->
+                ,   DTL.CSMP_INV_NUM         <!-- CSMP Invoice -->
+                ,   DTL.ISTL_LOC_CTY_ADDR    <!-- Install Loc -->
+                ,   NVL(PD.DISP_PO_DTL_LINE_NUM, VRD.TRX_LINE_NUM) DISP_PO_DTL_LINE_NUM  <!-- PO Line # -->
+                ,   DTL.EZINTIME
+                ,   DTL.EZINUSERID
+                ,   DTL.EZUPTIME
+                ,   DTL.EZUPUSERID
+                ,   DTL.EZTABLEID
+                FROM
+                    CM_AP_INV_HDR    HDR
+                ,   CM_INV_ACCT_DIST DTL
+                ,   PRNT_VND         PV
+                ,   VND              V
+                ,   VND_PMT_TERM     VPT
+                ,   VND_PMT_METH     VPM
+                ,   ACCT_INV_STS     AIS
+                ,   AP_LINE_TP       ALT
+                ,   PO               PO
+                ,   AP_INV_CATG      AIC
+                ,   CM_AP_INV_DTL    CAID
+                ,   COA_ACCT         CA
+                ,   PO_DTL           PD
+                ,   VND_RTRN         VR
+                ,   VND_RTRN_DTL     VRD
+                <!-- PO Variance checkbox -->
+                <isEqual property="xxChkBox_02" compareValue="Y">
+                ,   (
+                        SELECT
+                            GLBL_CMPY_CD
+                            ,AP_VND_CD
+                            ,AP_VND_INV_NUM
+                            ,AP_VND_INV_SQ_NUM
+                        FROM
+                            CM_INV_ACCT_DIST DTL
+                        WHERE
+                            DTL.GLBL_CMPY_CD  = #glblCmpyCd#
+                        AND DTL.AP_LINE_TP_CD = #variance#
+                        <isNotNull property="apVndCd">
+                        AND DTL.AP_VND_CD       LIKE  #apVndCd#
+                        </isNotNull>
+                       <isNotNull property="apVndInvNum">
+                        AND DTL.AP_VND_INV_NUM  LIKE  #apVndInvNum#
+                       </isNotNull>
+                        AND DTL.EZCANCELFLAG  = '0'
+                        GROUP BY
+                            GLBL_CMPY_CD
+                            ,AP_VND_CD
+                            ,AP_VND_INV_NUM
+                            ,AP_VND_INV_SQ_NUM
+                    ) PO_VAL
+                  </isEqual>
+                WHERE
+                    HDR.GLBL_CMPY_CD                   =     #glblCmpyCd#
+                AND HDR.GLBL_CMPY_CD                   =     DTL.GLBL_CMPY_CD
+                AND HDR.AP_VND_CD                      =     DTL.AP_VND_CD
+                AND HDR.AP_VND_INV_NUM                 =     DTL.AP_VND_INV_NUM
+                AND HDR.GLBL_CMPY_CD                   =     V.GLBL_CMPY_CD
+                AND HDR.AP_VND_CD                      =     V.INV_VND_CD
+                AND V.EZCANCELFLAG                     =     '0'
+                AND V.GLBL_CMPY_CD                     =     PV.GLBL_CMPY_CD
+                AND V.PRNT_VND_PK                      =     PV.PRNT_VND_PK
+                <isNotNull property="prntVndCd">
+                AND PV.PRNT_VND_CD                     LIKE  #prntVndCd#
+                </isNotNull>
+                <isNotNull property="dplyVndNm">
+                AND PV.PRNT_VND_NM LIKE #dplyVndNm#
+                </isNotNull>
+                AND PV.EZCANCELFLAG                    =     '0'
+                AND HDR.EZCANCELFLAG                   =     '0'
+                AND DTL.EZCANCELFLAG                   =     '0'
+                <isNotNull property="apVndCd">
+                AND HDR.AP_VND_CD                      LIKE  #apVndCd#
+                </isNotNull>
+                <isNotNull property="poNum">
+                <!-- AND HDR.PO_NUM                         LIKE  #poNum# -->
+                AND EXISTS (SELECT 1 FROM CM_INV_ACCT_DIST D WHERE HDR.GLBL_CMPY_CD = D.GLBL_CMPY_CD AND D.EZCANCELFLAG = '0' AND HDR.AP_VND_CD =D.AP_VND_CD AND HDR.AP_VND_INV_NUM = D.AP_VND_INV_NUM AND D.PO_NUM LIKE #poNum#)
+                </isNotNull>
+                <isNotNull property="delyOrdNum">
+                AND DTL.DELY_ORD_NUM                   LIKE  #delyOrdNum#
+                </isNotNull>
+                <isNotNull property="poDt_FR">
+                AND PO.PO_APVL_DT                      &gt;= #poDt_FR#         <!-- PO Date From -->
+                </isNotNull>
+                <isNotNull property="poDt_TO">
+                AND PO.PO_APVL_DT                      &lt;= #poDt_TO#         <!-- PO Date To   -->
+                </isNotNull>
+                <isNotNull property="dispPoDtlLineNum">
+                AND PD.DISP_PO_DTL_LINE_NUM            LIKE  #dispPoDtlLineNum#
+                </isNotNull>
+                <isNotNull property="vndPmtTermDescTxt">
+                AND UPPER(VPT.VND_PMT_TERM_DESC_TXT)   LIKE  #vndPmtTermDescTxt#
+                </isNotNull>
+                <isNotNull property="apVndInvNum">
+                <!-- AND HDR.AP_VND_INV_NUM                 LIKE  #apVndInvNum# -->
+                AND DTL.AP_VND_INV_NUM                 LIKE  #apVndInvNum#
+                </isNotNull>
+                <isNotNull property="acctInvStsCd">
+                AND HDR.ACCT_INV_STS_CD                =     #acctInvStsCd#
+                </isNotNull>
+                <isNotNull property="invDt_FR">
+                AND HDR.INV_DT                        &gt;= #invDt_FR#
+                </isNotNull>
+                <isNotNull property="invDt_TO">
+                AND HDR.INV_DT                        &lt;= #invDt_TO#
+                </isNotNull>
+                <isNotNull property="invAuthDt_FR">
+                AND HDR.INV_AUTH_DT                   &gt;= #invAuthDt_FR#
+                </isNotNull>
+                <isNotNull property="invAuthDt_TO">
+                AND HDR.INV_AUTH_DT                   &lt;= #invAuthDt_TO#
+                </isNotNull>
+                <isNotNull property="xxCmntTxt_FR">
+                AND DTL.DR_COA_CMPY_CD || '.' ||
+                    DTL.DR_COA_BR_CD   || '.' ||
+                    DTL.DR_COA_CC_CD   || '.' ||
+                    DTL.DR_COA_ACCT_CD || '.' ||
+                    DTL.DR_COA_PROD_CD || '.' ||
+                    DTL.DR_COA_CH_CD   || '.' ||
+                    DTL.DR_COA_AFFL_CD || '.' ||
+                    DTL.DR_COA_PROJ_CD || '.' ||
+                    DTL.DR_COA_EXTN_CD                    &gt;= #xxCmntTxt_FR#
+                </isNotNull>
+                <isNotNull property="xxCmntTxt_TO">
+                AND DTL.DR_COA_CMPY_CD || '.' ||
+                    DTL.DR_COA_BR_CD   || '.' ||
+                    DTL.DR_COA_CC_CD   || '.' ||
+                    DTL.DR_COA_ACCT_CD || '.' ||
+                    DTL.DR_COA_PROD_CD || '.' ||
+                    DTL.DR_COA_CH_CD   || '.' ||
+                    DTL.DR_COA_AFFL_CD || '.' ||
+                    DTL.DR_COA_PROJ_CD || '.' ||
+                    DTL.DR_COA_EXTN_CD                    &lt;= #xxCmntTxt_TO#
+                </isNotNull>
+                <!-- Source -->
+                <isNotNull property="apInvCatgCd_S">
+                AND HDR.AP_INV_CATG_CD                 =     #apInvCatgCd_S#
+                </isNotNull>
+                <isNotNull property="vndPmtMethDescTxt">
+                AND UPPER(VPM.VND_PMT_METH_DESC_TXT)   LIKE #vndPmtMethDescTxt#
+                </isNotNull>
+                <isNotNull property="apPmtChkNum">
+                AND HDR.AP_PMT_CHK_NUM                 LIKE #apPmtChkNum#
+                </isNotNull>
+                <isNotNull property="pmtDt_FR">
+                AND HDR.ARCS_PMT_DT                    &gt;= #pmtDt_FR#
+                </isNotNull>
+                <isNotNull property="pmtDt_TO">
+                AND HDR.ARCS_PMT_DT                    &lt;= #pmtDt_TO#
+                </isNotNull>
+                <isEqual property="xxChkBox_01" compareValue="Y">
+                AND HDR.PMT_HLD_FLG                    =     'Y'
+                AND HDR.ACCT_INV_STS_CD               !=     #acctInvStsCdCancelled#
+                </isEqual>
+                <isNotNull property="vndRtrnNum">
+                <!-- mod start 2022/02/15 QC#57090 -->
+                <!-- AND HDR.VND_RTRN_NUM                   LIKE  #vndRtrnNum# -->
+                AND EXISTS (SELECT 1 FROM CM_INV_ACCT_DIST D WHERE HDR.GLBL_CMPY_CD = D.GLBL_CMPY_CD AND D.EZCANCELFLAG = '0' AND HDR.AP_VND_CD =D.AP_VND_CD AND HDR.AP_VND_INV_NUM = D.AP_VND_INV_NUM AND D.VND_RTRN_NUM LIKE #vndRtrnNum#)
+                <!-- mod end 2022/02/15 QC#57090 -->
+                </isNotNull>
+                <isNotNull property="vndRtrnSubmtDt_FR">
+                AND VR.VND_RTRN_SUBMT_DT               &gt;= #vndRtrnSubmtDt_FR#         <!-- Vendor Return Date From -->
+                </isNotNull>
+                <isNotNull property="vndRtrnSubmtDt_TO">
+                AND VR.VND_RTRN_SUBMT_DT               &lt;= #vndRtrnSubmtDt_TO#         <!-- Vendor Return Date To   -->
+                </isNotNull>
+                <!-- START 2024/02/05 S.Ikariya [QC#63451,ADD] -->
+                <isNotNull property="acInvTotCostAmt_FR">
+                AND HDR.AC_INV_TOT_COST_AMT               &gt;= #acInvTotCostAmt_FR#         <!--Invoice Amount From -->
+                </isNotNull>
+                <isNotNull property="acInvTotCostAmt_TO">
+                AND HDR.AC_INV_TOT_COST_AMT               &lt;= #acInvTotCostAmt_TO#         <!--Invoice Amount To   -->
+                </isNotNull>
+                <!-- END 2024/02/05 S.Ikariya [QC#63451,ADD] -->
+                AND HDR.GLBL_CMPY_CD                   =     VPT.GLBL_CMPY_CD(+)
+                AND HDR.VND_PMT_TERM_CD                =     VPT.VND_PMT_TERM_CD(+)
+                AND '0'                                =     VPT.EZCANCELFLAG(+)
+                AND HDR.GLBL_CMPY_CD                   =     VPM.GLBL_CMPY_CD(+)
+                AND NVL(HDR.ARCS_PMT_METH_CD,PV.VND_PMT_METH_CD) =     VPM.VND_PMT_METH_NM(+)
+                AND '0'                                  =     VPM.EZCANCELFLAG(+)
+                AND HDR.GLBL_CMPY_CD                   =     AIS.GLBL_CMPY_CD(+)
+                AND HDR.ACCT_INV_STS_CD                =     AIS.ACCT_INV_STS_CD(+)
+                AND '0'                                =     AIS.EZCANCELFLAG(+)
+                AND DTL.GLBL_CMPY_CD                   =     ALT.GLBL_CMPY_CD(+)
+                AND DTL.AP_LINE_TP_CD                  =     ALT.AP_LINE_TP_CD(+)
+                AND 0                                  =     ALT.EZCANCELFLAG(+)
+                AND DTL.GLBL_CMPY_CD                   =     PO.GLBL_CMPY_CD(+)
+                AND DTL.PO_NUM                         =     PO.PO_ORD_NUM(+)
+                AND '0'                                =     PO.EZCANCELFLAG(+)
+                AND HDR.GLBL_CMPY_CD                   =     AIC.GLBL_CMPY_CD(+)
+                AND HDR.AP_INV_CATG_CD                 =     AIC.AP_INV_CATG_CD(+)
+                AND '0'                                =     AIC.EZCANCELFLAG(+)
+                AND DTL.GLBL_CMPY_CD                   =     CAID.GLBL_CMPY_CD(+)
+                AND DTL.AP_VND_CD                      =     CAID.AP_VND_CD(+)
+                AND DTL.AP_VND_INV_NUM                 =     CAID.AP_VND_INV_NUM(+)
+                AND DTL.AP_VND_INV_SQ_NUM              =     CAID.AP_VND_INV_SQ_NUM(+)
+                AND DTL.AP_VND_INV_LINE_NUM            =     CAID.AP_VND_INV_LINE_NUM(+)
+                AND DTL.AP_LINE_TP_CD               &lt;&gt; #variance#
+                AND CAID.EZCANCELFLAG(+)               =     '0'
+                AND DTL.GLBL_CMPY_CD                   =     CA.GLBL_CMPY_CD(+)
+                AND DTL.DR_COA_ACCT_CD                 =     CA.COA_ACCT_CD(+)
+                AND CA.EZCANCELFLAG(+)                 =     '0'
+                AND CAID.GLBL_CMPY_CD                  =     PD.GLBL_CMPY_CD(+)
+                AND CAID.PO_NUM                        =     PD.PO_ORD_NUM(+)
+                AND CAID.PO_ORD_DTL_LINE_NUM           =     PD.PO_ORD_DTL_LINE_NUM(+)
+                AND PD.EZCANCELFLAG(+)                 =     '0'
+                AND DTL.GLBL_CMPY_CD                   =     VR.GLBL_CMPY_CD(+)
+                AND DTL.VND_RTRN_NUM                   =     VR.VND_RTRN_NUM(+)
+                AND '0'                                =     VR.EZCANCELFLAG(+)
+                AND CAID.GLBL_CMPY_CD                  =     VRD.GLBL_CMPY_CD(+)
+                AND CAID.VND_RTRN_NUM                  =     VRD.VND_RTRN_NUM(+)
+                AND CAID.PO_ORD_DTL_LINE_NUM           =     VRD.TRX_LINE_NUM(+)
+                AND VRD.EZCANCELFLAG(+)                 =     '0'
+                <!-- PO Variance checkbox -->
+                <isEqual property="xxChkBox_02" compareValue="Y">
+                AND HDR.GLBL_CMPY_CD                   =     PO_VAL.GLBL_CMPY_CD
+                AND HDR.AP_VND_CD                      =     PO_VAL.AP_VND_CD
+                AND HDR.AP_VND_INV_NUM                 =     PO_VAL.AP_VND_INV_NUM
+                AND HDR.AP_VND_INV_SQ_NUM              =     PO_VAL.AP_VND_INV_SQ_NUM
+                </isEqual>
+                ORDER BY
+                    HDR.AP_VND_CD
+                ,   HDR.AP_VND_INV_NUM
+                ,   HDR.AP_VND_INV_SQ_NUM
+                ,   AP_VND_INV_LINE_NUM
+                ,   TO_NUMBER(PD.DISP_PO_DTL_LINE_NUM) NULLS LAST
+            ) MAIN
+        WHERE
+             ROWNUM &lt;= #rowNum#
+    </statement>
+
+    <resultMap id="result.NFBL2060_DSMsg" class="NFBL2060_DSMsg">
+        <result property="apInvCatgDescTxt_D1"      column="AP_INV_CATG_DESC_TXT"       javaType="EZDSStringItem"/>
+        <result property="apVndInvNum_D1"           column="AP_VND_INV_NUM"             javaType="EZDSStringItem"/>
+        <result property="apVndInvSqNum_D1"         column="AP_VND_INV_SQ_NUM"          javaType="EZDSStringItem"/>
+        <result property="invDt_D1"                 column="INV_DT"                     javaType="EZDSStringItem"/>
+        <result property="invAuthDt_D1"             column="INV_AUTH_DT"                javaType="EZDSStringItem"/>
+        <result property="prntVndCd_D1"             column="PRNT_VND_CD"                javaType="EZDSStringItem"/>
+        <result property="dplyVndNm_D1"             column="DPLY_VND_NM"                javaType="EZDSStringItem"/>
+        <result property="apVndCd_D1"               column="AP_VND_CD"                  javaType="EZDSStringItem"/>
+        <result property="vndPmtTermDescTxt_D1"     column="VND_PMT_TERM_DESC_TXT"      javaType="EZDSStringItem"/>
+        <result property="acInvTotCostAmt_D1"       column="AC_INV_TOT_COST_AMT"        javaType="EZDSBigDecimalItem"/>
+        <result property="invHdrDescTxt_D1"         column="INV_HDR_DESC_TXT"           javaType="EZDSStringItem"/>
+        <result property="acctInvStsCd_D1"          column="ACCT_INV_STS_CD"            javaType="EZDSStringItem"/>
+        <result property="acctInvStsDescTxt_D1"     column="ACCT_INV_STS_DESC_TXT"      javaType="EZDSStringItem"/>
+        <result property="poNum_D1"                 column="PO_NUM"                     javaType="EZDSStringItem"/>
+        <result property="poDt_D1"                  column="PO_APVL_DT"                 javaType="EZDSStringItem"/>
+        <result property="vndRtrnNum_D1"            column="VND_RTRN_NUM"               javaType="EZDSStringItem"/>
+        <result property="vndRtrnSubmtDt_D1"        column="VND_RTRN_SUBMT_DT"          javaType="EZDSStringItem"/>
+        <result property="delyOrdNum_D1"            column="DELY_ORD_NUM"               javaType="EZDSStringItem"/>
+        <result property="apVndInvLineNum_D1"       column="AP_VND_INV_LINE_NUM"        javaType="EZDSStringItem"/>
+        <result property="apLineTpDescTxt_D1"       column="AP_LINE_TP_DESC_TXT"        javaType="EZDSStringItem"/>
+        <result property="mdseDescShortTxt_D1"      column="MDSE_DESC_SHORT_TXT"        javaType="EZDSStringItem"/>
+        <result property="acInvJrnlCostAmt_D1"      column="AC_INV_JRNL_COST_AMT"       javaType="EZDSBigDecimalItem"/>
+        <result property="acInvTaxAmt_D1"           column="AC_SC_TAX_AMT"              javaType="EZDSBigDecimalItem"/>
+        <result property="xxFldValTxt_D1"           column="AP_ACCT_DESC_TXT"           javaType="EZDSStringItem"/>
+        <result property="xxCmntTxt_D2"             column="XX_CMNT_TXT"                javaType="EZDSStringItem"/>
+        <result property="invQty_D1"                column="PO_QTY"                     javaType="EZDSBigDecimalItem"/>
+        <result property="invRcvQty_D1"             column="INV_RCV_QTY"                javaType="EZDSBigDecimalItem"/>
+        <result property="apBillQty_D1"             column="AP_BILL_QTY"                javaType="EZDSBigDecimalItem"/>
+        <result property="apPmtChkNum_D1"           column="AP_PMT_CHK_NUM"             javaType="EZDSStringItem"/>
+        <result property="pmtDt_D1"                 column="ARCS_PMT_DT"                javaType="EZDSStringItem"/>
+        <result property="contrNum_D1"              column="CONTR_NUM"                  javaType="EZDSStringItem"/>
+        <result property="custDlrCd_D1"             column="CUST_DLR_CD"                javaType="EZDSStringItem"/>
+        <result property="serNum_D1"                column="SER_NUM"                    javaType="EZDSStringItem"/>
+        <result property="csmpInvNum_D1"            column="CSMP_INV_NUM"               javaType="EZDSStringItem"/>
+        <result property="istlLocCtyAddr_D1"        column="ISTL_LOC_CTY_ADDR"          javaType="EZDSStringItem"/>
+        <result property="dispPoDtlLineNum_D1"      column="DISP_PO_DTL_LINE_NUM"       javaType="EZDSStringItem"/>
+        <result property="xxRecHistCratTs_D1"       column="XX_REC_HIST_CRAT_TS"        javaType="EZDSStringItem"/>
+        <result property="xxRecHistCratByNm_D1"     column="XX_REC_HIST_CRAT_BY_NM"     javaType="EZDSStringItem"/>
+        <result property="xxRecHistUpdTs_D1"        column="XX_REC_HIST_UPD_TS"         javaType="EZDSStringItem"/>
+        <result property="xxRecHistUpdByNm_D1"      column="XX_REC_HIST_UPD_BY_NM"      javaType="EZDSStringItem"/>
+        <result property="xxRecHistTblNm_D1"        column="XX_REC_HIST_TBL_NM"         javaType="EZDSStringItem"/>
+    </resultMap>
+
+    <statement id="getSummaryTabRecord" parameterClass="Map" resultMap="result.NFBL2060_SSMsg">
+        SELECT
+                AIC.AP_INV_CATG_DESC_TXT          AP_INV_CATG_DESC_TXT
+            ,   MAIN.AP_VND_CD                    AP_VND_CD
+            ,   MAIN.AP_VND_INV_NUM               AP_VND_INV_NUM
+            ,   MAIN.AP_VND_INV_SQ_NUM            AP_VND_INV_SQ_NUM
+            ,   CAIH.INV_DT                       INV_DT
+            ,   CASE WHEN CAIH.ACCT_INV_STS_CD IN (#acctInvStsL#, #acctInvStsP#, #acctInvStsV#) THEN CAIH.INV_AUTH_DT ELSE NULL END INV_AUTH_DT
+            ,   CAIH.PRNT_VND_CD                  PRNT_VND_CD
+            ,   PV.PRNT_VND_NM || ' - ' || V.LOC_NM      DPLY_VND_NM
+            ,   CAIH.INV_HDR_DESC_TXT             INV_HDR_DESC_TXT
+            ,   AIS.ACCT_INV_STS_DESC_TXT         ACCT_INV_STS_DESC_TXT
+            ,   DECODE(CAIH.PO_NUM, #none#, NULL, CAIH.PO_NUM) PO_NUM
+            ,   MAIN.PO_APVL_DT                   PO_APVL_DT
+            ,   DECODE(CAIH.VND_RTRN_NUM, #none#, NULL, CAIH.VND_RTRN_NUM) VND_RTRN_NUM
+            ,   MAIN.VND_RTRN_SUBMT_DT            VND_RTRN_SUBMT_DT
+            ,   CAIH.AC_INV_TOT_COST_AMT          INV_AMT
+            ,   CAIH.AP_PMT_CHK_NUM               AP_PMT_CHK_NUM
+            ,   CAIH.ARCS_PMT_DT                  ARCS_PMT_DT
+            <!-- ,  CASE WHEN CAIH.PO_NUM IS NOT NULL THEN -->
+            ,  CASE WHEN CAIH.PO_NUM IS NOT NULL THEN
+                    (SELECT NVL(SUM(DPD.ENT_PO_DTL_DEAL_NET_AMT),0)
+                    FROM PO_DTL DPD
+                    WHERE DPD.GLBL_CMPY_CD  = #glblCmpyCd#
+                      <!-- AND DPD.PO_ORD_NUM    = CAIH.PO_NUM -->
+                      AND DPD.PO_ORD_NUM    = CAIH.PO_NUM
+                      AND DPD.EZCANCELFLAG  = '0'
+                    )
+                    <!-- WHEN CAIH.VND_RTRN_NUM IS NOT NULL THEN -->
+                    WHEN CAIH.VND_RTRN_NUM IS NOT NULL THEN
+                    (SELECT NVL(SUM(DRD.DEAL_VND_RTRN_UNIT_PRC_AMT * DRD.RTRN_QTY),0)
+                    FROM VND_RTRN_DTL DRD
+                    WHERE DRD.GLBL_CMPY_CD  = #glblCmpyCd#
+                      <!-- AND DRD.VND_RTRN_NUM  = CAIH.VND_RTRN_NUM -->
+                      AND DRD.VND_RTRN_NUM  = CAIH.VND_RTRN_NUM
+                      AND DRD.EZCANCELFLAG  = '0'
+                    )
+                    ELSE 0
+                END AS                            ENT_PO_DTL_DEAL_NET_AMT
+            ,   VPT.VND_PMT_TERM_DESC_TXT         VND_PMT_TERM_DESC_TXT
+            ,   CAIH.EZINTIME                     XX_REC_HIST_CRAT_TS
+            ,   CAIH.EZINUSERID                   XX_REC_HIST_CRAT_BY_NM
+            ,   CAIH.EZUPTIME                     XX_REC_HIST_UPD_TS
+            ,   CAIH.EZUPUSERID                   XX_REC_HIST_UPD_BY_NM
+            ,   CAIH.EZTABLEID                    XX_REC_HIST_TBL_NM
+        FROM
+            (
+                SELECT
+                    CIPH.AP_VND_CD
+                ,   CIPH.AP_VND_INV_NUM
+                ,   CIPH.AP_VND_INV_SQ_NUM
+                ,   CIPH.PO_APVL_DT
+                ,   CIPH.VND_RTRN_SUBMT_DT
+                FROM
+                    (
+                        SELECT
+                            INV.AP_VND_CD
+                        ,   INV.AP_VND_INV_NUM
+                        ,   INV.AP_VND_INV_SQ_NUM
+                        ,   INV.PO_APVL_DT
+                        ,   INV.VND_RTRN_SUBMT_DT
+                        FROM
+                            (
+                                SELECT
+                                    HDR.AP_VND_CD
+                                ,   HDR.AP_VND_INV_NUM
+                                ,   HDR.AP_VND_INV_SQ_NUM
+                                ,   MAX(PO.PO_APVL_DT)               PO_APVL_DT
+                                ,   MAX(VR.VND_RTRN_SUBMT_DT)        VND_RTRN_SUBMT_DT
+                                FROM
+                                    CM_AP_INV_HDR    HDR
+                                ,   CM_INV_ACCT_DIST DTL
+                                <isNotNull property="vndPmtTermDescTxt">
+                                ,   VND_PMT_TERM     VPT
+                                </isNotNull>
+                                <isNotNull property="vndPmtMethDescTxt">
+                                ,   VND_PMT_METH     VPM
+                                ,   VND              V
+                                </isNotNull>
+                                <isNotNull property="dplyVndNm">
+                                ,   PRNT_VND         PV
+                                </isNotNull>
+                                ,   PO               PO
+                                ,   VND_RTRN         VR
+                                <isEqual property="xxChkBox_02" compareValue="Y">
+                                ,   (
+                                        SELECT
+                                            AP_VND_CD
+                                        ,   AP_VND_INV_NUM
+                                        ,   AP_VND_INV_SQ_NUM
+                                        FROM
+                                            CM_INV_ACCT_DIST DTL
+                                        WHERE
+                                            DTL.GLBL_CMPY_CD  = #glblCmpyCd#
+                                        AND DTL.AP_LINE_TP_CD = #variance#
+                                        <isNotNull property="apVndCd">
+                                        AND DTL.AP_VND_CD     LIKE  #apVndCd#
+                                        </isNotNull>
+                                       <isNotNull property="apVndInvNum">
+                                        AND DTL.AP_VND_INV_NUM  LIKE  #apVndInvNum#
+                                       </isNotNull>
+                                        AND DTL.EZCANCELFLAG  = '0'
+                                        GROUP BY
+                                             AP_VND_CD
+                                            ,AP_VND_INV_NUM
+                                            ,AP_VND_INV_SQ_NUM
+                                       ) PO_VAL
+                                </isEqual>
+                                WHERE
+                                    HDR.GLBL_CMPY_CD                   =     #glblCmpyCd#
+                                AND HDR.GLBL_CMPY_CD                   =     DTL.GLBL_CMPY_CD
+                                AND HDR.AP_VND_CD                      =     DTL.AP_VND_CD
+                                AND HDR.AP_VND_INV_NUM                 =     DTL.AP_VND_INV_NUM
+                                AND HDR.AP_VND_INV_SQ_NUM              =     DTL.AP_VND_INV_SQ_NUM
+                                AND HDR.EZCANCELFLAG                   =     '0'
+                                AND DTL.EZCANCELFLAG                   =     '0'
+                                <isNotNull property="apVndCd">
+                                AND HDR.AP_VND_CD                      LIKE  #apVndCd#
+                                </isNotNull>
+                                <isNotNull property="prntVndCd">
+                                AND HDR.PRNT_VND_CD                    LIKE  #prntVndCd#
+                                </isNotNull>
+                                <isNotNull property="dplyVndNm">
+                                AND HDR.GLBL_CMPY_CD                   =     PV.GLBL_CMPY_CD
+                                AND HDR.PRNT_VND_CD                    =     PV.PRNT_VND_CD
+                                AND PV.PRNT_VND_NM                     LIKE #dplyVndNm#
+                                AND PV.EZCANCELFLAG                    =    '0'
+                                </isNotNull>
+                                <isNotNull property="poNum">
+                                <!-- AND HDR.PO_NUM                         LIKE  #poNum# -->
+                                AND DTL.PO_NUM                         LIKE  #poNum#
+                                </isNotNull>
+                                <isNotNull property="vndRtrnNum">
+                                <!-- mod start 2022/02/15 QC#57090 -->
+                                <!-- AND HDR.VND_RTRN_NUM                   LIKE  #vndRtrnNum# -->
+                                AND DTL.VND_RTRN_NUM                   LIKE  #vndRtrnNum#
+                                <!-- mod end 2022/02/15 QC#57090 -->
+                                </isNotNull>
+                                <isNotNull property="delyOrdNum">
+                                AND DTL.DELY_ORD_NUM                   LIKE  #delyOrdNum#
+                                </isNotNull>
+                                <isNotNull property="poDt_FR">
+                                AND PO.PO_APVL_DT                      &gt;= #poDt_FR#         <!-- PO Date From -->
+                                </isNotNull>
+                                <isNotNull property="poDt_TO">
+                                AND PO.PO_APVL_DT                      &lt;= #poDt_TO#         <!-- PO Date To   -->
+                                </isNotNull>
+                                <isNotNull property="vndRtrnSubmtDt_FR">
+                                AND VR.VND_RTRN_SUBMT_DT               &gt;= #vndRtrnSubmtDt_FR#         <!-- Vendor Return Date From -->
+                                </isNotNull>
+                                <isNotNull property="vndRtrnSubmtDt_TO">
+                                AND VR.VND_RTRN_SUBMT_DT               &lt;= #vndRtrnSubmtDt_TO#         <!-- Vendor Return Date To   -->
+                                </isNotNull>
+                                <!-- START 2024/02/05 S.Ikariya [QC#63451,ADD] -->
+                                <isNotNull property="acInvTotCostAmt_FR">
+                                AND HDR.AC_INV_TOT_COST_AMT               &gt;= #acInvTotCostAmt_FR#         <!--Invoice Amount From -->
+                                </isNotNull>
+                                <isNotNull property="acInvTotCostAmt_TO">
+                                AND HDR.AC_INV_TOT_COST_AMT               &lt;= #acInvTotCostAmt_TO#         <!-- Invoice Amount To   -->
+                                </isNotNull>
+                                <!-- END 2024/02/05 S.Ikariya [QC#63451,ADD] -->
+                                <isNotNull property="apVndInvNum">
+                                AND HDR.AP_VND_INV_NUM                 LIKE  #apVndInvNum#
+                                </isNotNull>
+                                <isNotNull property="acctInvStsCd">
+                                AND HDR.ACCT_INV_STS_CD                =     #acctInvStsCd#
+                                </isNotNull>
+                                <isNotNull property="invDt_FR">
+                                AND HDR.INV_DT                         &gt;= #invDt_FR#
+                                </isNotNull>
+                                <isNotNull property="invDt_TO">
+                                AND HDR.INV_DT                         &lt;= #invDt_TO#
+                                </isNotNull>
+                                <isNotNull property="invAuthDt_FR">
+                                AND HDR.INV_AUTH_DT                    &gt;= #invAuthDt_FR#
+                                </isNotNull>
+                                <isNotNull property="invAuthDt_TO">
+                                AND HDR.INV_AUTH_DT                    &lt;= #invAuthDt_TO#
+                                </isNotNull>
+                                <isNotNull property="xxCmntTxt_FR">
+                                AND DTL.DR_COA_CMPY_CD || '.' ||
+                                    DTL.DR_COA_BR_CD   || '.' ||
+                                    DTL.DR_COA_CC_CD   || '.' ||
+                                    DTL.DR_COA_ACCT_CD || '.' ||
+                                    DTL.DR_COA_PROD_CD || '.' ||
+                                    DTL.DR_COA_CH_CD   || '.' ||
+                                    DTL.DR_COA_AFFL_CD || '.' ||
+                                    DTL.DR_COA_PROJ_CD || '.' ||
+                                    DTL.DR_COA_EXTN_CD                    &gt;= #xxCmntTxt_FR#
+                                </isNotNull>
+                                <isNotNull property="xxCmntTxt_TO">
+                                AND DTL.DR_COA_CMPY_CD || '.' ||
+                                    DTL.DR_COA_BR_CD   || '.' ||
+                                    DTL.DR_COA_CC_CD   || '.' ||
+                                    DTL.DR_COA_ACCT_CD || '.' ||
+                                    DTL.DR_COA_PROD_CD || '.' ||
+                                    DTL.DR_COA_CH_CD   || '.' ||
+                                    DTL.DR_COA_AFFL_CD || '.' ||
+                                    DTL.DR_COA_PROJ_CD || '.' ||
+                                    DTL.DR_COA_EXTN_CD                    &lt;= #xxCmntTxt_TO#
+                                </isNotNull>
+                                <isNotNull property="apInvCatgCd_S">
+                                AND HDR.AP_INV_CATG_CD                 =     #apInvCatgCd_S#
+                                </isNotNull>
+                                <isNotNull property="apPmtChkNum">
+                                AND HDR.AP_PMT_CHK_NUM                 LIKE #apPmtChkNum#
+                                </isNotNull>
+                                <isNotNull property="pmtDt_FR">
+                                AND HDR.ARCS_PMT_DT                    &gt;= #pmtDt_FR#         <!-- Payment Date From -->
+                                </isNotNull>
+                                <isNotNull property="pmtDt_TO">
+                                AND HDR.ARCS_PMT_DT                    &lt;= #pmtDt_TO#         <!-- Payment Date To   -->
+                                </isNotNull>
+                                <!-- Holds check box -->
+                                <isEqual property="xxChkBox_01" compareValue="Y">
+                                AND HDR.PMT_HLD_FLG                    =     'Y'
+                                AND HDR.ACCT_INV_STS_CD               !=     #acctInvStsCdCancelled#
+                                </isEqual>
+                                <isNotNull property="vndPmtTermDescTxt">
+                                AND HDR.GLBL_CMPY_CD                   =     VPT.GLBL_CMPY_CD(+)
+                                AND HDR.VND_PMT_TERM_CD                =     VPT.VND_PMT_TERM_CD(+)
+                                AND UPPER(VPT.VND_PMT_TERM_DESC_TXT)   LIKE  #vndPmtTermDescTxt#
+                                AND 0                                  =     VPT.EZCANCELFLAG(+)
+                                </isNotNull>
+                                <isNotNull property="vndPmtMethDescTxt">
+                                AND HDR.GLBL_CMPY_CD                   =     V.GLBL_CMPY_CD(+)
+                                AND HDR.AP_VND_CD                      =     V.INV_VND_CD(+)
+                                AND V.EZCANCELFLAG                     =     '0'
+                                AND HDR.GLBL_CMPY_CD                   =     VPM.GLBL_CMPY_CD(+)
+                                AND UPPER(VPM.VND_PMT_METH_DESC_TXT)   LIKE #vndPmtMethDescTxt#
+                                AND NVL(HDR.ARCS_PMT_METH_CD,V.VND_PMT_METH_CD) =     VPM.VND_PMT_METH_NM(+)
+                                AND VPM.EZCANCELFLAG(+)                =     '0'
+                                </isNotNull>
+                                AND DTL.GLBL_CMPY_CD                   =     PO.GLBL_CMPY_CD(+)
+                                AND DTL.PO_NUM                         =     PO.PO_ORD_NUM(+)
+                                AND PO.EZCANCELFLAG(+)                 =     '0'
+                                AND DTL.GLBL_CMPY_CD                   =     VR.GLBL_CMPY_CD(+)
+                                AND DTL.VND_RTRN_NUM                   =     VR.VND_RTRN_NUM(+)
+                                AND VR.EZCANCELFLAG(+)                 =     '0'  
+                                <!-- PO Variance checkbox -->
+                                <isEqual property="xxChkBox_02" compareValue="Y">
+                                AND HDR.AP_VND_CD                      =     PO_VAL.AP_VND_CD
+                                AND HDR.AP_VND_INV_NUM                 =     PO_VAL.AP_VND_INV_NUM
+                                AND HDR.AP_VND_INV_SQ_NUM              =     PO_VAL.AP_VND_INV_SQ_NUM
+                                </isEqual>
+                                GROUP BY
+                                    HDR.AP_VND_CD
+                                ,   HDR.AP_VND_INV_NUM
+                                ,   HDR.AP_VND_INV_SQ_NUM
+                            ) INV
+                        ORDER BY
+                            INV.AP_VND_CD
+                        ,   INV.AP_VND_INV_NUM
+                        ,   INV.AP_VND_INV_SQ_NUM
+                    )                CIPH
+                WHERE
+                    ROWNUM &lt;= #rowNum#
+            ) MAIN
+           ,   CM_AP_INV_HDR    CAIH
+           ,   PRNT_VND PV
+           ,   VND      V
+           ,   ACCT_INV_STS      AIS
+           ,   VND_PMT_TERM      VPT
+           ,   AP_INV_CATG       AIC
+        WHERE
+                CAIH.GLBL_CMPY_CD       = #glblCmpyCd#
+            AND CAIH.AP_VND_CD          = MAIN.AP_VND_CD
+            AND CAIH.AP_VND_INV_NUM     = MAIN.AP_VND_INV_NUM
+            AND CAIH.AP_VND_INV_SQ_NUM  = MAIN.AP_VND_INV_SQ_NUM
+            AND CAIH.EZCANCELFLAG       = '0'
+
+            AND CAIH.GLBL_CMPY_CD       = V.GLBL_CMPY_CD(+)
+            AND CAIH.AP_VND_CD          = V.VND_CD(+)
+            AND V.EZCANCELFLAG(+)       = '0'
+            AND V.GLBL_CMPY_CD          = PV.GLBL_CMPY_CD(+)
+            AND V.PRNT_VND_PK           = PV.PRNT_VND_PK(+)
+            AND CAIH.PRNT_VND_CD        = PV.PRNT_VND_CD(+)
+            AND PV.EZCANCELFLAG(+)      = '0'
+
+            AND CAIH.GLBL_CMPY_CD       = AIS.GLBL_CMPY_CD(+)
+            AND CAIH.ACCT_INV_STS_CD    = AIS.ACCT_INV_STS_CD(+)
+            AND AIS.EZCANCELFLAG(+)     = '0'
+            AND CAIH.GLBL_CMPY_CD       = VPT.GLBL_CMPY_CD(+)
+            AND CAIH.VND_PMT_TERM_CD    = VPT.VND_PMT_TERM_CD(+)
+            AND VPT.EZCANCELFLAG(+)     = '0'
+            AND CAIH.GLBL_CMPY_CD       = AIC.GLBL_CMPY_CD(+)
+            AND CAIH.AP_INV_CATG_CD     = AIC.AP_INV_CATG_CD(+)
+            AND AIC.EZCANCELFLAG(+)     = '0'
+        ORDER BY
+            CAIH.AP_VND_CD
+        ,   CAIH.AP_VND_INV_NUM
+        ,   CAIH.AP_VND_INV_SQ_NUM
+    </statement>
+
+    <resultMap id="result.NFBL2060_SSMsg" class="NFBL2060_SSMsg">
+        <result property="apInvCatgDescTxt_S1"       column="AP_INV_CATG_DESC_TXT"     javaType="EZDSStringItem"/>
+        <result property="apVndCd_S1"                column="AP_VND_CD"                javaType="EZDSStringItem"/>
+        <result property="apVndInvNum_S1"            column="AP_VND_INV_NUM"           javaType="EZDSStringItem"/>
+        <result property="apVndInvSqNum_S1"          column="AP_VND_INV_SQ_NUM"        javaType="EZDSStringItem"/>
+        <result property="invDt_S1"                  column="INV_DT"                   javaType="EZDSStringItem"/>
+        <result property="invAuthDt_S1"              column="INV_AUTH_DT"              javaType="EZDSStringItem"/>
+        <result property="prntVndCd_S1"              column="PRNT_VND_CD"              javaType="EZDSStringItem"/>
+        <result property="dplyVndNm_S1"              column="DPLY_VND_NM"              javaType="EZDSStringItem"/>
+        <result property="apVndCd_S1"                column="AP_VND_CD"                javaType="EZDSStringItem"/>
+        <result property="invAmt_S1"                 column="INV_AMT"                  javaType="EZDSBigDecimalItem"/>
+        <result property="invHdrDescTxt_S1"          column="INV_HDR_DESC_TXT"         javaType="EZDSStringItem"/>
+        <result property="acctInvStsDescTxt_S1"      column="ACCT_INV_STS_DESC_TXT"    javaType="EZDSStringItem"/>
+        <result property="poNum_S1"                  column="PO_NUM"                   javaType="EZDSStringItem"/>
+        <result property="poApvlDt_S1"               column="PO_APVL_DT"               javaType="EZDSStringItem"/>
+        <!-- mod start 2022/02/15 QC#57090 -->
+        <!-- <result property="vndRtrnNum_S1"             column="VND_RTRN_NUM"             javaType="EZDSStringItem"/> -->
+        <result property="xxDplyTrxNumTxt_S1"        column="VND_RTRN_NUM"             javaType="EZDSStringItem"/>
+        <!-- mod end 2022/02/15 QC#57090 -->
+        <result property="vndRtrnSubmtDt_S1"         column="VND_RTRN_SUBMT_DT"        javaType="EZDSStringItem"/>
+        <result property="entPoDtlDealNetAmt_S1"     column="ENT_PO_DTL_DEAL_NET_AMT"  javaType="EZDSBigDecimalItem"/>
+        <result property="apPmtChkNum_S1"            column="AP_PMT_CHK_NUM"           javaType="EZDSStringItem"/>
+        <result property="pmtDt_S1"                  column="ARCS_PMT_DT"              javaType="EZDSStringItem"/>
+        <result property="vndPmtTermDescTxt_S1"      column="VND_PMT_TERM_DESC_TXT"    javaType="EZDSStringItem"/>
+        <result property="xxRecHistCratTs_S1"        column="XX_REC_HIST_CRAT_TS"      javaType="EZDSStringItem"/>
+        <result property="xxRecHistCratByNm_S1"      column="XX_REC_HIST_CRAT_BY_NM"   javaType="EZDSStringItem"/>
+        <result property="xxRecHistUpdTs_S1"         column="XX_REC_HIST_UPD_TS"       javaType="EZDSStringItem"/>
+        <result property="xxRecHistUpdByNm_S1"       column="XX_REC_HIST_UPD_BY_NM"    javaType="EZDSStringItem"/>
+        <result property="xxRecHistTblNm_S1"         column="XX_REC_HIST_TBL_NM"       javaType="EZDSStringItem"/>
+    </resultMap>
+
+</sqlMap>

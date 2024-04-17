@@ -1,0 +1,468 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NLGB014001">
+
+    <statement id="getAdjData" parameterClass="Map">
+        SELECT
+            WIT.WMS_TASK_CD                         AS WMS_TASK_CD
+           ,WIT.INTFC_TRX_ID                        AS INTFC_TRX_ID
+           ,WIT.INTFC_TRX_SQ_NUM                    AS INTFC_TRX_SQ_NUM
+           ,WIT.WMS_INBD_TRX_PK                     AS WMS_INBD_TRX_PK
+           ,NVL(WHMM.HOST_MDSE_CD, WIT.WMS_MDSE_CD) AS MDSE_CD
+           ,M.RCV_SER_TAKE_FLG                      AS RCV_SER_TAKE_FLG
+           ,RW.RTL_WH_CD                            AS RTL_WH_CD
+           ,RS.INVTY_LOC_CD                         AS INVTY_LOC_CD
+           ,WIT.WMS_STK_STS_CD                      AS STK_STS_CD
+           ,WIT.WMS_ORD_QTY                         AS WMS_ORD_QTY
+           ,WIT.WMS_PROC_QTY                        AS WMS_PROC_QTY
+           ,WIT.SER_NUM                             AS SER_NUM
+           ,WIT.WMS_CNTNR_ID                        AS SVC_CONFIG_MSTR_PK
+           <!-- START 2018/04/12 S.Katsuma [SOL#078,160,ADD] -->
+           ,WIT.WMS_RSN_CD                          AS WMS_RSN_CD
+           <!-- END 2018/04/12 S.Katsuma [SOL#078,160,ADD] -->
+<!-- START 2019/11/21 T.Ogura [QC#54633,ADD] -->
+           ,M.INVTY_CTRL_FLG                        AS INVTY_CTRL_FLG
+<!-- END   2019/11/21 T.Ogura [QC#54633,ADD] -->
+<!-- START 2020/05/15 K.Fukumura [QC#56071,ADD] -->
+           ,WIT.CYCLE_CNT_RSN_CD                    AS CYCLE_CNT_RSN_CD
+           ,WIT.CYCLE_CNT_RSN_CMNT_TXT              AS CYCLE_CNT_RSN_CMNT_TXT
+<!-- END   2020/05/15 K.Fukumura [QC#56071,ADD] -->
+           <!-- START 2021/10/20 A.Marte [QC#59368,ADD] -->
+           ,M.INSTL_BASE_CTRL_FLG                  AS INSTL_BASE_CTRL_FLG
+           <!-- END 2021/10/20 A.Marte [QC#59368,ADD] -->
+        FROM
+            WMS_INBD_TRX      WIT
+           ,WMS_HOST_MDSE_MAP WHMM
+           ,MDSE              M
+           ,RTL_WH            RW
+           ,RTL_SWH           RS
+        WHERE
+            WIT.GLBL_CMPY_CD     = #glblCmpyCd#
+       <iterate property="wmsTrgtWhCd" var="wmsTrgtWhCd[]" open="AND WIT.WH_CD IN (" close=")" conjunction=",">
+           #wmsTrgtWhCd[]#
+       </iterate>
+        AND WIT.WMS_TASK_CD     IN (#wmsTaskCadj#, #wmsTaskSera#)
+        AND WIT.PROC_STS_CD      = #procStsCd#
+        AND WIT.EZCANCELFLAG     = '0'
+        AND WIT.GLBL_CMPY_CD     = WHMM.GLBL_CMPY_CD(+)
+        AND WIT.WMS_MDSE_CD      = WHMM.WMS_MDSE_CD(+)
+        AND WHMM.EZCANCELFLAG(+) = '0'
+        AND WIT.GLBL_CMPY_CD     = M.GLBL_CMPY_CD(+)
+        AND NVL(WHMM.HOST_MDSE_CD, WIT.WMS_MDSE_CD) = M.MDSE_CD(+)
+        AND M.EZCANCELFLAG(+)    = '0'
+        AND WIT.GLBL_CMPY_CD     = RW.GLBL_CMPY_CD
+        AND WIT.WH_CD            = RW.WMS_WH_CD
+        AND RW.EZCANCELFLAG      = '0'
+        AND RW.GLBL_CMPY_CD      = RS.GLBL_CMPY_CD
+        AND RW.RTL_WH_CD         = RS.RTL_WH_CD
+        AND RS.EZCANCELFLAG      = '0'
+        <isEqual property="packCdSetOwnrFlg" compareValue="Y">
+        AND RW.INVTY_OWNR_CD || RS.RTL_SWH_CD = WIT.WMS_PKG_CD
+        </isEqual>
+        <isNotEqual property="packCdSetOwnrFlg" compareValue="Y">
+        AND RS.INVTY_LOC_CD      = WIT.WMS_PKG_CD
+        </isNotEqual>
+        ORDER BY
+            WIT.INTFC_TRX_ID
+           ,RW.RTL_WH_CD
+           <!-- START 2021/07/15 A.Marte [QC#58480,ADD] -->
+           ,WIT.WMS_CNTNR_ID
+           <!-- END 2021/07/15 A.Marte [QC#58480,ADD] -->
+           ,NVL(WHMM.HOST_MDSE_CD, WIT.WMS_MDSE_CD)
+           <!-- RECORD ORDER. SERIAL:WMS_ORD_QTY ASC(-,+) NON-SERIAL:WMS_ORD_QTY DESC(+,-) -->
+           ,DECODE(M.RCV_SER_TAKE_FLG, 'Y', 1, -1)*WIT.WMS_ORD_QTY
+           ,WIT.WMS_TASK_CD
+    </statement>
+
+    <statement id="getStatData" parameterClass="Map">
+        SELECT
+            WIT.INTFC_TRX_ID                        AS INTFC_TRX_ID
+           ,WIT.WMS_INBD_TRX_PK                     AS WMS_INBD_TRX_PK
+           ,WIT.OTBD_ORD_NUM                        AS OTBD_ORD_NUM
+           ,WIT.INBD_ORD_NUM                        AS INBD_ORD_NUM
+           ,(
+             SELECT
+                  RH.SRC_ORD_NUM
+              FROM
+                   WMS_INBD_TRX W
+                  ,RWS_HDR RH
+              WHERE
+                  W.GLBL_CMPY_CD   = WIT.GLBL_CMPY_CD
+              AND W.WMS_TAG_ID     = WIT.WMS_TAG_ID
+              AND W.WMS_MDSE_CD    = WIT.WMS_MDSE_CD
+              AND W.WMS_TASK_CD    = #rcvd#
+              AND W.EZCANCELFLAG   = '0'
+              AND W.GLBL_CMPY_CD   = RH.GLBL_CMPY_CD
+              AND W.INBD_ORD_NUM   = RH.RWS_REF_NUM
+              AND RH.SCE_ORD_TP_CD = #return#
+              AND RH.EZCANCELFLAG  = '0'
+              AND ROWNUM = 1
+           ) AS RMA_NUM
+           ,NVL(WHMM.HOST_MDSE_CD, WIT.WMS_MDSE_CD) AS MDSE_CD
+           ,WIT.WMS_MDSE_CD                         AS WMS_MDSE_CD
+           ,WIT.WH_CD                               AS WH_CD
+           ,RW.RTL_WH_CD                            AS RTL_WH_CD
+           ,RS.INVTY_LOC_CD                         AS INVTY_LOC_CD
+           ,WIT.WMS_STK_STS_CD                      AS STK_STS_CD
+           ,WIT.WMS_OLD_STK_STS_CD                  AS WMS_OLD_STK_STS_CD
+           ,WIT.WMS_ORD_QTY                         AS WMS_ORD_QTY
+           ,WIT.WMS_PROC_QTY                        AS WMS_PROC_QTY
+           ,WIT.SER_NUM                             AS SER_NUM
+           ,WIT.WMS_CNTNR_ID                        AS SVC_CONFIG_MSTR_PK
+           ,WIT.EZINTIME                            AS EZINTIME
+           ,MD.SHPG_SER_TAKE_FLG                    AS SHPG_SER_TAKE_FLG
+           ,MD.INSTL_BASE_CTRL_FLG                  AS INSTL_BASE_CTRL_FLG
+        FROM
+            WMS_INBD_TRX      WIT
+           ,WMS_HOST_MDSE_MAP WHMM
+           ,RTL_WH            RW
+           ,RTL_SWH           RS
+           ,MDSE              MD
+        WHERE
+            WIT.GLBL_CMPY_CD     = #glblCmpyCd#
+       <iterate property="wmsTrgtWhCd" var="wmsTrgtWhCd[]" open="AND WIT.WH_CD IN (" close=")" conjunction=",">
+           #wmsTrgtWhCd[]#
+       </iterate>
+        AND WIT.WMS_TASK_CD                              = #wmsTaskStat#
+        
+        
+        AND   ( WIT.PROC_STS_CD                          = #procStsCd#
+            OR( WIT.PROC_STS_CD                          = #procStsCdError# AND ( WIT.EZINTIME BETWEEN #skipErrorStatTsStart# AND #skipErrorStatTsEnd#))
+              )
+        AND WIT.GLBL_CMPY_CD                             = WHMM.GLBL_CMPY_CD(+)
+        AND WIT.WMS_MDSE_CD                              = WHMM.WMS_MDSE_CD(+)
+        AND WIT.GLBL_CMPY_CD                             = RW.GLBL_CMPY_CD
+        AND WIT.WH_CD                                    = RW.WMS_WH_CD
+        AND RW.GLBL_CMPY_CD                              = RS.GLBL_CMPY_CD
+        AND RW.RTL_WH_CD                                 = RS.RTL_WH_CD
+        <isEqual property="packCdSetOwnrFlg" compareValue="Y">
+        AND RW.INVTY_OWNR_CD || RS.RTL_SWH_CD = WIT.WMS_PKG_CD
+        </isEqual>
+        <isNotEqual property="packCdSetOwnrFlg" compareValue="Y">
+        AND RS.INVTY_LOC_CD                              = WIT.WMS_PKG_CD
+        </isNotEqual>
+        AND WIT.GLBL_CMPY_CD                             = MD.GLBL_CMPY_CD(+)
+        AND NVL(WHMM.HOST_MDSE_CD, WIT.WMS_MDSE_CD)      = MD.MDSE_CD(+)
+        AND WIT.EZCANCELFLAG                             = '0'
+        AND WHMM.EZCANCELFLAG(+)                         = '0'
+        AND RS.EZCANCELFLAG                              = '0'
+        AND RW.EZCANCELFLAG                              = '0'
+        AND MD.EZCANCELFLAG(+)                           = '0'
+        AND NOT EXISTS (
+            SELECT
+                1
+            FROM
+                WMS_INBD_TRX W
+            WHERE
+                W.GLBL_CMPY_CD   = WIT.GLBL_CMPY_CD
+            AND W.WH_CD          = WIT.WH_CD
+            AND W.WMS_MDSE_CD    = WIT.WMS_MDSE_CD
+            AND W.WMS_STK_STS_CD = WIT.WMS_OLD_STK_STS_CD
+            AND W.WMS_TASK_CD    = #rcvd#
+            AND W.PROC_STS_CD    = #procStsCd#
+            AND W.EZCANCELFLAG   = '0'
+        )
+        ORDER BY
+            WIT.INTFC_TRX_ID
+           ,RW.RTL_WH_CD
+           ,WIT.WMS_ORD_QTY DESC
+    </statement>
+
+    <statement id="searchConfig" parameterClass="Map" resultClass="Map">
+    SELECT
+        *
+    FROM
+        (
+            SELECT
+                SMM.SVC_MACH_MSTR_PK
+               ,SMM.MDSE_CD
+               ,SMM.SER_NUM
+               ,SMM.SVC_MACH_MSTR_STS_CD
+               ,SMM.CUR_LOC_NUM
+               ,SMM.SVC_MACH_MSTR_LOC_STS_CD
+               ,SMM.STK_STS_CD
+               ,SMM.SVC_CONFIG_MSTR_PK
+               ,SMM.SVC_MACH_MAINT_AVAL_FLG
+               ,SMM.TRX_HDR_NUM
+               ,SMM.SVC_MACH_QTY
+               ,SMM.EZUPTIME
+               ,SMM.EZUPTIMEZONE
+               ,MD.SHPG_SER_TAKE_FLG
+               ,MD.MDSE_DESC_SHORT_TXT
+               ,MD.INSTL_BASE_CTRL_FLG
+            FROM
+                SVC_MACH_MSTR SMM
+               ,MDSE          MD
+            WHERE
+                SMM.GLBL_CMPY_CD                = #glblCmpyCd#
+            AND SMM.SVC_CONFIG_MSTR_PK          = #configId#
+            AND SMM.MDSE_CD                     = #mdseCd#
+            AND SMM.SVC_MACH_MSTR_STS_CD IN (#svcMachMstrStsCrat#, #svcMachMstrStsRmv#)
+            AND SMM.CUR_LOC_NUM                 = #invtyLocCd#
+            AND SMM.SVC_MACH_MAINT_AVAL_FLG     = 'Y'
+            AND SMM.TRX_HDR_NUM IS NULL
+            AND SMM.STK_STS_CD                  = #wmsOldStkStsCd#
+            AND SMM.GLBL_CMPY_CD                = MD.GLBL_CMPY_CD
+            AND SMM.MDSE_CD                     = MD.MDSE_CD
+            AND SMM.EZCANCELFLAG                = '0'
+            AND MD.EZCANCELFLAG                 = '0'
+            ORDER BY
+                SMM.SVC_MACH_MSTR_PK
+           )
+       WHERE ROWNUM &lt;= #rowNum#
+        
+    </statement>
+
+    <statement id="searchNonConfig" parameterClass="Map" resultClass="Map">
+        SELECT
+            SMM.SVC_MACH_MSTR_PK
+           ,SMM.MDSE_CD
+           ,SMM.SER_NUM
+           ,SMM.SVC_MACH_MSTR_STS_CD
+           ,SMM.CUR_LOC_NUM
+           ,SMM.SVC_MACH_MSTR_LOC_STS_CD
+           ,SMM.STK_STS_CD
+           ,SMM.SVC_CONFIG_MSTR_PK
+           ,SMM.SVC_MACH_MAINT_AVAL_FLG
+           ,SMM.TRX_HDR_NUM
+           ,SMM.SVC_MACH_QTY
+           ,SMM.EZUPTIME
+           ,SMM.EZUPTIMEZONE
+           ,MD.SHPG_SER_TAKE_FLG
+           ,MD.MDSE_DESC_SHORT_TXT
+           ,MD.INSTL_BASE_CTRL_FLG
+        FROM
+            SVC_MACH_MSTR SMM
+           ,MDSE          MD
+        WHERE
+            SMM.GLBL_CMPY_CD                = #glblCmpyCd#
+        AND SMM.MDSE_CD                     = #mdseCd#
+        AND SMM.SVC_CONFIG_MSTR_PK IS NULL
+        AND SMM.SVC_MACH_MAINT_AVAL_FLG     = 'Y'
+        AND SMM.TRX_HDR_NUM IS NULL
+        AND SMM.CUR_LOC_NUM                 = #invtyLocCd#
+        AND SMM.STK_STS_CD                  = #wmsOldStkStsCd#
+        AND SMM.SVC_MACH_MSTR_STS_CD IN (#svcMachMstrStsCrat#, #svcMachMstrStsRmv#)
+        AND SMM.GLBL_CMPY_CD                = MD.GLBL_CMPY_CD
+        AND SMM.MDSE_CD                     = MD.MDSE_CD
+        AND SMM.EZCANCELFLAG                = '0'
+        AND MD.EZCANCELFLAG                 = '0'
+        AND ROWNUM                      &lt;= #wmsProcQty#
+    </statement>
+
+    <statement id="searchNonConfigRMA" parameterClass="Map" resultClass="Map">
+        SELECT
+            SMM.SVC_MACH_MSTR_PK
+           ,SMM.MDSE_CD
+           ,SMM.SER_NUM
+           ,SMM.SVC_MACH_MSTR_STS_CD
+           ,SMM.CUR_LOC_NUM
+           ,SMM.SVC_MACH_MSTR_LOC_STS_CD
+           ,SMM.STK_STS_CD
+           ,SMM.SVC_CONFIG_MSTR_PK
+           ,SMM.SVC_MACH_MAINT_AVAL_FLG
+           ,SMM.TRX_HDR_NUM
+           ,SMM.SVC_MACH_QTY
+           ,SMM.EZUPTIME
+           ,SMM.EZUPTIMEZONE
+           ,MD.SHPG_SER_TAKE_FLG
+           ,MD.MDSE_DESC_SHORT_TXT
+           ,MD.INSTL_BASE_CTRL_FLG
+        FROM
+            SVC_MACH_MSTR SMM
+           ,MDSE          MD
+        WHERE
+            SMM.GLBL_CMPY_CD                = #glblCmpyCd#
+        AND SMM.MDSE_CD                     = #mdseCd#
+        AND SMM.RMA_NUM                     = #rmaNum#
+        <!-- START 2021/12/15 A.Marte [QC#59573,ADD] -->
+        <isNotEqual property="rmaMatch" compareValue="Y">
+        AND SMM.SVC_CONFIG_MSTR_PK IS NULL
+        </isNotEqual>
+        <!-- END 2021/12/15 A.Marte [QC#59573,ADD] -->
+        AND SMM.SVC_MACH_MAINT_AVAL_FLG     = 'Y'
+        AND SMM.TRX_HDR_NUM IS NULL
+        AND SMM.CUR_LOC_NUM                 = #invtyLocCd#
+        AND SMM.STK_STS_CD                  = #wmsOldStkStsCd#
+        AND SMM.SVC_MACH_MSTR_STS_CD IN (#svcMachMstrStsRmv#)
+        AND SMM.GLBL_CMPY_CD                = MD.GLBL_CMPY_CD
+        AND SMM.MDSE_CD                     = MD.MDSE_CD
+        AND SMM.EZCANCELFLAG                = '0'
+        AND MD.EZCANCELFLAG                 = '0'
+        AND ROWNUM                      &lt;= #wmsProcQty#
+    </statement>
+
+    <statement id="getSvcMachMstrInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+            SVC_MACH_MSTR_PK
+           ,SVC_MACH_MSTR_STS_CD
+           ,MDSE_CD
+           ,CUR_LOC_NUM
+           ,SVC_MACH_MSTR_LOC_STS_CD
+           ,STK_STS_CD
+           ,SVC_CONFIG_MSTR_PK
+           ,SVC_MACH_MAINT_AVAL_FLG
+           ,TRX_HDR_NUM
+           ,EZUPTIME
+           ,EZUPTIMEZONE
+        FROM
+            SVC_MACH_MSTR
+        WHERE
+            GLBL_CMPY_CD                = #glblCmpyCd#
+        AND SER_NUM                     = #serNum#
+        AND MDSE_CD                     = #mdseCd#
+        AND EZCANCELFLAG                = '0'
+    </statement>
+
+    <statement id="getInvtyOrdInfo" parameterClass="Map" resultClass="Map">
+        SELECT
+             HDR.GLBL_CMPY_CD            AS GLBL_CMPY_CD
+            ,HDR.INVTY_ORD_NUM           AS INVTY_ORD_NUM
+            ,HDR.INVTY_ORD_TP_CD         AS INVTY_ORD_TP_CD
+            ,HDR.INVTY_LOC_CD            AS RTL_WH_CD
+            ,DTL.INVTY_ORD_LINE_NUM      AS INVTY_ORD_LINE_NUM
+            ,DTL.MDSE_CD                 AS MDSE_CD
+            ,DTL.STK_STS_CD              AS FROM_STK_STS_CD
+            ,DTL.INVTY_LOC_CD            AS INVTY_LOC_CD
+            ,DTL.LOC_STS_CD              AS LOC_STS_CD
+            ,DTL.TO_STK_STS_CD           AS TO_STK_STS_CD
+            ,DTL.ORD_QTY                 AS ORD_QTY
+            ,DTL.INVTY_ORD_DTL_STS_CD    AS INVTY_ORD_DTL_STS_CD
+        FROM
+            INVTY_ORD         HDR
+            ,INVTY_ORD_DTL    DTL
+        WHERE
+            HDR.GLBL_CMPY_CD     = #glblCmpyCd#
+        AND    HDR.INVTY_ORD_NUM = #invtyOrdNum#
+        AND HDR.GLBL_CMPY_CD     = DTL.GLBL_CMPY_CD
+        AND HDR.INVTY_ORD_NUM    = DTL.INVTY_ORD_NUM
+        AND HDR.EZCANCELFLAG     = '0'
+        AND DTL.EZCANCELFLAG     = '0'
+    </statement>
+
+    <statement id="findErrRvcWmsInbdTrx" parameterClass="Map" resultClass="Map">
+        SELECT
+            WIT.WMS_INBD_TRX_PK
+           ,WIT.INBD_ORD_NUM
+           ,WIT.INBD_ORD_LINE_NUM
+           ,WIT.SER_NUM
+           ,WIT.WMS_PROC_QTY
+        FROM
+            WMS_INBD_TRX WIT
+        WHERE
+            WIT.GLBL_CMPY_CD   = #glblCmpyCd#
+        AND WIT.WH_CD          = #whCd#
+        AND WIT.WMS_MDSE_CD    = #wmsMdseCd#
+        AND WIT.WMS_STK_STS_CD = #wmsOldStxStsCd#
+        AND WIT.WMS_TASK_CD    = #rcvd#
+        AND WIT.PROC_STS_CD    = #procStsCd#
+        <isNotNull property="serNum">
+        AND WIT.SER_NUM    = #serNum#
+        </isNotNull>
+        AND WIT.EZCANCELFLAG   = '0'
+    </statement>
+
+    <!-- START 2018/05/08 S.Katsuma [QC#25913,ADD] -->
+    <statement id="getMdseOrPartsCd" parameterClass="Map" resultClass="Map">
+        SELECT
+            MDS.COA_MDSE_TP_CD
+        FROM
+            ALL_MDSE_V       MDS
+           ,MDSE_TP_VAL_SET  MDT
+        WHERE
+            MDS.GLBL_CMPY_CD       = #glblCmpyCd#
+        AND MDS.MDSE_CD            = #mdseCd#
+        AND MDS.EZCANCELFLAG       = '0'
+        AND MDS.GLBL_CMPY_CD       = MDT.GLBL_CMPY_CD
+        AND MDS.COA_MDSE_TP_CD     = MDT.COA_MDSE_TP_CD
+        AND MDT.MDSE_TP_CTX_TP_CD  = #partsItem#
+        AND MDT.EZCANCELFLAG       = '0'
+    </statement>
+    <!-- END 2018/05/08 S.Katsuma [QC#25913,ADD] -->
+
+    <statement id="findSkipPCLSWmsInbdTrx" parameterClass="Map" resultClass="BigDecimal">
+        SELECT
+            WIT.WMS_INBD_TRX_PK
+        FROM
+            WMS_INBD_TRX WIT
+        WHERE
+            WIT.GLBL_CMPY_CD   = #glblCmpyCd#
+        AND WIT.WH_CD          = #whCd#
+        AND WIT.WMS_TASK_CD    = #pcls#
+        AND WIT.INBD_ORD_NUM   = #inbdOrdNum#
+        AND WIT.EZCANCELFLAG   = '0'
+    </statement>
+
+    <!-- START 2021/07/15 A.Marte [QC#58480,ADD] -->
+    <statement id="getConfigItems" parameterClass="Map" resultClass="String">
+        SELECT 
+            SMM.MDSE_CD
+        FROM 
+            SVC_MACH_MSTR SMM
+        WHERE 
+            SMM.GLBL_CMPY_CD             = #glblCmpyCd#
+        AND SMM.SVC_CONFIG_MSTR_PK       = #svcConfigMstrPk#
+        AND SMM.SVC_MACH_MAINT_AVAL_FLG  = #svcMachMaintAvalFlg#
+        AND SMM.SVC_MACH_MSTR_LOC_STS_CD = #dcStock#
+        AND SMM.SVC_MACH_MSTR_STS_CD     IN (#svcMachMstrStsCrat#, #svcMachMstrStsRmv#)
+        AND SMM.EZCANCELFLAG             = '0'
+        ORDER BY
+            MDSE_CD
+    </statement>
+    <!-- END 2021/07/15 A.Marte [QC#58480,ADD] -->
+    
+    <!-- START 2021/12/15 A.Marte [QC#59573,ADD] -->
+    <statement id="isMatchingRMAInbdOrdNum" parameterClass="Map" resultClass="BigDecimal">
+        SELECT 
+            COUNT(*)
+        FROM 
+            RWS_HDR RH
+        WHERE 
+            RH.GLBL_CMPY_CD              = #glblCmpyCd#
+        AND RH.SRC_ORD_NUM               = #rmaNum#
+        AND RH.RWS_REF_NUM               = #inbdOrdNum#
+        AND RH.EZCANCELFLAG              = '0'
+    </statement>
+
+    <statement id="isSCEReturnType" parameterClass="Map" resultClass="BigDecimal">
+        SELECT 
+            COUNT(*)
+        FROM 
+            RWS_HDR RH
+        WHERE 
+            RH.GLBL_CMPY_CD              = #glblCmpyCd#
+        AND RH.RWS_REF_NUM               = #inbdOrdNum#
+        AND RH.SCE_ORD_TP_CD             = #return#
+        AND RH.EZCANCELFLAG              = '0'
+    </statement>
+    <!-- END 2021/12/15 A.Marte [QC#59573,ADD] -->
+
+    <!-- START 2022/02/10 A.Marte [QC#59705,ADD] -->
+    <statement id="getConfigFromRMAMatchLine" parameterClass="Map" resultClass="String">
+        SELECT
+            SMM.SVC_CONFIG_MSTR_PK
+        FROM
+            SVC_MACH_MSTR SMM
+           ,MDSE          MD
+        WHERE
+            SMM.GLBL_CMPY_CD                = #glblCmpyCd#
+        AND SMM.MDSE_CD                     = #mdseCd#
+        <isNotNull property="rmaNum">
+        AND SMM.RMA_NUM                     = #rmaNum#
+        AND SMM.SVC_MACH_MSTR_STS_CD IN (#svcMachMstrStsRmv#)
+        </isNotNull>
+        AND SMM.SVC_MACH_MAINT_AVAL_FLG     = 'Y'
+        AND SMM.TRX_HDR_NUM IS NULL
+        AND SMM.CUR_LOC_NUM                 = #invtyLocCd#
+        AND SMM.STK_STS_CD                  = #wmsOldStkStsCd#
+        <isNotNull property="serNum">
+        AND SMM.SER_NUM    = #serNum#
+        </isNotNull>
+        AND SMM.GLBL_CMPY_CD                = MD.GLBL_CMPY_CD
+        AND SMM.MDSE_CD                     = MD.MDSE_CD
+        AND SMM.EZCANCELFLAG                = '0'
+        AND MD.EZCANCELFLAG                 = '0'
+        AND ROWNUM                      &lt;= #wmsProcQty#
+    </statement>
+    <!-- END 2022/02/10 A.Marte [QC#59705,ADD] -->
+
+</sqlMap>

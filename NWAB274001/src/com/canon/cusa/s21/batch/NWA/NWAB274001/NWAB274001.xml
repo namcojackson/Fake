@@ -1,0 +1,117 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<sqlMap namespace="NWAB274001">
+
+    <statement id="getTargetList" parameterClass="Map" resultClass="Map">
+        SELECT
+            *
+        FROM (
+                SELECT
+                     CNSI.CUST_NTFY_SHIP_INFO_PK
+                    ,CNSI.PROC_STS_CD
+                    ,SP.SHPG_PLN_NUM
+                    ,C.DS_ORD_CATG_CD
+                    ,DFN.LINE_BIZ_TP_CD
+                    ,DCCP.CTAC_PSN_EML_ADDR
+                    ,SMM.SER_NUM
+                    ,MN.T_MDL_NM MDL_NM
+                    ,C.CPO_ORD_NUM
+                    ,TO_CHAR(TO_DATE(C.CPO_ORD_TS, 'YYYYMMDD'), 'DD-MON-YY', 'NLS_DATE_LANGUAGE = ENGLISH') CPO_ORD_DT
+                    ,C.SELL_TO_FIRST_REF_CMNT_TXT
+                    ,NVL(M1.MDSE_DESC_SHORT_TXT, M2.MDSE_DESC_SHORT_TXT) MDSE_DESC_SHORT_TXT
+                    ,SP.ORD_QTY
+                    ,SP.CARR_NM 
+                    ,SP.PRO_NUM
+                    ,C.ADD_SHIP_TO_FIRST_LINE_ADDR
+                         || DECODE(C.ADD_SHIP_TO_SCD_LINE_ADDR,   null, '', ' '  || C.ADD_SHIP_TO_SCD_LINE_ADDR)
+                         || DECODE(C.ADD_SHIP_TO_THIRD_LINE_ADDR, null, '', ' '  || C.ADD_SHIP_TO_THIRD_LINE_ADDR)
+                         || DECODE(C.ADD_SHIP_TO_FRTH_LINE_ADDR,  null, '', ' '  || C.ADD_SHIP_TO_FRTH_LINE_ADDR)
+                         || DECODE(C.ADD_SHIP_TO_CTY_ADDR,        null, '', ', ' || C.ADD_SHIP_TO_CTY_ADDR)
+                         || DECODE(C.ADD_SHIP_TO_ST_CD,           null, '', ', ' || C.ADD_SHIP_TO_ST_CD)
+                         || DECODE(C.ADD_SHIP_TO_POST_CD,         null, '', ', ' || C.ADD_SHIP_TO_POST_CD) SHIP_TO_INFO
+                    ,ROW_NUMBER() OVER(
+                        PARTITION BY SP.SHPG_PLN_NUM
+                        <!-- 2023/09/20 QC#61782 Mod Start -->
+                        <!-- ORDER BY DCCP.DS_CPO_CTAC_PSN_PK DESC -->
+                        <!-- 2023/11/17 QC#62204 Mod Start -->
+                        <!-- ,DCCP.CTAC_PSN_EML_ADDR -->
+                        ,LOWER(DCCP.CTAC_PSN_EML_ADDR)
+                        <!-- 2023/11/17 QC#62204 Mod End -->
+                        ORDER BY CTAC_PSN_SORT_NUM NULLS FIRST
+                        <!-- 2023/09/20 QC#61782 Mod End -->
+                    ) ROW_NUM
+                    ,CD.CPO_DTL_LINE_NUM
+                    ,CD.CPO_DTL_LINE_SUB_NUM
+                    <!-- 2023/09/20 QC#61782 Add Start -->
+                    ,DCCP.CTAC_PSN_SORT_NUM
+                    <!-- 2023/09/20 QC#61782 Add End -->
+                FROM
+                     CUST_NTFY_SHIP_INFO        CNSI
+                    ,SHPG_PLN                   SP
+                    ,CPO                        C
+                    ,CPO_DTL                    CD
+                    ,SVC_MACH_MSTR              SMM
+                    ,SVC_CONFIG_MSTR            SCM
+                    ,MDL_NM                     MN
+                    ,MDSE                       M1
+                    ,ORD_TAKE_MDSE              OTM
+                    ,MDSE                       M2
+                    ,DS_CPO_CTAC_PSN            DCCP
+                    ,DS_ORD_TP_PROC_DFN         DFN
+                WHERE
+                        CNSI.GLBL_CMPY_CD         = #glblCmpyCd#
+                    AND CNSI.EZCANCELFLAG         = '0'
+                    AND CNSI.GLBL_CMPY_CD         = SP.GLBL_CMPY_CD
+                    AND CNSI.SHPG_PLN_NUM         = SP.SHPG_PLN_NUM
+                    AND SP.EZCANCELFLAG           = '0'
+                    AND SP.GLBL_CMPY_CD           = C.GLBL_CMPY_CD
+                    AND SP.TRX_HDR_NUM            = C.CPO_ORD_NUM
+                    AND C.EZCANCELFLAG            = '0'
+                    AND SP.GLBL_CMPY_CD           = CD.GLBL_CMPY_CD
+                    AND SP.TRX_HDR_NUM            = CD.CPO_ORD_NUM
+                    AND SP.TRX_LINE_NUM           = CD.CPO_DTL_LINE_NUM
+                    AND SP.TRX_LINE_SUB_NUM       = CD.CPO_DTL_LINE_SUB_NUM
+                    AND CD.EZCANCELFLAG           = '0'
+                    AND CD.GLBL_CMPY_CD           = SMM.GLBL_CMPY_CD        (+)
+                    AND CD.SVC_MACH_MSTR_PK       = SMM.SVC_MACH_MSTR_PK    (+)
+                    AND SMM.EZCANCELFLAG      (+) = '0'
+                    AND SMM.GLBL_CMPY_CD          = SCM.GLBL_CMPY_CD        (+)
+                    AND SMM.SVC_CONFIG_MSTR_PK    = SCM.SVC_CONFIG_MSTR_PK  (+)
+                    AND SCM.EZCANCELFLAG      (+) = '0'
+                    AND SCM.GLBL_CMPY_CD          = MN.T_GLBL_CMPY_CD       (+)
+                    AND SCM.MDL_ID                = MN.T_MDL_ID             (+)
+                    AND MN.EZCANCELFLAG       (+) = '0'
+                    AND CD.GLBL_CMPY_CD           = M1.GLBL_CMPY_CD         (+)
+                    AND CD.MDSE_CD                = M1.MDSE_CD              (+)
+                    AND M1.EZCANCELFLAG       (+) = '0'
+                    AND CD.GLBL_CMPY_CD           = OTM.GLBL_CMPY_CD        (+)
+                    AND CD.MDSE_CD                = OTM.ORD_TAKE_MDSE_CD    (+)
+                    AND OTM.EZCANCELFLAG      (+) = '0'
+                    AND OTM.GLBL_CMPY_CD          = M2.GLBL_CMPY_CD         (+)
+                    AND OTM.MDSE_CD               = M2.MDSE_CD              (+)
+                    AND M2.EZCANCELFLAG       (+) = '0'
+                    AND C.GLBL_CMPY_CD            = DCCP.GLBL_CMPY_CD
+                    AND C.CPO_ORD_NUM             = DCCP.CPO_ORD_NUM
+                    AND CNSI.PROC_STS_CD          = #procStsCd#
+                    <!-- 2023/09/20 QC#61782 Mod Start -->
+                    <!-- AND DCCP.CTAC_PSN_TP_CD       = #ctacTpCd# -->
+                    <iterate property="ctacTpCd" var="elem[]" open="AND (" close=")" conjunction="OR">
+                        DCCP.CTAC_PSN_TP_CD       = #elem[]#
+                    </iterate>
+                    <!-- 2023/09/20 QC#61782 Mod End -->
+                    AND DCCP.EZCANCELFLAG         = '0'
+                    AND C.GLBL_CMPY_CD            = DFN.GLBL_CMPY_CD
+                    AND DFN.EZCANCELFLAG          = '0'
+                    AND C.DS_ORD_TP_CD            = DFN.DS_ORD_TP_CD
+            )
+        WHERE
+             ROW_NUM = 1
+        ORDER BY
+             LINE_BIZ_TP_CD
+            ,CTAC_PSN_EML_ADDR
+            ,SHIP_TO_INFO
+            ,CPO_ORD_NUM
+            ,CPO_DTL_LINE_NUM
+            ,CPO_DTL_LINE_SUB_NUM
+    </statement>
+
+</sqlMap>

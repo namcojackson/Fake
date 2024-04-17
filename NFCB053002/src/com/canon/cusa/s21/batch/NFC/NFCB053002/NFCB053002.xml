@@ -1,0 +1,557 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<sqlMap namespace="NFCB053002">
+
+<statement id="getTargetData" parameterClass="Map">
+
+  SELECT GLBL_CMPY_CD
+        ,AR_RCPT_RCV_INTFC_PK
+        ,RCV_FUNC_ID
+        ,DEP_DT
+        ,DEP_TM
+<!--
+        ,VLD_CUST_RCPT_NUM
+-->
+        ,CUST_RCPT_NUM AS VLD_CUST_RCPT_NUM
+        ,CUST_RCPT_AMT
+        ,AR_TRX_NUM
+        ,GRP_INV_NUM
+        ,CUST_INV_AMT
+        ,AR_LOCK_BOX_BAT_NUM
+        ,AR_LOCK_BOX_BAT_LINE_NUM
+        ,AR_BAT_RCPT_NM
+        ,REM_DS_BANK_ACCT_PK
+        ,CUST_DS_BANK_ACCT_PK
+        ,CUST_ACCT_REF_NUM
+        ,PAYER_CUST_CD
+        ,CUST_INV_NUM
+        ,AR_RCPT_SRC_CD
+        ,AR_CUST_ID_STS_CD
+        ,AR_LOCK_BOX_FILE_NM
+        ,AR_LOCK_BOX_CD
+        ,BAT_RCPT_REC_CNT
+        ,BAT_RCPT_TOT_AMT
+        ,CUST_DS_BANK_MICR_NUM
+        ,BILL_TO_CUST_ACCT_CD
+    FROM AR_RCPT_RCV_INTFC RRI
+   WHERE RRI.GLBL_CMPY_CD = #glblCmpyCd#
+     AND RRI.EZCANCELFLAG = '0'
+     AND NOT EXISTS (SELECT '*'
+                   FROM AR_RCPT_RCV_INTFC IN_RRI
+                  WHERE IN_RRI.GLBL_CMPY_CD = #glblCmpyCd#
+                    AND IN_RRI.EZCANCELFLAG = '0'
+                    AND (IN_RRI.AR_RCPT_RCV_ERR_FLG = #flgY#
+                     OR  IN_RRI.AR_CUST_ID_STS_CD = #inComp#)
+                    AND IN_RRI.AR_BAT_RCPT_NM = RRI.AR_BAT_RCPT_NM
+                    AND IN_RRI.AR_LOCK_BOX_BAT_LINE_NUM = RRI.AR_LOCK_BOX_BAT_LINE_NUM
+                    )
+    AND RRI.AR_RCPT_RCV_WRK_CRAT_FLG = #flgN#
+    <isNotNull property="lineList">
+        <iterate property="lineList" var="lineList[]" open="AND AR_LOCK_BOX_BAT_LINE_NUM IN (" close=")" conjunction=",">
+            #lineList[]#
+        </iterate>
+    </isNotNull>
+  ORDER BY AR_BAT_RCPT_NM
+          <!-- START 2019/07/10 H.Ikeda [QC#51259, ADD] -->
+          ,AR_LOCK_BOX_BAT_NUM
+          ,AR_LOCK_BOX_BAT_LINE_NUM
+          <!-- END   2019/07/10 H.Ikeda [QC#51259, ADD] -->
+          ,VLD_CUST_RCPT_NUM
+          ,PAYER_CUST_CD
+          ,CUST_DS_BANK_MICR_NUM
+          <!-- START 2018/07/02 H.Ikeda [QC#25736,ADD] -->
+          <!-- ,CUST_INV_AMT  -->
+          <!-- END   2018/07/02 H.Ikeda [QC#25736,ADD] -->
+  <!--        ,CUST_INV_NUM -->
+          ,AR_LOCK_BOX_BAT_LINE_SQ_NUM
+</statement>
+
+<statement id="getTrxBalByGrpInv" parameterClass="Map">
+
+  SELECT AR_TRX_NUM
+        ,AR_CASH_APPLY_STS_CD
+        ,DEAL_RMNG_BAL_GRS_AMT
+        ,GRP_INV_NUM
+        <!-- START 2023/09/01 S.Fujita [QC#61815,ADD] -->
+        ,1 SORT_NUM
+        <!-- END 2023/09/01 S.Fujita [QC#61815,ADD] -->
+    FROM AR_TRX_BAL  ATB
+   WHERE ATB.GLBL_CMPY_CD   = #glblCmpyCd#
+     AND ATB.EZCANCELFLAG   = '0'
+     <!-- START 2023/09/01 S.Fujita [QC#61815,ADD] -->
+     AND ATB.GRP_INV_NUM    = #custInvNum#
+  UNION
+      SELECT 
+          AR_TRX_NUM
+         ,AR_CASH_APPLY_STS_CD
+         ,DEAL_RMNG_BAL_GRS_AMT
+         ,GRP_INV_NUM
+         ,2 SORT_NUM
+      FROM
+          AR_TRX_BAL  ATB
+      WHERE
+              ATB.GLBL_CMPY_CD   = #glblCmpyCd#
+          AND ATB.EZCANCELFLAG   = '0'
+          AND ATB.AR_TRX_NUM     = #custInvNum#
+          AND ATB.GRP_INV_NUM IS NOT NULL
+  UNION
+      SELECT 
+          AR_TRX_NUM
+         ,AR_CASH_APPLY_STS_CD
+         ,DEAL_RMNG_BAL_GRS_AMT
+         ,GRP_INV_NUM
+         ,3 SORT_NUM
+      FROM
+          AR_TRX_BAL  ATB
+      WHERE
+              ATB.GLBL_CMPY_CD   = #glblCmpyCd#
+          AND ATB.EZCANCELFLAG   = '0'
+          AND ATB.GRP_INV_NUM IN (
+                                 SELECT
+                                     X.GRP_INV_NUM
+                                 FROM
+                                     AR_TRX_BAL  X
+                                 WHERE
+                                         X.GLBL_CMPY_CD = #glblCmpyCd#
+                                     AND X.EZCANCELFLAG = '0'
+                                     AND X.AR_TRX_NUM   = #custInvNum#
+                                 )
+          AND NOT EXISTS (
+                         SELECT
+                             1
+                         FROM
+                             AR_RCPT_RCV_INTFC X
+                         WHERE
+                                 X.GLBL_CMPY_CD    = #glblCmpyCd#
+                             AND X.EZCANCELFLAG    = '0'
+                             AND X.CUST_INV_NUM    = ATB.AR_TRX_NUM
+                         )
+          AND NOT EXISTS (
+                          SELECT
+                              1
+                          FROM
+                              AR_RCPT_RCV_WRK X
+                          WHERE
+                                  X.GLBL_CMPY_CD    = #glblCmpyCd#
+                              AND X.EZCANCELFLAG    = '0'
+                              AND X.CUST_INV_NUM    = ATB.AR_TRX_NUM
+                         )
+      ORDER BY SORT_NUM,AR_TRX_NUM
+     <!-- END 2023/09/01 S.Fujita [QC#61815,ADD] -->
+     <!-- START 2023/09/01 S.Fujita [QC#61815,DEL] -->
+     <!-- START 2023/05/08 S.Fujita [QC#61244,MOD] -->
+     <!-- AND ATB.GRP_INV_NUM    = #custInvNum# -->
+     <!-- AND (ATB.GRP_INV_NUM    = #custInvNum# -->
+        <!-- OR -->
+         <!-- ATB.GRP_INV_NUM   IN ( -->
+             <!-- SELECT -->
+                 <!-- GRP_INV_NUM -->
+             <!-- FROM -->
+                 <!-- AR_TRX_BAL  ATB -->
+             <!-- WHERE -->
+                 <!-- ATB.GLBL_CMPY_CD = #glblCmpyCd# -->
+             <!-- AND ATB.EZCANCELFLAG = '0' -->
+             <!-- AND ATB.AR_TRX_NUM   = #custInvNum#) -->
+        <!-- ) -->
+     <!-- END 2023/05/08 S.Fujita [QC#61244,MOD] -->
+     <!-- START 2018/07/30 H.Ikeda [QC#27409,MOD] -->
+     <!--
+     AND ATB.BILL_TO_CUST_ACCT_CD IN
+     <iterate property="custList" var="custNum[]" open="(" close=")" conjunction=",">
+         #custNum[]#
+     </iterate>
+     -->
+    <!-- AND (ATB.BILL_TO_CUST_ACCT_CD = #payerCustCd#-->
+         <!-- OR-->
+         <!-- EXISTS-->
+         <!-- (-->
+          <!-- SELECT 1-->
+          <!-- FROM   DS_ACCT_RELN    DAR-->
+                <!-- ,DS_ACCT_RELN_TP ART-->
+          <!-- WHERE  DAR.GLBL_CMPY_CD          = #glblCmpyCd#-->
+          <!-- AND    DAR.EZCANCELFLAG          = '0'-->
+          <!-- AND    DAR.GLBL_CMPY_CD          = ART.GLBL_CMPY_CD-->
+          <!-- AND DAR.EZCANCELFLAG             = ART.EZCANCELFLAG-->
+          <!-- AND DAR.RELN_DS_ACCT_NUM         = #payerCustCd#-->
+          <!-- AND DAR.DS_ACCT_RELN_BILL_TO_FLG = #flgY#-->
+          <!-- AND DAR.DS_ACCT_RELN_TP_CD       = ART.DS_ACCT_RELN_TP_CD-->
+          <!-- AND DAR.DS_ACCT_RELN_TP_CD &lt;&gt; #dsAcctRelnTpCd#-->
+          <!-- AND DAR.EFF_FROM_DT          &lt;= #slsDt#-->
+          <!-- AND (DAR.EFF_THRU_DT &gt;= #slsDt# OR DAR.EFF_THRU_DT IS NULL)-->
+          <!--AND DAR.DS_ACCT_NUM = ATB.BILL_TO_CUST_ACCT_CD-->
+         <!-- )-->
+        <!-- )-->
+     <!-- END   2018/07/30 H.Ikeda [QC#27409,MOD] -->
+     <!-- START 2020/01/08 H.Ikeda [QC#55180,MOD] -->
+     <!-- AND ATB.AR_TRX_TP_CD &lt;&gt; #rcp#  -->
+     <!--AND ATB.AR_TRX_TP_CD NOT IN (#acc#, #rcp#) -->
+     <!-- END   2020/01/08 H.Ikeda [QC#55180,MOD] -->
+   <!-- ORDER BY AR_TRX_NUM -->
+     <!-- END 2023/09/01 S.Fujita [QC#61815,DEL] -->
+</statement>
+
+<statement id="getTrxBalByInv" parameterClass="Map">
+
+  SELECT AR_TRX_NUM
+        ,AR_CASH_APPLY_STS_CD
+        ,DEAL_RMNG_BAL_GRS_AMT
+        ,GRP_INV_NUM
+    FROM AR_TRX_BAL  ATB
+   WHERE ATB.GLBL_CMPY_CD   = #glblCmpyCd#
+     AND ATB.EZCANCELFLAG   = '0'
+     AND ATB.AR_TRX_NUM    = #custInvNum#
+     <!-- START 2018/07/30 H.Ikeda [QC#27409,MOD] -->
+     <!--
+     AND ATB.BILL_TO_CUST_ACCT_CD IN
+     <iterate property="custList" var="custNum[]" open="(" close=")" conjunction=",">
+         #custNum[]#
+     </iterate>
+     -->
+     AND (ATB.BILL_TO_CUST_ACCT_CD = #payerCustCd#
+          OR
+          EXISTS
+          (
+           SELECT 1
+           FROM   DS_ACCT_RELN    DAR
+                 ,DS_ACCT_RELN_TP ART
+           WHERE  DAR.GLBL_CMPY_CD          = #glblCmpyCd#
+           AND    DAR.EZCANCELFLAG          = '0'
+           AND    DAR.GLBL_CMPY_CD          = ART.GLBL_CMPY_CD
+           AND DAR.EZCANCELFLAG             = ART.EZCANCELFLAG
+           AND DAR.RELN_DS_ACCT_NUM         = #payerCustCd#
+           AND DAR.DS_ACCT_RELN_BILL_TO_FLG = #flgY#
+           AND DAR.DS_ACCT_RELN_TP_CD       = ART.DS_ACCT_RELN_TP_CD
+           AND DAR.DS_ACCT_RELN_TP_CD &lt;&gt; #dsAcctRelnTpCd#
+           AND DAR.EFF_FROM_DT          &lt;= #slsDt#
+           AND (DAR.EFF_THRU_DT &gt;= #slsDt# OR DAR.EFF_THRU_DT IS NULL)
+           AND DAR.DS_ACCT_NUM = ATB.BILL_TO_CUST_ACCT_CD
+          )
+         )
+     <!-- END   2018/07/30 H.Ikeda [QC#27409,MOD] -->
+     <!-- START 2020/01/08 H.Ikeda [QC#55180,MOD] -->
+     <!-- AND ATB.AR_TRX_TP_CD &lt;&gt; #rcp#  -->
+     AND ATB.AR_TRX_TP_CD NOT IN (#acc#, #rcp#)
+     <!-- END   2020/01/08 H.Ikeda [QC#55180,MOD] -->
+</statement>
+
+<statement id="getTrxBalBySrcSysDoc" parameterClass="Map">
+
+  SELECT AR_TRX_NUM
+        ,AR_CASH_APPLY_STS_CD
+        ,DEAL_RMNG_BAL_GRS_AMT
+        ,GRP_INV_NUM
+    FROM AR_TRX_BAL  ATB
+   WHERE ATB.GLBL_CMPY_CD       = #glblCmpyCd#
+     AND ATB.EZCANCELFLAG       = '0'
+     AND ATB.AR_CUST_REF_NUM    = #custInvNum#
+     <!-- START 2018/07/30 H.Ikeda [QC#27409,MOD] -->
+     <!--
+     AND ATB.BILL_TO_CUST_ACCT_CD IN
+     <iterate property="custList" var="custNum[]" open="(" close=")" conjunction=",">
+         #custNum[]#
+     </iterate>
+     -->
+     AND (ATB.BILL_TO_CUST_ACCT_CD = #payerCustCd#
+          OR
+          EXISTS
+          (
+           SELECT 1
+           FROM   DS_ACCT_RELN    DAR
+                 ,DS_ACCT_RELN_TP ART
+           WHERE  DAR.GLBL_CMPY_CD          = #glblCmpyCd#
+           AND    DAR.EZCANCELFLAG          = '0'
+           AND    DAR.GLBL_CMPY_CD          = ART.GLBL_CMPY_CD
+           AND DAR.EZCANCELFLAG             = ART.EZCANCELFLAG
+           AND DAR.RELN_DS_ACCT_NUM         = #payerCustCd#
+           AND DAR.DS_ACCT_RELN_BILL_TO_FLG = #flgY#
+           AND DAR.DS_ACCT_RELN_TP_CD       = ART.DS_ACCT_RELN_TP_CD
+           AND DAR.DS_ACCT_RELN_TP_CD &lt;&gt; #dsAcctRelnTpCd#
+           AND DAR.EFF_FROM_DT          &lt;= #slsDt#
+           AND (DAR.EFF_THRU_DT &gt;= #slsDt# OR DAR.EFF_THRU_DT IS NULL)
+           AND DAR.DS_ACCT_NUM = ATB.BILL_TO_CUST_ACCT_CD
+          )
+         )
+     <!-- END   2018/07/30 H.Ikeda [QC#27409,MOD] -->
+     <!-- START 2020/01/08 H.Ikeda [QC#55180,MOD] -->
+     <!-- AND ATB.AR_TRX_TP_CD &lt;&gt; #rcp#  -->
+     AND ATB.AR_TRX_TP_CD NOT IN (#acc#, #rcp#)
+     <!-- END   2020/01/08 H.Ikeda [QC#55180,MOD] -->
+</statement>
+
+<statement id="getRelatedCustomer" parameterClass="Map" resultMap="String">
+
+  SELECT DS_ACCT_NUM
+    FROM DS_ACCT_RELN    DAR
+        ,DS_ACCT_RELN_TP ART
+   WHERE DAR.GLBL_CMPY_CD             = #glblCmpyCd#
+     AND DAR.EZCANCELFLAG             = '0'
+     AND DAR.GLBL_CMPY_CD             = ART.GLBL_CMPY_CD
+     AND DAR.EZCANCELFLAG             = ART.EZCANCELFLAG
+     AND DAR.RELN_DS_ACCT_NUM         = #payerCustCd#
+     AND DAR.DS_ACCT_RELN_BILL_TO_FLG = #flgY#
+     AND DAR.DS_ACCT_RELN_TP_CD       = ART.DS_ACCT_RELN_TP_CD
+     AND DAR.DS_ACCT_RELN_TP_CD &lt;&gt; #dsAcctRelnTpCd#
+     AND DAR.EFF_FROM_DT          &lt;= #slsDt#
+     AND (DAR.EFF_THRU_DT &gt;= #slsDt# OR DAR.EFF_THRU_DT IS NULL) 
+</statement>
+
+<statement id="getCustomer" parameterClass="Map" resultMap="String">
+
+  SELECT
+         BTC.BILL_TO_CUST_CD
+  FROM
+         DS_CUST_BANK_ACCT_RELN CBR
+        ,BILL_TO_CUST           BTC
+   WHERE CBR.GLBL_CMPY_CD             = #glblCmpyCd#
+   AND   CBR.EZCANCELFLAG             = '0'
+   AND   CBR.DS_BANK_ACCT_PK          = #custDsBankAcctPk#
+   AND   CBR.GLBL_CMPY_CD             = BTC.GLBL_CMPY_CD
+   AND   CBR.LOC_NUM                  = BTC.LOC_NUM
+   AND   CBR.EZCANCELFLAG             = BTC.EZCANCELFLAG
+</statement>
+
+<statement id="getTrxBalByDueDt" parameterClass="Map" resultClass="Map">
+  SELECT
+        ATB.AR_TRX_NUM
+       ,ATB.AR_CASH_APPLY_STS_CD
+       ,ATB.DEAL_RMNG_BAL_GRS_AMT
+       ,ATB.GRP_INV_NUM
+  FROM
+        AR_TRX_BAL  ATB
+  WHERE
+        ATB.GLBL_CMPY_CD   = #glblCmpyCd#
+  AND   ATB.EZCANCELFLAG   = '0'
+  AND   ATB.BILL_TO_CUST_ACCT_CD = #payerCustNum#
+  <isNotNull property="rcp">
+  <!-- START 2020/01/08 H.Ikeda [QC#55180,MOD] -->
+  AND   ATB.AR_TRX_TP_CD NOT IN (#crm#, #rcp#, #acc#)
+  <!-- END   2020/01/08 H.Ikeda [QC#55180,MOD] -->
+  AND   ATB.DEAL_RMNG_BAL_GRS_AMT &gt; 0
+  </isNotNull>
+  <isNull property="rcp">
+  AND   ATB.AR_TRX_TP_CD = #crm#
+  AND   ATB.DEAL_RMNG_BAL_GRS_AMT &lt; 0
+  </isNull>
+  AND   NOT EXISTS(SELECT
+                       1 
+                   FROM
+                       AR_RCPT_RCV_INTFC ARRI
+                   WHERE
+                       ARRI.GLBL_CMPY_CD = #glblCmpyCd#
+                   and
+                       ARRI.EZCANCELFLAG = '0' 
+                   and 
+                       ARRI.AR_LOCK_BOX_FILE_NM = #arLockBoxFileNm# 
+                   and
+                       ARRI.CUST_INV_NUM = ATB.AR_TRX_NUM
+                   )
+  ORDER BY
+        ATB.INV_DUE_DT
+       ,ATB.AR_TRX_NUM
+</statement>
+
+<statement id="getTargetDataListNum" parameterClass="Map" resultClass="String">
+  SELECT AR_LOCK_BOX_BAT_LINE_NUM
+    FROM AR_RCPT_RCV_INTFC RRI
+   WHERE RRI.GLBL_CMPY_CD = #glblCmpyCd#
+     AND RRI.EZCANCELFLAG = '0'
+     AND NOT EXISTS (SELECT '*'
+                       FROM AR_RCPT_RCV_INTFC IN_RRI
+                      WHERE IN_RRI.GLBL_CMPY_CD = #glblCmpyCd#
+                        AND IN_RRI.EZCANCELFLAG = '0'
+                        AND (IN_RRI.AR_RCPT_RCV_ERR_FLG = #flgY#
+                         OR  IN_RRI.AR_CUST_ID_STS_CD = #inComp#)
+                        AND IN_RRI.AR_BAT_RCPT_NM = RRI.AR_BAT_RCPT_NM
+                        AND IN_RRI.AR_LOCK_BOX_BAT_LINE_NUM = RRI.AR_LOCK_BOX_BAT_LINE_NUM
+                    )
+    AND RRI.AR_RCPT_RCV_WRK_CRAT_FLG = #flgN# 
+  GROUP BY AR_LOCK_BOX_BAT_LINE_NUM
+</statement>
+
+<statement id="getRcvHdrNum" parameterClass="Map" resultMap="String">
+    SELECT
+        MAX(A.RCV_HDR_NUM)
+    FROM
+        AR_RCPT_RCV_WRK A
+    WHERE
+           A.GLBL_CMPY_CD   =  #glblCmpyCd#
+      AND  A.AR_BAT_RCPT_NM =  #arbatRcptNm#
+</statement>
+
+
+    <statement id="getArRcptRcvWrk_OLD" parameterClass="Map">
+        SELECT
+            W1.RCV_SQ_PK
+           ,W1.RCV_HDR_NUM
+           ,W1.CHK_AMT
+           ,SUM(W1.CHK_RCPT_TOT_AMT) AS SUM_CHK_RCPT_TOT_AMT
+           ,CASE WHEN W1.CHK_AMT &lt; SUM(W1.CHK_RCPT_TOT_AMT) THEN 1
+                 WHEN 0 &gt; SUM(w1.CHK_RCPT_TOT_AMT) THEN 2
+                 ELSE 0
+            END  AS RSLT
+        FROM
+            AR_RCPT_RCV_WRK W1
+           ,(SELECT 
+                 RCV_SQ_PK
+                ,RCV_HDR_NUM
+                ,COUNT(RCV_SQ_PK) AS CNT
+             FROM
+                 AR_RCPT_RCV_WRK
+             WHERE
+                 GLBL_CMPY_CD  = #glblCmpyCd#
+             AND
+                 RCV_STS_CD    = #rcvStsCd#
+             AND
+                 EZCANCELFLAG  = '0'
+             GROUP BY
+                 RCV_SQ_PK
+                ,RCV_HDR_NUM) W2
+        WHERE
+            W1.RCV_SQ_PK = W2.RCV_SQ_PK
+        AND
+            W1.RCV_HDR_NUM = W2.RCV_HDR_NUM
+        AND
+            1 &lt; W2.CNT
+        AND
+            W1.EZCANCELFLAG  = '0'
+        GROUP BY
+            W1.RCV_SQ_PK
+           ,W1.RCV_HDR_NUM
+           ,W1.CHK_AMT
+        ORDER BY
+            W1.RCV_SQ_PK
+    </statement>
+
+    <statement id="getArRcptRcvWrk" parameterClass="Map">
+        SELECT
+            W1.RCV_SQ_PK
+           ,W1.RCV_HDR_NUM
+           ,W1.CHK_AMT
+           ,SUM(W1.CHK_RCPT_TOT_AMT) AS SUM_CHK_RCPT_TOT_AMT
+           ,CASE WHEN W1.CHK_AMT &lt; SUM(W1.CHK_RCPT_TOT_AMT) THEN 1
+                 WHEN 0 &gt; SUM(w1.CHK_RCPT_TOT_AMT) THEN 2
+                 ELSE 0
+            END  AS RSLT
+        FROM
+            AR_RCPT_RCV_WRK W1
+        WHERE
+            W1.GLBL_CMPY_CD = #glblCmpyCd#
+        AND
+            W1.EZCANCELFLAG  = '0'
+        AND
+            W1.RCV_STS_CD    = #rcvStsCd#
+        GROUP BY
+            W1.RCV_SQ_PK
+           ,W1.RCV_HDR_NUM
+           ,W1.CHK_AMT
+        ORDER BY
+            W1.RCV_SQ_PK
+    </statement>
+
+    <statement id="getArRcptRcvWrkData" parameterClass="Map">
+        SELECT
+            W.RCV_SQ_PK
+           ,W.RCV_HDR_NUM
+           ,W.RCV_DTL_NUM
+           ,W.CUST_INV_NUM
+           ,W.CHK_RCPT_TOT_AMT
+        FROM
+            AR_RCPT_RCV_WRK W
+        WHERE
+            W.GLBL_CMPY_CD  = #glblCmpyCd#
+        AND
+            W.RCV_SQ_PK     = #rcvSqPk#
+        AND
+            W.RCV_HDR_NUM   = #rcvHdrNum#
+        AND
+            W.EZCANCELFLAG  = '0'
+    </statement>
+
+    <statement id="getArInvInfoFromInvChk" parameterClass="Map">
+     SELECT
+               A.AR_TRX_BAL_PK
+     FROM
+               AR_TRX_BAL   A
+     WHERE
+                    A.GLBL_CMPY_CD  =  #glblCmpyCd#
+               AND  A.AR_TRX_NUM    =  #invNum#
+               AND (
+                          A.AR_CASH_APPLY_STS_CD  =  #arCashApplyStsCd01#
+                      OR  A.AR_CASH_APPLY_STS_CD  =  #arCashApplyStsCd02#
+                    )
+               AND  A.EXPT_FLG      =  #exptFlg#
+               AND  A.EZCANCELFLAG  =  '0'
+    </statement>
+
+    <statement id="getSameChkData" parameterClass="Map">
+        SELECT
+            A1.RCV_SQ_PK
+           ,A1.RCV_HDR_NUM
+           ,A1.INV_30_NUM
+        FROM
+            AR_RCPT_RCV_WRK A1
+        WHERE
+            A1.GLBL_CMPY_CD = #glblCmpyCd#
+        AND
+            A1.RCV_STS_CD   = #rcvStsCd#
+        AND
+            A1.INV_30_NUM IS NOT NULL
+        AND
+            A1.EZCANCELFLAG = '0'
+        GROUP BY A1.RCV_SQ_PK, A1.RCV_HDR_NUM, A1.INV_30_NUM HAVING (COUNT(A1.INV_30_NUM) > 1)
+        ORDER BY A1.RCV_SQ_PK, A1.RCV_HDR_NUM, A1.INV_30_NUM
+    </statement>
+
+    <statement id="getMaxRcvDtlNum" parameterClass="Map" resultMap="String">
+        SELECT
+            MAX(RCV_DTL_NUM)
+        FROM
+            AR_RCPT_RCV_WRK 
+        WHERE
+            GLBL_CMPY_CD = #glblCmpyCd#
+        AND
+            RCV_SQ_PK    = #rcvSqPk#
+        AND
+            RCV_HDR_NUM  = #rcvHdrNum#
+        AND
+            EZCANCELFLAG = '0'
+    </statement>
+
+    <statement id="getSameInvData" parameterClass="Map">
+        SELECT
+            ARRW1.INV_30_NUM
+        FROM
+            AR_RCPT_RCV_WRK ARRW1
+        WHERE
+             ARRW1.GLBL_CMPY_CD = #glblCmpyCd#
+        AND
+             ARRW1.RCV_STS_CD   = #rcvStsCd#
+        AND
+             ARRW1.EZCANCELFLAG = '0'
+        AND
+             ARRW1.RCV_SQ_PK    = #rcvSqPk#
+        AND
+             ARRW1.RCV_HDR_NUM  = #rcvHdrNum#
+        AND
+             ARRW1.INV_30_ORIG_NUM IS NOT NULL
+        GROUP BY ARRW1.INV_30_NUM
+    </statement>
+
+    <statement id="getSameArRcptRcvWrk" parameterClass="Map">
+        SELECT
+            ARRW.RCV_DTL_NUM
+           ,ARRW.INV_30_NUM
+           ,ARRW.CHK_RCPT_TOT_AMT
+           ,ARRW.INV_ORIG_TOT_AMT
+        FROM
+            AR_RCPT_RCV_WRK ARRW
+        WHERE
+             ARRW.GLBL_CMPY_CD = #glblCmpyCd#
+        AND
+             ARRW.EZCANCELFLAG = '0'
+        AND
+             ARRW.RCV_SQ_PK    = #rcvSqPk#
+        AND
+             ARRW.RCV_HDR_NUM  = #rcvHdrNum#
+    </statement>
+</sqlMap>

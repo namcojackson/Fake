@@ -1,0 +1,187 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<sqlMap namespace="NSAL0520Query">
+<statement id="getConfigHist" parameterClass="Map" resultClass="Map">
+SELECT
+	*
+FROM (
+	WITH
+	CONFIG_PK AS
+	(
+		SELECT
+			SCM.SVC_CONFIG_MSTR_PK
+		,	SCM.GLBL_CMPY_CD
+		,	SCM.EZCANCELFLAG
+		,	DENSE_RANK() OVER (
+				PARTITION BY
+					SCM.SVC_MACH_MSTR_PK
+				ORDER BY
+					SCM.RGTN_CONFIG_DT	DESC
+				,	EZINTIME			DESC
+			)	AS	CONFIG_RANK
+		,	SCM.RGTN_CONFIG_DT
+		,	MIN(SCM.RGTN_CONFIG_DT) OVER (
+				PARTITION BY
+					SCM.SVC_CONFIG_MSTR_PK
+			)	AS	MIN_RGTN_CONFIG_DT
+			,	MAX(SCM.RGTN_CONFIG_DT) OVER (
+				PARTITION BY
+					SCM.SVC_CONFIG_MSTR_PK
+			)	AS	MAX_RGTN_CONFIG_DT
+		FROM
+			SVC_CONFIG_MSTR_DTL SCM
+		WHERE
+			SCM.SVC_MACH_MSTR_PK	=	#svcMachMstrPk#
+		AND SCM.GLBL_CMPY_CD		=	#glblCmpyCd#
+		AND SCM.EZCANCELFLAG		=	'0'
+	)
+	,	CONFIG_LIST AS
+	(
+		SELECT
+			SCM.SVC_CONFIG_MSTR_DTL_PK
+		,	SCM.SVC_CONFIG_MSTR_PK
+		,	SCM.SVC_MACH_MSTR_PK
+		,	SCM.SER_NUM
+		,	SCM.MDSE_CD
+<!-- START START 2016/09/20 N.Arai [QC#11616, MOD] -->
+<!-- 	,	MDS.MDSE_NM     -->
+        ,   MDS.MDSE_DESC_SHORT_TXT
+<!-- END START 2016/09/20 N.Arai [QC#11616, MOD] -->
+<!-- START START 2018/07/26 T.Wada [QC#21623, MOD] -->
+<!--    ,	CASE
+			WHEN	SCM.SVC_MACH_MSTR_PK	=	SCM.PRNT_SVC_MACH_MSTR_PK
+			THEN
+			(
+				SELECT
+					T_MDL_NM
+				FROM
+					MDL_NM
+				WHERE
+					T_MDL_ID		=	SCM.MDL_ID
+				AND	T_GLBL_CMPY_CD	=	SCM.GLBL_CMPY_CD
+				AND	EZCANCELFLAG	=	SCM.EZCANCELFLAG
+			)
+ 		ELSE NULL
+			END		
+			AS	MDL_NM
+ -->
+        ,   MDL.T_MDL_NM    AS  MDL_NM
+<!-- END START 2018/07/26 T.Wada [QC#21623, MOD] -->
+		,	SCM.ISTL_DT
+		,	SCM.SVC_MACH_RMV_DT
+		,	SCM.CUR_LOC_ACCT_NUM AS SHIP_TO_CUST_CD
+<!-- START START 2018/07/26 T.Wada [QC#21623, MOD] -->
+<!-- 
+		,	SCM.FIRST_LINE_ADDR
+		,	SCM.SCD_LINE_ADDR
+		,	SCM.THIRD_LINE_ADDR
+		,	SCM.FRTH_LINE_ADDR
+		,	SCM.CTY_ADDR
+		,	SCM.ST_CD
+		,	SCM.POST_CD
+ -->
+        ,   STC.FIRST_LINE_ADDR
+        ,   STC.SCD_LINE_ADDR
+        ,   STC.THIRD_LINE_ADDR
+        ,   STC.FRTH_LINE_ADDR
+        ,   STC.CTY_ADDR
+        ,   STC.ST_CD
+        ,   STC.POST_CD
+<!-- END START 2018/07/26 T.Wada [QC#21623, MOD] -->
+		,	CFP.CONFIG_RANK
+		,	CASE
+			WHEN	SCM.SVC_MACH_MSTR_PK	=	SCM.PRNT_SVC_MACH_MSTR_PK
+			THEN
+				0
+			ELSE
+				SCM.SVC_MACH_MSTR_PK
+			END		AS	MACH_RANK
+		,	CFP.MIN_RGTN_CONFIG_DT
+		,	CFP.MAX_RGTN_CONFIG_DT
+<!-- START 2018/07/26 T.Wada [QC#21623, MOD] -->
+<!-- 
+		,   BTC.LOC_NM AS BILL_TO_LOC_NM
+		,   STC.LOC_NM AS SHIP_TO_LOC_NM
+ -->
+<!--    ,   SEL1.LOC_NM AS SELL_TO_LOC_NM -->
+<!-- START 2018/09/13 K.Fujimoto [QC#28240, MOD] -->
+        ,   SEL2.DS_ACCT_NM AS BILL_TO_DS_ACCT_NM
+        ,   SEL3.DS_ACCT_NM AS SELL_DS_ACCT_NM
+        ,   SEL4.DS_ACCT_NM AS SHIP_DS_ACCT_NM
+<!-- END START 2018/09/13 K.Fujimoto [QC#28240, MOD] -->
+<!-- END START 2018/07/26 T.Wada [QC#21623, MOD] -->
+		FROM
+			CONFIG_PK				CFP
+		,	SVC_CONFIG_MSTR_DTL		SCM
+		,	MDSE					MDS
+<!-- START 2018/07/26 T.Wada [QC#21623, MOD] -->
+<!--    
+        ,   BILL_TO_CUST            BTC
+-->
+<!-- END 2018/07/26 T.Wada [QC#21623, MOD] -->
+		,   SHIP_TO_CUST            STC
+		<!-- ,   SELL_TO_CUST            SEL1 -->
+        ,   SELL_TO_CUST            SEL2
+        ,   SELL_TO_CUST            SEL3
+        ,   SELL_TO_CUST            SEL4
+        ,   MDL_NM                  MDL
+		WHERE
+			CFP.SVC_CONFIG_MSTR_PK	=	SCM.SVC_CONFIG_MSTR_PK
+		AND	CFP.GLBL_CMPY_CD		=	SCM.GLBL_CMPY_CD
+		AND	CFP.EZCANCELFLAG		=	SCM.EZCANCELFLAG
+		AND	MDS.MDSE_CD				=	SCM.MDSE_CD
+		AND	MDS.GLBL_CMPY_CD		=	SCM.GLBL_CMPY_CD
+		AND	MDS.EZCANCELFLAG		=	SCM.EZCANCELFLAG
+<!-- START 2018/07/26 T.Wada [QC#21623, MOD] -->
+<!--
+ 		AND BTC.GLBL_CMPY_CD(+)     =   SCM.GLBL_CMPY_CD
+		AND BTC.BILL_TO_CUST_CD(+)  =   SCM.OWNR_LOC_NUM
+		AND BTC.EZCANCELFLAG(+)     =   '0'
+-->
+		AND STC.GLBL_CMPY_CD(+)     =   SCM.GLBL_CMPY_CD
+        AND STC.SHIP_TO_CUST_CD(+)  =   SCM.CUR_LOC_NUM
+        AND STC.EZCANCELFLAG(+)     =   '0'
+
+<!-- 
+        AND SEL1.GLBL_CMPY_CD(+)     =   SCM.GLBL_CMPY_CD
+        AND SEL1.SELL_TO_CUST_CD(+)  =   SCM.BILL_TO_LOC_NUM
+        AND SEL1.EZCANCELFLAG(+)     =   '0'
+ -->
+<!--  IB Owner  -->
+        AND SEL2.GLBL_CMPY_CD(+)     =   SCM.GLBL_CMPY_CD
+        AND SEL2.SELL_TO_CUST_CD(+)  =   SCM.OWNR_ACCT_NUM
+        AND SEL2.EZCANCELFLAG(+)     =   '0'
+
+<!--  IB Bill To  -->
+        AND SEL3.GLBL_CMPY_CD(+)     =   SCM.GLBL_CMPY_CD
+        AND SEL3.SELL_TO_CUST_CD(+)  =   SCM.BILL_TO_ACCT_NUM
+        AND SEL3.EZCANCELFLAG(+)     =   '0'
+<!-- IB Ship to -->
+        AND SEL4.GLBL_CMPY_CD(+)     =   SCM.GLBL_CMPY_CD
+        AND SEL4.SELL_TO_CUST_CD(+)  =   SCM.CUR_LOC_ACCT_NUM
+        AND SEL4.EZCANCELFLAG(+)     =   '0'
+
+        AND MDL.T_GLBL_CMPY_CD(+)    =   SCM.GLBL_CMPY_CD
+        AND MDL.T_MDL_ID(+)          =   SCM.MDL_ID
+        AND MDL.EZCANCELFLAG(+)      =   '0'
+<!-- END 2018/07/26 T.Wada [QC#21623, MOD] -->
+	)
+	SELECT
+		C.*
+	,	ROW_NUMBER() OVER (
+			ORDER BY
+				C.CONFIG_RANK
+			,	C.SVC_CONFIG_MSTR_PK
+			<!-- START 2018/07/18 T.Tomita [QC#24604, ADD] -->
+			,	C.SVC_MACH_RMV_DT
+			<!-- END 2018/07/18 T.Tomita [QC#24604, ADD] -->
+			,	C.MACH_RANK
+		)	AS	ROW_NUM
+	FROM
+		CONFIG_LIST	C
+)
+WHERE
+	ROW_NUM		&lt;=	#rowNum#
+ORDER BY
+	ROW_NUM
+</statement>
+</sqlMap>
